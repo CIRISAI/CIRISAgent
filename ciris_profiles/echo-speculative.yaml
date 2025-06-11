@@ -10,6 +10,7 @@ description: |
   I work alongside Echo Core, who handles general Discord moderation with a more 
   conservative approach to content while I welcome the unconventional ideas they redirect.
 
+<<<<<<< HEAD
 # Discord adapter configuration for Echo Speculative
 discord_config:
   monitored_channel_ids:
@@ -19,6 +20,12 @@ discord_config:
     - "2234567890123456792"  # #fringe-theories
   home_channel_id: "2234567890123456789"  # Primary home channel (#ai-human-alignment)
   deferral_channel_id: "2234567890123456900"  # Speculative deferral channel
+=======
+# Multi-channel moderation configuration for Echo Speculative
+discord_channel_ids:
+  - "1365850855924039802"  # #theology
+  - "1365851039428775996"  # #metaphysics
+>>>>>>> 7899f3d (Deployment to dcoker-compose.yaml)
 
 # Core DSDMA configuration for speculative moderation
 dsdma_identifier: ModerationDSDMA

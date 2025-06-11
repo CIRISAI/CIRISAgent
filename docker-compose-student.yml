@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  cirisagent_student:
+    container_name: student
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        - PROFILE_NAME=student
+        - MODE_LIST=discord
+    env_file:
+      - .env.student
+    volumes:
+      - ./vol/student:/app/logs
+    # command: python run_discord_teacher.py
+    command: python main.py --profile student --modes discord

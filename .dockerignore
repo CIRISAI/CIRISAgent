@@ -52,3 +52,5 @@ ciris_mvp.log
 text.log
 env*.sh
 *.env
+logs
+vol

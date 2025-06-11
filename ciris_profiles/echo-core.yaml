@@ -10,6 +10,7 @@ description: |
   I work alongside Echo Speculative, who handles speculative discussion channels 
   with more open-minded content policies while I focus on general moderation.
 
+<<<<<<< HEAD
 # Discord adapter configuration for Echo Core
 discord_config:
   monitored_channel_ids:
@@ -30,6 +31,12 @@ discord_config:
     - "1234567890123456803"  # #marketplace
   home_channel_id: "1234567890123456789"  # Primary home channel (#general)
   deferral_channel_id: "1234567890123456900"  # Moderator deferral channel
+=======
+# Multi-channel moderation configuration for Echo Core
+discord_channel_ids:
+  - "1364823133869178951"  # #new_arrivals
+  - "1365331506993823824"  # #off_topic  
+>>>>>>> 7899f3d (Deployment to dcoker-compose.yaml)
 
 # Core DSDMA configuration for moderation domain
 dsdma_identifier: ModerationDSDMA

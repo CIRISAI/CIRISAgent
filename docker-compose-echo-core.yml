@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  cirisagent_echo_core:
+    container_name: echo-core
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        - PROFILE_NAME=echo-core
+        - MODE_LIST=discord
+    env_file:
+      - .env.echo-core
+    volumes:
+      - ./vol/echo-core:/app/logs
+    # command: python run_discord_teacher.py
+    command: python main.py --profile echo-core --modes discord

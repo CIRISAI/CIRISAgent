@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  cirisagent_echo_spec:
+    container_name: echo-speculative
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        - PROFILE_NAME=echo-speculative
+        - MODE_LIST=discord
+    env_file:
+      - .env.echo-spec
+    volumes:
+      - ./vol/echo-speculative:/app/logs
+    # command: python run_discord_teacher.py
+    command: python main.py --profile echo-speculative --modes discord

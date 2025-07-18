@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  ciris-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ciris-dev
+    environment:
+      - CIRIS_ENV=development
+      - CIRIS_DEBUG=true
+      - CIRIS_MOCK_LLM=true
+      - CIRIS_API_HOST=0.0.0.0
+      - CIRIS_API_PORT=8080
+      - PROCESSING_ROUND_DELAY=0.5
+      - THOUGHT_PROCESSING_TIMEOUT=10
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./ciris_engine:/app/ciris_engine
+      - ./ciris_modular_services:/app/ciris_modular_services
+      - ./logs:/app/logs
+      - ./data:/app/data
+    command: python main.py --mock-llm --adapter api
+    restart: unless-stopped
+
+  # Optional: Add a database service if needed
+  # postgres:
+  #   image: postgres:15
+  #   environment:
+  #     POSTGRES_DB: ciris_dev
+  #     POSTGRES_USER: ciris
+  #     POSTGRES_PASSWORD: ciris_dev_password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

@@ -1,0 +1,45 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CIRIS Backend (Mock)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+                "--mock-llm",
+                "--adapter",
+                "api"
+            ],
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env.development"
+        },
+        {
+            "name": "CIRIS Frontend",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": [
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}/CIRISGUI",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Full-Stack Debug",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "${workspaceFolder}/scripts/dev_fullstack.sh",
+            "console": "integratedTerminal"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Backend + Frontend",
+            "configurations": [
+                "CIRIS Backend (Mock)",
+                "CIRIS Frontend"
+            ]
+        }
+    ]
+}

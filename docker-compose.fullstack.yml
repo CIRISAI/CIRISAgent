@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # CIRIS Backend
+  ciris-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ciris-backend-dev
+    environment:
+      - CIRIS_ENV=development
+      - CIRIS_DEBUG=true
+      - CIRIS_MOCK_LLM=true
+      - CIRIS_API_HOST=0.0.0.0
+      - CIRIS_API_PORT=8080
+      - PROCESSING_ROUND_DELAY=0.5
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./ciris_engine:/app/ciris_engine
+      - ./ciris_modular_services:/app/ciris_modular_services
+      - ./logs:/app/logs
+      - ./data:/app/data
+    command: python main.py --mock-llm --adapter api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/system/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CIRISGUI Frontend
+  ciris-frontend:
+    build:
+      context: ./CIRISGUI
+      dockerfile: Dockerfile.frontend
+    container_name: ciris-frontend-dev
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./CIRISGUI/apps/agui:/app/apps/agui
+      - /app/apps/agui/node_modules
+      - /app/apps/agui/.next
+    depends_on:
+      ciris-backend:
+        condition: service_healthy
+    command: pnpm dev
+
+volumes:
+  postgres_data:

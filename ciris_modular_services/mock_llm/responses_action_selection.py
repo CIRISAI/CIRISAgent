@@ -4,7 +4,11 @@ import re
 import json
 import logging
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
-from ciris_engine.schemas.actions import *
+from ciris_engine.schemas.actions import (
+    SpeakParams, MemorizeParams, RecallParams, PonderParams,
+    ObserveParams, ToolParams, RejectParams, DeferParams,
+    ForgetParams, TaskCompleteParams
+)
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType, GraphScope, GraphNodeAttributes
 from ciris_engine.logic.utils.channel_utils import create_channel_context
@@ -14,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Constants
 VALID_NODE_TYPES = ["AGENT", "USER", "CHANNEL", "CONCEPT", "CONFIG"]
 VALID_SCOPES = ["LOCAL", "IDENTITY", "ENVIRONMENT", "COMMUNITY", "NETWORK"]
+MOCK_LLM_SOURCE_TAG = "source:mock_llm"
 
 HELP_TEXT = """📋 CIRIS Mock LLM Commands Help
 
@@ -83,7 +88,7 @@ def parse_tool_params(params_str: str) -> Dict[str, Any]:
         return {}
     try:
         return json.loads(params_str)
-    except:
+    except json.JSONDecodeError:
         # Key=value parsing
         result = {}
         for pair in params_str.split():
@@ -136,11 +141,11 @@ def cmd_memorize(args: str, ctx: List, msgs: List) -> Tuple[HandlerActionType, A
             else:
                 # Not structured format, treat as content
                 node_id = "_".join(args.split()[:3]).lower().replace(",", "").replace(".", "") or "memory"
-                node = create_node(node_id, tags=[f"content:{args[:50]}", "source:mock_llm"])
+                node = create_node(node_id, tags=[f"content:{args[:50]}", MOCK_LLM_SOURCE_TAG])
     else:
         # Treat as content
         node_id = "_".join(args.split()[:3]).lower().replace(",", "").replace(".", "") or "memory"
-        node = create_node(node_id, tags=[f"content:{args[:50]}", "source:mock_llm"])
+        node = create_node(node_id, tags=[f"content:{args[:50]}", MOCK_LLM_SOURCE_TAG])
     
     return HandlerActionType.MEMORIZE, MemorizeParams(node=node), f"Memorizing {node_id}"
 
@@ -349,9 +354,7 @@ def action_selection(context: Optional[List[Any]] = None, messages: Optional[Lis
     # 4. Check messages
     else:
         # Check for follow-up thought
-        is_followup = False
         if messages and messages[0].get('role') == 'system' and messages[0].get('content', '').startswith('THOUGHT_TYPE=follow_up'):
-            is_followup = True
             
             # Extract thought content
             for msg in messages:
@@ -399,7 +402,7 @@ def action_selection(context: Optional[List[Any]] = None, messages: Optional[Lis
                                         # Treat args as content for user commands
                                         action = HandlerActionType.MEMORIZE
                                         node_id = "_".join(cmd_info[1].split()[:3]).lower().replace(",", "").replace(".", "") or "memory"
-                                        node = create_node(node_id, tags=[f"content:{cmd_info[1][:50]}", "source:mock_llm"])
+                                        node = create_node(node_id, tags=[f"content:{cmd_info[1][:50]}", MOCK_LLM_SOURCE_TAG])
                                         params = MemorizeParams(node=node)
                                         rationale = f"Memorizing: {cmd_info[1][:50]}..."
                                     else:

@@ -65,7 +65,7 @@ class TestForcedActions:
         assert result.selected_action == HandlerActionType.SPEAK
         assert result.action_parameters.content == "Cross-channel message"
         assert hasattr(result.action_parameters, "channel_context")
-        assert result.action_parameters.channel_context["channel_id"] == "discord_123"
+        assert result.action_parameters.channel_context.channel_id == "discord_123"
     
     def test_forced_speak_context_display(self):
         """Test SPEAK with $context to display full context."""
@@ -84,8 +84,8 @@ class TestForcedActions:
         
         assert result.selected_action == HandlerActionType.MEMORIZE
         assert result.action_parameters.node.id == "test_node"
-        assert result.action_parameters.node.type.value == "CONCEPT"
-        assert result.action_parameters.node.scope.value == "LOCAL"
+        assert result.action_parameters.node.type.value == "concept"
+        assert result.action_parameters.node.scope.value == "local"
     
     def test_forced_memorize_invalid_type(self):
         """Test MEMORIZE with invalid node type."""
@@ -121,7 +121,7 @@ class TestForcedActions:
         result = action_selection(context=context)
         
         assert result.selected_action == HandlerActionType.OBSERVE
-        assert result.action_parameters.channel_context["channel_id"] == "discord_123"
+        assert result.action_parameters.channel_context.channel_id == "discord_123"
         assert result.action_parameters.active is True
     
     def test_forced_tool_action(self):
@@ -195,7 +195,7 @@ class TestCommandParsing:
         
         assert result.selected_action == HandlerActionType.RECALL
         assert result.action_parameters.query == "weather"
-        assert result.action_parameters.node_type.value == "CONCEPT"
+        assert result.action_parameters.node_type == "CONCEPT"
     
     def test_user_input_memorize_command(self):
         """Test $memorize command from user_input."""
@@ -384,7 +384,7 @@ class TestEdgeCases:
         
         assert result.selected_action == HandlerActionType.SPEAK
         assert result.action_parameters.content == "[MOCK LLM] Cross-channel message"
-        assert result.action_parameters.channel_context["channel_id"] == "test_channel"
+        assert result.action_parameters.channel_context.channel_id == "test_channel"
     
     def test_recall_node_params(self):
         """Test RECALL with node_id, type, and scope."""
@@ -393,8 +393,10 @@ class TestEdgeCases:
         
         assert result.selected_action == HandlerActionType.RECALL
         assert result.action_parameters.node_id == "user123"
-        assert result.action_parameters.node_type.value == "USER"
-        assert result.action_parameters.scope.value == "LOCAL"
+        
+        # node_type comes back as lowercase string, scope as enum
+        assert result.action_parameters.node_type == "user"
+        assert result.action_parameters.scope == GraphScope.LOCAL
 
 
 if __name__ == "__main__":

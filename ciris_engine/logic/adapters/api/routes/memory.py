@@ -19,6 +19,7 @@ from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ..dependencies.auth import require_observer, require_admin, AuthContext
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
+from ciris_engine.logic.services.memory_service.timeline_query_service import TimelineQueryService
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -348,267 +349,16 @@ async def get_timeline(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Calculate time range
-        now = datetime.now(timezone.utc)
-        start_time = now - timedelta(hours=hours)
-
-        # Query memories in time range
-        # Note: This is just for validation/documentation purposes, not actually used
-        # Cap at 100 for QueryRequest validation, but use actual limit for queries below
-        QueryRequest(
-            node_id=None,
-            query=None,
-            related_to=None,
-            since=start_time,
-            until=now,
+        # Use the TimelineQueryService to handle the complex logic
+        timeline_service = TimelineQueryService(memory_service)
+        
+        response = await timeline_service.get_timeline(
+            hours=hours,
+            bucket_size=bucket_size,
             scope=scope,
-            type=type,
-            tags=None,
-            limit=min(limit or 100, 100),  # Cap at 100 for validation
-            offset=0,
-            include_edges=False,
-            depth=1
-        )
-
-        # For timeline, we need to query nodes within the time range directly
-        # The standard recall/search methods order by updated_at DESC which gives us only recent nodes
-        nodes = []
-        
-        # Import database utilities
-        from ciris_engine.logic.persistence import get_db_connection
-        from ciris_engine.schemas.services.graph_core import GraphNode, NodeType as NodeTypeEnum
-        import json
-        
-        # Query the database directly for timeline data
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                
-                # For timeline, we need to sample across time buckets
-                # First, get the days in our range
-                days_in_range = int((now - start_time).total_seconds() / 86400) + 1
-                nodes_per_day = max(1, (limit or 100) // days_in_range)
-                
-                # Sample nodes from each day
-                all_db_nodes = []
-                for day_offset in range(days_in_range):
-                    day_start = (now - timedelta(days=day_offset)).replace(hour=0, minute=0, second=0, microsecond=0)
-                    day_end = day_start + timedelta(days=1)
-                    
-                    # Build query for this day
-                    query_parts = [
-                        SQL_SELECT_NODES,
-                        SQL_FROM_NODES,
-                        SQL_WHERE_TIME_RANGE,
-                        SQL_EXCLUDE_METRICS
-                    ]
-                    params: List[Any] = [day_start.isoformat(), day_end.isoformat()]
-                    
-                    # Add scope filter
-                    if scope:
-                        query_parts.append(SQL_WHERE_SCOPE)
-                        params.append(scope.value)
-                    
-                    # Add type filter
-                    if type:
-                        query_parts.append(SQL_WHERE_NODE_TYPE)
-                        params.append(type.value)
-                    
-                    # Random sampling for better distribution
-                    query_parts.extend([
-                        SQL_ORDER_RANDOM,
-                        SQL_LIMIT
-                    ])
-                    params.append(nodes_per_day * 2)  # Get extra to allow for filtering
-                
-                    query = " ".join(query_parts)
-                    cursor.execute(query, params)
-                    
-                    # Convert rows to GraphNode objects for this day
-                    for row in cursor.fetchall():
-                        try:
-                            # Parse attributes
-                            attributes = json.loads(row['attributes_json']) if row['attributes_json'] else {}
-                            
-                            # Create GraphNode
-                            node = GraphNode(
-                                id=row['node_id'],
-                                type=NodeTypeEnum(row['node_type']),
-                                scope=GraphScope(row['scope']),
-                                attributes=attributes,
-                                version=row['version'],
-                                updated_by=row['updated_by'],
-                                updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', UTC_TIMEZONE_SUFFIX))
-                            )
-                            all_db_nodes.append(node)
-                        except Exception as e:
-                            logger.warning(f"Failed to parse node {row['node_id']}: {e}")
-                            continue
-                
-                # For timeline layout, sample nodes evenly across time range
-                if len(all_db_nodes) > (limit or 100):
-                    # Group by hour buckets
-                    hour_buckets: Dict[datetime, List[Any]] = {}
-                    for node in all_db_nodes:
-                        if node.updated_at is None:
-                            continue
-                        hour = node.updated_at.replace(minute=0, second=0, microsecond=0)
-                        if hour not in hour_buckets:
-                            hour_buckets[hour] = []
-                        hour_buckets[hour].append(node)
-                    
-                    # Sample nodes from each bucket
-                    target_per_bucket = max(1, (limit or 100) // len(hour_buckets)) if hour_buckets else 1
-                    for hour, bucket_nodes in hour_buckets.items():
-                        # Take up to target_per_bucket nodes from each hour
-                        sampled = bucket_nodes[:target_per_bucket]
-                        nodes.extend(sampled)
-                    
-                    # If we don't have enough, add more from the most populated buckets
-                    if len(nodes) < (limit or 100):
-                        remaining = (limit or 100) - len(nodes)
-                        sorted_buckets = sorted(hour_buckets.items(), key=lambda x: len(x[1]), reverse=True)
-                        for hour, bucket_nodes in sorted_buckets:
-                            already_taken = min(target_per_bucket, len(bucket_nodes))
-                            available = bucket_nodes[already_taken:]
-                            if available:
-                                take = min(len(available), remaining)
-                                nodes.extend(available[:take])
-                                remaining -= take
-                                if remaining <= 0:
-                                    break
-                else:
-                    nodes = all_db_nodes
-                        
-        except Exception as e:
-            logger.error(f"Failed to query timeline data: {e}")
-            # Fall back to standard search
-            all_nodes = await memory_service.search("", filters=MemorySearchFilter(
-                scope=scope.value if scope else None,
-                node_type=type.value if type else None,
-                limit=1000
-            ))
-            
-            # Filter by time
-            for node in all_nodes:
-                if isinstance(node.attributes, dict):
-                    node_time = node.attributes.get('created_at') or node.attributes.get('timestamp')
-                else:
-                    node_time = node.attributes.created_at
-                
-                # Fallback to top-level updated_at
-                if not node_time and hasattr(node, 'updated_at'):
-                    node_time = node.updated_at
-                
-                if node_time:
-                    if isinstance(node_time, str):
-                        node_time = datetime.fromisoformat(node_time.replace('Z', UTC_TIMEZONE_SUFFIX))
-
-                    if start_time <= node_time <= now:
-                        nodes.append(node)
-
-        # Sort by time
-        def get_node_time(n: GraphNode) -> str:
-            if isinstance(n.attributes, dict):
-                time_val = n.attributes.get('created_at') or n.attributes.get('timestamp', '')
-            else:
-                time_val = n.attributes.created_at or ''
-            
-            # Fallback to top-level updated_at
-            if not time_val and hasattr(n, 'updated_at'):
-                time_val = n.updated_at
-            
-            return str(time_val) if time_val else ''
-        nodes.sort(key=get_node_time, reverse=True)
-
-        # Create time buckets
-        buckets = {}
-        bucket_delta = timedelta(hours=1) if bucket_size == "hour" else timedelta(days=1)
-
-        current_bucket = start_time
-        while current_bucket < now:
-            bucket_key = current_bucket.strftime("%Y-%m-%d %H:00" if bucket_size == "hour" else "%Y-%m-%d")
-            buckets[bucket_key] = 0
-            current_bucket += bucket_delta
-
-        # Count nodes in buckets
-        for node in nodes:
-            if isinstance(node.attributes, dict):
-                node_time = node.attributes.get('created_at') or node.attributes.get('timestamp')
-            else:
-                node_time = node.attributes.created_at
-            
-            # Fallback to top-level updated_at
-            if not node_time and hasattr(node, 'updated_at'):
-                node_time = node.updated_at
-            
-            if node_time:
-                if isinstance(node_time, str):
-                    node_time = datetime.fromisoformat(node_time.replace('Z', UTC_TIMEZONE_SUFFIX))
-
-                bucket_key = node_time.strftime("%Y-%m-%d %H:00" if bucket_size == "hour" else "%Y-%m-%d")
-                if bucket_key in buckets:
-                    buckets[bucket_key] += 1
-
-        # Limit nodes to return
-        returned_nodes = nodes[:limit]
-        
-        # Fetch edges if requested
-        edges = None
-        if include_edges and returned_nodes:
-            # Get edges for the nodes we're actually returning
-            node_ids = [n.id for n in returned_nodes]
-            edges = []
-            
-            try:
-                with get_db_connection() as conn:
-                    cursor = conn.cursor()
-                    
-                    # Query edges where either source or target is in our node list
-                    placeholders = ','.join('?' * len(node_ids))
-                    query = f"""
-                    SELECT edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json, created_at
-                    FROM graph_edges
-                    WHERE source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders})
-                    """
-                    
-                    cursor.execute(query, node_ids + node_ids)
-                    
-                    for row in cursor.fetchall():
-                        try:
-                            # Create GraphEdge from row
-                            # row: edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json, created_at
-                            attributes_json = json.loads(row[6]) if row[6] else {}
-                            
-                            # Create GraphEdgeAttributes
-                            edge_attrs = GraphEdgeAttributes(
-                                created_at=attributes_json.get('created_at', row[7]),
-                                context=attributes_json.get('context')
-                            )
-                            
-                            edge = GraphEdge(
-                                source=row[1],  # source_node_id
-                                target=row[2],  # target_node_id
-                                relationship=row[4],  # relationship type
-                                scope=row[3],  # scope
-                                weight=row[5] if row[5] is not None else 1.0,
-                                attributes=edge_attrs
-                            )
-                            edges.append(edge)
-                        except Exception as e:
-                            logger.warning(f"Failed to parse edge {row[0]}: {e}")
-                            
-            except Exception as e:
-                logger.error(f"Failed to fetch edges: {e}")
-                edges = []
-
-        response = TimelineResponse(
-            memories=returned_nodes,
-            edges=edges,
-            buckets=buckets,
-            start_time=start_time,
-            end_time=now,
-            total=len(nodes)
+            node_type=type,
+            limit=limit or 1000,
+            include_edges=include_edges
         )
 
         return SuccessResponse(
@@ -621,6 +371,7 @@ async def get_timeline(
         )
 
     except Exception as e:
+        logger.error(f"Timeline query failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/recall/{node_id}", response_model=SuccessResponse[GraphNode])

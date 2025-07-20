@@ -20,6 +20,7 @@ from ..dependencies.auth import require_observer, require_admin, AuthContext
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.services.memory_service.timeline_query_service import TimelineQueryService
+from ciris_engine.logic.services.memory_service.graph_visualization_service import GraphVisualizationService, LayoutType
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -183,90 +184,9 @@ async def query_memory(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        nodes = []
-
-        # Query by specific node ID
-        if body.node_id:
-            query = MemoryQuery(
-                node_id=body.node_id,
-                scope=body.scope or GraphScope.LOCAL,
-                type=body.type,
-                include_edges=body.include_edges,
-                depth=body.depth
-            )
-            nodes = await memory_service.recall(query)
-
-        # Text search
-        elif body.query:
-            filters = MemorySearchFilter(
-                scope=body.scope.value if body.scope else None,
-                node_type=body.type.value if body.type else None,
-                created_after=body.since,
-                created_before=body.until,
-                created_by=None,
-                has_attributes=None,
-                attribute_values=None,
-                limit=body.limit,
-                offset=body.offset
-            )
-            # Note: tags filtering would need to be handled differently
-            # as MemorySearchFilter doesn't have a tags field
-
-            nodes = await memory_service.search(body.query, filters=filters)
-
-        # Find related nodes
-        elif body.related_to:
-            query = MemoryQuery(
-                node_id=body.related_to,
-                scope=body.scope or GraphScope.LOCAL,
-                type=body.type,
-                include_edges=body.include_edges or True,  # Default to True for related queries
-                depth=body.depth or 2
-            )
-            related_nodes = await memory_service.recall(query)
-            # Filter out the source node
-            nodes = [n for n in related_nodes if n.id != body.related_to]
-
-        # Type-based query
-        elif body.type:
-            # Use a broad recall with type filter
-            # This is a simplified approach - in practice, the memory service
-            # should support type-based queries directly
-            all_nodes = await memory_service.recall(MemoryQuery(
-                node_id="*",  # Wildcard to get all
-                scope=body.scope or GraphScope.LOCAL,
-                type=body.type,
-                include_edges=False,
-                depth=1
-            ))
-            nodes = all_nodes
-
-        # Apply time filters if provided
-        if body.since or body.until:
-            filtered_nodes = []
-            for node in nodes:
-                if isinstance(node.attributes, dict):
-                    node_time = node.attributes.get('created_at') or node.attributes.get('timestamp')
-                else:
-                    node_time = node.attributes.created_at
-                if node_time:
-                    if isinstance(node_time, str):
-                        node_time = datetime.fromisoformat(node_time.replace('Z', UTC_TIMEZONE_SUFFIX))
-
-                    if body.since and node_time < body.since:
-                        continue
-                    if body.until and node_time > body.until:
-                        continue
-
-                    filtered_nodes.append(node)
-            nodes = filtered_nodes
-
-        # Apply pagination
-        len(nodes)
-        if body.offset:
-            nodes = nodes[body.offset:]
-        if body.limit:
-            nodes = nodes[:body.limit]
+        # Use MemoryQueryBuilder for consistent query patterns
+        query_builder = MemoryQueryBuilder(memory_service)
+        nodes = await query_builder.build_and_execute(body)
 
         return SuccessResponse(
             data=nodes,
@@ -546,8 +466,9 @@ async def visualize_memory_graph(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
     
     try:
-        # Import visualization dependencies
-        import networkx as nx
+        # Use the visualization service
+        viz_service = GraphVisualizationService()
+        
         from datetime import datetime
         
         # Query nodes based on filters

@@ -924,15 +924,9 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
     # Use custom rationale if provided, otherwise use the generated rationale
     final_rationale = custom_rationale if custom_rationale else rationale
     
-    # Store action parameters directly as a dict
-    if params:
-        action_params_dict = params.model_dump() if hasattr(params, 'model_dump') else params
-    else:
-        action_params_dict = None
-    
     result = ActionSelectionDMAResult(
         selected_action=action,
-        action_parameters=action_params_dict,  # Store parameters directly
+        action_parameters=params,  # Pass the Pydantic object directly
         rationale=final_rationale
     )
     

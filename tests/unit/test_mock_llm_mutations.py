@@ -25,7 +25,9 @@ class TestMutationStringInputs:
         result = action_selection(context=context)
         
         assert result.selected_action == HandlerActionType.SPEAK
-        assert result.action_parameters.content == long_content
+        # Content is truncated to 5000 chars for DoS protection in parse_channel
+        assert len(result.action_parameters.content) == 5000
+        assert result.action_parameters.content == "A" * 5000
     
     def test_special_characters_in_content(self):
         """Test with special characters and escape sequences."""

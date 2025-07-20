@@ -51,7 +51,12 @@ ERRORS = {
 
 def parse_channel(content: str) -> Tuple[Optional[str], str]:
     """Extract @channel: from content."""
-    match = re.search(r'@channel:(\S+)', content)
+    # Limit content length to prevent DoS
+    if len(content) > 5000:
+        content = content[:5000]
+    
+    # Use bounded match to prevent backtracking
+    match = re.search(r'@channel:([^\s]{1,100})', content)
     if match:
         channel = match.group(1)
         cleaned = content.replace(match.group(0), '').strip() or "[MOCK LLM] Cross-channel message"
@@ -149,7 +154,7 @@ def cmd_recall(args: str, ctx: List, msgs: List) -> Tuple[HandlerActionType, Any
         params = RecallParams(
             node_id=parts[0],
             node_type=getattr(NodeType, parts[1].upper()),
-            scope=getattr(GraphScope, parts[2].upper()) if len(parts) > 2 else None,
+            scope=getattr(GraphScope, parts[2].upper()),
             limit=10
         )
         return HandlerActionType.RECALL, params, f"Recalling node {parts[0]}"
@@ -239,13 +244,19 @@ def extract_command(text: str) -> Optional[Tuple[str, str]]:
 
 def extract_user_input(msg_content: str) -> str:
     """Extract user input from various message formats."""
+    # Limit input length to prevent DoS
+    if len(msg_content) > 10000:
+        msg_content = msg_content[:10000]
+    
     # @USERNAME (ID: ID): content
-    match = re.search(r'@\w+\s*\([^)]+\):\s*(.+)', msg_content, re.IGNORECASE | re.DOTALL)
+    # Use non-greedy match and limit backtracking by not using DOTALL
+    match = re.search(r'@\w+\s*\([^)]{1,100}\):\s*(.{1,5000})', msg_content, re.IGNORECASE)
     if match:
         return match.group(1).strip()
     
     # User said: content
-    match = re.search(r'(?:User|@\w+)\s+(?:said|says?):\s*(.+)', msg_content, re.IGNORECASE | re.DOTALL)
+    # Use non-greedy match and limit backtracking
+    match = re.search(r'(?:User|@\w+)\s+(?:said|says?):\s*(.{1,5000})', msg_content, re.IGNORECASE)
     if match:
         return match.group(1).strip()
     
@@ -345,7 +356,9 @@ def action_selection(context: Optional[List[Any]] = None, messages: Optional[Lis
             # Extract thought content
             for msg in messages:
                 if msg.get('role') == 'user' and "Original Thought:" in msg.get('content', ''):
-                    match = re.search(r'Original Thought:\s*"(.*?)"', msg['content'], re.DOTALL)
+                    # Limit search to prevent DoS - no DOTALL, bounded match
+                    content = msg['content'][:5000] if len(msg['content']) > 5000 else msg['content']
+                    match = re.search(r'Original Thought:\s*"([^"]{0,1000})"', content)
                     if match:
                         thought = match.group(1)
                         if any(p in thought for p in ["Message sent successfully", "TASK COMPLETE", "spoke in channel"]):
@@ -371,8 +384,12 @@ def action_selection(context: Optional[List[Any]] = None, messages: Optional[Lis
                     
                     # Check conversation history
                     if "=== CONVERSATION HISTORY" in msg.get('content', ''):
-                        for line in msg['content'].split('\n'):
-                            match = re.search(r'^\d+\.\s*@\w+\s*\([^)]+\):\s*(\$\w+.*?)$', line.strip())
+                        # Limit lines to process to prevent DoS
+                        lines = msg['content'].split('\n')[:100]
+                        for line in lines:
+                            # Bounded match to prevent backtracking
+                            line = line.strip()[:500]
+                            match = re.search(r'^\d+\.\s*@\w+\s*\([^)]{1,50}\):\s*(\$\w+[^\n]{0,200})$', line)
                             if match:
                                 cmd_text = match.group(1).strip()
                                 cmd_info = extract_command(cmd_text)

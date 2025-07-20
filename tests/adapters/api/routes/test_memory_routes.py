@@ -323,26 +323,142 @@ class TestMemoryRoutes:
         assert result["data"]["id"] == sample_node.id
         assert result["data"]["type"] == sample_node.type.value
     
-    def test_visualize_graph_svg(self, client, app, mock_auth):
+    def test_visualize_graph_svg(self, client, app, mock_auth, sample_node):
         """Test graph visualization endpoint."""
-        # Mock visualization service
-        with patch('ciris_engine.logic.adapters.api.routes.memory.GraphVisualizationService') as mock_viz:
-            mock_service = Mock()
-            mock_viz.return_value = mock_service
+        # Mock nodes for visualization
+        app.state.memory_service.recall.return_value = [sample_node]
+        
+        # Mock edge query function
+        with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edges:
+            mock_edges.return_value = []
             
-            # Mock networkx availability
-            with patch('ciris_engine.logic.adapters.api.routes.memory.nx'):
+            # Mock visualization service
+            with patch('ciris_engine.logic.adapters.api.routes.memory.GraphVisualizationService') as mock_viz:
+                mock_service = AsyncMock()
+                mock_viz.return_value = mock_service
+                
                 # Return simple SVG
                 svg_content = '<svg width="800" height="600"><circle cx="50" cy="50" r="20"/></svg>'
+                mock_service.generate_svg.return_value = svg_content
                 
                 response = client.get(
                     "/memory/visualize/graph?layout=force&width=800&height=600",
                     headers={"Authorization": "Bearer test-token"}
                 )
                 
-                # The current implementation is complex - just verify it doesn't crash
-                # In a real refactor, this would use the GraphVisualizationService
-                assert response.status_code in [200, 500]  # May fail due to complex logic
+                assert response.status_code == 200
+                assert response.headers["content-type"] == "image/svg+xml"
+                assert b"<svg" in response.content
+                
+                # Verify service was called correctly
+                mock_service.generate_svg.assert_called_once()
+                args = mock_service.generate_svg.call_args[1]
+                assert args["width"] == 800
+                assert args["height"] == 600
+                assert args["layout_type"].value == "force"
+    
+    def test_visualize_graph_timeline_layout(self, client, app, mock_auth):
+        """Test graph visualization with timeline layout."""
+        # Create nodes with timestamps
+        now = datetime.now(timezone.utc)
+        nodes = [
+            GraphNode(
+                id=f"node-{i}",
+                type=NodeType.THOUGHT,
+                scope=GraphScope.LOCAL,
+                attributes={"created_at": (now - timedelta(hours=i)).isoformat()},
+                version=1,
+                updated_by="test"
+            )
+            for i in range(5)
+        ]
+        
+        # Mock MemoryQueryBuilder for time-based query
+        with patch('ciris_engine.logic.adapters.api.routes.memory.MemoryQueryBuilder') as mock_qb:
+            mock_builder = Mock()
+            mock_qb.return_value = mock_builder
+            mock_builder.build_and_execute = AsyncMock(return_value=nodes)
+            
+            # Mock edge query
+            with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edges:
+                mock_edges.return_value = []
+                
+                # Mock visualization service
+                with patch('ciris_engine.logic.adapters.api.routes.memory.GraphVisualizationService') as mock_viz:
+                    mock_service = AsyncMock()
+                    mock_viz.return_value = mock_service
+                    
+                    svg_content = '<svg width="1200" height="800"><text>Timeline</text></svg>'
+                    mock_service.generate_svg.return_value = svg_content
+                    
+                    response = client.get(
+                        "/memory/visualize/graph?layout=timeline&hours=24&width=1200&height=800",
+                        headers={"Authorization": "Bearer test-token"}
+                    )
+                    
+                    assert response.status_code == 200
+                    assert response.headers["content-type"] == "image/svg+xml"
+                    
+                    # Verify timeline-specific parameters
+                    mock_service.generate_svg.assert_called_once()
+                    args = mock_service.generate_svg.call_args[1]
+                    assert args["layout_type"].value == "timeline"
+                    assert args["hours"] == 24
+    
+    def test_visualize_graph_with_edges(self, client, app, mock_auth):
+        """Test graph visualization includes edges."""
+        nodes = [
+            GraphNode(id="node-1", type=NodeType.THOUGHT, scope=GraphScope.LOCAL, 
+                     attributes={}, version=1, updated_by="test"),
+            GraphNode(id="node-2", type=NodeType.TASK, scope=GraphScope.LOCAL,
+                     attributes={}, version=1, updated_by="test")
+        ]
+        
+        edges = [
+            GraphEdge(source="node-1", target="node-2", relationship="relates_to",
+                     scope="local", weight=1.0)
+        ]
+        
+        app.state.memory_service.recall.return_value = nodes
+        
+        # Mock edge query
+        with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edge_fn:
+            mock_edge_fn.side_effect = lambda node_id, *args, **kwargs: edges if node_id == "node-1" else []
+            
+            # Mock visualization service
+            with patch('ciris_engine.logic.adapters.api.routes.memory.GraphVisualizationService') as mock_viz:
+                mock_service = AsyncMock()
+                mock_viz.return_value = mock_service
+                mock_service.generate_svg.return_value = '<svg></svg>'
+                
+                response = client.get(
+                    "/memory/visualize/graph",
+                    headers={"Authorization": "Bearer test-token"}
+                )
+                
+                assert response.status_code == 200
+                
+                # Verify edges were passed to visualization service
+                args = mock_service.generate_svg.call_args[1]
+                assert len(args["edges"]) == 1
+                assert args["edges"][0].source == "node-1"
+                assert args["edges"][0].target == "node-2"
+    
+    def test_visualize_graph_no_networkx(self, client, app, mock_auth):
+        """Test visualization when networkx is not available."""
+        app.state.memory_service.recall.return_value = []
+        
+        # Simulate ImportError for networkx
+        with patch('ciris_engine.logic.adapters.api.routes.memory.GraphVisualizationService') as mock_viz:
+            mock_viz.side_effect = ImportError("No module named 'networkx'")
+            
+            response = client.get(
+                "/memory/visualize/graph",
+                headers={"Authorization": "Bearer test-token"}
+            )
+            
+            assert response.status_code == 503
+            assert "networkx" in response.json()["detail"]
     
     def test_create_edges(self, client, app, mock_auth):
         """Test edge creation between nodes."""

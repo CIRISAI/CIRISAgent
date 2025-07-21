@@ -46,17 +46,23 @@ class GraphVisualizationService:
     
     # Node type to color mapping
     NODE_COLORS = {
-        NodeType.THOUGHT: "#FF6B6B",      # Red - active thoughts
-        NodeType.TASK: "#4ECDC4",         # Teal - tasks
-        NodeType.CONVERSATION: "#95E1D3", # Light teal - conversations
-        NodeType.MESSAGE: "#74B9FF",      # Light blue - messages
-        NodeType.CONCEPT: "#A29BFE",      # Purple - concepts
-        NodeType.IDENTITY: "#FFEAA7",     # Yellow - identity
-        NodeType.METRIC: "#FD79A8",       # Pink - metrics
-        NodeType.TOOL: "#FDCB6E",         # Orange - tools
-        NodeType.AUDIT: "#636E72",        # Gray - audit
-        NodeType.INCIDENT: "#D63031",     # Dark red - incidents
-        NodeType.TSDB_DATA: "#00B894",    # Green - time series data
+        NodeType.OBSERVATION: "#FF6B6B",      # Red - observations
+        NodeType.TASK_SUMMARY: "#4ECDC4",     # Teal - tasks
+        NodeType.CONVERSATION_SUMMARY: "#95E1D3", # Light teal - conversations
+        NodeType.CONCEPT: "#A29BFE",          # Purple - concepts
+        NodeType.IDENTITY: "#FFEAA7",         # Yellow - identity
+        NodeType.IDENTITY_SNAPSHOT: "#FFD93D", # Bright yellow - identity snapshots
+        NodeType.BEHAVIORAL: "#FD79A8",       # Pink - behavioral
+        NodeType.SOCIAL: "#74B9FF",           # Light blue - social
+        NodeType.AUDIT_ENTRY: "#636E72",      # Gray - audit
+        NodeType.AUDIT_SUMMARY: "#95A5A6",    # Light gray - audit summaries
+        NodeType.TSDB_DATA: "#00B894",        # Green - time series data
+        NodeType.TSDB_SUMMARY: "#00CEC9",     # Cyan - time series summaries
+        NodeType.TRACE_SUMMARY: "#E17055",    # Orange - traces
+        NodeType.CONFIG: "#FDCB6E",           # Yellow-orange - config
+        NodeType.AGENT: "#6C5CE7",            # Purple - agents
+        NodeType.USER: "#0984E3",             # Blue - users
+        NodeType.CHANNEL: "#00B894",          # Green - channels
     }
     
     # Edge relationship to style mapping

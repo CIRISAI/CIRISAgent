@@ -16,6 +16,7 @@ from ciris_engine.schemas.api.responses import SuccessResponse, ResponseMetadata
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType, GraphScope, GraphEdge, GraphEdgeAttributes
 from ciris_engine.schemas.services.operations import MemoryQuery, MemoryOpResult
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+from ciris_engine.schemas.adapters.memory import QueryRequest, TimelineResponse
 from ..dependencies.auth import require_observer, require_admin, AuthContext
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
@@ -50,37 +51,6 @@ MARKER_END = '</marker>'
 class StoreRequest(BaseModel):
     """Request to store typed nodes in memory (MEMORIZE)."""
     node: GraphNode = Field(..., description="Typed graph node to store")
-
-
-class QueryRequest(BaseModel):
-    """Flexible query request supporting multiple patterns (RECALL)."""
-    # Query patterns
-    node_id: Optional[str] = Field(None, description="Specific node ID to retrieve")
-    query: Optional[str] = Field(None, description="Natural language search query")
-    related_to: Optional[str] = Field(None, description="Find nodes related to this node ID")
-    
-    # Filters
-    since: Optional[datetime] = Field(None, description="Start time for temporal queries")
-    until: Optional[datetime] = Field(None, description="End time for temporal queries")
-    scope: Optional[GraphScope] = Field(None, description="Scope filter")
-    type: Optional[NodeType] = Field(None, description="Node type filter")
-    tags: Optional[List[str]] = Field(None, description="Tag filters")
-    
-    # Options
-    include_edges: bool = Field(False, description="Include edges in response")
-    depth: int = Field(1, ge=1, le=5, description="Depth for graph traversal")
-    limit: int = Field(100, ge=1, le=1000, description="Maximum results")
-    offset: int = Field(0, ge=0, description="Pagination offset")
-
-
-class TimelineResponse(BaseModel):
-    """Response for timeline view."""
-    memories: List[GraphNode] = Field(..., description="Nodes in the timeline")
-    edges: Optional[List[GraphEdge]] = Field(None, description="Edges between nodes if requested")
-    buckets: Dict[str, int] = Field(..., description="Time bucket counts")
-    start_time: datetime = Field(..., description="Start of timeline range")
-    end_time: datetime = Field(..., description="End of timeline range")
-    total: int = Field(..., description="Total nodes in range (before limit)")
 
 
 class CreateEdgeRequest(BaseModel):

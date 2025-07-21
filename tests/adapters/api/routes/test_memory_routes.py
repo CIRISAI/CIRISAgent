@@ -202,8 +202,9 @@ class TestMemoryRoutes:
         assert len(result["data"]) == 1
         assert result["data"][0]["id"] == sample_node.id
     
-    def test_query_memory_by_text(self, client, app, mock_auth, sample_node):
+    def test_query_memory_by_text(self, app, sample_node):
         """Test text search query."""
+        client = self._get_authenticated_client(app)
         app.state.memory_service.search.return_value = [sample_node]
         
         response = client.post(
@@ -321,7 +322,7 @@ class TestMemoryRoutes:
             
             assert response.status_code == 200
             result = response.json()
-                assert len(result["data"]["memories"]) == 5
+            assert len(result["data"]["memories"]) == 5
             assert result["data"]["total"] == 5
             assert "buckets" in result["data"]
     

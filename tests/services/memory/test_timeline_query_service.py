@@ -108,7 +108,7 @@ class TestTimelineQueryService:
             result = await service.get_timeline(
                 hours=48,
                 bucket_size="day",
-                scope=GraphScope.GLOBAL,
+                scope=GraphScope.LOCAL,
                 node_type=NodeType.TASK,
                 limit=50
             )
@@ -123,7 +123,7 @@ class TestTimelineQueryService:
                 params = call_args[0][1]
                 
                 if "scope = ?" in query:
-                    assert GraphScope.GLOBAL.value in params
+                    assert GraphScope.LOCAL.value in params
                 if "node_type = ?" in query:
                     assert NodeType.TASK.value in params
     

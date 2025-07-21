@@ -26,7 +26,7 @@ class TestGraphVisualizationService:
         return [
             GraphNode(
                 id="node-1",
-                type=NodeType.THOUGHT,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
                 attributes={"content": "Test thought", "created_at": now.isoformat()},
                 version=1,
@@ -34,7 +34,7 @@ class TestGraphVisualizationService:
             ),
             GraphNode(
                 id="node-2",
-                type=NodeType.TASK,
+                type=NodeType.TASK_SUMMARY,
                 scope=GraphScope.LOCAL,
                 attributes={"title": "Test task", "created_at": (now - timedelta(hours=1)).isoformat()},
                 version=1,
@@ -148,8 +148,8 @@ class TestGraphVisualizationService:
     
     def test_node_colors(self, service):
         """Test node color mapping."""
-        assert service.NODE_COLORS[NodeType.THOUGHT] == "#FF6B6B"
-        assert service.NODE_COLORS[NodeType.TASK] == "#4ECDC4"
+        assert service.NODE_COLORS[NodeType.OBSERVATION] == "#FF6B6B"
+        assert service.NODE_COLORS[NodeType.TASK_SUMMARY] == "#4ECDC4"
         assert service.NODE_COLORS[NodeType.CONCEPT] == "#A29BFE"
     
     def test_edge_styles(self, service):
@@ -169,7 +169,7 @@ class TestGraphVisualizationService:
         # Test dict attributes with created_at
         node1 = GraphNode(
             id="test-1",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={"created_at": now.isoformat()},
             version=1,
@@ -183,7 +183,7 @@ class TestGraphVisualizationService:
         # Test fallback to updated_at
         node2 = GraphNode(
             id="test-2",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={},
             version=1,
@@ -212,7 +212,7 @@ class TestGraphVisualizationService:
         # Test with long content
         node2 = GraphNode(
             id="node-2",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={"content": "This is a very long thought content that should be truncated"},
             version=1,
@@ -226,7 +226,7 @@ class TestGraphVisualizationService:
         # Test fallback to ID
         node3 = GraphNode(
             id="short-id",
-            type=NodeType.TASK,
+            type=NodeType.TASK_SUMMARY,
             scope=GraphScope.LOCAL,
             attributes={},
             version=1,
@@ -253,7 +253,7 @@ class TestGraphVisualizationService:
         nodes = [
             GraphNode(
                 id=f"node-{i}",
-                type=NodeType.THOUGHT,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
                 attributes={"created_at": (now - timedelta(hours=i)).isoformat()},
                 version=1,

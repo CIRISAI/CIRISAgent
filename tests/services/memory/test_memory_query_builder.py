@@ -34,7 +34,7 @@ class TestMemoryQueryBuilder:
         return [
             GraphNode(
                 id="node-1",
-                type=NodeType.THOUGHT,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
                 attributes={"content": "Test thought", "created_at": now.isoformat()},
                 version=1,
@@ -43,8 +43,8 @@ class TestMemoryQueryBuilder:
             ),
             GraphNode(
                 id="node-2",
-                type=NodeType.TASK,
-                scope=GraphScope.GLOBAL,
+                type=NodeType.TASK_SUMMARY,
+                scope=GraphScope.LOCAL,
                 attributes={"title": "Test task", "created_at": (now - timedelta(hours=1)).isoformat()},
                 version=1,
                 updated_by="test",
@@ -71,7 +71,7 @@ class TestMemoryQueryBuilder:
         assert builder.determine_query_type(req4) == QueryType.TIME_RANGE
         
         # Type filter query
-        req5 = QueryRequest(type=NodeType.TASK)
+        req5 = QueryRequest(type=NodeType.TASK_SUMMARY)
         assert builder.determine_query_type(req5) == QueryType.TYPE_FILTER
         
         # Wildcard query
@@ -235,7 +235,7 @@ class TestMemoryQueryBuilder:
         task_nodes = [
             GraphNode(
                 id="task-1",
-                type=NodeType.TASK,
+                type=NodeType.TASK_SUMMARY,
                 scope=GraphScope.LOCAL,
                 attributes={},
                 version=1,
@@ -246,7 +246,7 @@ class TestMemoryQueryBuilder:
         mock_memory_service.recall.return_value = task_nodes
         
         request = QueryRequest(
-            type=NodeType.TASK,
+            type=NodeType.TASK_SUMMARY,
             scope=GraphScope.LOCAL
         )
         
@@ -254,10 +254,10 @@ class TestMemoryQueryBuilder:
         
         # Verify type filter was applied
         call_args = mock_memory_service.recall.call_args[0][0]
-        assert call_args.type == NodeType.TASK
+        assert call_args.type == NodeType.TASK_SUMMARY
         
         assert len(result) == 1
-        assert result[0].type == NodeType.TASK
+        assert result[0].type == NodeType.TASK_SUMMARY
     
     def test_get_node_time(self, builder):
         """Test time extraction from nodes."""
@@ -266,7 +266,7 @@ class TestMemoryQueryBuilder:
         # Test with dict attributes
         node1 = GraphNode(
             id="test-1",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={"created_at": now.isoformat()},
             version=1,
@@ -280,7 +280,7 @@ class TestMemoryQueryBuilder:
         # Test with updated_at fallback
         node2 = GraphNode(
             id="test-2",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={},
             version=1,
@@ -294,7 +294,7 @@ class TestMemoryQueryBuilder:
         # Test with no time
         node3 = GraphNode(
             id="test-3",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={},
             version=1,

@@ -397,7 +397,7 @@ class TestMemoryRoutes:
         app.state.memory_service.recall.return_value = [sample_node]
         
         # Mock edge query function
-        with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edges:
+        with patch('ciris_engine.logic.persistence.models.graph.get_edges_for_node') as mock_edges:
             mock_edges.return_value = []
             
             # Mock visualization service
@@ -449,7 +449,7 @@ class TestMemoryRoutes:
             mock_builder.build_and_execute = AsyncMock(return_value=nodes)
             
             # Mock edge query
-            with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edges:
+            with patch('ciris_engine.logic.persistence.models.graph.get_edges_for_node') as mock_edges:
                 mock_edges.return_value = []
                 
                 # Mock visualization service
@@ -492,7 +492,7 @@ class TestMemoryRoutes:
         app.state.memory_service.recall.return_value = nodes
         
         # Mock edge query
-        with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edge_fn:
+        with patch('ciris_engine.logic.persistence.models.graph.get_edges_for_node') as mock_edge_fn:
             mock_edge_fn.side_effect = lambda node_id, *args, **kwargs: edges if node_id == "node-1" else []
             
             # Mock visualization service
@@ -570,7 +570,7 @@ class TestMemoryRoutes:
         ]
         
         # Mock edge query - implementation specific
-        with patch('ciris_engine.logic.adapters.api.routes.memory.get_edges_for_node') as mock_edges:
+        with patch('ciris_engine.logic.persistence.models.graph.get_edges_for_node') as mock_edges:
             mock_edges.return_value = edges
             
             response = client.get(

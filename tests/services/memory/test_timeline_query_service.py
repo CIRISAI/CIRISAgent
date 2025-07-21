@@ -198,7 +198,8 @@ class TestTimelineQueryService:
                     updated_at=now
                 )
             ]
-            mock_memory_service.search.return_value = mock_nodes
+            from unittest.mock import AsyncMock
+            mock_memory_service.search = AsyncMock(return_value=mock_nodes)
             
             # Execute timeline query
             result = await service.get_timeline(

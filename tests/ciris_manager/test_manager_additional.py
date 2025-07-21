@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 from ciris_manager.manager import CIRISManager
 from ciris_manager.config.settings import CIRISManagerConfig
+from .conftest import create_test_config
 
 
 class TestManagerAdditional:
@@ -16,8 +17,7 @@ class TestManagerAdditional:
     @pytest.mark.asyncio
     async def test_start_api_server_import_error(self, tmp_path):
         """Test API server start with import error."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents") 
+        config = create_test_config(tmp_path)
         config.manager.port = 0  # Use port 0 to get a random available port
         
         manager = CIRISManager(config)
@@ -39,8 +39,7 @@ class TestManagerAdditional:
     @pytest.mark.asyncio
     async def test_container_management_with_image_pull_disabled(self, tmp_path):
         """Test container management without pulling images."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        config = create_test_config(tmp_path)
         config.container_management.pull_images = False
         config.container_management.interval = 0.01
         
@@ -84,10 +83,9 @@ class TestManagerAdditional:
     
     def test_scan_with_invalid_metadata(self, tmp_path):
         """Test scanning with invalid agent metadata."""
-        config = CIRISManagerConfig()
         agents_dir = tmp_path / "agents"
-        agents_dir.mkdir()
-        config.manager.agents_directory = str(agents_dir)
+        agents_dir.mkdir(exist_ok=True)
+        config = create_test_config(tmp_path)
         
         # Create agent directory
         agent_dir = agents_dir / "test"

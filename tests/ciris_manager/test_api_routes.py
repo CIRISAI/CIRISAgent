@@ -257,6 +257,7 @@ class TestAPIRoutes:
         )
         
         mock_manager.agent_registry.get_agent_by_name.return_value = agent
+        mock_manager.delete_agent = AsyncMock(return_value=True)
         
         response = client.delete("/manager/v1/agents/scout")
         assert response.status_code == 200
@@ -264,7 +265,7 @@ class TestAPIRoutes:
         assert data["status"] == "deleted"
         assert data["agent_id"] == "agent-scout"
         
-        mock_manager.agent_registry.unregister_agent.assert_called_once_with("agent-scout")
+        mock_manager.delete_agent.assert_called_once_with("agent-scout")
     
     def test_delete_agent_not_found(self, client, mock_manager):
         """Test deleting non-existent agent."""

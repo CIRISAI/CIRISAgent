@@ -147,8 +147,11 @@ def create_routes(manager) -> APIRouter:
         if not agent:
             raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
         
-        # TODO: Stop container and clean up
-        manager.agent_registry.unregister_agent(agent.agent_id)
+        # Delete agent and clean up resources
+        success = await manager.delete_agent(agent.agent_id)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete agent")
         
         return {"status": "deleted", "agent_id": agent.agent_id}
     

@@ -18,6 +18,7 @@ from ciris_manager.port_manager import PortManager
 from ciris_manager.template_verifier import TemplateVerifier
 from ciris_manager.agent_registry import AgentRegistry
 from ciris_manager.compose_generator import ComposeGenerator
+from ciris_manager.nginx_route_generator import NginxRouteGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,11 @@ class CIRISManager:
             default_image=self.config.docker.image
         )
         
+        # Initialize nginx route generator
+        self.nginx_generator = NginxRouteGenerator(
+            nginx_config_dir=self.config.nginx.agents_config_dir
+        )
+        
         # Initialize existing components (updated for per-agent management)
         self.container_manager = None  # Will be replaced with per-agent management
         
@@ -98,6 +104,14 @@ class CIRISManager:
                 if agent_info:
                     # Ensure port manager knows about this allocation
                     self.port_manager.allocate_port(agent_id)
+                    
+                    # Restore nginx route for this agent
+                    container_name = f"ciris-agent-{agent_info.name.lower()}"
+                    self.nginx_generator.write_agent_config(
+                        agent_id=agent_info.name.lower(),
+                        container_name=container_name,
+                        port=agent_info.port
+                    )
                     logger.info(f"Found existing agent: {agent_id} on port {agent_info.port}")
     
     async def create_agent(
@@ -190,14 +204,80 @@ class CIRISManager:
     
     async def _add_nginx_route(self, agent_name: str, port: int) -> None:
         """Add nginx route for agent."""
-        # This would modify nginx config and reload
-        # For now, just log
-        logger.info(f"Would add nginx route: /api/{agent_name}/* -> localhost:{port}")
+        # Generate container name based on agent name
+        container_name = f"ciris-agent-{agent_name}"
         
-        # TODO: Implement actual nginx config modification
-        # nginx_config = Path(self.config.nginx.config_path)
-        # ... modify config ...
-        # subprocess.run(self.config.nginx.reload_command.split(), check=True)
+        # Write nginx config for this agent
+        self.nginx_generator.write_agent_config(
+            agent_id=agent_name,
+            container_name=container_name,
+            port=port
+        )
+        
+        # Reload nginx
+        success = await self.nginx_generator.reload_nginx(
+            container_name=self.config.nginx.container_name
+        )
+        
+        if success:
+            logger.info(f"Added nginx route: /api/{agent_name}/* -> {container_name}:{port}")
+        else:
+            logger.warning(f"Failed to reload nginx after adding route for {agent_name}")
+    
+    async def delete_agent(self, agent_id: str) -> bool:
+        """
+        Delete an agent and clean up its resources.
+        
+        Args:
+            agent_id: Agent identifier
+            
+        Returns:
+            True if deletion was successful
+        """
+        agent = self.agent_registry.get_agent(agent_id)
+        if not agent:
+            return False
+        
+        # Stop container
+        container_name = f"ciris-agent-{agent.name.lower()}"
+        try:
+            cmd = ["docker", "stop", container_name]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+            
+            # Remove container
+            cmd = ["docker", "rm", container_name]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+        except Exception as e:
+            logger.error(f"Error stopping container {container_name}: {e}")
+        
+        # Remove nginx route
+        self.nginx_generator.remove_agent_config(agent.name.lower())
+        await self.nginx_generator.reload_nginx(self.config.nginx.container_name)
+        
+        # Release port
+        self.port_manager.release_port(agent_id)
+        
+        # Unregister agent
+        self.agent_registry.unregister_agent(agent_id)
+        
+        # Remove agent directory
+        agent_dir = self.agents_dir / agent.name.lower()
+        if agent_dir.exists():
+            import shutil
+            shutil.rmtree(agent_dir)
+        
+        logger.info(f"Deleted agent {agent_id}")
+        return True
     
     async def _start_agent(self, agent_id: str, compose_path: Path) -> None:
         """Start an agent container."""

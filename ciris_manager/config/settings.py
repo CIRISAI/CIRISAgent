@@ -83,6 +83,14 @@ class NginxConfig(BaseModel):
         default="systemctl reload nginx",
         description="Command to reload nginx"
     )
+    agents_config_dir: str = Field(
+        default="/etc/nginx/agents",
+        description="Directory for per-agent nginx config files"
+    )
+    container_name: str = Field(
+        default="ciris-nginx",
+        description="Name of the nginx container"
+    )
 
 
 class CIRISManagerConfig(BaseModel):

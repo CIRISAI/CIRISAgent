@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 from ciris_manager.manager import CIRISManager, main
 from ciris_manager.config.settings import CIRISManagerConfig
+from .conftest import create_test_config
 
 
 class TestManagerCoverage:
@@ -36,28 +37,31 @@ class TestManagerCoverage:
     
     @pytest.mark.asyncio
     async def test_add_nginx_route(self, tmp_path):
-        """Test nginx route addition (placeholder implementation)."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        """Test nginx route addition."""
+        config = create_test_config(tmp_path)
         
         manager = CIRISManager(config)
         
-        # Test the placeholder implementation
-        with patch('ciris_manager.manager.logger') as mock_logger:
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True) as mock_reload:
             await manager._add_nginx_route("scout", 8081)
             
-            # Should log the intended action
-            mock_logger.info.assert_called()
-            call_args = mock_logger.info.call_args[0][0]
-            assert "nginx route" in call_args
-            assert "scout" in call_args
-            assert "8081" in str(call_args)
+            # Check that config file was written
+            nginx_config_file = Path(config.nginx.agents_config_dir) / "scout.conf"
+            assert nginx_config_file.exists()
+            
+            # Check config content
+            content = nginx_config_file.read_text()
+            assert "location ~ ^/api/scout/" in content
+            assert "proxy_pass http://ciris-agent-scout:8081/" in content
+            
+            # Check reload was called
+            mock_reload.assert_called_once_with(container_name="test-nginx")
     
     @pytest.mark.asyncio
     async def test_pull_agent_images(self, tmp_path):
         """Test pulling agent images."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        config = create_test_config(tmp_path)
         
         manager = CIRISManager(config)
         
@@ -82,7 +86,7 @@ class TestManagerCoverage:
     
     def test_scan_existing_agents_no_directory(self, tmp_path):
         """Test scanning when agents directory doesn't exist."""
-        config = CIRISManagerConfig()
+        config = create_test_config(tmp_path)
         config.manager.agents_directory = str(tmp_path / "nonexistent")
         
         # Should not raise error
@@ -95,8 +99,7 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_container_management_loop_error_handling(self, tmp_path):
         """Test container management loop error handling."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        config = create_test_config(tmp_path)
         config.container_management.interval = 0.01  # Fast for testing
         
         manager = CIRISManager(config)
@@ -130,8 +133,7 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_create_agent_allocate_existing_port(self, tmp_path):
         """Test agent creation when port is already allocated."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        config = create_test_config(tmp_path)
         config.manager.templates_directory = str(tmp_path / "templates")
         
         # Create template
@@ -148,22 +150,23 @@ class TestManagerCoverage:
         # Mock verifier and subprocess
         manager.template_verifier.is_pre_approved = Mock(return_value=True)
         
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate = AsyncMock(return_value=(b"", b""))
-            mock_subprocess.return_value = mock_process
-            
-            # Create agent - should get next available port
-            result = await manager.create_agent("test", "Test")
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True):
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 0
+                mock_process.communicate = AsyncMock(return_value=(b"", b""))
+                mock_subprocess.return_value = mock_process
+                
+                # Create agent - should get next available port
+                result = await manager.create_agent("test", "Test")
             
             assert result["port"] == 8081  # Next available
     
     @pytest.mark.asyncio 
     async def test_start_api_server_disabled(self, tmp_path):
         """Test that API server doesn't start when port is not configured."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        config = create_test_config(tmp_path)
         config.manager.port = None  # Disable API
         
         manager = CIRISManager(config)
@@ -179,8 +182,7 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_run_with_signal_handlers(self, tmp_path):
         """Test run method with signal handling."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        config = create_test_config(tmp_path)
         
         manager = CIRISManager(config)
         

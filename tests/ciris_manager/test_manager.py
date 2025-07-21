@@ -64,6 +64,10 @@ class TestCIRISManager:
     @pytest.fixture
     def config(self, temp_dirs):
         """Create test configuration."""
+        # Create nginx config directory in temp
+        nginx_dir = temp_dirs["base"] / "nginx"
+        nginx_dir.mkdir()
+        
         return CIRISManagerConfig(
             manager={
                 "agents_directory": str(temp_dirs["agents"]),
@@ -80,6 +84,10 @@ class TestCIRISManager:
                 "start": 8080,
                 "end": 8090,
                 "reserved": [8888]
+            },
+            nginx={
+                "agents_config_dir": str(nginx_dir),
+                "container_name": "test-nginx"
             }
         )
     
@@ -144,19 +152,21 @@ class TestCIRISManager:
         # Mock template verifier
         manager.template_verifier.is_pre_approved = Mock(return_value=True)
         
-        # Mock subprocess for docker-compose
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate = AsyncMock(return_value=(b"", b""))
-            mock_subprocess.return_value = mock_process
-            
-            # Create agent
-            result = await manager.create_agent(
-                template="scout",
-                name="Scout",
-                environment={"CUSTOM": "value"}
-            )
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True):
+            # Mock subprocess for docker-compose
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 0
+                mock_process.communicate = AsyncMock(return_value=(b"", b""))
+                mock_subprocess.return_value = mock_process
+                
+                # Create agent
+                result = await manager.create_agent(
+                    template="scout",
+                    name="Scout",
+                    environment={"CUSTOM": "value"}
+                )
         
         # Verify result
         assert result["agent_id"] == "scout"
@@ -197,19 +207,21 @@ class TestCIRISManager:
         # Mock template verifier
         manager.template_verifier.is_pre_approved = Mock(return_value=False)
         
-        # Mock subprocess
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate = AsyncMock(return_value=(b"", b""))
-            mock_subprocess.return_value = mock_process
-            
-            # Create agent with signature
-            result = await manager.create_agent(
-                template="custom",
-                name="Custom",
-                wa_signature="test_signature"
-            )
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True):
+            # Mock subprocess
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 0
+                mock_process.communicate = AsyncMock(return_value=(b"", b""))
+                mock_subprocess.return_value = mock_process
+                
+                # Create agent with signature
+                result = await manager.create_agent(
+                    template="custom",
+                    name="Custom",
+                    wa_signature="test_signature"
+                )
         
         # Should succeed
         assert result["agent_id"] == "custom"
@@ -231,19 +243,21 @@ class TestCIRISManager:
         # Mock template verifier
         manager.template_verifier.is_pre_approved = Mock(return_value=True)
         
-        # Mock subprocess to fail
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 1
-            mock_process.communicate = AsyncMock(return_value=(b"", b"Error: failed"))
-            mock_subprocess.return_value = mock_process
-            
-            # Should raise RuntimeError
-            with pytest.raises(RuntimeError, match="Failed to start agent"):
-                await manager.create_agent(
-                    template="scout",
-                    name="Scout"
-                )
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True):
+            # Mock subprocess to fail
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 1
+                mock_process.communicate = AsyncMock(return_value=(b"", b"Error: failed"))
+                mock_subprocess.return_value = mock_process
+                
+                # Should raise RuntimeError
+                with pytest.raises(RuntimeError, match="Failed to start agent"):
+                    await manager.create_agent(
+                        template="scout",
+                        name="Scout"
+                    )
     
     @pytest.mark.asyncio
     async def test_container_management_loop(self, manager):
@@ -332,15 +346,17 @@ class TestCIRISManager:
         # Mock template and subprocess
         manager.template_verifier.is_pre_approved = Mock(return_value=True)
         
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate = AsyncMock(return_value=(b"", b""))
-            mock_subprocess.return_value = mock_process
-            
-            # Create agents
-            result1 = await manager.create_agent("scout", "Scout1")
-            result2 = await manager.create_agent("scout", "Scout2")
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True):
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 0
+                mock_process.communicate = AsyncMock(return_value=(b"", b""))
+                mock_subprocess.return_value = mock_process
+                
+                # Create agents
+                result1 = await manager.create_agent("scout", "Scout1")
+                result2 = await manager.create_agent("scout", "Scout2")
         
         assert result1["port"] == 8080
         assert result2["port"] == 8081
@@ -365,16 +381,18 @@ class TestCIRISManager:
             mock_process.communicate = AsyncMock(return_value=(b"", b""))
             return mock_process
         
-        with patch('asyncio.create_subprocess_exec', side_effect=mock_subprocess):
-            # Create multiple agents concurrently
-            tasks = []
-            for i in range(5):
-                task = asyncio.create_task(
-                    manager.create_agent("scout", f"Scout{i}")
-                )
-                tasks.append(task)
-            
-            results = await asyncio.gather(*tasks)
+        # Mock nginx reload
+        with patch.object(manager.nginx_generator, 'reload_nginx', return_value=True):
+            with patch('asyncio.create_subprocess_exec', side_effect=mock_subprocess):
+                # Create multiple agents concurrently
+                tasks = []
+                for i in range(5):
+                    task = asyncio.create_task(
+                        manager.create_agent("scout", f"Scout{i}")
+                    )
+                    tasks.append(task)
+                
+                results = await asyncio.gather(*tasks)
         
         # All should succeed with unique ports
         ports = [r["port"] for r in results]

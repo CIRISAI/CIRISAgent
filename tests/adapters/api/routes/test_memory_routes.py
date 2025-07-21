@@ -16,7 +16,9 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphEdge, NodeT
 from ciris_engine.schemas.adapters.memory import QueryRequest, TimelineResponse
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext
-from ciris_engine.constants import DEFAULT_USER_ID
+
+# Test constants
+DEFAULT_USER_ID = "test_user"
 
 
 class TestMemoryRoutes:
@@ -54,11 +56,15 @@ class TestMemoryRoutes:
     @pytest.fixture
     def mock_auth(self):
         """Mock authentication dependency."""
+        from datetime import datetime, timezone
+        from ciris_engine.schemas.api.auth import UserRole, Permission, ROLE_PERMISSIONS
+        
         with patch('ciris_engine.logic.adapters.api.routes.memory.require_observer') as mock:
             mock.return_value = AuthContext(
                 user_id=DEFAULT_USER_ID,
-                username="test_user",
-                role="OBSERVER"
+                role=UserRole.OBSERVER,
+                permissions=ROLE_PERMISSIONS[UserRole.OBSERVER],
+                authenticated_at=datetime.now(timezone.utc)
             )
             yield mock
     
@@ -67,23 +73,45 @@ class TestMemoryRoutes:
         """Create sample node for testing."""
         return GraphNode(
             id="test-node-1",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={
-                "content": "Test thought content",
+                "content": "Test observation content",
                 "created_at": datetime.now(timezone.utc).isoformat()
             },
             version=1,
             updated_by="test_user"
         )
     
-    def test_store_memory_success(self, client, app, mock_auth, sample_node):
+    def test_store_memory_success(self, app, sample_node):
         """Test successful memory storage."""
+        # Import dependencies
+        from datetime import datetime, timezone
+        from ciris_engine.schemas.api.auth import UserRole, ROLE_PERMISSIONS
+        from ciris_engine.logic.adapters.api.dependencies.auth import require_observer
+        
+        # Create auth override
+        def mock_auth_dependency():
+            return AuthContext(
+                user_id=DEFAULT_USER_ID,
+                role=UserRole.OBSERVER,
+                permissions=ROLE_PERMISSIONS[UserRole.OBSERVER],
+                authenticated_at=datetime.now(timezone.utc)
+            )
+        
+        # Override dependency
+        app.dependency_overrides[require_observer] = mock_auth_dependency
+        
+        # Create test client with overrides
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        
         # Mock memorize response
-        app.state.memory_service.memorize.return_value = Mock(
-            success=True,
-            node_id=sample_node.id,
-            operation="MEMORIZE"
+        from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
+        app.state.memory_service.memorize.return_value = MemoryOpResult(
+            status=MemoryOpStatus.OK,
+            reason="Node stored successfully",
+            data={"node_id": sample_node.id}
         )
         
         response = client.post(
@@ -94,13 +122,34 @@ class TestMemoryRoutes:
         
         assert response.status_code == 200
         result = response.json()
-        assert result["success"] is True
-        assert result["data"]["success"] is True
-        assert result["data"]["node_id"] == sample_node.id
-        assert result["data"]["operation"] == "MEMORIZE"
+        assert "data" in result
+        assert "metadata" in result
+        assert result["data"]["status"] == "ok"
+        assert result["data"]["data"]["node_id"] == sample_node.id
     
-    def test_store_memory_service_unavailable(self, client, app, mock_auth, sample_node):
+    def test_store_memory_service_unavailable(self, app, sample_node):
         """Test memory storage when service is unavailable."""
+        # Import dependencies
+        from datetime import datetime, timezone
+        from ciris_engine.schemas.api.auth import UserRole, ROLE_PERMISSIONS
+        from ciris_engine.logic.adapters.api.dependencies.auth import require_observer
+        
+        # Create auth override
+        def mock_auth_dependency():
+            return AuthContext(
+                user_id=DEFAULT_USER_ID,
+                role=UserRole.OBSERVER,
+                permissions=ROLE_PERMISSIONS[UserRole.OBSERVER],
+                authenticated_at=datetime.now(timezone.utc)
+            )
+        
+        # Override dependency
+        app.dependency_overrides[require_observer] = mock_auth_dependency
+        
+        # Create test client with overrides
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        
         # Remove memory service
         delattr(app.state, 'memory_service')
         
@@ -154,7 +203,7 @@ class TestMemoryRoutes:
         """Test querying related nodes."""
         node1 = GraphNode(
             id="node-1",
-            type=NodeType.THOUGHT,
+            type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
             attributes={},
             version=1,
@@ -162,7 +211,7 @@ class TestMemoryRoutes:
         )
         node2 = GraphNode(
             id="node-2",
-            type=NodeType.TASK,
+            type=NodeType.TASK_SUMMARY,
             scope=GraphScope.LOCAL,
             attributes={},
             version=1,
@@ -189,11 +238,13 @@ class TestMemoryRoutes:
     
     def test_delete_memory_success(self, client, app, mock_auth):
         """Test successful memory deletion."""
+        from ciris_engine.schemas.api.auth import UserRole, ROLE_PERMISSIONS
         with patch('ciris_engine.logic.adapters.api.routes.memory.require_admin') as mock_admin:
             mock_admin.return_value = AuthContext(
                 user_id=DEFAULT_USER_ID,
-                username="admin",
-                role="ADMIN"
+                role=UserRole.ADMIN,
+                permissions=ROLE_PERMISSIONS[UserRole.ADMIN],
+                authenticated_at=datetime.now(timezone.utc)
             )
             
             app.state.memory_service.forget.return_value = Mock(
@@ -219,7 +270,7 @@ class TestMemoryRoutes:
         nodes = [
             GraphNode(
                 id=f"node-{i}",
-                type=NodeType.THOUGHT,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
                 attributes={"created_at": (now - timedelta(hours=i)).isoformat()},
                 version=1,
@@ -364,7 +415,7 @@ class TestMemoryRoutes:
         nodes = [
             GraphNode(
                 id=f"node-{i}",
-                type=NodeType.THOUGHT,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
                 attributes={"created_at": (now - timedelta(hours=i)).isoformat()},
                 version=1,
@@ -519,7 +570,7 @@ class TestMemoryRoutes:
         nodes = [
             GraphNode(
                 id=f"node-{i}",
-                type=NodeType.THOUGHT,
+                type=NodeType.OBSERVATION,
                 scope=GraphScope.LOCAL,
                 attributes={},
                 version=1,

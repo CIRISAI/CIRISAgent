@@ -1,0 +1,11 @@
+{
+  "name": "ciris-gui-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}

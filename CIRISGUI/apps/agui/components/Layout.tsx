@@ -36,6 +36,7 @@ function Navbar({ className }: { className?: string }) {
     { name: "System", href: "/system", minRole: "OBSERVER" },
     { name: "Config", href: "/config", minRole: "ADMIN" },
     { name: "Users", href: "/users", minRole: "ADMIN" },
+    { name: "Manager", href: "/manager", minRole: "SYSTEM_ADMIN" },
     { name: "WA", href: "/wa", minRole: "OBSERVER" }, // Will be filtered by the page itself based on ADMIN or AUTHORITY role
   ];
   const navigation4 = [
@@ -51,6 +52,7 @@ function Navbar({ className }: { className?: string }) {
     { name: "System", href: "/system", minRole: "OBSERVER" },
     { name: "Config", href: "/config", minRole: "ADMIN" },
     { name: "Users", href: "/users", minRole: "ADMIN" },
+    { name: "Manager", href: "/manager", minRole: "SYSTEM_ADMIN" },
     { name: "WA", href: "/wa", minRole: "OBSERVER" }, // Will be filtered by the page itself based on ADMIN or AUTHORITY role
   ];
 

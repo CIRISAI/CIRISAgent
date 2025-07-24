@@ -54,7 +54,14 @@ export class ManagerResource extends BaseResource {
    * List all CIRIS agents managed by CIRISManager
    */
   async listAgents(): Promise<AgentInfo[]> {
-    return this.transport.get<AgentInfo[]>('/manager/v1/agents');
+    // Use relative URL to go through nginx proxy
+    const response = await fetch('/manager/v1/agents');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch agents: ${response.status}`);
+    }
+    const data = await response.json();
+    // Extract agents array from response
+    return data.agents || data;
   }
 
   /**

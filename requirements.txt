@@ -50,3 +50,6 @@ streamlit-shadcn-ui>=0.1.0,<1.0.0
 
 # Code Analysis (for mypy toolkit)
 astunparse>=1.6.3,<2.0.0
+
+# Container Management
+docker>=6.0.0,<8.0.0

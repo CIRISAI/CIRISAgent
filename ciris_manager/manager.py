@@ -65,8 +65,8 @@ class CIRISManager:
         
         # Initialize nginx manager
         self.nginx_manager = NginxManager(
-            config_path=self.config.nginx.config_path,
-            reload_command=self.config.nginx.reload_command
+            config_dir=self.config.nginx.config_dir,
+            container_name=self.config.nginx.container_name
         )
         
         # Initialize existing components (updated for per-agent management)
@@ -195,23 +195,34 @@ class CIRISManager:
             "status": "starting"
         }
     
-    async def _add_nginx_route(self, agent_name: str, port: int) -> None:
-        """Add nginx route for agent."""
+    async def update_nginx_config(self) -> bool:
+        """Update nginx configuration with all current agents."""
         try:
-            # Ensure managed sections exist first
-            if not self.nginx_manager.ensure_managed_sections():
-                logger.error("Failed to ensure nginx managed sections")
-                raise RuntimeError("Nginx configuration not ready")
+            # Discover all running agents
+            from ciris_manager.docker_discovery import DockerAgentDiscovery
+            discovery = DockerAgentDiscovery()
+            agents = discovery.discover_agents()
             
-            # Add the agent route
-            if self.nginx_manager.add_agent_route(agent_name, port):
-                logger.info(f"Added nginx route: /api/{agent_name}/* -> localhost:{port}")
+            # Update nginx config with current agent list
+            success = self.nginx_manager.update_config(agents)
+            
+            if success:
+                logger.info(f"Updated nginx config with {len(agents)} agents")
             else:
-                logger.error(f"Failed to add nginx route for {agent_name}")
-                raise RuntimeError("Failed to add nginx route")
+                logger.error("Failed to update nginx configuration")
+            
+            return success
+            
         except Exception as e:
-            logger.error(f"Error adding nginx route: {e}")
-            raise
+            logger.error(f"Error updating nginx config: {e}")
+            return False
+    
+    async def _add_nginx_route(self, agent_name: str, port: int) -> None:
+        """Update nginx configuration after adding a new agent."""
+        # With the new template-based approach, we regenerate the entire config
+        success = await self.update_nginx_config()
+        if not success:
+            raise RuntimeError("Failed to update nginx configuration")
     
     async def _start_agent(self, agent_id: str, compose_path: Path) -> None:
         """Start an agent container."""
@@ -266,6 +277,9 @@ class CIRISManager:
         logger.info("Starting CIRISManager...")
         
         self._running = True
+        
+        # Generate initial nginx config if it doesn't exist
+        await self.update_nginx_config()
         
         # Start the new container management loop
         asyncio.create_task(self.container_management_loop())

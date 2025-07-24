@@ -77,22 +77,16 @@ def create_routes(manager) -> APIRouter:
     
     @router.get("/agents", response_model=AgentListResponse)
     async def list_agents() -> AgentListResponse:
-        """List all managed agents."""
-        agents = manager.agent_registry.list_agents()
+        """List all managed agents by discovering Docker containers."""
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
         
-        agent_list = []
-        for agent in agents:
-            agent_list.append({
-                "agent_id": agent.agent_id,
-                "name": agent.name,
-                "port": agent.port,
-                "template": agent.template,
-                "api_endpoint": f"http://localhost:{agent.port}",
-                "compose_file": agent.compose_file,
-                "created_at": agent.created_at
-            })
+        discovery = DockerAgentDiscovery()
+        agents = discovery.discover_agents()
         
-        return AgentListResponse(agents=agent_list)
+        # Update nginx configuration with discovered agents
+        await manager.update_nginx_config()
+        
+        return AgentListResponse(agents=agents)
     
     @router.get("/agents/{agent_name}")
     async def get_agent(agent_name: str) -> Dict[str, Any]:
@@ -197,5 +191,24 @@ def create_routes(manager) -> APIRouter:
                 "end": manager.port_manager.end_port
             }
         }
+    
+    @router.get("/env/default")
+    async def get_default_env() -> Dict[str, str]:
+        """Get default .env file content for agent creation."""
+        import os
+        from pathlib import Path
+        
+        # Look for .env file in the project root
+        env_path = Path("/home/emoore/CIRISAgent/.env")
+        
+        if env_path.exists():
+            try:
+                content = env_path.read_text()
+                return {"content": content}
+            except Exception as e:
+                logger.error(f"Failed to read .env file: {e}")
+                return {"content": ""}
+        
+        return {"content": ""}
     
     return router

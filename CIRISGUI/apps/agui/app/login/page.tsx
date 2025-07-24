@@ -26,24 +26,19 @@ export default function LoginPage() {
   useEffect(() => {
     const loadAgents = async () => {
       try {
+        console.log('Loading agents from manager...');
         const discovered = await cirisClient.manager.listAgents();
+        console.log('Discovered agents:', discovered);
         const runningAgents = discovered.filter(a => a.status === 'running');
+        console.log('Running agents:', runningAgents);
         setAgents(runningAgents);
         if (runningAgents.length > 0) {
           setSelectedAgent(runningAgents[0].agent_id);
         }
       } catch (error) {
         console.error('Failed to load agents:', error);
-        // Fallback to datum
-        setAgents([{
-          agent_id: 'datum',
-          agent_name: 'Datum',
-          container_name: 'ciris-agent-datum',
-          status: 'running',
-          api_endpoint: window.location.origin,
-          created_at: new Date().toISOString(),
-          update_available: false
-        }]);
+        // Don't set any fallback agents - show empty list
+        setAgents([]);
       } finally {
         setLoadingAgents(false);
       }

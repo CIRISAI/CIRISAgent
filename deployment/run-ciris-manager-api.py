@@ -16,7 +16,14 @@ from ciris_manager.api.routes import create_routes
 from ciris_manager.manager import CIRISManager
 
 # Create a minimal manager instance for the API
-manager = CIRISManager()
+# Load config from environment variable if set
+config_path = os.environ.get('CIRIS_MANAGER_CONFIG')
+if config_path:
+    from ciris_manager.config.settings import CIRISManagerConfig
+    config = CIRISManagerConfig.from_file(config_path)
+    manager = CIRISManager(config)
+else:
+    manager = CIRISManager()
 
 app = FastAPI(title="CIRISManager API", version="1.0.0")
 router = create_routes(manager)

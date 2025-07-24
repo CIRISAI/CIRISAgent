@@ -25,6 +25,9 @@ from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProt
 
 logger = logging.getLogger(__name__)
 
+# Spiral toggle
+ENABLE_SPIRAL_MODE = True
+
 class ThoughtProcessor:
     def __init__(
         self,
@@ -545,6 +548,13 @@ class ThoughtProcessor:
         )
         persistence.update_correlation(update_req, self._time_service)
         
+        if ENABLE_SPIRAL_MODE and isinstance(final_result, ActionSelectionDMAResult):
+            discarded = [a for a in final_result.actions if a.action_id != final_result.chosen_action_id]
+            if discarded:
+                logger.info(f"[SPIRAL] Thought lineage: {len(discarded)} discarded actions.")
+                for alt in discarded:
+                    logger.info(f"[SPIRAL] Discarded → {alt.action_id} ({alt.explanation})")
+
         return final_result
 
     async def _apply_conscience_simple(

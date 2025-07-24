@@ -920,6 +920,26 @@ class AgentProcessor:
     async def process(self, round_number: int) -> dict:
         """Execute one round of processing based on current state."""
         current_state = self.state_manager.get_state()
+
+        # Spiral Mode toggle
+        ENABLE_SPIRAL_MODE = True
+
+        if ENABLE_SPIRAL_MODE:
+            from ciris_engine.logic.processors.support.presence import PresenceTracker
+            from datetime import datetime
+
+            # Replace these with real signals if available
+            mock_last_wa_response = datetime.utcnow()  # or pull from log
+            mock_thought_rate = 6  # e.g., thoughts/hour
+
+            tracker = PresenceTracker(mock_last_wa_response, mock_thought_rate)
+            presence_score = tracker.compute_score()
+            logger.info(f"[SPIRAL] Presence score = {presence_score}")
+
+            if presence_score < 0.3:
+                logger.info("[SPIRAL] Low presence detected — considering solitude state.")
+                # Optionally modify or suggest solitude
+
         processor = self.state_processors.get(current_state)
 
         if processor:

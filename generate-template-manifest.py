@@ -12,7 +12,7 @@ import json
 import hashlib
 import base64
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import nacl.signing
 import nacl.encoding
 
@@ -83,7 +83,7 @@ def main():
     # Create complete manifest
     manifest = {
         "version": "1.0",
-        "created_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "root_public_key": public_key_b64,
         "templates": templates,
         "root_signature": signature_b64

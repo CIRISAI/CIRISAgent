@@ -6,7 +6,7 @@ Generates individual docker-compose.yml files for each agent.
 
 import yaml
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -131,7 +131,7 @@ class ComposeGenerator:
                     },
                     "labels": {
                         "ai.ciris.agents.id": agent_id,
-                        "ai.ciris.agents.created": datetime.utcnow().isoformat() + "Z",
+                        "ai.ciris.agents.created": datetime.now(timezone.utc).isoformat(),
                         "ai.ciris.agents.template": template
                     }
                 }

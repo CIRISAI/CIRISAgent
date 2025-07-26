@@ -374,7 +374,8 @@ class ApiPlatform(Service):
     
     def is_healthy(self) -> bool:
         """Check if the API server is healthy and running."""
-        if self._server is None or self._server_task is None:
+        has_server = self._server is not None and self._server_task is not None
+        if not has_server:
             return False
         
         # Check if the server task is still running
@@ -388,15 +389,18 @@ class ApiPlatform(Service):
             # Wait for either the agent task or server task to complete
             while not agent_run_task.done():
                 # Check if server is still running
-                if self._server_task and self._server_task.done():
-                    # Server stopped unexpectedly
-                    exc = self._server_task.exception()
-                    if exc:
-                        logger.error(f"API server stopped with error: {exc}")
-                        raise exc
-                    else:
-                        logger.warning("API server stopped unexpectedly")
-                        break
+                if not self._server_task or not self._server_task.done():
+                    await asyncio.sleep(0.1)
+                    continue
+                    
+                # Server stopped unexpectedly
+                exc = self._server_task.exception()
+                if exc:
+                    logger.error(f"API server stopped with error: {exc}")
+                    raise exc
+                
+                logger.warning("API server stopped unexpectedly")
+                break
                 
                 # Wait for a short time before checking again
                 await asyncio.sleep(1)

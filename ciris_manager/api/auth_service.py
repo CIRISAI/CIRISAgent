@@ -5,7 +5,7 @@ Separates OAuth logic from route handlers for better testability.
 """
 
 from typing import Optional, Dict, Any, Protocol
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pydantic import BaseModel, Field
 import secrets
@@ -83,7 +83,7 @@ class InMemorySessionStore:
     def store_session(self, state: str, data: Dict[str, Any]) -> None:
         self._sessions[state] = {
             **data,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
     
     def get_session(self, state: str) -> Optional[Dict[str, Any]]:
@@ -274,7 +274,7 @@ class AuthService:
     def create_jwt_token(self, payload: Dict[str, Any]) -> str:
         """Create JWT token."""
         to_encode = payload.copy()
-        expire = datetime.utcnow() + timedelta(hours=self.jwt_expiration_hours)
+        expire = datetime.now(timezone.utc) + timedelta(hours=self.jwt_expiration_hours)
         to_encode.update({"exp": expire})
         
         return jwt.encode(to_encode, self.jwt_secret, algorithm=self.jwt_algorithm)

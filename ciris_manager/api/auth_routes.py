@@ -36,7 +36,7 @@ def init_auth_service(
     google_client_secret: Optional[str] = None,
     jwt_secret: Optional[str] = None,
     db_path: Optional[Path] = None
-) -> AuthService:
+) -> Optional[AuthService]:
     """Initialize auth service with configuration."""
     global _auth_service
     
@@ -70,9 +70,24 @@ def init_auth_service(
     return _auth_service
 
 
+def _get_callback_url(request: Request) -> str:
+    """Determine OAuth callback URL based on environment."""
+    if request.url.hostname in ["localhost", "127.0.0.1"]:
+        return f"http://localhost:8888/manager/v1/oauth/callback"
+    return "https://agents.ciris.ai/manager/oauth/callback"
+
+
+def _get_redirect_uri(request: Request, redirect_uri: Optional[str]) -> str:
+    """Determine redirect URI after OAuth."""
+    if redirect_uri:
+        return redirect_uri
+    return f"{request.url.scheme}://{request.url.netloc}/manager"
+
+
 def create_auth_routes() -> APIRouter:
     """Create authentication routes."""
     router = APIRouter()
+    oauth_error_msg = "OAuth not configured"
     
     @router.get("/oauth/login")
     async def google_login(
@@ -82,21 +97,14 @@ def create_auth_routes() -> APIRouter:
     ):
         """Initiate Google OAuth login flow."""
         if not auth_service:
-            raise HTTPException(status_code=500, detail="OAuth not configured")
+            raise HTTPException(status_code=500, detail=oauth_error_msg)
         
-        # Determine redirect URI
-        if not redirect_uri:
-            redirect_uri = f"{request.url.scheme}://{request.url.netloc}/manager"
-        
-        # Determine callback URL based on environment
-        if request.url.hostname in ["localhost", "127.0.0.1"]:
-            callback_url = f"http://localhost:8888/manager/v1/oauth/callback"
-        else:
-            callback_url = "https://agents.ciris.ai/manager/oauth/callback"
+        final_redirect_uri = _get_redirect_uri(request, redirect_uri)
+        callback_url = _get_callback_url(request)
         
         try:
             state, auth_url = await auth_service.initiate_oauth_flow(
-                redirect_uri=redirect_uri,
+                redirect_uri=final_redirect_uri,
                 callback_url=callback_url
             )
             return RedirectResponse(url=auth_url)
@@ -113,7 +121,7 @@ def create_auth_routes() -> APIRouter:
     ):
         """Handle Google OAuth callback."""
         if not auth_service:
-            raise HTTPException(status_code=500, detail="OAuth not configured")
+            raise HTTPException(status_code=500, detail=oauth_error_msg)
         
         try:
             result = await auth_service.handle_oauth_callback(code, state)
@@ -155,7 +163,7 @@ def create_auth_routes() -> APIRouter:
     ):
         """Get current authenticated user."""
         if not auth_service:
-            raise HTTPException(status_code=500, detail="OAuth not configured")
+            raise HTTPException(status_code=500, detail=oauth_error_msg)
         
         user = auth_service.get_current_user(authorization)
         if not user:
@@ -172,7 +180,7 @@ def get_current_user_dependency(
 ) -> Dict[str, Any]:
     """FastAPI dependency to get current authenticated user."""
     if not auth_service:
-        raise HTTPException(status_code=500, detail="OAuth not configured")
+        raise HTTPException(status_code=500, detail="OAuth not configured")  # Keep for external dependency
     
     user = auth_service.get_current_user(authorization)
     if not user:

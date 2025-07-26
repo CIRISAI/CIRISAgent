@@ -94,8 +94,11 @@ class ComposeGenerator:
         #     logger.info("Communication channel enabled: Slack")
         
         # Set the final adapter configuration
-        base_env["CIRIS_ADAPTER"] = ",".join(channels)
-        logger.info(f"Agent will be accessible via: {', '.join(channels)}")
+        # Use CIRIS_MODE for clarity, but also set CIRIS_ADAPTER for backward compatibility
+        mode_names = ["service" if ch == "api" else ch for ch in channels]
+        base_env["CIRIS_MODE"] = ",".join(mode_names)
+        base_env["CIRIS_ADAPTER"] = ",".join(channels)  # Backward compatibility
+        logger.info(f"Agent will be accessible via: {', '.join(mode_names)}")
         
         # Build compose configuration
         compose_config = {

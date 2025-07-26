@@ -215,11 +215,24 @@ def main(
         # Handle adapter types - check environment variable if none specified
         final_adapter_types_list = list(adapter_types_list)
         if not final_adapter_types_list:
-            # Check CIRIS_ADAPTER environment variable
-            env_adapter = get_env_var("CIRIS_ADAPTER")
-            if env_adapter:
-                # Support comma-separated adapters (e.g., "api,discord")
-                final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
+            # Check CIRIS_MODE first (new semantic name), then CIRIS_ADAPTER (backward compat)
+            env_mode = get_env_var("CIRIS_MODE")
+            env_adapter = get_env_var("CIRIS_ADAPTER") if not env_mode else None
+            
+            if env_mode or env_adapter:
+                # Support comma-separated modes (e.g., "service,discord")
+                mode_string = env_mode or env_adapter
+                # Map new semantic names to adapter types
+                mode_mapping = {
+                    "service": "api",    # LLM agent as a service
+                    "tool": "cli",       # LLM agent as a CLI tool
+                    "discord": "discord", # LLM agent on Discord
+                    # Keep old names for backward compatibility
+                    "api": "api",
+                    "cli": "cli"
+                }
+                modes = [m.strip() for m in mode_string.split(",")]
+                final_adapter_types_list = [mode_mapping.get(m, m) for m in modes]
             else:
                 final_adapter_types_list = ["cli"]
         

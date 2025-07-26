@@ -10,9 +10,15 @@
 
 ### 1. Agents (CIRISAgent containers)
 - **Purpose**: The actual CIRIS AI instances
-- **Config**: Must set `CIRIS_ADAPTER=api` (or discord/cli)
+- **Config**: Must set `CIRIS_MODE=service` (or `discord`, `tool`)
 - **Ports**: 8080-8199 (managed by CIRISManager)
 - **Debug**: `docker logs ciris-<agent-id>` and `/app/logs/incidents_latest.log`
+
+#### Agent Modes:
+- `service` - Web API + GUI access (stays running)
+- `discord` - Discord bot mode (stays running)
+- `tool` - CLI tool mode (executes and exits)
+- `service,discord` - Multiple modes simultaneously
 
 ### 2. GUI (CIRISGUI)
 - **Purpose**: Web interface for agent management
@@ -37,7 +43,7 @@
 1. **nginx routing**: Use `host.docker.internal:PORT` not container names
 2. **Agent IDs**: 6-char suffix, no spaces in directories
 3. **Manager startup**: Must set `CIRIS_MANAGER_CONFIG` env var
-4. **Agent adapter**: Must set `CIRIS_ADAPTER=api` or agents exit immediately
+4. **Agent mode**: Must set `CIRIS_MODE=service` or agents exit immediately
 
 ## Quick Commands
 
@@ -76,9 +82,14 @@ docker exec <container> tail /app/logs/incidents_latest.log
 
 ### For Agents
 - `CIRIS_AGENT_ID` - Unique identifier (auto-set by Manager)
-- `CIRIS_ADAPTER` - api|discord|cli (cli exits after wakeup)
-- `CIRIS_API_HOST=0.0.0.0` - For API adapter
+- `CIRIS_MODE` - service|discord|tool (or comma-separated for multi-mode)
+  - `service`: Web API + GUI (stays running)
+  - `discord`: Discord bot (stays running)  
+  - `tool`: CLI tool (exits after processing)
+- `CIRIS_API_HOST=0.0.0.0` - For service mode
 - `CIRIS_API_PORT=8080` - Internal port
+
+**Note**: `CIRIS_ADAPTER` (api|discord|cli) still works for backward compatibility
 
 ### For Discord
 - `DISCORD_TOKEN` - Bot token

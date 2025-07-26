@@ -368,19 +368,20 @@ export function CreateAgentDialog({
           </div>
         </form>
         
-        <DialogFooter className="border-t pt-4 mt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={creating}
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            form="create-agent-form"
-            disabled={creating || !formData.template || !formData.name}>
+        <div className="border-t pt-4 mt-4">
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={creating}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              form="create-agent-form"
+              disabled={creating || !formData.template || !formData.name}>
               {creating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -390,7 +391,8 @@ export function CreateAgentDialog({
                 'Create Agent'
               )}
           </Button>
-        </DialogFooter>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

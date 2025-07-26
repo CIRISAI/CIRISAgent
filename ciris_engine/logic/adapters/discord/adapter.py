@@ -51,7 +51,7 @@ class DiscordPlatform(Service):
                 if "server_id" in kwargs:
                     config_dict["server_id"] = kwargs["server_id"]
                 # Add other config fields if present
-                for key in ["deferral_channel_id", "admin_user_ids", "snore_channel_id"]:
+                for key in ["deferral_channel_id", "admin_user_ids"]:
                     if key in kwargs:
                         config_dict[key] = kwargs[key]
                 

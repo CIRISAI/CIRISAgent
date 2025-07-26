@@ -1,8 +1,8 @@
 """
 NGINX configuration management for CIRIS agents.
 
-This module handles dynamic nginx configuration updates when agents are
-created or removed through CIRISManager.
+This module handles dynamic nginx configuration generation using a template-based
+approach. It generates complete nginx.conf files rather than fragments.
 """
 import os
 import shutil
@@ -16,391 +16,337 @@ logger = logging.getLogger(__name__)
 
 
 class NginxManager:
-    """Manages nginx configuration for CIRIS agents."""
+    """Manages nginx configuration using template generation."""
     
-    # Template for agent upstream block
-    UPSTREAM_TEMPLATE = """
-upstream {agent_name} {{
-    server 127.0.0.1:{port};
-}}"""
-
-    # Template for OAuth callback routes
-    OAUTH_TEMPLATE = """
-    # {agent_display} OAuth callbacks (Direct API pattern)
-    location ~ ^/v1/auth/oauth/{agent_name}/(.+)/callback$ {{
-        proxy_pass http://{agent_name}/v1/auth/oauth/$1/callback$is_args$args;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }}"""
-
-    # Template for agent API routes
-    API_ROUTE_TEMPLATE = """
-    # {agent_display} API (port {port})
-    location ~ ^/api/{agent_name}/(.*)$ {{
-        proxy_pass http://{agent_name}/$1$is_args$args;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # WebSocket support
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
-    }}"""
-
-    # Markers for managed sections
-    UPSTREAM_START_MARKER = "# === CIRISMANAGER UPSTREAMS START ==="
-    UPSTREAM_END_MARKER = "# === CIRISMANAGER UPSTREAMS END ==="
-    OAUTH_START_MARKER = "    # === CIRISMANAGER OAUTH ROUTES START ==="
-    OAUTH_END_MARKER = "    # === CIRISMANAGER OAUTH ROUTES END ==="
-    API_START_MARKER = "    # === CIRISMANAGER API ROUTES START ==="
-    API_END_MARKER = "    # === CIRISMANAGER API ROUTES END ==="
-
-    def __init__(self, config_path: str = "/etc/nginx/conf.d/agents.ciris.ai.conf",
-                 reload_command: str = "systemctl reload nginx"):
+    def __init__(self, config_dir: str = "/home/ciris/nginx",
+                 container_name: str = "ciris-nginx"):
         """
         Initialize nginx manager.
         
         Args:
-            config_path: Path to nginx configuration file
-            reload_command: Command to reload nginx
+            config_dir: Directory for nginx configuration files
+            container_name: Name of the nginx Docker container
         """
-        self.config_path = Path(config_path)
-        self.reload_command = reload_command
+        self.config_dir = Path(config_dir)
+        self.container_name = container_name
+        self.config_path = self.config_dir / "nginx.conf"
+        self.new_config_path = self.config_dir / "nginx.conf.new"
+        self.backup_path = self.config_dir / "nginx.conf.backup"
         
-    def add_agent_route(self, agent_name: str, port: int, 
-                       agent_display: Optional[str] = None) -> bool:
+        # Ensure directory exists
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        
+    def update_config(self, agents: List[Dict]) -> bool:
         """
-        Add nginx routes for a new agent.
+        Update nginx configuration with current agent list.
         
         Args:
-            agent_name: Agent name (lowercase, used in URLs)
-            port: Port number for the agent
-            agent_display: Display name for comments (optional)
+            agents: List of agent dictionaries with id, name, port info
             
         Returns:
             True if successful, False otherwise
         """
-        if not agent_display:
-            agent_display = agent_name.replace("-", " ").title()
-            
         try:
-            # Read current config
-            if not self.config_path.exists():
-                logger.error(f"Nginx config not found at {self.config_path}")
+            # 1. Generate new config
+            new_config = self.generate_config(agents)
+            
+            # 2. Write to temporary file
+            self.new_config_path.write_text(new_config)
+            logger.info(f"Generated new nginx config with {len(agents)} agents")
+            
+            # 3. Validate configuration
+            if not self._validate_config():
+                logger.error("Nginx config validation failed")
                 return False
                 
-            content = self.config_path.read_text()
+            # 4. Backup current config if it exists
+            if self.config_path.exists():
+                shutil.copy2(self.config_path, self.backup_path)
+                logger.info("Backed up current nginx config")
+                
+            # 5. Atomic replace
+            os.rename(self.new_config_path, self.config_path)
+            logger.info("Installed new nginx config")
             
-            # Check if agent already exists
-            if f"upstream {agent_name} {{" in content:
-                logger.warning(f"Agent {agent_name} already exists in nginx config")
+            # 6. Reload nginx
+            if self._reload_nginx():
+                logger.info("Nginx reloaded successfully")
                 return True
-                
-            # Add upstream
-            upstream_block = self.UPSTREAM_TEMPLATE.format(
-                agent_name=agent_name,
-                port=port
-            )
-            content = self._insert_block(
-                content, upstream_block, 
-                self.UPSTREAM_START_MARKER, 
-                self.UPSTREAM_END_MARKER
-            )
-            
-            # Add OAuth route
-            oauth_block = self.OAUTH_TEMPLATE.format(
-                agent_name=agent_name,
-                agent_display=agent_display
-            )
-            content = self._insert_block(
-                content, oauth_block,
-                self.OAUTH_START_MARKER,
-                self.OAUTH_END_MARKER
-            )
-            
-            # Add API route
-            api_block = self.API_ROUTE_TEMPLATE.format(
-                agent_name=agent_name,
-                agent_display=agent_display,
-                port=port
-            )
-            content = self._insert_block(
-                content, api_block,
-                self.API_START_MARKER,
-                self.API_END_MARKER
-            )
-            
-            # Backup and write new config
-            self._backup_config()
-            self.config_path.write_text(content)
-            
-            # Test and reload nginx
-            if self._test_nginx_config():
-                if self._reload_nginx():
-                    logger.info(f"Successfully added routes for agent {agent_name}")
-                    return True
-                else:
-                    logger.error("Failed to reload nginx")
-                    self._restore_backup()
-                    return False
             else:
-                logger.error("Nginx config test failed")
-                self._restore_backup()
+                logger.error("Nginx reload failed, rolling back")
+                self._rollback()
                 return False
                 
         except Exception as e:
-            logger.error(f"Failed to add agent route: {e}")
+            logger.error(f"Failed to update nginx config: {e}")
+            self._rollback()
             return False
-            
-    def remove_agent_route(self, agent_name: str) -> bool:
+    
+    def generate_config(self, agents: List[Dict]) -> str:
         """
-        Remove nginx routes for an agent.
+        Generate complete nginx configuration from agent list.
         
         Args:
-            agent_name: Agent name to remove
+            agents: List of agent dictionaries
             
         Returns:
-            True if successful, False otherwise
+            Complete nginx.conf content
         """
-        try:
-            if not self.config_path.exists():
-                logger.error(f"Nginx config not found at {self.config_path}")
-                return False
-                
-            content = self.config_path.read_text()
-            
-            # Remove upstream block
-            content = self._remove_block(
-                content,
-                f"upstream {agent_name} {{",
-                "}"
-            )
-            
-            # Remove OAuth route
-            content = self._remove_block(
-                content,
-                f"location ~ ^/v1/auth/oauth/{agent_name}/",
-                "    }"
-            )
-            
-            # Remove API route  
-            content = self._remove_block(
-                content,
-                f"location ~ ^/api/{agent_name}/",
-                "    }"
-            )
-            
-            # Backup and write new config
-            self._backup_config()
-            self.config_path.write_text(content)
-            
-            # Test and reload nginx
-            if self._test_nginx_config():
-                if self._reload_nginx():
-                    logger.info(f"Successfully removed routes for agent {agent_name}")
-                    return True
-                else:
-                    logger.error("Failed to reload nginx")
-                    self._restore_backup()
-                    return False
-            else:
-                logger.error("Nginx config test failed")
-                self._restore_backup()
-                return False
-                
-        except Exception as e:
-            logger.error(f"Failed to remove agent route: {e}")
-            return False
-            
-    def get_configured_agents(self) -> Dict[str, int]:
-        """
-        Get list of agents configured in nginx.
+        config = self._generate_base_config()
+        config += self._generate_upstreams(agents)
+        config += self._generate_server_block(agents)
+        return config
+    
+    def _generate_base_config(self) -> str:
+        """Generate base nginx configuration."""
+        return """events {
+    worker_connections 1024;
+}
+
+http {
+    # Default MIME types and settings
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    
+    # Performance settings
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    
+    # Logging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+    
+    # Size limits
+    client_max_body_size 10M;
+    
+"""
+
+    def _generate_upstreams(self, agents: List[Dict]) -> str:
+        """Generate upstream blocks for all services."""
+        upstreams = """    # === UPSTREAMS ===
+    # GUI upstream (running on host)
+    upstream gui {
+        server host.docker.internal:3000;
+    }
+    
+    # Manager upstream
+    upstream manager {
+        server host.docker.internal:8888;
+    }
+"""
         
-        Returns:
-            Dict mapping agent names to ports
-        """
-        agents = {}
-        try:
-            if not self.config_path.exists():
-                return agents
+        # Add agent upstreams
+        if agents:
+            upstreams += "\n    # Agent upstreams\n"
+            for agent in agents:
+                agent_id = agent.get('agent_id', agent.get('id'))
+                port = agent.get('api_port', agent.get('port'))
                 
-            content = self.config_path.read_text()
-            
-            # Parse upstream blocks
-            import re
-            pattern = r'upstream\s+(\w+)\s*{\s*server\s+127\.0\.0\.1:(\d+);'
-            matches = re.findall(pattern, content)
-            
-            for agent_name, port in matches:
-                # Skip non-agent upstreams
-                if agent_name in ['ciris_gui', 'ciris_manager']:
+                # Skip agents without valid ports
+                if not port or str(port).lower() == 'none':
+                    logger.warning(f"Skipping agent {agent_id} - no valid port")
                     continue
-                agents[agent_name] = int(port)
-                
-        except Exception as e:
-            logger.error(f"Failed to parse nginx config: {e}")
-            
-        return agents
+                    
+                # Use host-based routing for global scale
+                # This allows agents to run anywhere - same machine, different machines, cloud
+                upstreams += f"""    upstream agent_{agent_id} {{
+        server host.docker.internal:{port};
+    }}
+"""
         
-    def ensure_managed_sections(self) -> bool:
-        """
-        Ensure managed sections exist in nginx config.
+        return upstreams + "\n"
+    
+    def _generate_server_block(self, agents: List[Dict]) -> str:
+        """Generate main server block with all routes."""
+        # Find default agent (first one or 'datum' if exists)
+        default_agent = None
+        if agents:
+            default_agent = next((a for a in agents if a.get('agent_id') == 'datum'), agents[0])
         
-        Returns:
-            True if sections exist or were created
-        """
-        try:
-            if not self.config_path.exists():
-                logger.error(f"Nginx config not found at {self.config_path}")
-                return False
+        server = """    # === MAIN SERVER ===
+    server {
+        listen 80;
+        server_name _;
+        
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "healthy\\n";
+            add_header Content-Type text/plain;
+        }
+        
+        # GUI routes
+        location / {
+            proxy_pass http://gui;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        # Manager routes
+        location /manager/v1/ {
+            proxy_pass http://manager/manager/v1/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+"""
+        
+        # Add default API route if we have a default agent
+        if default_agent:
+            agent_id = default_agent.get('agent_id', default_agent.get('id'))
+            server += f"""
+        # Default API route ({agent_id})
+        location /v1/ {{
+            proxy_pass http://agent_{agent_id}/v1/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+        }}
+"""
+        
+        # Add agent-specific routes
+        if agents:
+            server += "\n        # === AGENT ROUTES ===\n"
+            for agent in agents:
+                agent_id = agent.get('agent_id', agent.get('id'))
+                agent_name = agent.get('agent_name', agent.get('name', agent_id))
+                port = agent.get('api_port', agent.get('port'))
                 
-            content = self.config_path.read_text()
-            modified = False
-            
-            # Check for upstream section
-            if self.UPSTREAM_START_MARKER not in content:
-                # Add after initial upstreams
-                insert_pos = content.find("upstream ciris_gui")
-                if insert_pos > 0:
-                    insert_pos = content.rfind("\n", 0, insert_pos)
-                    content = (
-                        content[:insert_pos] + "\n" +
-                        self.UPSTREAM_START_MARKER + "\n" +
-                        self.UPSTREAM_END_MARKER + "\n" +
-                        content[insert_pos:]
-                    )
-                    modified = True
-                    
-            # Check for OAuth section
-            if self.OAUTH_START_MARKER not in content:
-                # Add before default /v1/ route
-                insert_pos = content.find("# Default API endpoint")
-                if insert_pos > 0:
-                    content = (
-                        content[:insert_pos] +
-                        self.OAUTH_START_MARKER + "\n" +
-                        self.OAUTH_END_MARKER + "\n\n    " +
-                        content[insert_pos:]
-                    )
-                    modified = True
-                    
-            # Check for API routes section
-            if self.API_START_MARKER not in content:
-                # Add after CIRISManager routes
-                insert_pos = content.find("# GUI (React app)")
-                if insert_pos > 0:
-                    content = (
-                        content[:insert_pos] +
-                        self.API_START_MARKER + "\n" +
-                        self.API_END_MARKER + "\n\n    " +
-                        content[insert_pos:]
-                    )
-                    modified = True
-                    
-            if modified:
-                self._backup_config()
-                self.config_path.write_text(content)
-                return self._test_nginx_config()
+                # Skip agents without valid ports
+                if not port or str(port).lower() == 'none':
+                    continue
                 
-            return True
+                # OAuth callback route
+                server += f"""
+        # {agent_name} OAuth callbacks
+        location ~ ^/v1/auth/oauth/{agent_id}/(.+)/callback$ {{
+            proxy_pass http://agent_{agent_id}/v1/auth/oauth/$1/callback$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }}
+        
+        # {agent_name} API routes
+        location ~ ^/api/{agent_id}/(.*)$ {{
+            proxy_pass http://agent_{agent_id}/$1$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
             
-        except Exception as e:
-            logger.error(f"Failed to ensure managed sections: {e}")
+            # WebSocket support
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }}
+"""
+        
+        server += """    }
+}
+"""
+        return server
+    
+    def _validate_config(self) -> bool:
+        """Validate nginx configuration using docker exec."""
+        # First copy the new config to container for validation
+        copy_result = subprocess.run([
+            'docker', 'cp',
+            str(self.new_config_path),
+            f'{self.container_name}:/etc/nginx/nginx.conf.new'
+        ], capture_output=True)
+        
+        if copy_result.returncode != 0:
+            logger.error(f"Failed to copy config to container: {copy_result.stderr.decode()}")
+            return False
+        
+        # Validate the config
+        result = subprocess.run([
+            'docker', 'exec', self.container_name,
+            'nginx', '-t', '-c', '/etc/nginx/nginx.conf.new'
+        ], capture_output=True)
+        
+        if result.returncode != 0:
+            logger.error(f"Nginx validation failed: {result.stderr.decode()}")
             return False
             
-    def _insert_block(self, content: str, block: str, 
-                      start_marker: str, end_marker: str) -> str:
-        """Insert a block between markers."""
-        start_pos = content.find(start_marker)
-        if start_pos < 0:
-            raise ValueError(f"Marker {start_marker} not found")
-            
-        # Find end of start marker line
-        start_pos = content.find("\n", start_pos) + 1
-        
-        # Insert block
-        return content[:start_pos] + block + "\n" + content[start_pos:]
-        
-    def _remove_block(self, content: str, start_pattern: str, 
-                      end_pattern: str) -> str:
-        """Remove a block from content."""
-        import re
-        
-        # Find start
-        start_match = re.search(re.escape(start_pattern), content)
-        if not start_match:
-            return content
-            
-        # Find the line start
-        line_start = content.rfind("\n", 0, start_match.start())
-        if line_start < 0:
-            line_start = 0
-        else:
-            line_start += 1
-            
-        # Find end pattern after start
-        end_match = re.search(re.escape(end_pattern), content[start_match.start():])
-        if not end_match:
-            return content
-            
-        # Find end of line containing end pattern
-        line_end = content.find("\n", start_match.start() + end_match.end())
-        if line_end < 0:
-            line_end = len(content)
-        else:
-            line_end += 1
-            
-        # Remove the block
-        return content[:line_start] + content[line_end:]
-        
-    def _backup_config(self) -> None:
-        """Create backup of current config."""
-        backup_path = self.config_path.parent / (
-            self.config_path.name + 
-            f".bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        )
-        shutil.copy2(self.config_path, backup_path)
-        logger.info(f"Created backup at {backup_path}")
-        
-    def _restore_backup(self) -> None:
-        """Restore most recent backup."""
-        backup_dir = self.config_path.parent
-        backups = sorted(backup_dir.glob(f"{self.config_path.name}.bak.*"))
-        if backups:
-            latest_backup = backups[-1]
-            shutil.copy2(latest_backup, self.config_path)
-            logger.info(f"Restored backup from {latest_backup}")
-        else:
-            logger.error("No backup found to restore")
-            
-    def _test_nginx_config(self) -> bool:
-        """Test nginx configuration."""
-        try:
-            result = subprocess.run(
-                ["nginx", "-t"],
-                capture_output=True,
-                text=True
-            )
-            return result.returncode == 0
-        except Exception as e:
-            logger.error(f"Failed to test nginx config: {e}")
-            return False
-            
+        return True
+    
     def _reload_nginx(self) -> bool:
-        """Reload nginx."""
-        try:
-            result = subprocess.run(
-                self.reload_command.split(),
-                capture_output=True,
-                text=True
-            )
-            return result.returncode == 0
-        except Exception as e:
-            logger.error(f"Failed to reload nginx: {e}")
+        """Reload nginx configuration."""
+        # First copy the validated config to the proper location
+        copy_result = subprocess.run([
+            'docker', 'cp',
+            str(self.config_path),
+            f'{self.container_name}:/etc/nginx/nginx.conf'
+        ], capture_output=True)
+        
+        if copy_result.returncode != 0:
+            logger.error(f"Failed to copy config to container: {copy_result.stderr.decode()}")
             return False
+        
+        # Reload nginx
+        result = subprocess.run([
+            'docker', 'exec', self.container_name,
+            'nginx', '-s', 'reload'
+        ], capture_output=True)
+        
+        if result.returncode != 0:
+            logger.error(f"Nginx reload failed: {result.stderr.decode()}")
+            return False
+            
+        return True
+    
+    def _rollback(self):
+        """Rollback to previous configuration."""
+        if self.backup_path.exists():
+            try:
+                shutil.copy2(self.backup_path, self.config_path)
+                self._reload_nginx()
+                logger.info("Rolled back to previous nginx config")
+            except Exception as e:
+                logger.error(f"Rollback failed: {e}")
+        
+        # Clean up temporary file
+        if self.new_config_path.exists():
+            self.new_config_path.unlink()
+    
+    def remove_agent_routes(self, agent_id: str, agents: List[Dict]) -> bool:
+        """
+        Remove routes for a specific agent by regenerating config without it.
+        
+        Args:
+            agent_id: ID of agent to remove
+            agents: Current list of ALL agents (will filter out the one to remove)
+            
+        Returns:
+            True if successful
+        """
+        # Filter out the agent to remove
+        remaining_agents = [a for a in agents if a.get('agent_id', a.get('id')) != agent_id]
+        
+        # Regenerate config with remaining agents
+        return self.update_config(remaining_agents)
+    
+    def get_current_config(self) -> Optional[str]:
+        """Get current nginx configuration."""
+        if self.config_path.exists():
+            return self.config_path.read_text()
+        return None

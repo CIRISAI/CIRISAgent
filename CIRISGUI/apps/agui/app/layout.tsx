@@ -49,6 +49,8 @@ export default function RootLayout({
 
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  const isManagerPage = pathname?.startsWith("/manager");
+  const shouldUseLayout = !isLoginPage && !isManagerPage;
 
   return (
     <html lang="en">
@@ -57,7 +59,7 @@ export default function RootLayout({
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <AgentProvider>
-              {isLoginPage ? children : <Layout>{children}</Layout>}
+              {shouldUseLayout ? <Layout>{children}</Layout> : children}
               <Toaster position="top-right" />
             </AgentProvider>
           </AuthProvider>

@@ -298,8 +298,8 @@ async def create_agent(request, wa_signature=None):
         yaml.dump(compose_config, f)
     
     # 6. Update nginx routing
-    add_nginx_route(request.name.lower(), allocated_port)
-    reload_nginx()
+    # CIRISManager regenerates complete nginx.conf with all agents
+    nginx_manager.update_config(get_all_agents())
     
     # 7. Start the agent
     await run_command(f"docker-compose -f {compose_path} up -d")
@@ -493,8 +493,8 @@ container_management:
   pull_images: true
 
 nginx:
-  config_path: /etc/nginx/sites-available/agents.ciris.ai
-  reload_command: "systemctl reload nginx"
+  config_dir: /home/ciris/nginx  # Directory for nginx configs
+  container_name: ciris-nginx     # Nginx container name
 ```
 
 ### Agent Directory Structure
@@ -535,6 +535,40 @@ The `metadata.json` file tracks agent registrations:
 }
 ```
 
+### Nginx Management
+
+CIRISManager now handles complete nginx configuration using a template-based approach:
+
+1. **Template Generation**: Generates complete `nginx.conf` files from discovered agents
+2. **Atomic Updates**: Configuration validated before deployment with automatic rollback
+3. **Dynamic Routes**: Automatically adds routes for new agents, removes for stopped agents
+4. **Default Agent**: First agent (or 'datum' if exists) becomes the default `/v1/` route
+5. **OAuth Support**: Per-agent OAuth callback routes automatically configured
+
+#### Configuration Flow
+```
+Discover Agents → Generate nginx.conf → Validate → Atomic Replace → Reload
+                                          ↓ (fail)
+                                      Rollback to backup
+```
+
+#### Setup
+```bash
+# Initial setup
+./deployment/setup-nginx-management.sh
+
+# Test integration
+./deployment/test-nginx-integration.sh
+```
+
+#### Docker Compose Configuration
+```yaml
+ciris-nginx:
+  image: nginx:alpine
+  volumes:
+    - /home/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+```
+
 ### Benefits
 
 1. **Zero-Downtime Updates**: Agents control when to shutdown, new version starts automatically
@@ -543,6 +577,7 @@ The `metadata.json` file tracks agent registrations:
 4. **Secure Creation**: WA signature required for new agents
 5. **Simple Implementation**: Leverages Docker's natural behavior
 6. **Agent Autonomy**: Agents decide when to update, manager just notifies
+7. **Dynamic Routing**: Nginx routes automatically managed by CIRISManager
 
 ### Implementation Phases
 

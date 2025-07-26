@@ -40,7 +40,6 @@ services:
       - CIRIS_API_PORT=8080
       - CIRIS_ADAPTER=api
       - CIRIS_MOCK_LLM=true
-      - CIRIS_AGENT_NAME=datum
     volumes:
       - datum_data:/app/data
       - datum_logs:/app/logs
@@ -67,7 +66,6 @@ services:
       - CIRIS_API_PORT=8081
       - CIRIS_ADAPTER=api
       - CIRIS_MOCK_LLM=true
-      - CIRIS_AGENT_NAME=sage
     volumes:
       - sage_data:/app/data
       - sage_logs:/app/logs
@@ -94,7 +92,6 @@ services:
       - CIRIS_API_PORT=8082
       - CIRIS_ADAPTER=api
       - CIRIS_MOCK_LLM=true
-      - CIRIS_AGENT_NAME=scout
     volumes:
       - scout_data:/app/data
       - scout_logs:/app/logs
@@ -121,7 +118,6 @@ services:
       - CIRIS_API_PORT=8083
       - CIRIS_ADAPTER=api
       - CIRIS_MOCK_LLM=true
-      - CIRIS_AGENT_NAME=echo-core
     volumes:
       - echo_core_data:/app/data
       - echo_core_logs:/app/logs
@@ -148,7 +144,6 @@ services:
       - CIRIS_API_PORT=8084
       - CIRIS_ADAPTER=api
       - CIRIS_MOCK_LLM=true
-      - CIRIS_AGENT_NAME=echo-speculative
     volumes:
       - echo_speculative_data:/app/data
       - echo_speculative_logs:/app/logs

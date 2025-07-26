@@ -9,6 +9,8 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Agent identification
+      - CIRIS_AGENT_ID=datum
       # Force mock LLM
       - CIRIS_MOCK_LLM=true
       # API configuration
@@ -19,9 +21,9 @@ services:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_IDS=${DISCORD_CHANNEL_IDS}
+      - DISCORD_HOME_CHANNEL_ID=${DISCORD_HOME_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

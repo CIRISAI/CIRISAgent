@@ -2,7 +2,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@ciris/manager-client": ["../../packages/ciris-manager-client/src/index.ts"]
     },
     "target": "ES2019",
     "lib": ["dom", "dom.iterable", "esnext"],

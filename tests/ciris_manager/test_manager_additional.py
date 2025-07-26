@@ -16,9 +16,19 @@ class TestManagerAdditional:
     @pytest.mark.asyncio
     async def test_start_api_server_import_error(self, tmp_path):
         """Test API server start with import error."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents") 
-        config.manager.port = 0  # Use port 0 to get a random available port
+        # Create nginx config dir
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents"),
+                "port": 0  # Use port 0 to get a random available port
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         manager = CIRISManager(config)
         
@@ -39,10 +49,22 @@ class TestManagerAdditional:
     @pytest.mark.asyncio
     async def test_container_management_with_image_pull_disabled(self, tmp_path):
         """Test container management without pulling images."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
-        config.container_management.pull_images = False
-        config.container_management.interval = 0.01
+        # Create nginx config dir
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            },
+            container_management={
+                "pull_images": False,
+                "interval": 1  # Use 1 second for fast testing
+            }
+        )
         
         manager = CIRISManager(config)
         
@@ -84,10 +106,19 @@ class TestManagerAdditional:
     
     def test_scan_with_invalid_metadata(self, tmp_path):
         """Test scanning with invalid agent metadata."""
-        config = CIRISManagerConfig()
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
-        config.manager.agents_directory = str(agents_dir)
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(agents_dir)
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         # Create agent directory
         agent_dir = agents_dir / "test"

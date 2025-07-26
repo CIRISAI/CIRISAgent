@@ -37,14 +37,22 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_add_nginx_route(self, tmp_path):
         """Test nginx route addition."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         with patch('ciris_manager.nginx_manager.NginxManager') as mock_nginx_class:
             # Configure nginx manager mock
             mock_nginx = Mock()
-            mock_nginx.ensure_managed_sections = Mock(return_value=True)
-            mock_nginx.add_agent_route = Mock(return_value=True)
+            mock_nginx.update_config = Mock(return_value=True)
             mock_nginx_class.return_value = mock_nginx
             
             manager = CIRISManager(config)
@@ -53,15 +61,79 @@ class TestManagerCoverage:
             # Test nginx route addition
             await manager._add_nginx_route("scout", 8081)
             
-            # Should call ensure_managed_sections and add_agent_route
-            mock_nginx.ensure_managed_sections.assert_called_once()
-            mock_nginx.add_agent_route.assert_called_once_with("scout", 8081)
+            # Should call update_config with agent list
+            mock_nginx.update_config.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_update_nginx_config_error_handling(self, tmp_path):
+        """Test nginx config update error handling."""
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
+        
+        with patch('ciris_manager.nginx_manager.NginxManager') as mock_nginx_class:
+            # Configure nginx manager mock to raise error
+            mock_nginx = Mock()
+            mock_nginx.update_config = Mock(side_effect=Exception("Config error"))
+            mock_nginx_class.return_value = mock_nginx
+            
+            manager = CIRISManager(config)
+            manager.nginx_manager = mock_nginx
+            
+            # Should catch exception and return False
+            result = await manager.update_nginx_config()
+            assert result is False
+    
+    @pytest.mark.asyncio
+    async def test_add_nginx_route_failure(self, tmp_path):
+        """Test nginx route addition failure."""
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
+        
+        with patch('ciris_manager.nginx_manager.NginxManager') as mock_nginx_class:
+            # Configure nginx manager mock to return False
+            mock_nginx = Mock()
+            mock_nginx.update_config = Mock(return_value=False)
+            mock_nginx_class.return_value = mock_nginx
+            
+            manager = CIRISManager(config)
+            manager.nginx_manager = mock_nginx
+            
+            # Should raise RuntimeError when update fails
+            with pytest.raises(RuntimeError, match="Failed to update nginx configuration"):
+                await manager._add_nginx_route("scout", 8081)
     
     @pytest.mark.asyncio
     async def test_pull_agent_images(self, tmp_path):
         """Test pulling agent images."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         manager = CIRISManager(config)
         
@@ -86,8 +158,17 @@ class TestManagerCoverage:
     
     def test_scan_existing_agents_no_directory(self, tmp_path):
         """Test scanning when agents directory doesn't exist."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "nonexistent")
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "nonexistent")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         # Should not raise error
         manager = CIRISManager(config)
@@ -99,9 +180,20 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_container_management_loop_error_handling(self, tmp_path):
         """Test container management loop error handling."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
-        config.container_management.interval = 0.01  # Fast for testing
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            },
+            container_management={
+                "interval": 1  # Fast for testing (minimum 1 second)
+            }
+        )
         
         manager = CIRISManager(config)
         manager._running = True
@@ -134,9 +226,18 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_create_agent_allocate_existing_port(self, tmp_path):
         """Test agent creation when port is already allocated."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
-        config.manager.templates_directory = str(tmp_path / "templates")
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents"),
+                "templates_directory": str(tmp_path / "templates")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         # Create template
         templates_dir = Path(config.manager.templates_directory)
@@ -174,9 +275,18 @@ class TestManagerCoverage:
     @pytest.mark.asyncio 
     async def test_start_api_server_disabled(self, tmp_path):
         """Test that API server doesn't start when port is not configured."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
-        config.manager.port = None  # Disable API
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents"),
+                "port": 0  # Disable API (0 means don't bind)
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         manager = CIRISManager(config)
         
@@ -191,8 +301,17 @@ class TestManagerCoverage:
     @pytest.mark.asyncio
     async def test_run_with_signal_handlers(self, tmp_path):
         """Test run method with signal handling."""
-        config = CIRISManagerConfig()
-        config.manager.agents_directory = str(tmp_path / "agents")
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        
+        config = CIRISManagerConfig(
+            manager={
+                "agents_directory": str(tmp_path / "agents")
+            },
+            nginx={
+                "config_dir": str(nginx_dir)
+            }
+        )
         
         manager = CIRISManager(config)
         

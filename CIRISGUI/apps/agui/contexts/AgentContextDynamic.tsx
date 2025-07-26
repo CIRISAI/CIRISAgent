@@ -49,27 +49,15 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       
       // If no current agent selected, select first running agent
       if (!currentAgent && discovered.length > 0) {
-        const runningAgent = discovered.find(a => a.status === 'running') || discovered[0];
-        setCurrentAgent(runningAgent);
+        const runningAgent = discovered.find(a => a.status === 'running');
+        if (runningAgent) {
+          setCurrentAgent(runningAgent);
+        }
       }
     } catch (err) {
       console.error('Failed to discover agents:', err);
       setError(err instanceof Error ? err : new Error('Failed to discover agents'));
-      
-      // Fallback: try to use default agent
-      if (agents.length === 0) {
-        const defaultAgent: AgentInfo = {
-          agent_id: 'datum',
-          agent_name: 'Datum',
-          container_name: 'ciris-agent-datum',
-          status: 'unknown',
-          api_endpoint: window.location.origin,
-          created_at: new Date().toISOString(),
-          update_available: false
-        };
-        setAgents([defaultAgent]);
-        setCurrentAgent(defaultAgent);
-      }
+      // Don't create fallback agents - let the UI handle the "no agents" case
     } finally {
       setIsLoadingAgents(false);
     }
@@ -120,12 +108,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     setCurrentAgent(agent);
     
     // Update SDK to use multi-agent routing pattern
-    // For production, use /api/{agent}/v1 pattern
-    // For local development, use the agent's direct endpoint
-    const isProduction = window.location.hostname === 'agents.ciris.ai';
-    const baseURL = isProduction 
-      ? `${window.location.origin}/api/${agentId}`
-      : agent.api_endpoint;
+    // Always use /api/{agent} pattern for consistency with nginx routing
+    const baseURL = `${window.location.origin}/api/${agentId}`;
     
     cirisClient.setConfig({ baseURL });
   };

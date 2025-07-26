@@ -212,10 +212,29 @@ def main(
             )
             mock_llm = True
 
-        # Handle adapter types - if none specified, default to CLI
+        # Handle adapter types - check environment variable if none specified
         final_adapter_types_list = list(adapter_types_list)
         if not final_adapter_types_list:
-            final_adapter_types_list = ["cli"]
+            # Check CIRIS_MODE first (new semantic name), then CIRIS_ADAPTER (backward compat)
+            env_mode = get_env_var("CIRIS_MODE")
+            env_adapter = get_env_var("CIRIS_ADAPTER") if not env_mode else None
+            
+            if env_mode or env_adapter:
+                # Support comma-separated modes (e.g., "service,discord")
+                mode_string = env_mode or env_adapter
+                # Map new semantic names to adapter types
+                mode_mapping = {
+                    "service": "api",    # LLM agent as a service
+                    "tool": "cli",       # LLM agent as a CLI tool
+                    "discord": "discord", # LLM agent on Discord
+                    # Keep old names for backward compatibility
+                    "api": "api",
+                    "cli": "cli"
+                }
+                modes = [m.strip() for m in mode_string.split(",")]
+                final_adapter_types_list = [mode_mapping.get(m, m) for m in modes]
+            else:
+                final_adapter_types_list = ["cli"]
         
         # Support multiple instances of same adapter type like "discord:instance1" or "api:port8081"
         selected_adapter_types = list(final_adapter_types_list)

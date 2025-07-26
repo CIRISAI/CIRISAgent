@@ -75,13 +75,13 @@ class ManagerConfig(BaseModel):
 
 class NginxConfig(BaseModel):
     """Nginx configuration."""
-    config_path: str = Field(
-        default="/etc/nginx/sites-available/agents.ciris.ai",
-        description="Path to nginx config file"
+    config_dir: str = Field(
+        default="/home/ciris/nginx",
+        description="Directory for nginx configuration files"
     )
-    reload_command: str = Field(
-        default="systemctl reload nginx",
-        description="Command to reload nginx"
+    container_name: str = Field(
+        default="ciris-nginx",
+        description="Name of the nginx Docker container"
     )
 
 

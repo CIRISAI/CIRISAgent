@@ -241,6 +241,17 @@ jobs:
             cd CIRISAgent
             git pull origin main
             
+            # Setup Python virtual environment for CIRISManager
+            if [ ! -d "/home/ciris/venv" ]; then
+              echo "Creating Python virtual environment for CIRISManager..."
+              python3 -m venv /home/ciris/venv
+            fi
+            
+            # Update pip and install requirements
+            echo "Installing/updating Python dependencies..."
+            /home/ciris/venv/bin/pip install --upgrade pip
+            /home/ciris/venv/bin/pip install -r requirements.txt
+            
             # Create .env.datum file for Phase 1 if it doesn't exist
             if [ ! -f ".env.datum" ]; then
               echo "# Phase 1 Mock LLM Environment" > .env.datum

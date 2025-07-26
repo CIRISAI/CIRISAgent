@@ -1,9 +1,17 @@
 FROM node:20-alpine
 WORKDIR /app
-COPY apps/agui/package.json ./
-COPY apps/agui/package-lock.json ./
-RUN npm ci --legacy-peer-deps
-RUN npm install --save-dev @types/js-cookie --legacy-peer-deps
-COPY apps/agui ./
+
+# Copy everything first
+COPY . .
+
+# Install dependencies in the GUI app directory
+WORKDIR /app/apps/agui
+RUN npm install --legacy-peer-deps
+
+# Build the app
 RUN npm run build
+
+# Runtime
+EXPOSE 3000
+ENV NODE_ENV=production
 CMD ["npm", "run", "start"]

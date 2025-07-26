@@ -51,13 +51,16 @@ class TestComposeGenerator:
         # Check service config
         service = compose["services"]["agent-scout"]
         assert service["container_name"] == "ciris-agent-scout"
-        assert service["image"] == "ghcr.io/cirisai/ciris-agent:latest"
+        # Now uses build context instead of image
+        assert "build" in service
+        assert service["build"]["context"] == "/home/ciris/ciris/forks/CIRISAgent"
+        assert service["build"]["dockerfile"] == "Dockerfile"
         assert service["ports"] == ["8081:8080"]
         assert service["restart"] == "unless-stopped"
         
         # Check environment
         env = service["environment"]
-        assert env["CIRIS_AGENT_NAME"] == "Scout"
+        # CIRIS_AGENT_NAME removed - display name derived from agent_id
         assert env["CIRIS_AGENT_ID"] == "agent-scout"
         assert env["CIRIS_TEMPLATE"] == "scout"
         assert env["CIRIS_API_HOST"] == "0.0.0.0"
@@ -84,9 +87,9 @@ class TestComposeGenerator:
         assert logging["options"]["max-size"] == "10m"
         assert logging["options"]["max-file"] == "3"
         
-        # Check network
+        # Check network  
         network = compose["networks"]["default"]
-        assert network["name"] == "ciris-scout-network"
+        assert network["name"] == "ciris-agent-scout-network"
     
     def test_generate_compose_with_environment(self, generator, temp_agent_dir):
         """Test compose generation with additional environment."""
@@ -107,7 +110,7 @@ class TestComposeGenerator:
         assert env["CUSTOM_VAR"] == "custom_value"
         assert env["CIRIS_USE_MOCK_LLM"] == "false"  # Overridden
         assert env["DEBUG"] == "true"
-        assert env["CIRIS_AGENT_NAME"] == "Scout"  # Base env still present
+        # CIRIS_AGENT_NAME removed - display name derived from agent_id  # Base env still present
     
     def test_generate_compose_no_mock_llm(self, generator, temp_agent_dir):
         """Test compose generation without mock LLM."""
@@ -209,17 +212,17 @@ class TestComposeGenerator:
     
     def test_network_naming(self, generator, temp_agent_dir):
         """Test network naming for different agent names."""
-        # Test with various names
+        # Test with various agent IDs - network name is based on agent_id not agent_name
         test_cases = [
-            ("Scout", "ciris-scout-network"),
-            ("SAGE", "ciris-sage-network"),
-            ("Echo-Core", "ciris-echo-core-network"),
-            ("Agent 123", "ciris-agent 123-network")  # Space preserved
+            ("agent-scout", "Scout", "ciris-agent-scout-network"),
+            ("agent-sage", "SAGE", "ciris-agent-sage-network"),
+            ("echo-core", "Echo-Core", "ciris-echo-core-network"),
+            ("agent-123", "Agent 123", "ciris-agent-123-network")
         ]
         
-        for agent_name, expected_network in test_cases:
+        for agent_id, agent_name, expected_network in test_cases:
             compose = generator.generate_compose(
-                agent_id=f"agent-{agent_name.lower()}",
+                agent_id=agent_id,
                 agent_name=agent_name,
                 port=8080,
                 template="default",

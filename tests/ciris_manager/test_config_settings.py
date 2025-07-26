@@ -61,8 +61,8 @@ class TestConfigSettings:
     def test_nginx_config_defaults(self):
         """Test NginxConfig defaults."""
         config = NginxConfig()
-        assert "nginx" in config.config_path
-        assert "reload" in config.reload_command
+        assert config.container_name == "ciris-nginx"
+        assert "nginx" in config.config_dir
     
     def test_ciris_manager_config_defaults(self):
         """Test CIRISManagerConfig defaults."""

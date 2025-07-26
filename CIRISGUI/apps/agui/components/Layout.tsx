@@ -119,15 +119,8 @@ function Navbar({ className }: { className?: string }) {
 }
 export function Layout({ children }: LayoutProps) {
   const { user, logout, hasRole } = useAuth();
-  const { currentAgent, currentAgentRole } = useAgent();
+  const { currentAgent, currentAgentRole, agents } = useAgent();
   const router = useRouter();
-  const [agentName, setAgentName] = useState<string>('');
-
-  // Get agent name from localStorage on mount
-  useEffect(() => {
-    const storedName = localStorage.getItem('selectedAgentName') || 'Dev-Datum';
-    setAgentName(storedName);
-  }, []);
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", minRole: "OBSERVER" },
@@ -164,12 +157,25 @@ export function Layout({ children }: LayoutProps) {
                 <div className="min-w-[250px]">
                   <p className="text-xs text-gray-400 mb-1">Current Agent:</p>
                   <div className="bg-white rounded-lg shadow-sm px-3 py-2">
-                    <p className="text-sm font-medium text-gray-900">
-                      {agentName}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      To switch agents, please logout and login again
-                    </p>
+                    {currentAgent ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-900">
+                          {currentAgent.agent_name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {agents.length > 1 ? 'To switch agents, please logout and login again' : 'Running'}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-gray-500">
+                          No agents available
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Please create an agent using the Manager
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

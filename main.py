@@ -212,10 +212,16 @@ def main(
             )
             mock_llm = True
 
-        # Handle adapter types - if none specified, default to CLI
+        # Handle adapter types - check environment variable if none specified
         final_adapter_types_list = list(adapter_types_list)
         if not final_adapter_types_list:
-            final_adapter_types_list = ["cli"]
+            # Check CIRIS_ADAPTER environment variable
+            env_adapter = get_env_var("CIRIS_ADAPTER")
+            if env_adapter:
+                # Support comma-separated adapters (e.g., "api,discord")
+                final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
+            else:
+                final_adapter_types_list = ["cli"]
         
         # Support multiple instances of same adapter type like "discord:instance1" or "api:port8081"
         selected_adapter_types = list(final_adapter_types_list)

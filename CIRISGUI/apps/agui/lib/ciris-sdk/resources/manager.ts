@@ -54,21 +54,25 @@ export class ManagerResource extends BaseResource {
    * List all CIRIS agents managed by CIRISManager
    */
   async listAgents(): Promise<AgentInfo[]> {
-    // Use relative URL to go through nginx proxy
-    const response = await fetch('/manager/v1/agents');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch agents: ${response.status}`);
-    }
-    const data = await response.json();
+    // Manager API always goes through the nginx proxy, not the agent endpoint
+    // We need to use the origin URL to ensure it goes through the right path
+    const managerUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/manager/v1/agents`
+      : '/manager/v1/agents';
+    
+    const response = await this.transport.request<{ agents: AgentInfo[] }>('GET', managerUrl);
     // Extract agents array from response
-    return data.agents || data;
+    return response.agents || [];
   }
 
   /**
    * Get detailed information about a specific agent
    */
   async getAgent(agentId: string): Promise<AgentInfo> {
-    return this.transport.get<AgentInfo>(`/manager/v1/agents/${agentId}`);
+    const managerUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/manager/v1/agents/${agentId}`
+      : `/manager/v1/agents/${agentId}`;
+    return this.transport.request<AgentInfo>('GET', managerUrl);
   }
 
   /**
@@ -76,7 +80,10 @@ export class ManagerResource extends BaseResource {
    * Requires: Local authentication and valid WA signature
    */
   async createAgent(data: AgentCreationRequest): Promise<AgentInfo> {
-    return this.transport.post<AgentInfo>('/manager/v1/agents', data);
+    const managerUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/manager/v1/agents`
+      : '/manager/v1/agents';
+    return this.transport.request<AgentInfo>('POST', managerUrl, { body: data });
   }
 
   /**
@@ -84,23 +91,29 @@ export class ManagerResource extends BaseResource {
    * Requires: Local authentication
    */
   async notifyUpdate(agentId: string, notification: UpdateNotification): Promise<{ status: string; message: string }> {
-    return this.transport.post<{ status: string; message: string }>(
-      `/manager/v1/agents/${agentId}/notify-update`,
-      notification
-    );
+    const managerUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/manager/v1/agents/${agentId}/notify-update`
+      : `/manager/v1/agents/${agentId}/notify-update`;
+    return this.transport.request<{ status: string; message: string }>('POST', managerUrl, { body: notification });
   }
 
   /**
    * Get the deployment status for an agent
    */
   async getDeploymentStatus(agentId: string): Promise<DeploymentStatus> {
-    return this.transport.get<DeploymentStatus>(`/manager/v1/deployments/${agentId}/status`);
+    const managerUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/manager/v1/deployments/${agentId}/status`
+      : `/manager/v1/deployments/${agentId}/status`;
+    return this.transport.request<DeploymentStatus>('GET', managerUrl);
   }
 
   /**
    * Health check endpoint for CIRISManager
    */
   async health(): Promise<ManagerHealth> {
-    return this.transport.get<ManagerHealth>('/manager/v1/health');
+    const managerUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/manager/v1/health`
+      : '/manager/v1/health';
+    return this.transport.request<ManagerHealth>('GET', managerUrl);
   }
 }

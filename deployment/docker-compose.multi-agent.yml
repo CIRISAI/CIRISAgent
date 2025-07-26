@@ -10,7 +10,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - CIRIS_AGENT_NAME=Datum
       - CIRIS_AGENT_ID=datum
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api
@@ -27,7 +26,6 @@ services:
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - datum_data:/app/data
       - datum_logs:/app/logs
@@ -49,7 +47,6 @@ services:
     ports:
       - "8081:8080"
     environment:
-      - CIRIS_AGENT_NAME=Sage
       - CIRIS_AGENT_ID=sage
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api
@@ -66,7 +63,6 @@ services:
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - sage_data:/app/data
       - sage_logs:/app/logs
@@ -88,7 +84,6 @@ services:
     ports:
       - "8082:8080"
     environment:
-      - CIRIS_AGENT_NAME=Scout
       - CIRIS_AGENT_ID=scout
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api
@@ -105,7 +100,6 @@ services:
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - scout_data:/app/data
       - scout_logs:/app/logs
@@ -127,7 +121,6 @@ services:
     ports:
       - "8083:8080"
     environment:
-      - CIRIS_AGENT_NAME=Echo-Core
       - CIRIS_AGENT_ID=echo-core
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api
@@ -144,7 +137,6 @@ services:
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - echo_core_data:/app/data
       - echo_core_logs:/app/logs
@@ -166,7 +158,6 @@ services:
     ports:
       - "8084:8080"
     environment:
-      - CIRIS_AGENT_NAME=Echo-Speculative
       - CIRIS_AGENT_ID=echo-speculative
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api
@@ -183,7 +174,6 @@ services:
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - echo_speculative_data:/app/data
       - echo_speculative_logs:/app/logs

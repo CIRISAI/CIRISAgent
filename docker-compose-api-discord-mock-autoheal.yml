@@ -21,7 +21,6 @@ services:
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

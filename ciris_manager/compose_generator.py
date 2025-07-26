@@ -6,6 +6,7 @@ Generates individual docker-compose.yml files for each agent.
 
 import yaml
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -55,7 +56,6 @@ class ComposeGenerator:
         """
         # Base environment
         base_env = {
-            "CIRIS_AGENT_NAME": agent_name,
             "CIRIS_AGENT_ID": agent_id,
             "CIRIS_TEMPLATE": template,
             "CIRIS_API_HOST": "0.0.0.0",
@@ -69,13 +69,44 @@ class ComposeGenerator:
         if environment:
             base_env.update(environment)
         
+        # Intelligently determine communication channels based on configuration
+        channels = []
+        
+        # API is always enabled for management and monitoring
+        channels.append("api")
+        logger.info("Communication channel enabled: API (Web GUI access)")
+        
+        # Check for Discord configuration
+        discord_indicators = [
+            "DISCORD_BOT_TOKEN",
+            "DISCORD_TOKEN", 
+            "DISCORD_HOME_CHANNEL_ID",
+            "DISCORD_CHANNEL_IDS"
+        ]
+        
+        if any(key in base_env and base_env.get(key) for key in discord_indicators):
+            channels.append("discord")
+            logger.info("Communication channel enabled: Discord (bot token detected)")
+        
+        # Future: Add detection for other platforms
+        # if "SLACK_BOT_TOKEN" in base_env:
+        #     channels.append("slack")
+        #     logger.info("Communication channel enabled: Slack")
+        
+        # Set the final adapter configuration
+        base_env["CIRIS_ADAPTER"] = ",".join(channels)
+        logger.info(f"Agent will be accessible via: {', '.join(channels)}")
+        
         # Build compose configuration
         compose_config = {
             "version": "3.8",
             "services": {
                 agent_id: {
                     "container_name": f"ciris-{agent_id}",
-                    "image": f"{self.docker_registry}/{self.default_image}",
+                    "build": {
+                        "context": "/home/ciris/ciris/forks/CIRISAgent",
+                        "dockerfile": "Dockerfile"
+                    },
                     "ports": [f"{port}:8080"],
                     "environment": base_env,
                     "volumes": [
@@ -97,12 +128,17 @@ class ComposeGenerator:
                             "max-size": "10m",
                             "max-file": "3"
                         }
+                    },
+                    "labels": {
+                        "ai.ciris.agents.id": agent_id,
+                        "ai.ciris.agents.created": datetime.utcnow().isoformat() + "Z",
+                        "ai.ciris.agents.template": template
                     }
                 }
             },
             "networks": {
                 "default": {
-                    "name": f"ciris-{agent_name.lower()}-network"
+                    "name": f"ciris-{agent_id}-network"
                 }
             }
         }

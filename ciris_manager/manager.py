@@ -9,8 +9,7 @@ import asyncio
 import logging
 import signal
 import subprocess
-import random
-import string
+import secrets
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
@@ -436,6 +435,11 @@ class CIRISManager:
         """
         Generate a 6-character URL-safe suffix for agent IDs.
 
+        Uses cryptographically secure random number generation to ensure:
+        - Unpredictability: Prevents guessing of agent IDs
+        - Uniqueness: Very low collision probability (1 in 32^6 = ~1 billion)
+        - Security: Agent IDs cannot be enumerated or predicted
+
         Excludes visually confusing characters:
         - 0/O (zero and capital O)
         - I/l/1 (capital I, lowercase L, and one)
@@ -443,7 +447,7 @@ class CIRISManager:
         Returns:
             6-character lowercase string safe for URLs
         """
-        return "".join(random.choices(self.SAFE_CHARS, k=6))
+        return "".join(secrets.choice(self.SAFE_CHARS) for _ in range(6))
 
     def get_status(self) -> dict:
         """Get current manager status."""

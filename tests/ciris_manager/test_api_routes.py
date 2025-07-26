@@ -5,7 +5,7 @@ Unit tests for CIRISManager API routes.
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-from unittest.mock import Mock, MagicMock, AsyncMock
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from pathlib import Path
 from ciris_manager.api.routes import create_routes
 from ciris_manager.agent_registry import AgentInfo
@@ -22,6 +22,8 @@ class TestAPIRoutes:
         # Mock config
         manager.config = Mock()
         manager.config.running = True
+        manager.config.manager = Mock()
+        manager.config.manager.templates_directory = "/tmp/test-templates"
         
         # Mock agent registry
         manager.agent_registry = Mock()
@@ -62,9 +64,27 @@ class TestAPIRoutes:
         return manager
     
     @pytest.fixture
-    def client(self, mock_manager):
-        """Create test client."""
+    def mock_auth(self):
+        """Mock authentication dependency."""
+        def override_get_current_user():
+            return {
+                "id": "test-user-id",
+                "email": "test@example.com",
+                "name": "Test User"
+            }
+        return override_get_current_user
+    
+    @pytest.fixture
+    def client(self, mock_manager, mock_auth):
+        """Create test client with auth mocked."""
         app = FastAPI()
+        
+        # Import the dependency we need to override
+        from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+        
+        # Override the authentication dependency
+        app.dependency_overrides[get_current_user] = mock_auth
+        
         router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")
         return TestClient(app)
@@ -87,32 +107,70 @@ class TestAPIRoutes:
         assert "components" in data
         assert data["components"]["watchdog"] == "running"
     
-    def test_list_agents_empty(self, client):
+    @patch('ciris_manager.docker_discovery.DockerAgentDiscovery')
+    def test_list_agents_empty(self, mock_discovery_class, client):
         """Test listing agents when none exist."""
+        # Mock the discovery instance
+        mock_discovery = Mock()
+        mock_discovery.discover_agents.return_value = []
+        mock_discovery_class.return_value = mock_discovery
+        
         response = client.get("/manager/v1/agents")
         assert response.status_code == 200
         data = response.json()
         assert data["agents"] == []
     
-    def test_list_agents_with_data(self, client, mock_manager):
+    @patch('ciris_manager.docker_discovery.DockerAgentDiscovery')
+    def test_list_agents_with_data(self, mock_discovery_class, client, mock_manager):
         """Test listing agents with data."""
-        # Create mock agents
-        agent1 = AgentInfo(
-            agent_id="agent-scout",
-            name="Scout",
-            port=8081,
-            template="scout",
-            compose_file="/path/to/scout/docker-compose.yml"
-        )
-        agent2 = AgentInfo(
-            agent_id="agent-sage",
-            name="Sage",
-            port=8082,
-            template="sage",
-            compose_file="/path/to/sage/docker-compose.yml"
-        )
-        
-        mock_manager.agent_registry.list_agents.return_value = [agent1, agent2]
+        # Mock the discovery instance with Docker-style agent data
+        mock_discovery = Mock()
+        mock_agents = [
+            {
+                "agent_id": "agent-scout",
+                "agent_name": "Agent Scout",
+                "container_name": "ciris-agent-scout",
+                "container_id": "abc123def456",
+                "status": "running",
+                "health": "healthy",
+                "api_endpoint": "http://localhost:8081",
+                "api_port": "8081",
+                "created_at": "2025-01-01T00:00:00Z",
+                "started_at": "2025-01-01T00:01:00Z",
+                "exit_code": 0,
+                "environment": {
+                    "CIRIS_ADAPTER": "api",
+                    "CIRIS_MOCK_LLM": "true",
+                    "CIRIS_PORT": "8080"
+                },
+                "labels": {},
+                "image": "ghcr.io/cirisai/ciris-agent:latest",
+                "restart_policy": "unless-stopped"
+            },
+            {
+                "agent_id": "agent-sage",
+                "agent_name": "Agent Sage",
+                "container_name": "ciris-agent-sage",
+                "container_id": "def456ghi789",
+                "status": "running",
+                "health": "healthy",
+                "api_endpoint": "http://localhost:8082",
+                "api_port": "8082",
+                "created_at": "2025-01-01T00:02:00Z",
+                "started_at": "2025-01-01T00:03:00Z",
+                "exit_code": 0,
+                "environment": {
+                    "CIRIS_ADAPTER": "api",
+                    "CIRIS_MOCK_LLM": "true",
+                    "CIRIS_PORT": "8080"
+                },
+                "labels": {},
+                "image": "ghcr.io/cirisai/ciris-agent:latest",
+                "restart_policy": "unless-stopped"
+            }
+        ]
+        mock_discovery.discover_agents.return_value = mock_agents
+        mock_discovery_class.return_value = mock_discovery
         
         response = client.get("/manager/v1/agents")
         assert response.status_code == 200
@@ -121,8 +179,7 @@ class TestAPIRoutes:
         
         # Check first agent
         assert data["agents"][0]["agent_id"] == "agent-scout"
-        assert data["agents"][0]["name"] == "Scout"
-        assert data["agents"][0]["port"] == 8081
+        assert data["agents"][0]["agent_name"] == "Agent Scout"
         assert data["agents"][0]["api_endpoint"] == "http://localhost:8081"
     
     def test_get_agent_exists(self, client, mock_manager):
@@ -280,14 +337,26 @@ class TestAPIRoutes:
         data = response.json()
         assert "not found" in data["detail"]
     
-    def test_list_templates(self, client, mock_manager):
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.glob')
+    def test_list_templates(self, mock_glob, mock_exists, client, mock_manager):
         """Test listing templates."""
+        # Mock template directory exists
+        mock_exists.return_value = True
+        
+        # Mock template files
+        mock_template_files = [
+            Mock(stem="scout"),
+            Mock(stem="sage")
+        ]
+        mock_glob.return_value = mock_template_files
+        
         response = client.get("/manager/v1/templates")
         assert response.status_code == 200
         data = response.json()
         assert "scout" in data["templates"]
         assert "sage" in data["templates"]
-        assert data["templates"]["scout"] == "Scout template"
+        assert data["templates"]["scout"] == "Scout agent template"
         assert "scout" in data["pre_approved"]
         assert "sage" in data["pre_approved"]
     

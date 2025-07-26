@@ -34,11 +34,6 @@ def create_follow_up_thought(
     # Cap thought depth at maximum allowed value (7)
     next_depth = min(parent.thought_depth + 1, 7)
 
-    # If we're already at max depth, log a warning
-    if parent.thought_depth >= 7:
-        logger.warning(f"Parent thought {parent.thought_id} is already at max depth {parent.thought_depth}. "
-                      "Creating follow-up at same depth.")
-
     follow_up = Thought(
         thought_id=generate_thought_id(
             thought_type=thought_type,

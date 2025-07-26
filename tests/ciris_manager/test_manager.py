@@ -18,13 +18,13 @@ class TestCIRISManager:
     def test_generate_agent_suffix(self):
         """Test agent suffix generation."""
         # Import just what we need to test
-        import random
+        import secrets
         
         # Copy the implementation to test it in isolation
         SAFE_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"
         
         def generate_suffix():
-            return ''.join(random.choices(SAFE_CHARS, k=6))
+            return ''.join(secrets.choice(SAFE_CHARS) for _ in range(6))
         
         # Test multiple suffixes
         suffixes = set()
@@ -48,6 +48,31 @@ class TestCIRISManager:
         
         # Check reasonable uniqueness (should get at least 90 unique in 100 tries)
         assert len(suffixes) >= 90
+    
+    def test_manager_generate_agent_suffix(self, manager):
+        """Test the actual manager's suffix generation method."""
+        # Generate multiple suffixes using the manager's method
+        suffixes = set()
+        for _ in range(100):
+            suffix = manager._generate_agent_suffix()
+            
+            # Check length
+            assert len(suffix) == 6
+            
+            # Check all characters are from SAFE_CHARS
+            assert all(c in manager.SAFE_CHARS for c in suffix)
+            
+            # Check no confusing characters
+            assert '0' not in suffix
+            assert 'O' not in suffix
+            assert 'I' not in suffix
+            assert 'l' not in suffix
+            assert '1' not in suffix
+            
+            suffixes.add(suffix)
+        
+        # With cryptographically secure random, we should get very high uniqueness
+        assert len(suffixes) >= 95  # Even higher expectation with secrets module
     
     @pytest.fixture
     def temp_dirs(self):
@@ -98,6 +123,10 @@ class TestCIRISManager:
     @pytest.fixture
     def config(self, temp_dirs):
         """Create test configuration."""
+        # Create nginx config dir in temp directory
+        nginx_config_dir = temp_dirs["base"] / "nginx"
+        nginx_config_dir.mkdir(exist_ok=True)
+        
         return CIRISManagerConfig(
             manager={
                 "agents_directory": str(temp_dirs["agents"]),
@@ -114,6 +143,10 @@ class TestCIRISManager:
                 "start": 8080,
                 "end": 8090,
                 "reserved": [8888]
+            },
+            nginx={
+                "config_dir": str(nginx_config_dir),
+                "container_name": "test-nginx"
             }
         )
     
@@ -203,14 +236,15 @@ class TestCIRISManager:
                 environment={"CUSTOM": "value"}
             )
         
-        # Verify result
-        assert result["agent_id"] == "scout"
-        assert result["container"] == "ciris-scout"
+        # Verify result - agent_id now includes a 6-char suffix
+        assert result["agent_id"].startswith("scout-")
+        assert len(result["agent_id"].split("-")[-1]) == 6  # 6-char suffix
+        assert result["container"] == f"ciris-{result['agent_id']}"
         assert result["port"] == 8080  # First available
         assert result["status"] == "starting"
         
         # Verify agent registered
-        agent = manager.agent_registry.get_agent("scout")
+        agent = manager.agent_registry.get_agent(result["agent_id"])
         assert agent is not None
         assert agent.name == "Scout"
         
@@ -219,7 +253,8 @@ class TestCIRISManager:
         call_args = mock_subprocess.call_args[0]
         assert call_args[0] == "docker-compose"
         assert call_args[1] == "-f"
-        assert "scout/docker-compose.yml" in call_args[2]
+        # Path now includes the full agent ID with suffix
+        assert f"{result['agent_id']}/docker-compose.yml" in call_args[2]
         assert call_args[3] == "up"
         assert call_args[4] == "-d"
     
@@ -256,8 +291,9 @@ class TestCIRISManager:
                 wa_signature="test_signature"
             )
         
-        # Should succeed
-        assert result["agent_id"] == "custom"
+        # Should succeed - agent_id now includes a 6-char suffix
+        assert result["agent_id"].startswith("custom-")
+        assert len(result["agent_id"].split("-")[-1]) == 6
         assert result["status"] == "starting"
     
     @pytest.mark.asyncio
@@ -390,13 +426,17 @@ class TestCIRISManager:
         assert result1["port"] == 8080
         assert result2["port"] == 8081
         
+        # Store the actual agent IDs
+        agent_id1 = result1["agent_id"]
+        agent_id2 = result2["agent_id"]
+        
         # Create new manager instance
         with patch('ciris_manager.template_verifier.TemplateVerifier._verify_manifest_signature', return_value=True):
             manager2 = CIRISManager(manager.config)
         
-        # Ports should still be allocated
-        assert manager2.port_manager.get_port("scout1") == 8080
-        assert manager2.port_manager.get_port("scout2") == 8081
+        # Ports should still be allocated to the actual agent IDs
+        assert manager2.port_manager.get_port(agent_id1) == 8080
+        assert manager2.port_manager.get_port(agent_id2) == 8081
     
     @pytest.mark.asyncio
     async def test_concurrent_agent_creation(self, manager):
@@ -425,3 +465,79 @@ class TestCIRISManager:
         ports = [r["port"] for r in results]
         assert len(set(ports)) == 5  # All unique
         assert all(8080 <= p <= 8090 for p in ports)
+    
+    @pytest.mark.asyncio
+    async def test_delete_agent_success(self, manager, temp_dirs):
+        """Test successful agent deletion."""
+        # First create an agent
+        manager.template_verifier.is_pre_approved = Mock(return_value=True)
+        
+        # Create agent directory and compose file
+        agent_id = "test-abc123"
+        agent_dir = temp_dirs["agents"] / agent_id
+        agent_dir.mkdir()
+        compose_file = agent_dir / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register the agent
+        manager.agent_registry.register_agent(
+            agent_id=agent_id,
+            name="Test Agent",
+            port=8080,
+            template="test",
+            compose_file=str(compose_file)
+        )
+        manager.port_manager.allocate_port(agent_id)
+        
+        # Mock subprocess and docker discovery
+        async def mock_subprocess(*args, **kwargs):
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            return mock_process
+        
+        with patch('asyncio.create_subprocess_exec', side_effect=mock_subprocess):
+            with patch('ciris_manager.docker_discovery.DockerAgentDiscovery') as mock_discovery_class:
+                mock_discovery = Mock()
+                mock_discovery.discover_agents = Mock(return_value=[])
+                mock_discovery_class.return_value = mock_discovery
+                
+                # Delete the agent
+                result = await manager.delete_agent(agent_id)
+        
+        # Verify deletion
+        assert result is True
+        assert manager.agent_registry.get_agent(agent_id) is None
+        assert manager.port_manager.is_port_available(8080)  # Port should be freed
+        assert not compose_file.exists()  # Compose file should be deleted
+    
+    @pytest.mark.asyncio
+    async def test_delete_agent_not_found(self, manager):
+        """Test deleting non-existent agent."""
+        result = await manager.delete_agent("nonexistent")
+        assert result is False
+    
+    @pytest.mark.asyncio  
+    async def test_delete_agent_error_handling(self, manager, temp_dirs):
+        """Test delete agent with subprocess error."""
+        # Create and register an agent
+        agent_id = "test-error"
+        agent_dir = temp_dirs["agents"] / agent_id
+        agent_dir.mkdir()
+        compose_file = agent_dir / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        manager.agent_registry.register_agent(
+            agent_id=agent_id,
+            name="Test Agent",
+            port=8080,
+            template="test", 
+            compose_file=str(compose_file)
+        )
+        
+        # Mock subprocess to raise an error
+        with patch('asyncio.create_subprocess_exec', side_effect=Exception("Docker error")):
+            result = await manager.delete_agent(agent_id)
+        
+        # Should return False on error
+        assert result is False

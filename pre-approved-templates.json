@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "created_at": "2025-07-21T03:23:32.183067Z",
+  "created_at": "2025-07-24T18:40:40.961268Z",
   "templates": {
     "default": {
       "checksum": "sha256:887810c3ad5ed92f6cd2416fa7e509867051550d0c29dad3534bce66160e1665",
@@ -27,6 +27,6 @@
       "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "ck4tEbdo64sIjfk0GGPfrraz1AN6VICS7qzSihksNbJc9Ie2wvXqq1rlLRzqrxT9VLteRzzKqmIHQIMYdyyCAQ==",
-  "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
+  "root_signature": "SCgUxftkC3ji7wgc7HtKls5iJF2d3Gbkw9nHT5tMS/M1VS0vzqPMvm8GdqV2blVYA3ZCZadXFvB7Odt3pQ9fCA==",
+  "root_public_key": "S5XLLlHYlj++YdXobxsaPAr4NZfBa3hfHT39SGJ2xiw="
 }

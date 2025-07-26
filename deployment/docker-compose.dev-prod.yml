@@ -31,7 +31,6 @@ services:
     networks:
       - ciris-network
     environment:
-      - CIRIS_AGENT_NAME=Datum
       - CIRIS_AGENT_ID=datum
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api

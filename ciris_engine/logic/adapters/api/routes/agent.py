@@ -371,28 +371,28 @@ async def get_history(
         
         # Sort messages by timestamp (newest first)
         sorted_messages = sorted(fetched_messages, 
-                         key=lambda m: m["timestamp"] if isinstance(m["timestamp"], datetime) else datetime.fromisoformat(str(m["timestamp"])), 
+                         key=lambda m: m.timestamp if isinstance(m.timestamp, datetime) else datetime.fromisoformat(str(m.timestamp)) if m.timestamp else datetime.now(timezone.utc), 
                          reverse=True)
 
         # Filter by time if specified
         if before:
-            filtered_messages = [m for m in sorted_messages if (m["timestamp"] if isinstance(m["timestamp"], datetime) else datetime.fromisoformat(str(m["timestamp"]))) < before]
+            filtered_messages = [m for m in sorted_messages if m.timestamp and (m.timestamp if isinstance(m.timestamp, datetime) else datetime.fromisoformat(str(m.timestamp))) < before]
         else:
             filtered_messages = sorted_messages
 
         # Convert to conversation messages
         conv_messages = []
         for msg in filtered_messages[:limit]:  # Apply limit after filtering
-            # Safely access dictionary values
-            timestamp_val = msg["timestamp"]
-            msg_timestamp = timestamp_val if isinstance(timestamp_val, datetime) else datetime.fromisoformat(str(timestamp_val))
+            # Safely access model attributes
+            timestamp_val = msg.timestamp
+            msg_timestamp = timestamp_val if isinstance(timestamp_val, datetime) else datetime.fromisoformat(str(timestamp_val)) if timestamp_val else datetime.now(timezone.utc)
             
             conv_messages.append(ConversationMessage(
-                id=str(msg.get("message_id", "")),
-                author=str(msg.get("author_name") or msg.get("author_id", "")),
-                content=str(msg.get("content", "")),
+                id=str(msg.message_id or ""),
+                author=str(msg.author_name or msg.author_id or ""),
+                content=str(msg.content or ""),
                 timestamp=msg_timestamp,
-                is_agent=bool(msg.get("is_agent_message", False))
+                is_agent=bool(getattr(msg, "is_agent_message", False) or getattr(msg, "is_bot", False))
             ))
 
         # Build response

@@ -10,7 +10,6 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      - CIRIS_AGENT_NAME=Datum
       - CIRIS_AGENT_ID=datum
       - CIRIS_PORT=8080
       - CIRIS_ADAPTER=api
@@ -25,7 +24,6 @@ services:
       - DISCORD_CHANNEL_IDS=${DISCORD_CHANNEL_IDS}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
       - WA_USER_ID=${WA_USER_ID}
-      - SNORE_CHANNEL_ID=${SNORE_CHANNEL_ID}
     volumes:
       - agent_data:/app/data
       - agent_logs:/app/logs

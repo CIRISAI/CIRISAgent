@@ -9,8 +9,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Plus, Server, Trash2, RefreshCw } from 'lucide-react';
 import { CIRISManagerClient, AgentInfo, ManagerStatus } from '../../lib/ciris-manager-client';
 import { CreateAgentDialog } from './create-agent-dialog';
+import { ManagerProtectedRoute } from '../../components/ManagerProtectedRoute';
 
 export default function ManagerPage() {
+  return (
+    <ManagerProtectedRoute>
+      <ManagerPageContent />
+    </ManagerProtectedRoute>
+  );
+}
+
+function ManagerPageContent() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [status, setStatus] = useState<ManagerStatus | null>(null);
   const [loading, setLoading] = useState(true);

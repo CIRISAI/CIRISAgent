@@ -254,7 +254,15 @@ export class Transport {
    * Build full URL with query parameters
    */
   private buildURL(path: string, params?: Record<string, any>): string {
-    const url = new URL(path, this.baseURL);
+    let url: URL;
+    
+    // Check if path is already an absolute URL
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      url = new URL(path);
+    } else {
+      // Path is relative, combine with baseURL
+      url = new URL(path, this.baseURL);
+    }
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

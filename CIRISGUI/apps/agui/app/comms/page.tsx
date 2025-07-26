@@ -6,9 +6,12 @@ import { cirisClient } from '../../lib/ciris-sdk';
 import toast from 'react-hot-toast';
 import { StatusDot } from '../../components/Icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAgent } from '../../contexts/AgentContextDynamic';
+import { NoAgentsPlaceholder } from '../../components/NoAgentsPlaceholder';
 
 export default function CommsPage() {
   const { user } = useAuth();
+  const { currentAgent, isLoadingAgents } = useAgent();
   const [message, setMessage] = useState('');
   const [showShutdownDialog, setShowShutdownDialog] = useState(false);
   const [showEmergencyShutdownDialog, setShowEmergencyShutdownDialog] = useState(false);
@@ -28,6 +31,7 @@ export default function CommsPage() {
       return result;
     },
     refetchInterval: 2000, // Refresh every 2 seconds to catch responses
+    enabled: !!currentAgent,
   });
 
   // Fetch agent status
@@ -35,6 +39,7 @@ export default function CommsPage() {
     queryKey: ['agent-status'],
     queryFn: () => cirisClient.agent.getStatus(),
     refetchInterval: 5000, // Refresh every 5 seconds
+    enabled: !!currentAgent,
   });
 
   // Send message mutation
@@ -121,6 +126,15 @@ export default function CommsPage() {
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
       .slice(-20);
   }, [history]);
+
+  // Show placeholder if no agents
+  if (!isLoadingAgents && !currentAgent) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <NoAgentsPlaceholder />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">

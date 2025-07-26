@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import logging
-from .auth import get_current_user
+from .auth import get_current_user_dependency as get_current_user
 
 logger = logging.getLogger(__name__)
 

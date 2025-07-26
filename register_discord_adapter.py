@@ -64,15 +64,12 @@ def register_discord_adapter(
     bot_token = env_vars['DISCORD_BOT_TOKEN']
     home_channel_id = env_vars.get('DISCORD_CHANNEL_ID')
     deferral_channel_id = env_vars.get('DISCORD_DEFERRAL_CHANNEL_ID')
-    snore_channel_id = env_vars.get('SNORE_CHANNEL_ID')
     wa_user_id = env_vars.get('WA_USER_ID')
     
     # Build monitored channels list
     monitored_channels = []
     if home_channel_id:
         monitored_channels.append(home_channel_id)
-    if snore_channel_id and snore_channel_id not in monitored_channels:
-        monitored_channels.append(snore_channel_id)
     
     # Build admin users list
     admin_users = []

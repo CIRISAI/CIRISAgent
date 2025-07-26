@@ -190,16 +190,16 @@ export function CreateAgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Create New Agent</DialogTitle>
-            <DialogDescription>
-              Deploy a new CIRIS agent instance with the selected template
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Create New Agent</DialogTitle>
+          <DialogDescription>
+            Deploy a new CIRIS agent instance with the selected template
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="space-y-4 py-4">
+        <form id="create-agent-form" onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -366,17 +366,21 @@ export function CreateAgentDialog({
               </Tabs>
             </div>
           </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={creating}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={creating || !formData.template || !formData.name}>
+        </form>
+        
+        <DialogFooter className="border-t pt-4 mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={creating}
+          >
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            form="create-agent-form"
+            disabled={creating || !formData.template || !formData.name}>
               {creating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -385,9 +389,8 @@ export function CreateAgentDialog({
               ) : (
                 'Create Agent'
               )}
-            </Button>
-          </DialogFooter>
-        </form>
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

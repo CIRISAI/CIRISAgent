@@ -14,6 +14,9 @@ interface AuthContextType {
   hasRole: (role: string) => boolean;
   setUser: (user: User | null) => void;
   setToken: (token: string) => void;
+  managerToken: string | null;
+  setManagerToken: (token: string | null) => void;
+  isManagerAuthenticated: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,11 +24,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [managerToken, setManagerToken] = useState<string | null>(null);
   const router = useRouter();
 
   // Check auth status on mount
   useEffect(() => {
-    checkAuth();
+    // Skip auth check on login page and manager pages
+    const pathname = window.location.pathname;
+    if (pathname === '/login' || pathname.startsWith('/manager')) {
+      setLoading(false);
+    } else {
+      checkAuth();
+    }
+    // Also check for manager token
+    const savedManagerToken = localStorage.getItem('manager_token');
+    if (savedManagerToken) {
+      setManagerToken(savedManagerToken);
+    }
   }, []);
 
   const checkAuth = async () => {
@@ -82,8 +97,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     cirisClient.setConfig({ authToken: token });
   }, []);
 
+  const isManagerAuthenticated = useCallback(() => {
+    return !!managerToken;
+  }, [managerToken]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission, hasRole, setUser, setToken }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      login, 
+      logout, 
+      hasPermission, 
+      hasRole, 
+      setUser, 
+      setToken,
+      managerToken,
+      setManagerToken,
+      isManagerAuthenticated
+    }}>
       {children}
     </AuthContext.Provider>
   );

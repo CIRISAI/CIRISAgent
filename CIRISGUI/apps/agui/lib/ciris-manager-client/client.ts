@@ -24,6 +24,18 @@ export class CIRISManagerClient {
       }
     });
 
+    // Add request interceptor to inject manager token
+    this.client.interceptors.request.use(
+      (config) => {
+        const managerToken = localStorage.getItem('manager_token');
+        if (managerToken) {
+          config.headers.Authorization = `Bearer ${managerToken}`;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+
     // Add response interceptor for error handling
     this.client.interceptors.response.use(
       response => response,

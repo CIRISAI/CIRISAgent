@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: ciris-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Mount the CIRISManager-generated config directory
+      - /home/ciris/nginx:/etc/nginx:rw
+      # Mount logs for debugging
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - cirisagent_default
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Note: Dependencies are external services
+    # - ciris-gui (runs on host port 3000)
+    # - ciris-api-discord-mock (container)
+    # - ciris-manager (runs on host port 8888)
+
+networks:
+  cirisagent_default:
+    external: true

@@ -126,9 +126,9 @@ http {
     def _generate_upstreams(self, agents: List[Dict]) -> str:
         """Generate upstream blocks for all services."""
         upstreams = """    # === UPSTREAMS ===
-    # GUI upstream
+    # GUI upstream (running on host)
     upstream gui {
-        server ciris-gui:3000;
+        server host.docker.internal:3000;
     }
     
     # Manager upstream
@@ -142,9 +142,17 @@ http {
             upstreams += "\n    # Agent upstreams\n"
             for agent in agents:
                 agent_id = agent.get('agent_id', agent.get('id'))
-                port = agent.get('api_port', agent.get('port', 8080))
+                port = agent.get('api_port', agent.get('port'))
+                
+                # Skip agents without valid ports
+                if not port or str(port).lower() == 'none':
+                    logger.warning(f"Skipping agent {agent_id} - no valid port")
+                    continue
+                    
+                # Use host-based routing for global scale
+                # This allows agents to run anywhere - same machine, different machines, cloud
                 upstreams += f"""    upstream agent_{agent_id} {{
-        server 127.0.0.1:{port};
+        server host.docker.internal:{port};
     }}
 """
         
@@ -216,6 +224,11 @@ http {
             for agent in agents:
                 agent_id = agent.get('agent_id', agent.get('id'))
                 agent_name = agent.get('agent_name', agent.get('name', agent_id))
+                port = agent.get('api_port', agent.get('port'))
+                
+                # Skip agents without valid ports
+                if not port or str(port).lower() == 'none':
+                    continue
                 
                 # OAuth callback route
                 server += f"""

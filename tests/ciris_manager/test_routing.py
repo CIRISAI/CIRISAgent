@@ -406,7 +406,8 @@ class TestValidateRoutingSetup:
         
         assert result['routable_count'] == 0
         assert len(result['errors']) == 1
-        assert "Docker connection failed" in result['errors'][0]
+        assert result['errors'][0]['name'] == 'docker'
+        assert result['errors'][0]['error'] == 'Docker connection failed'
     
     @patch('docker.from_env')
     def test_validate_routing_setup_multiple_ports(self, mock_from_env):

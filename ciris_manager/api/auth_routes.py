@@ -118,8 +118,12 @@ def create_auth_routes() -> APIRouter:
         try:
             result = await auth_service.handle_oauth_callback(code, state)
             
-            # Set JWT cookie
-            response = RedirectResponse(url=result["redirect_uri"])
+            # Redirect with token in URL (like original implementation)
+            # This matches how the frontend expects to receive the token
+            redirect_url = f"{result['redirect_uri']}?token={result['access_token']}"
+            
+            # Also set JWT cookie for future API calls
+            response = RedirectResponse(url=redirect_url)
             response.set_cookie(
                 key="manager_token",
                 value=result["access_token"],

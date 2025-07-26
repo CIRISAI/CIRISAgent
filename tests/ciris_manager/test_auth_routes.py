@@ -149,7 +149,7 @@ class TestAuthRoutes:
         response = client.get("/v1/oauth/callback?code=test-code&state=test-state")
         
         assert response.status_code == 307  # Redirect
-        assert response.headers["location"] == "http://app.com/dashboard"
+        assert response.headers["location"] == "http://app.com/dashboard?token=test-jwt-token"
         
         # Check cookie was set
         assert "manager_token" in response.cookies

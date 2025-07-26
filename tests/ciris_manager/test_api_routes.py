@@ -328,6 +328,24 @@ class TestAPIRoutes:
         # Verify delete_agent was called
         mock_manager.delete_agent.assert_called_once_with("scout")
     
+    def test_delete_agent_operation_failed(self, client, mock_manager):
+        """Test deleting agent when operation fails."""
+        agent = AgentInfo(
+            agent_id="agent-scout",
+            name="Scout",
+            port=8081,
+            template="scout",
+            compose_file="/path/to/scout/docker-compose.yml"
+        )
+        
+        mock_manager.agent_registry.get_agent.return_value = agent
+        mock_manager.delete_agent.return_value = False  # Deletion failed
+        
+        response = client.delete("/manager/v1/agents/scout")
+        assert response.status_code == 500
+        data = response.json()
+        assert "Failed to delete agent" in data["detail"]
+    
     def test_delete_agent_not_found(self, client, mock_manager):
         """Test deleting non-existent agent."""
         mock_manager.agent_registry.get_agent.return_value = None
@@ -336,6 +354,29 @@ class TestAPIRoutes:
         assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"]
+    
+    @patch('ciris_manager.docker_discovery.DockerAgentDiscovery')
+    def test_delete_discovered_agent_not_managed(self, mock_discovery_class, client, mock_manager):
+        """Test deleting a discovered agent that wasn't created by CIRISManager."""
+        # Agent not in registry
+        mock_manager.agent_registry.get_agent.return_value = None
+        
+        # But agent exists in Docker discovery
+        mock_discovery = Mock()
+        mock_discovery.discover_agents.return_value = [
+            {
+                "agent_id": "external-agent",
+                "agent_name": "External Agent",
+                "container_name": "ciris-external-agent"
+            }
+        ]
+        mock_discovery_class.return_value = mock_discovery
+        
+        response = client.delete("/manager/v1/agents/external-agent")
+        assert response.status_code == 400
+        data = response.json()
+        assert "was not created by CIRISManager" in data["detail"]
+        assert "docker-compose" in data["detail"]
     
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.glob')
@@ -370,3 +411,37 @@ class TestAPIRoutes:
         assert 3000 in data["reserved"]
         assert data["range"]["start"] == 8080
         assert data["range"]["end"] == 8200
+    
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    def test_get_default_env_exists(self, mock_read_text, mock_exists, client):
+        """Test getting default env when file exists."""
+        mock_exists.return_value = True
+        mock_read_text.return_value = "CIRIS_MOCK_LLM=true\nCIRIS_LOG_LEVEL=DEBUG"
+        
+        response = client.get("/manager/v1/env/default")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "CIRIS_MOCK_LLM=true\nCIRIS_LOG_LEVEL=DEBUG"
+    
+    @patch('pathlib.Path.exists')
+    def test_get_default_env_not_exists(self, mock_exists, client):
+        """Test getting default env when file doesn't exist."""
+        mock_exists.return_value = False
+        
+        response = client.get("/manager/v1/env/default")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == ""
+    
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    def test_get_default_env_read_error(self, mock_read_text, mock_exists, client):
+        """Test getting default env when read fails."""
+        mock_exists.return_value = True
+        mock_read_text.side_effect = Exception("Permission denied")
+        
+        response = client.get("/manager/v1/env/default")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == ""

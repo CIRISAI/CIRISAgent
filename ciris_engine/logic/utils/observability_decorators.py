@@ -224,10 +224,12 @@ def trace_span(
                 # Store correlation if we have access to telemetry
                 if hasattr(self, '_telemetry_service'):
                     try:
-                        # Store asynchronously
-                        asyncio.create_task(
+                        # Store asynchronously and save reference to prevent GC
+                        task = asyncio.create_task(
                             self._telemetry_service._store_correlation(correlation)
                         )
+                        # Fire and forget - we don't await the task
+                        task.add_done_callback(lambda t: None)  # Suppress warnings
                     except Exception:
                         pass  # Don't fail the method if telemetry fails
         

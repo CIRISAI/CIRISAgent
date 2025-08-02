@@ -29,6 +29,61 @@ logger = logging.getLogger(__name__)
 F = TypeVar('F', bound=Callable[..., Any])
 
 
+def _prepare_log_context(func: Callable, self: Any, args: Any, kwargs: Any, 
+                        service_name: str, message_template: Optional[str]) -> Dict[str, Any]:
+    """Extract common logging context preparation logic."""
+    if message_template:
+        # Bind arguments to parameter names
+        sig = inspect.signature(func)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+        
+        # Format message with parameters
+        format_dict = dict(bound_args.arguments)
+        format_dict.pop('self', None)
+        
+        # Add special variables
+        format_dict['method_name'] = func.__name__
+        format_dict['service_name'] = service_name
+        
+        try:
+            log_message = f"[{service_name.upper()} DEBUG] {message_template.format(**format_dict)}"
+        except KeyError as e:
+            log_message = f"[{service_name.upper()} DEBUG] {func.__name__} called (template error: {e})"
+    else:
+        # Default message
+        log_message = f"[{service_name.upper()} DEBUG] {func.__name__} called"
+    
+    return {
+        'log_message': log_message,
+        'method_name': func.__name__,
+        'service_name': service_name
+    }
+
+
+def _log_execution_result(logger_instance: Any, service_name: str, method_name: str,
+                         start_time: float, result: Any, include_result: bool,
+                         log_level: str = "DEBUG") -> None:
+    """Log execution result with timing."""
+    if include_result:
+        elapsed_ms = (time.time() - start_time) * 1000
+        result_str = str(result)[:200] if result is not None else 'None'
+        log_method = getattr(logger_instance, log_level.lower(), logger_instance.debug)
+        log_method(
+            f"[{service_name.upper()} DEBUG] {method_name} completed in {elapsed_ms:.2f}ms, "
+            f"result: {result_str}"
+        )
+
+
+def _log_execution_error(logger_instance: Any, service_name: str, method_name: str,
+                        start_time: float, error: Exception) -> None:
+    """Log execution error with timing."""
+    elapsed_ms = (time.time() - start_time) * 1000
+    logger_instance.error(
+        f"[{service_name.upper()} DEBUG] {method_name} failed after {elapsed_ms:.2f}ms: {error}"
+    )
+
+
 def _get_debug_env_var(service_name: str) -> bool:
     """Check if debug mode is enabled for a service."""
     env_var = f"CIRIS_{service_name.upper()}_DEBUG"
@@ -219,52 +274,22 @@ def debug_log(
             # Get logger
             method_logger = getattr(self, '_logger', logger)
             
-            # Prepare log message
-            if message_template:
-                # Bind arguments to parameter names
-                sig = inspect.signature(func)
-                bound_args = sig.bind(self, *args, **kwargs)
-                bound_args.apply_defaults()
-                
-                # Format message with parameters
-                format_dict = dict(bound_args.arguments)
-                format_dict.pop('self', None)
-                
-                # Add special variables
-                format_dict['method_name'] = func.__name__
-                format_dict['service_name'] = service_name
-                
-                try:
-                    log_message = f"[{service_name.upper()} DEBUG] {message_template.format(**format_dict)}"
-                except KeyError as e:
-                    log_message = f"[{service_name.upper()} DEBUG] {func.__name__} called (template error: {e})"
-            else:
-                # Default message
-                log_message = f"[{service_name.upper()} DEBUG] {func.__name__} called"
+            # Prepare log context
+            context = _prepare_log_context(func, self, args, kwargs, service_name, message_template)
             
             # Log the call
             log_method = getattr(method_logger, log_level.lower(), method_logger.debug)
-            log_method(log_message)
+            log_method(context['log_message'])
             
             # Execute the method
             start_time = time.time()
             try:
                 result = await func(self, *args, **kwargs)
-                
-                if include_result:
-                    elapsed_ms = (time.time() - start_time) * 1000
-                    result_str = str(result)[:200] if result is not None else 'None'
-                    log_method(
-                        f"[{service_name.upper()} DEBUG] {func.__name__} completed in {elapsed_ms:.2f}ms, "
-                        f"result: {result_str}"
-                    )
-                
+                _log_execution_result(method_logger, service_name, func.__name__, 
+                                    start_time, result, include_result, log_level)
                 return result
             except Exception as e:
-                elapsed_ms = (time.time() - start_time) * 1000
-                method_logger.error(
-                    f"[{service_name.upper()} DEBUG] {func.__name__} failed after {elapsed_ms:.2f}ms: {e}"
-                )
+                _log_execution_error(method_logger, service_name, func.__name__, start_time, e)
                 raise
         
         @functools.wraps(func)
@@ -276,47 +301,25 @@ def debug_log(
                 # Debug mode not enabled, just execute the method
                 return func(self, *args, **kwargs)
             
-            # Similar logic for sync methods
+            # Get logger
             method_logger = getattr(self, '_logger', logger)
             
-            if message_template:
-                sig = inspect.signature(func)
-                bound_args = sig.bind(self, *args, **kwargs)
-                bound_args.apply_defaults()
-                
-                format_dict = dict(bound_args.arguments)
-                format_dict.pop('self', None)
-                format_dict['method_name'] = func.__name__
-                format_dict['service_name'] = service_name
-                
-                try:
-                    log_message = f"[{service_name.upper()} DEBUG] {message_template.format(**format_dict)}"
-                except KeyError as e:
-                    log_message = f"[{service_name.upper()} DEBUG] {func.__name__} called (template error: {e})"
-            else:
-                log_message = f"[{service_name.upper()} DEBUG] {func.__name__} called"
+            # Prepare log context - reuse common function
+            context = _prepare_log_context(func, self, args, kwargs, service_name, message_template)
             
+            # Log the call
             log_method = getattr(method_logger, log_level.lower(), method_logger.debug)
-            log_method(log_message)
+            log_method(context['log_message'])
             
+            # Execute the method
             start_time = time.time()
             try:
                 result = func(self, *args, **kwargs)
-                
-                if include_result:
-                    elapsed_ms = (time.time() - start_time) * 1000
-                    result_str = str(result)[:200] if result is not None else 'None'
-                    log_method(
-                        f"[{service_name.upper()} DEBUG] {func.__name__} completed in {elapsed_ms:.2f}ms, "
-                        f"result: {result_str}"
-                    )
-                
+                _log_execution_result(method_logger, service_name, func.__name__, 
+                                    start_time, result, include_result, log_level)
                 return result
             except Exception as e:
-                elapsed_ms = (time.time() - start_time) * 1000
-                method_logger.error(
-                    f"[{service_name.upper()} DEBUG] {func.__name__} failed after {elapsed_ms:.2f}ms: {e}"
-                )
+                _log_execution_error(method_logger, service_name, func.__name__, start_time, e)
                 raise
         
         # Return appropriate wrapper based on function type

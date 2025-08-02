@@ -9,7 +9,7 @@ import re
 import secrets
 import asyncio
 import logging
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Union
 from datetime import datetime, timedelta
 
 from ciris_engine.logic.services.base_service import BaseService
@@ -23,6 +23,7 @@ from ciris_engine.schemas.services.filters_core import (
 from ciris_engine.schemas.services.core import ServiceStatus, ServiceCapabilities
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
+from ciris_engine.schemas.services.message_protocol import Message
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +185,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
 
     async def filter_message(
         self,
-        message: object,
+        message: Message,
         adapter_type: str,
         is_llm_response: bool = False
     ) -> FilterResult:
@@ -370,7 +371,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         elif priority == FilterPriority.LOW:
             profile.trust_score = min(1.0, profile.trust_score + 0.01)
 
-    def _extract_content(self, message: object, adapter_type: str) -> str:
+    def _extract_content(self, message: Message, adapter_type: str) -> str:
         """Extract text content from message based on adapter type"""
         if hasattr(message, 'content'):
             return str(message.content)  # Ensure string return
@@ -381,7 +382,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         else:
             return str(message)
 
-    def _extract_user_id(self, message: object, adapter_type: str) -> Optional[str]:
+    def _extract_user_id(self, message: Message, adapter_type: str) -> Optional[str]:
         """Extract user ID from message"""
         if hasattr(message, 'user_id'):
             return str(message.user_id) if message.user_id is not None else None
@@ -391,7 +392,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return message.get('user_id') or message.get('author_id')
         return None
 
-    def _extract_channel_id(self, message: object, adapter_type: str) -> Optional[str]:
+    def _extract_channel_id(self, message: Message, adapter_type: str) -> Optional[str]:
         """Extract channel ID from message"""
         if hasattr(message, 'channel_id'):
             return str(message.channel_id) if message.channel_id is not None else None
@@ -399,7 +400,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return message.get('channel_id')
         return None
 
-    def _extract_message_id(self, message: object, adapter_type: str) -> str:
+    def _extract_message_id(self, message: Message, adapter_type: str) -> str:
         """Extract message ID from message"""
         if hasattr(message, 'message_id'):
             return str(message.message_id)
@@ -409,7 +410,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return str(message.get('message_id') or message.get('id', 'unknown'))
         return f"msg_{int(self._now().timestamp() * 1000)}"
 
-    def _is_direct_message(self, message: object, adapter_type: str) -> bool:
+    def _is_direct_message(self, message: Message, adapter_type: str) -> bool:
         """Check if message is a direct message"""
         if hasattr(message, 'is_dm'):
             return bool(message.is_dm)

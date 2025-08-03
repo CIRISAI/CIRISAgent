@@ -215,7 +215,7 @@ export default function LoginPage() {
   const handleManagerGoogleLogin = async () => {
     try {
       // Redirect to Manager OAuth endpoint through nginx proxy
-      const redirectUri = encodeURIComponent(`${window.location.origin}/manager/oauth/callback`);
+      const redirectUri = encodeURIComponent(`${window.location.origin}/manager/callback`);
       // Always use the nginx proxy path
       const managerUrl = `${window.location.origin}/manager/v1/oauth/login`;
       window.location.href = `${managerUrl}?redirect_uri=${redirectUri}`;

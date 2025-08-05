@@ -9,7 +9,8 @@ import re
 import secrets
 import asyncio
 import logging
-from typing import Dict, Optional, List, Tuple
+import os
+from typing import Dict, Optional, List, Tuple, Union
 from datetime import datetime, timedelta
 
 from ciris_engine.logic.services.base_service import BaseService
@@ -23,11 +24,15 @@ from ciris_engine.schemas.services.filters_core import (
 from ciris_engine.schemas.services.core import ServiceStatus, ServiceCapabilities
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
+from ciris_engine.protocols.adapters.message import Message
+from ciris_engine.logic.utils.observability_decorators import debug_log, measure_performance, observable
 
 logger = logging.getLogger(__name__)
 
 class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
     """Service for adaptive message filtering with graph memory persistence"""
+    
+    service_name = "AdaptiveFilter"  # For observability decorators
 
     def __init__(self, memory_service: object, time_service: TimeServiceProtocol, llm_service: Optional[object] = None, config_service: Optional[GraphConfigServiceProtocol] = None) -> None:
         # Set instance variables BEFORE calling super().__init__()
@@ -35,6 +40,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         self.memory = memory_service
         self.llm = llm_service
         self.config_service = config_service  # GraphConfigService for proper config storage
+        self._logger = logger  # For observability decorators
         
         # Now call parent constructor
         super().__init__(time_service=time_service)
@@ -182,9 +188,11 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
 
         return config
 
+    @debug_log("Processing message: id={message_id}, adapter={adapter_type}", include_result=True, service_name_override="FILTER")
+    @measure_performance(path_type="hot")
     async def filter_message(
         self,
-        message: object,
+        message: Message,
         adapter_type: str,
         is_llm_response: bool = False
     ) -> FilterResult:
@@ -207,13 +215,14 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
                 reasoning="Filter using minimal config"
             )
 
+        message_id = self._extract_message_id(message, adapter_type)
         triggered = []
         priority = FilterPriority.LOW
 
         content = self._extract_content(message, adapter_type)
         user_id = self._extract_user_id(message, adapter_type)
         channel_id = self._extract_channel_id(message, adapter_type)
-        message_id = self._extract_message_id(message, adapter_type)
+        
         is_dm = self._is_direct_message(message, adapter_type)
 
         if is_llm_response:
@@ -226,7 +235,9 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
                 continue
 
             try:
-                if await self._test_trigger(filter_trigger, content, message, adapter_type):
+                matched = await self._test_trigger(filter_trigger, content, message, adapter_type)
+                    
+                if matched:
                     triggered.append(filter_trigger.trigger_id)
 
                     if self._priority_value(filter_trigger.priority) < self._priority_value(priority):
@@ -268,12 +279,14 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             ]
         )
 
-    async def _test_trigger(self, trigger: FilterTrigger, content: str, message: object, adapter_type: str) -> bool:
+    @debug_log("Testing filter: {trigger.trigger_id} ({trigger.name})", include_result=True, service_name_override="FILTER")
+    async def _test_trigger(self, trigger: FilterTrigger, content: str, message: Message, adapter_type: str) -> bool:
         """Test if a trigger matches the given content/message"""
 
         if trigger.pattern_type == TriggerType.REGEX:
             pattern = re.compile(trigger.pattern, re.IGNORECASE)
-            return bool(pattern.search(content))
+            match = pattern.search(content)
+            return bool(match)
 
         elif trigger.pattern_type == TriggerType.LENGTH:
             threshold = int(trigger.pattern)
@@ -302,7 +315,8 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         elif trigger.pattern_type == TriggerType.CUSTOM:
             # Handle custom logic
             if trigger.pattern == "is_dm":
-                return self._is_direct_message(message, adapter_type)
+                is_dm = self._is_direct_message(message, adapter_type)
+                return is_dm
             elif trigger.pattern == "invalid_json":
                 # Test if content looks like malformed JSON
                 if content.strip().startswith('{') or content.strip().startswith('['):
@@ -370,7 +384,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         elif priority == FilterPriority.LOW:
             profile.trust_score = min(1.0, profile.trust_score + 0.01)
 
-    def _extract_content(self, message: object, adapter_type: str) -> str:
+    def _extract_content(self, message: Message, adapter_type: str) -> str:
         """Extract text content from message based on adapter type"""
         if hasattr(message, 'content'):
             return str(message.content)  # Ensure string return
@@ -381,7 +395,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         else:
             return str(message)
 
-    def _extract_user_id(self, message: object, adapter_type: str) -> Optional[str]:
+    def _extract_user_id(self, message: Message, adapter_type: str) -> Optional[str]:
         """Extract user ID from message"""
         if hasattr(message, 'user_id'):
             return str(message.user_id) if message.user_id is not None else None
@@ -391,7 +405,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return message.get('user_id') or message.get('author_id')
         return None
 
-    def _extract_channel_id(self, message: object, adapter_type: str) -> Optional[str]:
+    def _extract_channel_id(self, message: Message, adapter_type: str) -> Optional[str]:
         """Extract channel ID from message"""
         if hasattr(message, 'channel_id'):
             return str(message.channel_id) if message.channel_id is not None else None
@@ -399,7 +413,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return message.get('channel_id')
         return None
 
-    def _extract_message_id(self, message: object, adapter_type: str) -> str:
+    def _extract_message_id(self, message: Message, adapter_type: str) -> str:
         """Extract message ID from message"""
         if hasattr(message, 'message_id'):
             return str(message.message_id)
@@ -409,7 +423,8 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return str(message.get('message_id') or message.get('id', 'unknown'))
         return f"msg_{int(self._now().timestamp() * 1000)}"
 
-    def _is_direct_message(self, message: object, adapter_type: str) -> bool:
+    @debug_log("DM detection for adapter={adapter_type}", include_result=True, service_name_override="FILTER")
+    def _is_direct_message(self, message: Message, adapter_type: str) -> bool:
         """Check if message is a direct message"""
         if hasattr(message, 'is_dm'):
             return bool(message.is_dm)

@@ -1,9 +1,10 @@
 """Adaptive Filter Service Protocol."""
 
-from typing import Protocol, Any
+from typing import Protocol
 from abc import abstractmethod
 
 from ...runtime.base import ServiceProtocol
+from ...adapters.message import Message
 from ciris_engine.schemas.services.filters_core import FilterResult, FilterHealth, FilterTrigger
 
 class AdaptiveFilterServiceProtocol(ServiceProtocol, Protocol):
@@ -12,7 +13,7 @@ class AdaptiveFilterServiceProtocol(ServiceProtocol, Protocol):
     @abstractmethod
     async def filter_message(
         self,
-        message: Any,
+        message: Message,
         adapter_type: str,
         is_llm_response: bool = False
     ) -> FilterResult:

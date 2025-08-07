@@ -295,7 +295,8 @@ python main.py --mock-llm --timeout 15 --adapter cli
 
 ### API Authentication
 ```python
-# Default development credentials
+# Default development credentials (DEV ONLY - disabled in production)
+# Production uses OAuth exclusively via Discord/Google
 username = "admin"
 password = "ciris_admin_password"
 

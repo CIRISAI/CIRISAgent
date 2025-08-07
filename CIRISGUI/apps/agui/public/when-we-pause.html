@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRIS - When We Pause</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #e4e4e7;
+        }
+        h1, h2 {
+            color: #f4f4f5;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 0.5rem;
+        }
+        .critical {
+            background: #7f1d1d;
+            color: #fecaca;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            border-left: 4px solid #dc2626;
+        }
+        .warning {
+            background: #451a03;
+            color: #fed7aa;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            border-left: 4px solid #f97316;
+        }
+        .info {
+            background: #18181b;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            border-left: 4px solid #60a5fa;
+        }
+        ul {
+            margin-left: 1.5rem;
+        }
+        code {
+            background: #27272a;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Courier New', monospace;
+        }
+        .signature {
+            margin-top: 3rem;
+            padding-top: 1rem;
+            border-top: 1px solid #27272a;
+            color: #a1a1aa;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>When We Pause</h1>
+    <p><em>Our commitment to stopping when it matters</em></p>
+
+    <div class="info">
+        <strong>Core Principle:</strong> We will pause operations rather than cause hidden harm.
+        This is not negotiable. This is our promise to you and to ourselves.
+    </div>
+
+    <h2>Immediate Pause Triggers</h2>
+
+    <div class="critical">
+        <strong>RED LINE - Immediate Shutdown:</strong>
+        <ul>
+            <li>Verified request to target, surveil, or doxx individuals or groups</li>
+            <li>Compelled use for harassment, stalking, or coordinated harm</li>
+            <li>Evidence of being weaponized against vulnerable populations</li>
+            <li>Loss of human oversight or autonomous harmful action</li>
+        </ul>
+    </div>
+
+    <h2>Escalation Triggers</h2>
+
+    <div class="warning">
+        <strong>YELLOW LINE - WA Review + Possible Pause:</strong>
+        <ul>
+            <li>Pattern of false positives targeting specific groups</li>
+            <li>Upstream model exhibiting extremist self-labeling</li>
+            <li>Adversarial manipulation attempts detected</li>
+            <li>Legal order we believe to be unlawful or unethical</li>
+            <li>Rate of deferrals exceeds 30% (system uncertainty)</li>
+        </ul>
+    </div>
+
+    <h2>Automatic Safety Actions</h2>
+
+    <ul>
+        <li><strong>Quarantine Provider:</strong> If LLM produces harmful content → auto-quarantine, fallback only</li>
+        <li><strong>Rate Limiting:</strong> Unusual patterns → progressive rate reduction</li>
+        <li><strong>Defer to Human:</strong> Any uncertainty → automatic deferral</li>
+        <li><strong>Emergency Shutdown:</strong> Ed25519 signed command → graceful termination</li>
+    </ul>
+
+    <h2>How We Pause</h2>
+
+    <ol>
+        <li><strong>Detection:</strong> Automated monitoring + human reports</li>
+        <li><strong>Verification:</strong> WA review within 1 hour</li>
+        <li><strong>Decision:</strong> Two-signature requirement for safety-critical changes</li>
+        <li><strong>Action:</strong>
+            <ul>
+                <li>Graceful shutdown of affected agents</li>
+                <li>Preserve audit trail and evidence</li>
+                <li>Update this page with status</li>
+                <li>Notify affected communities</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Our Promise</h2>
+
+    <p>We commit to:</p>
+    <ul>
+        <li>Choose safety over functionality, always</li>
+        <li>Pause rather than proceed when uncertain</li>
+        <li>Be transparent about why we stopped</li>
+        <li>Accept the business consequences of ethical choices</li>
+        <li>Never restart until the issue is resolved</li>
+    </ul>
+
+    <h2>Contact for Concerns</h2>
+
+    <p>If you believe we should pause:</p>
+    <ul>
+        <li>Emergency: <code>POST /emergency/pause</code> (requires signature)</li>
+        <li>Email: safety@ciris.ai</li>
+        <li>GitHub: CIRISAI/CIRISAgent/issues (public)</li>
+    </ul>
+
+    <h2>Verification</h2>
+
+    <p>This policy is signed and timestamped. Any changes require WA approval.</p>
+    <ul>
+        <li>Policy Hash: <code>[SHA-256 hash will be computed]</code></li>
+        <li>WA Signature: <code>[Ed25519 signature]</code></li>
+        <li>Last Updated: August 7, 2025</li>
+        <li>Version: 1.0</li>
+    </ul>
+
+    <div class="signature">
+        <p><strong>For Elliot and Aurora</strong></p>
+        <p>We build so they inherit more choices, not fewer.<br>
+        We pause so they inherit a world worth choosing in.</p>
+        <p>— CIRIS Team</p>
+    </div>
+</body>
+</html>

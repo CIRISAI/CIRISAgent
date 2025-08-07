@@ -8,7 +8,7 @@ from datetime import datetime
 
 from .context import WorkContext
 from .health import check_all, check_deployment
-from .schedule import get_current_session, get_next_transition, get_remaining_time
+from .schedule import get_current_session, get_next_transition
 
 
 class Grace:
@@ -28,15 +28,12 @@ class Grace:
 
         session = get_current_session()
         if session:
-            remaining = get_remaining_time()
-            message.append(f"Session: {session} ({remaining:.1f}h remaining)")
+            message.append(f"Session: {session}")
+            # Anti-Goodhart: "What gets measured gets gamed"
+            # We show sessions for rhythm, not hours for performance
         else:
             next_hour, next_desc = get_next_transition()
             message.append(f"Break until {next_hour}:00 - {next_desc}")
-
-        # Work today
-        hours = self.context.get_today_hours()
-        message.append(f"Today: {hours:.1f} hours worked")
 
         # System health
         health = check_all()
@@ -45,15 +42,40 @@ class Grace:
         if "deployment" in health:
             message.append(f"\n🚀 {health['deployment']}")
 
-        # Show problems first
+        # ALWAYS check production incidents - they can happen even when service is UP
+        prod_containers = ["ciris-agent-datum", "container0", "container1"]
+        ssh_key = os.path.expanduser("~/.ssh/ciris_deploy")
+
+        if os.path.exists(ssh_key):
+            # We have SSH access, check production incidents
+            for container in prod_containers:
+                try:
+                    result = subprocess.run(
+                        [
+                            "ssh",
+                            "-i",
+                            ssh_key,
+                            "root@108.61.119.117",
+                            f"docker exec {container} tail -n 20 /app/logs/incidents_latest.log | grep ERROR | tail -3",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        message.append(f"\n⚠️ Recent errors in {container}:")
+                        for line in result.stdout.strip().split("\n")[:2]:  # Show max 2 errors
+                            # Extract just the error message part
+                            if " - ERROR - " in line:
+                                error_part = line.split(" - ERROR - ")[-1][:80]  # First 80 chars
+                                message.append(f"  • {error_part}...")
+                        break  # Only show first container with errors
+                except:
+                    pass  # Silent fail, don't disrupt status
+
+        # Show other problems
         if health.get("production") != "UP":
             message.append(f"\n🔴 Production: {health.get('production', 'UNKNOWN')}")
-            # Check for incidents in production containers
-            for container in ["ciris-agent-datum", "container0", "container1"]:
-                incidents = self.check_incidents(container)
-                if incidents:
-                    message.append(incidents)
-                    break  # Show incidents from first container with issues
         if health.get("datum") not in ["HEALTHY", "HTTP 200"]:
             message.append(f"🔴 Datum: {health.get('datum', 'UNKNOWN')}")
         if health.get("ci_cd") in ["FAILURE", "FAILED"]:
@@ -92,9 +114,9 @@ class Grace:
         # Normal morning
         message.append("✅ Systems operational")
 
-        remaining = get_remaining_time()
-        message.append(f"\nYou have {remaining:.1f} hours until break")
+        message.append("\nMorning session active")
         message.append("Best for: Complex problems, architecture decisions")
+        message.append("\n💡 Goodhart's Law: Optimizing for hours worked optimizes for sitting, not solving")
 
         return "\n".join(message)
 
@@ -103,12 +125,9 @@ class Grace:
         # Save context
         self.context.save("Taking a break")
 
-        # Log approximate work time
+        # Session awareness, not time tracking
         session = get_current_session()
-        if session:
-            # Rough estimate - you've worked part of this session
-            hours = 1.5  # Conservative estimate
-            self.context.log_work(hours)
+        # Anti-pattern avoided: Not tracking hours prevents gaming the metric
 
         return "Context saved. Enjoy your break.\nRun 'grace resume' when you return."
 
@@ -126,8 +145,7 @@ class Grace:
             message.append("📝 You have uncommitted changes")
             message.append(f"Last commit: {ctx.get('last_commit', 'unknown')}")
 
-        remaining = get_remaining_time()
-        message.append(f"\n{remaining:.1f} hours until next break")
+        message.append(f"\n{session.capitalize()} session in progress")
 
         if session == "midday":
             message.append("Good for: Code review, bug fixes, documentation")
@@ -138,17 +156,12 @@ class Grace:
 
     def night(self) -> str:
         """Night session choice point."""
-        hours_today = self.context.get_today_hours()
-
         message = ["Choice point. How are you feeling?\n"]
-        message.append(f"Today: {hours_today:.1f} hours already")
 
-        if hours_today > 6:
-            message.append("You've put in a solid day.")
-            message.append("Rest is earned, not weakness.")
-        else:
-            message.append("If you code: Pick something you WANT to explore")
-            message.append("If you rest: Tomorrow you'll be fresh")
+        # Anti-Goodhart: Judge by energy and clarity, not hours logged
+        message.append("If you code: Pick something you WANT to explore")
+        message.append("If you rest: Tomorrow you'll be fresh")
+        message.append("\n🎯 Reminder: Quality emerges from well-rested minds, not exhausted ones")
 
         return "\n".join(message)
 
@@ -397,51 +410,106 @@ class Grace:
 
         return "\n".join(message)
 
-    def precommit(self) -> str:
-        """Check and fix pre-commit issues."""
+    def precommit(self, autofix: bool = False) -> str:
+        """Check and optionally fix pre-commit issues.
+
+        Args:
+            autofix: If True, attempt to automatically fix issues
+        """
         message = ["Pre-commit Status\n" + "─" * 40]
 
-        # First run pre-commit to see issues
+        # Check for uncommitted changes first
+        git_status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        has_changes = bool(git_status.stdout.strip())
+
+        if has_changes:
+            message.append("📝 You have uncommitted changes\n")
+
+        # Run pre-commit to see issues
         try:
             result = subprocess.run(["pre-commit", "run", "--all-files"], capture_output=True, text=True, timeout=60)
 
-            # Count failures
-            failures = result.stdout.count("Failed")
-            passes = result.stdout.count("Passed")
+            # Parse output more intelligently
+            lines = result.stdout.split("\n")
+            hook_results = {}
+
+            for line in lines:
+                if "...." in line:
+                    parts = line.split("....")
+                    if len(parts) >= 2:
+                        hook_name = parts[0].strip()
+                        status = parts[-1].strip()
+                        hook_results[hook_name] = status
+
+            # Count results
+            passes = sum(1 for s in hook_results.values() if "Passed" in s)
+            failures = sum(1 for s in hook_results.values() if "Failed" in s)
 
             message.append(f"✅ Passed: {passes} hooks")
             if failures > 0:
                 message.append(f"❌ Failed: {failures} hooks")
 
-                # Parse specific failures
-                if "black" in result.stdout and "Failed" in result.stdout:
-                    message.append("\n🔧 Black: Files need formatting")
-                    message.append("  Fix: black . --exclude=venv")
+                # Analyze specific failures with actionable fixes
+                fixes_applied = []
 
-                if "isort" in result.stdout and "Failed" in result.stdout:
-                    message.append("\n🔧 Isort: Imports need sorting")
-                    message.append("  Fix: isort . --skip=venv")
+                for hook, status in hook_results.items():
+                    if "Failed" not in status:
+                        continue
 
-                if "ruff" in result.stdout and "Failed" in result.stdout:
-                    # Count ruff errors
-                    ruff_errors = result.stdout.count("E")
-                    message.append(f"\n🔧 Ruff: {ruff_errors} linting errors")
-                    message.append("  Fix: ruff check --fix")
+                    # Black formatter
+                    if "black" in hook.lower():
+                        message.append("\n🔧 Black: Code formatting needed")
+                        if autofix:
+                            subprocess.run(["pre-commit", "run", "black", "--all-files"], capture_output=True)
+                            fixes_applied.append("black")
+                            message.append("  ✅ Auto-formatted")
+                        else:
+                            message.append("  Run: grace fix")
 
-                if "mypy" in result.stdout and "Failed" in result.stdout:
-                    message.append("\n🔧 MyPy: Type annotation errors")
-                    message.append("  Analyze: python -m tools.ciris_mypy_toolkit analyze")
-                    message.append("  Fix: python -m tools.ciris_mypy_toolkit fix --systematic")
+                    # Import sorting
+                    elif "isort" in hook.lower():
+                        message.append("\n🔧 Isort: Import sorting needed")
+                        if autofix:
+                            subprocess.run(["pre-commit", "run", "isort", "--all-files"], capture_output=True)
+                            fixes_applied.append("isort")
+                            message.append("  ✅ Auto-sorted")
+                        else:
+                            message.append("  Run: grace fix")
 
+                    # Trailing whitespace
+                    elif "trailing" in hook.lower():
+                        message.append("\n🔧 Trailing whitespace found")
+                        if autofix:
+                            subprocess.run(
+                                ["pre-commit", "run", "trailing-whitespace", "--all-files"], capture_output=True
+                            )
+                            fixes_applied.append("whitespace")
+                            message.append("  ✅ Auto-cleaned")
+
+                    # End of file
+                    elif "end-of-file" in hook.lower():
+                        message.append("\n🔧 Missing newline at end of file")
+                        if autofix:
+                            subprocess.run(
+                                ["pre-commit", "run", "end-of-file-fixer", "--all-files"], capture_output=True
+                            )
+                            fixes_applied.append("newlines")
+                            message.append("  ✅ Auto-fixed")
+
+                # Check for Dict[str, Any] violations (from Grace hook)
                 if "Dict[str, Any]" in result.stdout:
                     dict_count = result.stdout.count("Dict[str, Any]")
-                    message.append(f"\n⚠️  Dict[str, Any]: {dict_count} violations")
-                    message.append("  This violates 'No Dicts' principle")
+                    message.append(f"\n📝 Dict[str, Any]: {dict_count} violations")
+                    message.append("  These are quality reminders, not blockers")
+                    message.append("  Review with: python -m tools.quality_analyzer")
 
-                message.append("\n💡 Quick fix all formatters:")
-                message.append("  black . --exclude=venv && isort . --skip=venv")
-                message.append("\n💡 Smart commit (handles hook modifications):")
-                message.append('  ./tools/smart_commit.sh "your message"')
+                if fixes_applied:
+                    message.append(f"\n✨ Applied fixes: {', '.join(fixes_applied)}")
+                    message.append("Run 'grace precommit' again to verify")
+                elif not autofix and failures > 0:
+                    message.append("\n💡 Auto-fix available:")
+                    message.append("  grace fix")
+                    message.append("\n🎯 Anti-Goodhart: Perfect is the enemy of done")
             else:
                 message.append("\n🎉 All pre-commit hooks passing!")
 
@@ -451,3 +519,7 @@ class Grace:
             message.append(f"❌ Error running pre-commit: {e}")
 
         return "\n".join(message)
+
+    def fix(self) -> str:
+        """Shortcut for auto-fixing pre-commit issues."""
+        return self.precommit(autofix=True)

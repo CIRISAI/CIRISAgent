@@ -1,6 +1,9 @@
-import yaml
-from ciris_engine.schemas.config.agent import AgentTemplate
 from pathlib import Path
+
+import yaml
+
+from ciris_engine.schemas.config.agent import AgentTemplate
+
 
 def validate_templates():
     """
@@ -14,7 +17,7 @@ def validate_templates():
     for path in template_paths:
         print(f"Validating {path}...")
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 data = yaml.safe_load(f)
                 AgentTemplate.model_validate(data)
             print(f"SUCCESS: {path} is valid against the AgentTemplate schema.")
@@ -22,6 +25,7 @@ def validate_templates():
             print(f"ERROR: {path} failed validation.")
             print(e)
             return
+
 
 if __name__ == "__main__":
     validate_templates()

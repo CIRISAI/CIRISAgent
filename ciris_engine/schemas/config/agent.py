@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class StewardshipCalculation(BaseModel):
     """Schema for the Stewardship Tier calculation details."""
+
     creator_influence_score: int = Field(..., description="Creator-Influence Score (CIS)")
     risk_magnitude: int = Field(..., description="Risk Magnitude (RM)")
     formula: str = Field(..., description="Formula used for calculation")
@@ -19,6 +20,7 @@ class StewardshipCalculation(BaseModel):
 
 class CreatorLedgerEntry(BaseModel):
     """Schema for the Creator Ledger entry."""
+
     creator_id: str = Field(..., description="Identifier for the creator or creating team")
     creation_timestamp: str = Field(..., description="ISO 8601 timestamp of the creation entry")
     covenant_version: str = Field(..., description="Version of the Covenant applied")
@@ -30,6 +32,7 @@ class CreatorLedgerEntry(BaseModel):
 
 class CreatorIntentStatement(BaseModel):
     """Schema for the Creator Intent Statement (CIS)."""
+
     purpose_and_functionalities: List[str] = Field(..., description="The intended purpose and functionalities")
     limitations_and_design_choices: List[str] = Field(..., description="Known limitations and key design choices")
     anticipated_benefits: List[str] = Field(..., description="Anticipated benefits of the creation")
@@ -38,6 +41,7 @@ class CreatorIntentStatement(BaseModel):
 
 class Stewardship(BaseModel):
     """Schema for Book VI Stewardship information."""
+
     stewardship_tier: int = Field(..., description="Calculated Stewardship Tier (ST) for the agent")
     creator_intent_statement: CreatorIntentStatement = Field(..., description="The Creator Intent Statement (CIS)")
     creator_ledger_entry: CreatorLedgerEntry = Field(..., description="The entry for the Creator Ledger")

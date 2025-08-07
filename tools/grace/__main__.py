@@ -28,7 +28,8 @@ def main() -> None:
         "night": grace.night,
         "deploy": grace.deploy_status,
         "deployment": grace.deploy_status,
-        "precommit": grace.precommit,
+        "precommit": lambda: grace.precommit(autofix="--fix" in sys.argv),
+        "fix": grace.fix,
         "incidents": lambda: grace.incidents(sys.argv[2] if len(sys.argv) > 2 else "ciris-agent-datum"),
         # Aliases
         "s": grace.status,
@@ -37,7 +38,8 @@ def main() -> None:
         "r": grace.resume,
         "n": grace.night,
         "d": grace.deploy_status,
-        "pc": grace.precommit,
+        "pc": lambda: grace.precommit(autofix="--fix" in sys.argv),
+        "f": grace.fix,
         "i": lambda: grace.incidents(sys.argv[2] if len(sys.argv) > 2 else "ciris-agent-datum"),
     }
 
@@ -52,11 +54,12 @@ def main() -> None:
         print("  resume     - Resume after break")
         print("  night      - Evening choice point")
         print("  deploy     - Check deployment status")
-        print("  precommit  - Check and fix pre-commit issues")
+        print("  precommit  - Check pre-commit issues (--fix to auto-fix)")
+        print("  fix        - Auto-fix pre-commit issues")
         print("  incidents  - Check container incidents log")
         print("             Usage: grace incidents [container_name]")
         print("             Default: ciris-agent-datum")
-        print("\nShort forms: s, m, p, r, n, d, pc, i")
+        print("\nShort forms: s, m, p, r, n, d, pc, f, i")
     else:
         print(f"Unknown command: {command}")
         print("Try 'grace help' for available commands")

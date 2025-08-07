@@ -14,7 +14,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from .middleware.rate_limiter import RateLimitMiddleware
 
 # Import all route modules from adapter
-from .routes import agent, audit, auth, config, emergency, memory, system, system_extensions, telemetry, users, wa
+from .routes import (
+    agent,
+    audit,
+    auth,
+    config,
+    dsar,
+    emergency,
+    memory,
+    system,
+    system_extensions,
+    telemetry,
+    transparency,
+    users,
+    wa,
+)
 
 # Import auth service
 from .services.auth_service import APIAuthService
@@ -134,6 +148,8 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         wa.router,  # Wise Authority
         auth.router,  # Authentication
         users.router,  # User management
+        dsar.router,  # Data Subject Access Requests (GDPR compliance)
+        transparency.router,  # Public transparency feed (no auth)
     ]
 
     # Include all v1 routes with /v1 prefix

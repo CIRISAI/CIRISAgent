@@ -17,7 +17,7 @@ class WorkContext:
         self.context_dir = Path.home() / ".grace"
         self.context_dir.mkdir(exist_ok=True)
         self.context_file = self.context_dir / "context.json"
-        self.work_log = self.context_dir / "work_log.json"
+        # Anti-Goodhart: Removed work_log - tracking hours incentivizes wrong behavior
 
     def save(self, message: str = "") -> None:
         """Save current work context."""
@@ -39,40 +39,10 @@ class WorkContext:
         with open(self.context_file) as f:
             return json.load(f)
 
-    def log_work(self, hours: float, note: str = "") -> None:
-        """Log work hours."""
-        log_entry = {"date": datetime.now().isoformat(), "hours": hours, "note": note}
-
-        logs = []
-        if self.work_log.exists():
-            with open(self.work_log) as f:
-                logs = json.load(f)
-
-        logs.append(log_entry)
-
-        # Keep last 30 days
-        if len(logs) > 30:
-            logs = logs[-30:]
-
-        with open(self.work_log, "w") as f:
-            json.dump(logs, f, indent=2)
-
-    def get_today_hours(self) -> float:
-        """Get hours worked today."""
-        if not self.work_log.exists():
-            return 0.0
-
-        today = datetime.now().date().isoformat()
-        total = 0.0
-
-        with open(self.work_log) as f:
-            logs = json.load(f)
-
-        for entry in logs:
-            if entry["date"].startswith(today):
-                total += entry["hours"]
-
-        return total
+    # Removed time tracking methods - Goodhart's Law:
+    # "When a measure becomes a target, it ceases to be a good measure."
+    # Tracking hours optimizes for time spent, not problems solved.
+    # Quality software emerges from clear thinking, not clock watching.
 
     def _get_git_branch(self) -> str:
         """Get current git branch."""

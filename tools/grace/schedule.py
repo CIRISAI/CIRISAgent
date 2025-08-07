@@ -44,13 +44,7 @@ def get_next_transition() -> Tuple[int, str]:
     return first_hour, TRANSITIONS[first_hour]
 
 
-def get_remaining_time() -> float:
-    """Hours remaining in current session."""
-    session = get_current_session()
-    if not session:
-        return 0.0
-
-    _, end = SESSIONS[session]
-    now = datetime.now()
-    remaining = end - now.hour - (now.minute / 60.0)
-    return max(0.0, remaining)
+# Removed get_remaining_time() - Anti-Goodhart Pattern
+# Counting down hours creates anxiety and rush
+# Better to focus on session rhythm than minute tracking
+# "The clock is a poor proxy for productivity"

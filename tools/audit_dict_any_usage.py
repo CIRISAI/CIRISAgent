@@ -407,6 +407,8 @@ def main():
             f,
             indent=2,
         )
+        # Add newline at end of file to satisfy pre-commit hooks
+        f.write("\n")
 
     print(f"\n\nDetailed findings saved to: {output_file}")
 

@@ -357,7 +357,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                             source_task_id=original_task.task_id,
                             parent_thought_id=referenced_thought_id,
                             thought_type=ThoughtType.GUIDANCE,
-                            status=ThoughtStatus.PROCESSING,  # Set to PROCESSING status
+                            status=ThoughtStatus.PENDING,  # Must be PENDING to enter processing queue!
                             created_at=(
                                 self.time_service.now_iso()
                                 if self.time_service

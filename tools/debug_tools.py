@@ -13,6 +13,8 @@ Usage:
     python debug_tools.py traces             # List recent trace IDs
     python debug_tools.py incidents          # Show recent incidents
     python debug_tools.py api-messages       # Show API message queue
+    python debug_tools.py investigate <id>   # Investigate stuck thought (prefix OK)
+    python debug_tools.py guidance           # Show all guidance thoughts
 """
 
 import json
@@ -335,30 +337,50 @@ def list_traces(limit=20):
             print(f"{trace_id:<40} {first[:19]:<20} {last[:19]:<20} {count}")
 
 
-def show_thoughts(status="PENDING"):
-    """Show thoughts by status."""
+def show_thoughts(status="PENDING", thought_type=None):
+    """Show thoughts by status and optionally by type."""
     conn = get_db_connection()
-    cursor = conn.execute(
-        """
-        SELECT thought_id, source_task_id, thought_type, status,
-               thought_depth, created_at, content
-        FROM thoughts
-        WHERE status = ?
-        ORDER BY created_at DESC
-        LIMIT 20
-    """,
-        (status,),
-    )
+
+    if thought_type:
+        cursor = conn.execute(
+            """
+            SELECT thought_id, source_task_id, thought_type, status,
+                   thought_depth, created_at, content, parent_thought_id,
+                   round_number, updated_at
+            FROM thoughts
+            WHERE status = ? AND thought_type = ?
+            ORDER BY created_at DESC
+            LIMIT 20
+        """,
+            (status, thought_type),
+        )
+    else:
+        cursor = conn.execute(
+            """
+            SELECT thought_id, source_task_id, thought_type, status,
+                   thought_depth, created_at, content, parent_thought_id,
+                   round_number, updated_at
+            FROM thoughts
+            WHERE status = ?
+            ORDER BY created_at DESC
+            LIMIT 20
+        """,
+            (status,),
+        )
 
     rows = cursor.fetchall()
+    filter_desc = f"{status} {thought_type or ''}" if thought_type else status
     print(f"\n{'='*100}")
-    print(f"{status} THOUGHTS ({len(rows)} shown)")
+    print(f"{filter_desc} THOUGHTS ({len(rows)} shown)")
     print(f"{'='*100}")
 
-    for thought_id, task_id, thought_type, status, depth, created, content in rows:
-        print(f"\n{created} - {thought_type} (depth {depth})")
+    for thought_id, task_id, thought_type, status, depth, created, content, parent_id, round_num, updated in rows:
+        print(f"\n{created} - {thought_type} (depth {depth}, round {round_num})")
         print(f"  Thought: {thought_id}")
         print(f"  Task: {task_id}")
+        if parent_id:
+            print(f"  Parent: {parent_id}")
+        print(f"  Updated: {updated}")
         print(f"  Content: {content[:100]}...")
 
 
@@ -417,6 +439,156 @@ def show_handler_metrics():
         print(f"{handler:<30} {action:<20} {status:<15} {count:<10} {avg_str}")
 
 
+def investigate_stuck_thought(thought_id_prefix):
+    """Investigate a stuck thought - show all related data."""
+    conn = get_db_connection()
+
+    # Find the thought
+    cursor = conn.execute(
+        """
+        SELECT thought_id, source_task_id, thought_type, status,
+               thought_depth, parent_thought_id, round_number,
+               created_at, updated_at, content
+        FROM thoughts
+        WHERE thought_id LIKE ?
+    """,
+        (f"{thought_id_prefix}%",),
+    )
+
+    thought_row = cursor.fetchone()
+    if not thought_row:
+        print(f"No thought found with ID starting with {thought_id_prefix}")
+        return
+
+    (thought_id, task_id, thought_type, status, depth, parent_id, round_num, created, updated, content) = thought_row
+
+    print(f"\n{'='*100}")
+    print(f"INVESTIGATING STUCK THOUGHT: {thought_id}")
+    print(f"{'='*100}")
+
+    print(f"\nTHOUGHT DETAILS:")
+    print(f"  Type: {thought_type}")
+    print(f"  Status: {status}")
+    print(f"  Depth: {depth}")
+    print(f"  Round: {round_num}")
+    print(f"  Parent: {parent_id}")
+    print(f"  Created: {created}")
+    print(f"  Updated: {updated}")
+    print(f"  Content Preview: {content[:200] if content else 'None'}...")
+
+    # Check task status
+    cursor = conn.execute("SELECT task_id, description, status, priority FROM tasks WHERE task_id = ?", (task_id,))
+    task_row = cursor.fetchone()
+    if task_row:
+        print(f"\nTASK STATUS:")
+        print(f"  Task ID: {task_row[0]}")
+        print(f"  Description: {task_row[1][:100]}...")
+        print(f"  Status: {task_row[2]}")
+        print(f"  Priority: {task_row[3]}")
+
+    # Check all thoughts for this task
+    cursor = conn.execute(
+        """
+        SELECT thought_id, thought_type, status, round_number, created_at
+        FROM thoughts
+        WHERE source_task_id = ?
+        ORDER BY created_at DESC
+    """,
+        (task_id,),
+    )
+
+    print(f"\nALL THOUGHTS FOR TASK {task_id}:")
+    for row in cursor.fetchall():
+        tid, ttype, tstatus, tround, tcreated = row
+        marker = " <-- THIS ONE" if tid == thought_id else ""
+        print(f"  {tcreated} | {tid[:8]}... | {ttype:12} | {tstatus:12} | Round {tround}{marker}")
+
+    # Check correlations for this thought
+    cursor = conn.execute(
+        """
+        SELECT correlation_id, handler_name, action_type, status,
+               created_at, updated_at, request_data
+        FROM service_correlations
+        WHERE request_data LIKE ?
+        ORDER BY created_at DESC
+        LIMIT 10
+    """,
+        (f'%"{thought_id}"%',),
+    )
+
+    corr_rows = cursor.fetchall()
+    if corr_rows:
+        print(f"\nCORRELATIONS FOR THOUGHT {thought_id[:8]}...:")
+        for row in corr_rows:
+            corr_id, handler, action, corr_status, corr_created, corr_updated, req_data = row
+            print(f"  {corr_created} | {handler:20} | {action:15} | {corr_status}")
+
+    # Check if thought is in processing queue
+    print(f"\nPROCESSING STATUS:")
+    print(f"  Thought has been in {status} status for:")
+    if updated and created:
+        try:
+            start = datetime.fromisoformat(created.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+            duration = (end - start).total_seconds()
+            print(f"    {duration:.1f} seconds since last update")
+        except:
+            pass
+
+    # Check parent thought if exists
+    if parent_id:
+        cursor = conn.execute("SELECT thought_type, status, content FROM thoughts WHERE thought_id = ?", (parent_id,))
+        parent_row = cursor.fetchone()
+        if parent_row:
+            print(f"\nPARENT THOUGHT {parent_id[:8]}...:")
+            print(f"  Type: {parent_row[0]}")
+            print(f"  Status: {parent_row[1]}")
+            print(f"  Content preview: {parent_row[2][:100] if parent_row[2] else 'None'}...")
+
+
+def show_guidance_thoughts():
+    """Show all guidance thoughts and their processing status."""
+    conn = get_db_connection()
+    cursor = conn.execute(
+        """
+        SELECT t.thought_id, t.source_task_id, t.status, t.round_number,
+               t.created_at, t.updated_at, t.parent_thought_id,
+               tk.description, tk.status as task_status
+        FROM thoughts t
+        LEFT JOIN tasks tk ON t.source_task_id = tk.task_id
+        WHERE t.thought_type = 'guidance'
+        ORDER BY t.created_at DESC
+        LIMIT 20
+    """
+    )
+
+    rows = cursor.fetchall()
+    print(f"\n{'='*100}")
+    print(f"GUIDANCE THOUGHTS ({len(rows)} found)")
+    print(f"{'='*100}")
+
+    for row in rows:
+        (thought_id, task_id, status, round_num, created, updated, parent_id, task_desc, task_status) = row
+
+        print(f"\n{created} - Status: {status} (Round {round_num})")
+        print(f"  Thought: {thought_id}")
+        print(f"  Parent: {parent_id[:8]}... " if parent_id else "  No parent")
+        print(f"  Task: {task_id[:20]}... ({task_status})")
+        if task_desc:
+            print(f"  Task Desc: {task_desc[:60]}...")
+
+        # Calculate how long in current status
+        if updated and created:
+            try:
+                start = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                end = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+                duration = (end - start).total_seconds()
+                if duration > 60:
+                    print(f"  ⚠️  In {status} for {duration:.0f} seconds!")
+            except:
+                pass
+
+
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
@@ -472,6 +644,12 @@ def main():
         channel = sys.argv[2] if len(sys.argv) > 2 else None
         show_api_messages(channel)
 
+    elif command == "investigate" and len(sys.argv) > 2:
+        investigate_stuck_thought(sys.argv[2])
+
+    elif command == "guidance":
+        show_guidance_thoughts()
+
     else:
         print(__doc__)
 
@@ -490,6 +668,8 @@ __all__ = [
     "show_thoughts",
     "show_tasks",
     "show_handler_metrics",
+    "investigate_stuck_thought",
+    "show_guidance_thoughts",
 ]
 
 

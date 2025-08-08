@@ -288,8 +288,16 @@ class TestDiscordContextPersistence:
                         corr.service_type,
                         corr.handler_name,
                         corr.action_type,
-                        json.dumps(corr.request_data),
-                        json.dumps(corr.response_data),
+                        (
+                            corr.request_data.model_dump_json()
+                            if hasattr(corr.request_data, "model_dump_json")
+                            else json.dumps(corr.request_data)
+                        ),
+                        (
+                            corr.response_data.model_dump_json()
+                            if hasattr(corr.response_data, "model_dump_json")
+                            else json.dumps(corr.response_data)
+                        ),
                         corr.status.value if hasattr(corr.status, "value") else corr.status,
                         corr.created_at.isoformat() if hasattr(corr.created_at, "isoformat") else str(corr.created_at),
                         corr.updated_at.isoformat() if hasattr(corr.updated_at, "isoformat") else str(corr.updated_at),

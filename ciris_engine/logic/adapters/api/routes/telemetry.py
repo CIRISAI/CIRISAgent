@@ -356,9 +356,8 @@ async def _get_system_overview(request: Request) -> SystemOverview:
     # Get incident count
     if incident_service:
         try:
-            one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
-            incidents = await incident_service.get_incidents(start_time=one_hour_ago)
-            overview.recent_incidents = len(incidents) if incidents else 0
+            # Get count of incidents from the last hour
+            overview.recent_incidents = await incident_service.get_incident_count(hours=1)
         except Exception as e:
             logger.warning(
                 f"Telemetry metric retrieval failed for incident count: {type(e).__name__}: {str(e)} - Returning default/empty value"

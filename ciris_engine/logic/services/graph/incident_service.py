@@ -527,6 +527,25 @@ class IncidentManagementService(BaseGraphService):
             updated_at=current_time,
         )
 
+    async def get_incident_count(self, hours: int = 1) -> int:
+        """Get count of incidents in the specified time window.
+
+        Args:
+            hours: Number of hours to look back
+
+        Returns:
+            Count of incidents
+        """
+        try:
+            time_service = self._get_time_service()
+            current_time = time_service.now()
+            cutoff_time = current_time - timedelta(hours=hours)
+            incidents = await self._get_recent_incidents(cutoff_time)
+            return len(incidents)
+        except Exception as e:
+            logger.warning(f"Failed to get incident count: {e}")
+            return 0
+
     async def _mark_incidents_analyzed(self, incidents: List[IncidentNode]) -> None:
         """Mark incidents as analyzed."""
         for incident in incidents:

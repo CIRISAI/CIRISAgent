@@ -183,7 +183,7 @@ class DiscordChannelManager:
                 request_data=ServiceRequestData(
                     service_type="discord",
                     method_name="observe",
-                    channel_id=str(message.channel.id),
+                    channel_id=channel_id,  # Use the full format discord_guildid_channelid
                     parameters={
                         "content": message.content,
                         "author_id": str(message.author.id),

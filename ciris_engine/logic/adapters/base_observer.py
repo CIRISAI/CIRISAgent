@@ -48,7 +48,6 @@ class BaseObserver(Generic[MessageT], ABC):
         self.auth_service = auth_service
         self.observer_wa_id = observer_wa_id
         self.origin_service = origin_service
-        self._history: List[MessageT] = []
 
     @abstractmethod
     async def start(self) -> None:  # pragma: no cover - implemented by subclasses
@@ -434,9 +433,6 @@ class BaseObserver(Generic[MessageT], ABC):
 
         # Allow subclasses to enhance the message (e.g., vision processing)
         processed_msg = await self._enhance_message(processed_msg)
-
-        # Add ALL messages to history (including agent's own)
-        self._history.append(processed_msg)
 
         # If it's the agent's message, stop here (no task creation)
         if is_agent_message:

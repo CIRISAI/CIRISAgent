@@ -5,6 +5,7 @@ Main Grace class - ties everything together simply.
 import os
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from .context import WorkContext
 from .health import check_all, check_deployment
@@ -387,21 +388,9 @@ class Grace:
         deployment = check_deployment()
         if deployment:
             message.append(deployment)
-
-        # Check if OAuth fix is live (simple check)
-        try:
-            result = subprocess.run(
-                ["curl", "-s", "https://agents.ciris.ai"], capture_output=True, text=True, timeout=10
-            )
-            if "/api/${agent.agent_id}/v1/auth/oauth/" in result.stdout:
-                message.append("\n✅ OAuth fix is LIVE!")
-                message.append("Ready to test login functionality")
-            elif deployment and "in progress" in deployment:
-                message.append("\n⏳ Deployment building...")
-            else:
-                message.append("\n⏰ OAuth fix not detected yet")
-        except Exception:
-            message.append("\nCould not check OAuth status")
+        else:
+            # If no deployment info, still show something
+            message.append("No recent deployments found")
 
         # Check incidents log if available (for production containers)
         incidents = self.check_incidents()

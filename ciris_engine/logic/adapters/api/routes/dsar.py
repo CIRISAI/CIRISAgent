@@ -9,13 +9,12 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
-from ciris_engine.logic.adapters.api.auth import get_current_user
-from ciris_engine.logic.adapters.api.models import StandardResponse
-from ciris_engine.schemas.auth import TokenData
+from ..auth import get_current_user
+from ..models import StandardResponse, TokenData
 
-router = APIRouter(prefix="/v1/dsr", tags=["DSAR"])
+router = APIRouter(prefix="/dsr", tags=["DSAR"])
 
 
 class DSARRequest(BaseModel):
@@ -26,7 +25,7 @@ class DSARRequest(BaseModel):
         description="Type of request: access, delete, export, or correct",
         pattern="^(access|delete|export|correct)$",
     )
-    email: EmailStr = Field(..., description="Contact email for the request")
+    email: str = Field(..., description="Contact email for the request")
     user_identifier: Optional[str] = Field(None, description="Discord ID, username, or other identifier")
     details: Optional[str] = Field(None, description="Additional details about the request")
     urgent: bool = Field(False, description="Whether this is an urgent request")

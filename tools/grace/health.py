@@ -82,7 +82,7 @@ def check_ci_status() -> Dict[str, str]:
 def check_deployment() -> str:
     """Check if recent deployment is active."""
     try:
-        # Check if build is running
+        # Check if build is running - specifically the Build and Deploy workflow
         result = subprocess.run(
             [
                 "gh",
@@ -90,6 +90,8 @@ def check_deployment() -> str:
                 "list",
                 "--repo",
                 "CIRISAI/CIRISAgent",
+                "--workflow",
+                "Build and Deploy",
                 "--limit",
                 "1",
                 "--json",
@@ -109,10 +111,16 @@ def check_deployment() -> str:
                 commit = run.get("headSha", "")[:7]
 
                 if status == "in_progress":
-                    return f"Deployment in progress [{commit}]"
-                elif status == "completed" and conclusion == "success":
-                    # Check if it's recent (within last hour)
-                    return f"Recent deployment completed [{commit}]"
+                    return f"⏳ Deployment in progress [{commit}]"
+                elif status == "completed":
+                    if conclusion == "success":
+                        return f"✅ Recent deployment succeeded [{commit}]"
+                    elif conclusion == "failure":
+                        return f"❌ Recent deployment FAILED [{commit}]"
+                    elif conclusion == "cancelled":
+                        return f"⚠️ Recent deployment cancelled [{commit}]"
+                    else:
+                        return f"Recent deployment {conclusion} [{commit}]"
 
         return ""
     except Exception:

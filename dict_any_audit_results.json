@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 158,
-    "files_affected": 75,
+    "occurrences": 160,
+    "files_affected": 77,
     "categories": {
-      "generic_data": 138,
+      "generic_data": 140,
       "parameters": 5,
       "configuration": 3,
       "api_request": 2,
@@ -605,7 +605,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/base_observer.py",
-        "line": 128,
+        "line": 127,
         "class": "BaseObserver",
         "function": "_get_correlation_history",
         "context": "other",
@@ -740,6 +740,14 @@
         "usage_hint": "generic_data"
       },
       {
+        "file": "ciris_engine/logic/adapters/api/models.py",
+        "line": 18,
+        "class": "StandardResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
         "file": "ciris_engine/logic/adapters/api/routes/system.py",
         "line": 161,
         "class": "AdapterActionRequest",
@@ -753,6 +761,14 @@
         "class": "ToolInfo",
         "function": null,
         "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 156,
+        "class": null,
+        "function": "get_system_status",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -2584,7 +2600,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 320,
-    "files_affected": 108
+    "occurrences": 322,
+    "files_affected": 110
   }
 }

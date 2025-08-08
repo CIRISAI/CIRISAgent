@@ -4,12 +4,12 @@ Provides anonymized statistics about system operations without auth.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/v1/transparency", tags=["Transparency"])
+router = APIRouter(prefix="/transparency", tags=["Transparency"])
 
 
 class ActionCount(BaseModel):
@@ -153,7 +153,7 @@ async def get_transparency_policy() -> TransparencyPolicy:
 
 
 @router.get("/status")
-async def get_system_status() -> Dict[str, any]:
+async def get_system_status() -> Dict[str, Any]:
     """
     Get current system status.
 

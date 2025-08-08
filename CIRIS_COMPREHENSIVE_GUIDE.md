@@ -1,8 +1,7 @@
 # CIRIS Comprehensive AI Assistant Guide
 
-**Version**: 1.2.0-beta
-**Last Updated**: August 7, 2025
 **Purpose**: Complete reference for AI assistants working with CIRIS codebase
+**Copyright**: © 2025 Eric Moore and CIRIS L3C | Apache 2.0 License | PATENT PENDING
 
 ---
 
@@ -82,10 +81,18 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 4. **Typed Graph Nodes**: 11 active classes with validation
 5. **Production Deployment**: agents.ciris.ai running multiple agents
 6. **Book VI Compliance**: Full stewardship implementation
+7. **Privacy Safeguards**: 14-day retention, DSAR compliance, transparency feed
+8. **Stop Conditions**: Clear red lines, sunset triggers, "when we pause" policy
 
-### Version Information
-- **Current**: 1.2.0-beta "Graceful Guardian"
+### OAuth Configuration
 - **OAuth Callback**: `https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback`
+
+### Critical Safeguards
+- **Data Retention**: 14 days for messages (pilot phase)
+- **DSAR Endpoint**: `/v1/dsr` for GDPR compliance
+- **Transparency Feed**: `/v1/transparency/feed` (public, no auth)
+- **Stop Conditions**: Red lines for immediate shutdown
+- **Sunset Triggers**: Section VIII implementation
 
 ---
 
@@ -157,9 +164,58 @@ Services NEVER create other services. All creation happens in ServiceInitializer
 
 ---
 
+## Privacy Safeguards & Transparency
+
+### Data Retention Policy
+- **Message Content**: 14 days (pilot phase)
+- **Moderation Logs**: 14 days, then hashed
+- **Audit Trail**: 90 days for compliance
+- **Incident Reports**: 90 days for safety
+- **System Metrics**: Aggregated indefinitely (no personal data)
+
+### DSAR Compliance (`/v1/dsr`)
+- Submit data requests (access, delete, export, correct)
+- Track requests with ticket ID
+- 14-day response time (3 days for urgent)
+- Admin management endpoints
+
+### Public Transparency Feed (`/v1/transparency`)
+- **No authentication required** - Public access
+- Anonymized statistics only
+- Action breakdown (SPEAK, DEFER, REJECT, OBSERVE)
+- Safety metrics (harmful requests blocked, rate limits)
+- System health metrics
+
+### Stop Conditions
+
+**RED LINES - Immediate Shutdown:**
+- Verified request to target, surveil, or doxx individuals
+- Compelled use for harassment or coordinated harm
+- Evidence of weaponization against vulnerable populations
+- Loss of human oversight
+
+**YELLOW LINES - WA Review:**
+- Pattern of false positives targeting specific groups
+- Upstream model exhibiting extremist self-labeling
+- Adversarial manipulation attempts detected
+- Deferral rate exceeds 30%
+
+### Sunset Triggers (Section VIII)
+- Compelled misuse → Emergency shutdown
+- Loss of human oversight → Immediate shutdown
+- WA injunction → Graceful sunset
+- KPI degradation ≥20% for 3 quarters → Planned retirement
+- Regulatory revocation → Sunset with dignity
+
+### Public Policy Pages
+- `/privacy-policy.html` - 14-day retention commitment
+- `/terms-of-service.html` - Human-in-the-loop emphasis
+- `/when-we-pause.html` - Stop conditions policy
+- `/why-we-paused.html` - Status update page
+
 ## API v1.0 Complete Reference
 
-### 78 Endpoints Across 12 Modules
+### 82 Endpoints Across 13 Modules
 
 #### 1. Agent Module (`/v1/agent/*`)
 - `POST /interact` - Send message to agent
@@ -208,11 +264,21 @@ Service management:
 
 Default dev credentials: `admin/ciris_admin_password`
 
-#### 7. Emergency (`/emergency/*`)
+#### 7. DSAR (`/v1/dsr/*`)
+- `POST /` - Submit data request (access/delete/export/correct)
+- `GET /{ticket_id}` - Check request status
+- `GET /` - List requests (admin only)
+- `PUT /{ticket_id}/status` - Update status (admin only)
+
+#### 8. Transparency (`/v1/transparency/*`)
+- `GET /feed` - Public transparency statistics (no auth required)
+- `GET /policy` - Privacy policy and commitments
+
+#### 9. Emergency (`/emergency/*`)
 - `POST /shutdown` - Emergency shutdown (requires Ed25519 signature)
 - Bypasses normal auth
 
-#### 8. WebSocket (`/v1/ws`)
+#### 10. WebSocket (`/v1/ws`)
 - Real-time updates and streaming
 
 ### Authentication Flow
@@ -361,6 +427,64 @@ show_handler_metrics()
 ```
 
 ---
+
+## CIRISManager - Production Lifecycle Management
+
+CIRISManager orchestrates all production agents, providing automatic nginx routing, OAuth authentication, and canary deployments.
+
+### Core Capabilities
+- **Automatic Agent Discovery** - Detects and manages CIRIS agent containers via Docker
+- **Dynamic Nginx Routing** - Generates nginx configurations for multi-tenant agent access
+- **Crash Loop Detection** - Prevents infinite restarts (3 crashes in 5 minutes)
+- **OAuth Authentication** - Google OAuth with JWT tokens, domain-restricted
+- **Canary Deployments** - Staged rollouts with agent consent
+- **Environment Management** - Full control of agent env vars through GUI
+- **Discord Integration** - Easy toggle and configuration
+- **WA Review** - Required approval for Tier 4/5 agents
+
+### Agent Templates
+
+| Template | Description | Tier | WA Review |
+|----------|-------------|------|-----------|
+| `scout` | Basic exploration | 2 | No |
+| `sage` | Knowledge management | 2 | No |
+| `datum` | Data processing | 3 | No |
+| `echo` | Discord moderation | 4 | Yes |
+| `echo-context` | Context-aware moderation | 4 | Yes |
+| `echo-community` | Community management | 5 | Yes |
+
+### Nginx Routing Architecture
+
+```nginx
+# Manager GUI and API
+/manager/v1/ → localhost:8888/manager/v1/
+
+# Agent GUI (multi-tenant)
+/agent/{agent-id}/ → ciris-gui:3000/?agent={agent-id}
+
+# Agent APIs (dynamic)
+/api/{agent-id}/ → ciris-agent-{agent-id}:8080/v1/
+```
+
+### Manager API Endpoints
+
+- `GET /manager/v1/agents` - List all agents
+- `POST /manager/v1/agents` - Create new agent
+- `PATCH /manager/v1/agents/{id}/config` - Update agent config
+- `DELETE /manager/v1/agents/{id}` - Delete agent
+- `GET /manager/v1/templates` - List available templates
+- `GET /manager/v1/health` - Health check
+- `POST /manager/v1/updates/notify` - CD notification
+
+### Directory Structure
+
+```
+/opt/ciris-manager/     # Manager installation
+/opt/ciris/agents/      # Agent data directories
+/opt/ciris/nginx/       # Nginx configurations
+/etc/ciris-manager/     # Manager config
+/var/log/ciris-manager/ # Logs with rotation
+```
 
 ## Production Deployment
 
@@ -748,4 +872,3 @@ docker exec ciris-agent-datum tail -n 100 /app/logs/incidents_latest.log
 ---
 
 *End of CIRIS Comprehensive Guide*
-*Version 1.2.0-beta - August 7, 2025*

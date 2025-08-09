@@ -338,7 +338,8 @@ def main(
                 if discord_bot_token:
                     discord_config.bot_token = discord_bot_token
 
-                # Environment variables are loaded by global configuration bootstrap
+                # Load environment variables into the config
+                discord_config.load_env_vars()
 
                 adapter_configs[adapter_type] = discord_config
                 discord_channel_id = discord_config.get_home_channel_id()

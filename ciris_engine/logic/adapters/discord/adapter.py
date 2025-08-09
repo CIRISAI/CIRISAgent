@@ -38,6 +38,9 @@ class DiscordPlatform(Service):
                 self.config = DiscordAdapterConfig()
 
             # ALWAYS load environment variables to fill in any missing values
+            logger.info(
+                f"DEBUG: Before load_env_vars in adapter_config branch, monitored_channel_ids = {self.config.monitored_channel_ids}"
+            )
             self.config.load_env_vars()
             logger.info(
                 f"Discord adapter using provided config with env vars loaded: channels={self.config.monitored_channel_ids}"
@@ -80,6 +83,9 @@ class DiscordPlatform(Service):
                     logger.debug(f"DiscordPlatform: Could not load config from template: {e}")
 
             self.config.load_env_vars()
+            logger.info(
+                f"DEBUG: After load_env_vars in else branch, monitored_channel_ids = {self.config.monitored_channel_ids}"
+            )
 
         if not self.config.bot_token:
             logger.error("DiscordPlatform: 'bot_token' not found in config. This is required.")
@@ -263,6 +269,9 @@ class DiscordPlatform(Service):
         # Get time_service from runtime
         time_service = getattr(self.runtime, "time_service", None)
 
+        logger.info(
+            f"DEBUG: About to create DiscordObserver with monitored_channel_ids = {self.config.monitored_channel_ids}"
+        )
         self.discord_observer = DiscordObserver(
             monitored_channel_ids=self.config.monitored_channel_ids,
             deferral_channel_id=self.config.deferral_channel_id,

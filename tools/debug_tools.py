@@ -15,6 +15,9 @@ Usage:
     python debug_tools.py api-messages       # Show API message queue
     python debug_tools.py investigate <id>   # Investigate stuck thought (prefix OK)
     python debug_tools.py guidance           # Show all guidance thoughts
+    python debug_tools.py context <channel>  # Show conversation context for channel
+    python debug_tools.py history            # Analyze conversation history in thoughts
+    python debug_tools.py contexts           # Analyze all context building patterns
 """
 
 import json
@@ -589,6 +592,218 @@ def show_guidance_thoughts():
                 pass
 
 
+def show_channel_context(channel_id):
+    """Show conversation context for a specific channel."""
+    print(f"\n{'='*100}")
+    print(f"CONVERSATION CONTEXT FOR CHANNEL: {channel_id}")
+    print(f"{'='*100}")
+
+    # Get recent correlations for this channel
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    query = """
+    SELECT correlation_id, action_type, handler_name, request_data, created_at
+    FROM service_correlations
+    WHERE request_data LIKE ?
+    ORDER BY created_at DESC
+    LIMIT 20
+    """
+
+    cursor.execute(query, (f"%{channel_id}%",))
+    correlations = cursor.fetchall()
+
+    print(f"\nFound {len(correlations)} correlations for this channel\n")
+
+    observe_count = 0
+    speak_count = 0
+
+    for corr in correlations:
+        action = corr[1]
+        handler = corr[2]
+        created = corr[4]
+
+        if action == "observe":
+            observe_count += 1
+        elif action == "speak":
+            speak_count += 1
+
+        try:
+            req_data = json.loads(corr[3]) if corr[3] else {}
+            message = req_data.get("parameters", {}).get("content", "")
+            if message:
+                message = message[:100] + "..." if len(message) > 100 else message
+                print(f"{created}: {action:10} | {message}")
+        except:
+            print(f"{created}: {action:10} | (no message data)")
+
+    print(f"\n{'Summary':20}: {observe_count} observations, {speak_count} speak actions")
+    conn.close()
+
+
+def analyze_conversation_history():
+    """Analyze conversation history in recent observation thoughts."""
+    print(f"\n{'='*100}")
+    print("CONVERSATION HISTORY ANALYSIS")
+    print(f"{'='*100}")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get recent observation thoughts
+    query = """
+    SELECT thought_id, content, created_at
+    FROM thoughts
+    WHERE thought_type = 'observation'
+      AND created_at > datetime('now', '-2 hours')
+    ORDER BY created_at DESC
+    LIMIT 20
+    """
+
+    cursor.execute(query)
+    thoughts = cursor.fetchall()
+
+    print(f"\nAnalyzing {len(thoughts)} recent observation thoughts:\n")
+
+    with_history = 0
+    without_history = 0
+    total_history_msgs = 0
+    total_history_chars = 0
+
+    for thought in thoughts:
+        thought_id = thought[0]
+        content = thought[1] if thought[1] else ""
+        created = thought[2]
+
+        if "CONVERSATION HISTORY" in content:
+            with_history += 1
+
+            # Count history entries
+            history_count = content.count(". @")
+            total_history_msgs += history_count
+
+            # Calculate history size
+            history_start = content.find("=== CONVERSATION HISTORY")
+            history_end = content.find("=== EVALUATE")
+            if history_start > 0 and history_end > history_start:
+                history_section = content[history_start:history_end]
+                total_history_chars += len(history_section)
+
+            print(f"✅ {created}: {thought_id[:20]}... - {history_count} messages in history")
+        else:
+            without_history += 1
+            print(f"❌ {created}: {thought_id[:20]}... - NO HISTORY")
+
+    print(f"\n{'='*50}")
+    print(f"SUMMARY:")
+    print(f"  With history:    {with_history} thoughts ({with_history*100//len(thoughts) if thoughts else 0}%)")
+    print(f"  Without history: {without_history} thoughts ({without_history*100//len(thoughts) if thoughts else 0}%)")
+    if with_history > 0:
+        print(f"  Avg messages:    {total_history_msgs // with_history} per thought")
+        print(f"  Avg history size: {total_history_chars // with_history} chars")
+
+    conn.close()
+
+
+def analyze_context_building():
+    """Analyze context building patterns in recent thoughts."""
+    print(f"\n{'='*100}")
+    print("CONTEXT BUILDING ANALYSIS")
+    print(f"{'='*100}")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get recent thoughts with context
+    query = """
+    SELECT t.thought_id, t.thought_type, t.content, t.created_at, t.context
+    FROM thoughts t
+    WHERE t.created_at > datetime('now', '-2 hours')
+      AND t.content IS NOT NULL
+    ORDER BY t.created_at DESC
+    LIMIT 30
+    """
+
+    cursor.execute(query)
+    thoughts = cursor.fetchall()
+
+    print(f"\nAnalyzing {len(thoughts)} recent thoughts for context patterns:\n")
+
+    # Statistics
+    with_user_context = 0
+    with_channel_context = 0
+    with_conversation_history = 0
+    channel_ids_found = set()
+    user_ids_found = set()
+
+    for thought in thoughts:
+        thought_id = thought[0]
+        thought_type = thought[1]
+        content = thought[2] if thought[2] else ""
+        created = thought[3]
+        context = thought[4] if thought[4] else ""
+
+        # Check for various context elements
+        has_user = False
+        has_channel = False
+        has_history = False
+
+        # Check content for patterns
+        if "@" in content and "ID:" in content:
+            has_user = True
+            with_user_context += 1
+            # Extract user IDs
+            import re
+
+            user_pattern = r"ID:\s*([^\s\)]+)"
+            matches = re.findall(user_pattern, content)
+            user_ids_found.update(matches[:3])  # First 3 user IDs
+
+        if "channel" in content.lower() or "discord_" in content:
+            has_channel = True
+            with_channel_context += 1
+            # Extract channel IDs
+            channel_pattern = r"(discord_\d+_\d+|cli_[^\s]+|api_[^\s]+)"
+            matches = re.findall(channel_pattern, content)
+            channel_ids_found.update(matches[:3])
+
+        if "CONVERSATION HISTORY" in content:
+            has_history = True
+            with_conversation_history += 1
+
+        # Print summary for this thought
+        indicators = []
+        if has_user:
+            indicators.append("U")
+        if has_channel:
+            indicators.append("C")
+        if has_history:
+            indicators.append("H")
+
+        indicator_str = f"[{'/'.join(indicators) if indicators else '-'}]"
+        print(f"{created}: {thought_type:12} {indicator_str:8} {thought_id[:20]}...")
+
+    print(f"\n{'='*50}")
+    print(f"CONTEXT STATISTICS:")
+    print(
+        f"  With user context:     {with_user_context}/{len(thoughts)} ({with_user_context*100//len(thoughts) if thoughts else 0}%)"
+    )
+    print(
+        f"  With channel context:  {with_channel_context}/{len(thoughts)} ({with_channel_context*100//len(thoughts) if thoughts else 0}%)"
+    )
+    print(
+        f"  With conversation:     {with_conversation_history}/{len(thoughts)} ({with_conversation_history*100//len(thoughts) if thoughts else 0}%)"
+    )
+    print(f"\n  Unique channels found: {len(channel_ids_found)}")
+    for ch_id in list(channel_ids_found)[:3]:
+        print(f"    - {ch_id}")
+    print(f"\n  Unique users found:    {len(user_ids_found)}")
+    for user_id in list(user_ids_found)[:3]:
+        print(f"    - {user_id}")
+
+    conn.close()
+
+
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
@@ -650,6 +865,15 @@ def main():
     elif command == "guidance":
         show_guidance_thoughts()
 
+    elif command == "context" and len(sys.argv) > 2:
+        show_channel_context(sys.argv[2])
+
+    elif command == "history":
+        analyze_conversation_history()
+
+    elif command == "contexts":
+        analyze_context_building()
+
     else:
         print(__doc__)
 
@@ -670,6 +894,9 @@ __all__ = [
     "show_handler_metrics",
     "investigate_stuck_thought",
     "show_guidance_thoughts",
+    "show_channel_context",
+    "analyze_conversation_history",
+    "analyze_context_building",
 ]
 
 

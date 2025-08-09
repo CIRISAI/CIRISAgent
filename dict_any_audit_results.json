@@ -877,7 +877,7 @@
       },
       {
         "file": "ciris_engine/logic/dma/action_selection/context_builder.py",
-        "line": 311,
+        "line": 319,
         "class": "ActionSelectionContextBuilder",
         "function": "_build_conscience_guidance",
         "context": "other",

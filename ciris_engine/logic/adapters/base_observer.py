@@ -302,6 +302,12 @@ class BaseObserver(Generic[MessageT], ABC):
             channel_id = getattr(msg, "channel_id", "system")
             history_context = await self._get_correlation_history(channel_id, PASSIVE_CONTEXT_LIMIT)
 
+            # Log context retrieval details
+            logger.info(
+                f"[CONTEXT] Retrieved {len(history_context)} messages for channel {channel_id}, "
+                f"total context size: {sum(len(str(m)) for m in history_context)} chars"
+            )
+
             task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
@@ -337,6 +343,15 @@ class BaseObserver(Generic[MessageT], ABC):
             thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {msg.content}")  # type: ignore[attr-defined]
 
             thought_content = "\n".join(thought_lines)
+
+            # Log context building details
+            history_line_count = len(
+                [line for line in thought_lines for i in range(1, 11) if line.startswith(f"{i}. @")]
+            )
+            logger.info(
+                f"[CONTEXT] Built thought context with {history_line_count} history messages, "
+                f"total thought size: {len(thought_content)} chars"
+            )
 
             thought = Thought(
                 thought_id=generate_thought_id(thought_type=ThoughtType.OBSERVATION, task_id=task.task_id),

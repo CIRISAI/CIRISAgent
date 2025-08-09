@@ -26,7 +26,12 @@ def generate_seed_thought_enhanced(self: Any, task: Task, round_number: int = 0)
         # Format: "Respond to message from @{author} (ID: {id}) in #{channel}: '{content}'"
         import re
 
-        match = re.match(r"Respond to message from @(.*?) \(ID: (.*?)\) in #(.*?): '(.*?)'$", task.description)
+        # Use more specific patterns to prevent catastrophic backtracking
+        # Limit field lengths and use negated character classes instead of lazy quantifiers
+        match = re.match(
+            r"Respond to message from @([^()]{1,100}) \(ID: ([^()]{1,50})\) in #([^:]{1,100}): '(.{0,1000})'$",
+            task.description,
+        )
 
         if match:
             # This is a properly formatted observation task

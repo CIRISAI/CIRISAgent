@@ -30,6 +30,8 @@ class ActionSelectionContextBuilder:
     def build_main_user_content(self, triaged_inputs: EnhancedDMAInputs, agent_name: Optional[str] = None) -> str:
         """Build the main user content for LLM evaluation."""
 
+        logger.info("[CONTEXT] Building main user content for action selection")
+
         # Extract core components from typed input
         original_thought = triaged_inputs.original_thought
         ethical_pdma_result = triaged_inputs.ethical_pdma_result
@@ -61,6 +63,12 @@ class ActionSelectionContextBuilder:
         # Build system context
         processing_context = triaged_inputs.processing_context
         user_profile_context_str, system_snapshot_context_str = self._build_system_context(processing_context)
+
+        # Log context size details
+        if user_profile_context_str:
+            logger.info(f"[CONTEXT] User profile context: {len(user_profile_context_str)} chars")
+        if system_snapshot_context_str:
+            logger.info(f"[CONTEXT] System snapshot context: {len(system_snapshot_context_str)} chars")
 
         # Build startup guidance
         _startup_guidance = self._build_startup_guidance(original_thought)

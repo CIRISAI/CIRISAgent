@@ -3,10 +3,10 @@
 from pathlib import Path
 
 # Version information
-CIRIS_VERSION = "1.3.1-beta"
+CIRIS_VERSION = "1.3.2-beta"
 CIRIS_VERSION_MAJOR = 1
 CIRIS_VERSION_MINOR = 3
-CIRIS_VERSION_PATCH = 1
+CIRIS_VERSION_PATCH = 2
 CIRIS_VERSION_BUILD = 0  # Build number for incremental improvements
 CIRIS_VERSION_STAGE = "beta"
 CIRIS_CODENAME = "Graceful Guardian"  # Codename for this release

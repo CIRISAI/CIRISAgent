@@ -43,12 +43,20 @@ class ContextBuilder:
         # Use provided snapshot or build new one
         if system_snapshot:
             system_snapshot_data = system_snapshot
+            logger.info("[CONTEXT] Using provided system snapshot")
         else:
             system_snapshot_data = await self.build_system_snapshot(task, thought)
+            logger.info("[CONTEXT] Built new system snapshot")
         # Convert list of UserProfile to dict keyed by user_id
         user_profiles_list = getattr(system_snapshot_data, "user_profiles", []) or []
         user_profiles_data = {profile.user_id: profile for profile in user_profiles_list}
         task_history_data = getattr(system_snapshot_data, "recently_completed_tasks_summary", None) or []
+
+        # Log user context details
+        if user_profiles_data:
+            logger.info(f"[CONTEXT] Built user profiles for {len(user_profiles_data)} users")
+            for user_id, profile in list(user_profiles_data.items())[:3]:  # Log first 3
+                logger.debug(f"[CONTEXT]   User {user_id}: {getattr(profile, 'name', 'unknown')}")
 
         # Get identity context from memory service
         identity_context_str = self.memory_service.export_identity_context() if self.memory_service else None
@@ -186,6 +194,9 @@ class ContextBuilder:
             logger.warning("CRITICAL: Channel ID could not be resolved from any source - consciences may receive None")
             channel_id = "UNKNOWN"
             resolution_source = "emergency fallback"
+
+        # Log final channel resolution
+        logger.info(f"[CONTEXT] Channel ID resolved: '{channel_id}' (source: {resolution_source})")
 
         # Only set channel_id if it's not already set in system_snapshot
         if channel_id and hasattr(system_snapshot_data, "channel_id"):

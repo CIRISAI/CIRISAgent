@@ -3,7 +3,7 @@ Unit tests for Discord configuration loading to prevent regression of the monito
 """
 
 import os
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -124,7 +124,7 @@ class TestDiscordConfigLoading:
         mock_msg.content = "Test message"
 
         # Mock the _create_passive_observation_result to track if it's called
-        observer._create_passive_observation_result = Mock()
+        observer._create_passive_observation_result = AsyncMock()
 
         await observer._handle_passive_observation(mock_msg)
 
@@ -148,7 +148,7 @@ class TestDiscordConfigLoading:
         mock_msg.content = "Test message"
 
         # Mock the _create_passive_observation_result to track if it's called
-        observer._create_passive_observation_result = Mock()
+        observer._create_passive_observation_result = AsyncMock()
 
         await observer._handle_passive_observation(mock_msg)
 

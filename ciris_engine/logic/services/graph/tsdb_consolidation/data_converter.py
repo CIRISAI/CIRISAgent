@@ -7,10 +7,11 @@ The converter accepts both dictionary inputs (for backward compatibility) and ty
 
 import json
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ciris_engine.schemas.services.graph.consolidation import (
     InteractionContext,
@@ -28,6 +29,57 @@ from ciris_engine.schemas.services.graph.consolidation import (
 logger = logging.getLogger(__name__)
 
 
+class RateLimitedLogger:
+    """Logger that suppresses repetitive warnings."""
+
+    def __init__(self, logger, max_warnings_per_type=5, reset_interval_seconds=3600):
+        self.logger = logger
+        self.max_warnings = max_warnings_per_type
+        self.reset_interval = reset_interval_seconds
+        self.warning_counts = defaultdict(int)
+        self.last_reset = datetime.now(timezone.utc)
+        self.suppressed_counts = defaultdict(int)
+
+    def should_log(self, error_key: str) -> bool:
+        """Check if we should log this error or suppress it."""
+        now = datetime.now(timezone.utc)
+
+        # Reset counts if interval has passed
+        if (now - self.last_reset).total_seconds() > self.reset_interval:
+            if self.suppressed_counts:
+                # Log summary of suppressed warnings
+                for key, count in self.suppressed_counts.items():
+                    if count > 0:
+                        self.logger.info(f"Suppressed {count} additional occurrences of: {key}")
+
+            self.warning_counts.clear()
+            self.suppressed_counts.clear()
+            self.last_reset = now
+
+        # Check if we should log
+        if self.warning_counts[error_key] < self.max_warnings:
+            self.warning_counts[error_key] += 1
+            return True
+        else:
+            self.suppressed_counts[error_key] += 1
+            return False
+
+    def warning(self, message: str, error_key: Optional[str] = None):
+        """Log a warning with rate limiting."""
+        if error_key is None:
+            error_key = message[:100]  # Use first 100 chars as key
+
+        if self.should_log(error_key):
+            if self.warning_counts[error_key] == self.max_warnings:
+                self.logger.warning(f"{message} (Further occurrences will be suppressed)")
+            else:
+                self.logger.warning(message)
+
+
+# Create rate-limited logger instance
+rate_limited_logger = RateLimitedLogger(logger)
+
+
 # Raw data models representing database rows
 class RawCorrelationData(BaseModel):
     """Raw correlation data from database row."""
@@ -40,10 +92,18 @@ class RawCorrelationData(BaseModel):
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
     timestamp: datetime
-    request_data: Dict[str, Union[str, int, float, bool, list, dict]] = Field(default_factory=dict)
-    response_data: Dict[str, Union[str, int, float, bool, list, dict]] = Field(default_factory=dict)
-    tags: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict)
+    request_data: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = Field(default_factory=dict)
+    response_data: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = Field(default_factory=dict)
+    tags: Optional[Dict[str, Union[str, int, float, bool]]] = Field(default_factory=dict)
     context: Optional[Dict[str, Union[str, int, float, bool, list]]] = Field(default=None)
+
+    @field_validator("request_data", "response_data", "tags", mode="before")
+    @classmethod
+    def convert_none_to_empty_dict(cls, v):
+        """Convert None values to empty dict for proper type safety."""
+        if v is None:
+            return {}
+        return v
 
 
 class RawTaskData(BaseModel):
@@ -148,7 +208,8 @@ class TSDBDataConverter:
                 context=context,
             )
         except Exception as e:
-            logger.warning(f"Failed to convert service interaction data: {e}")
+            error_msg = f"Failed to convert service interaction data: {str(e)[:200]}"
+            rate_limited_logger.warning(error_msg, error_key="service_interaction_conversion")
             return None
 
     @staticmethod
@@ -196,7 +257,8 @@ class TSDBDataConverter:
                 aggregation_type=raw_request.get("aggregation_type"),
             )
         except Exception as e:
-            logger.warning(f"Failed to convert metric correlation data: {e}")
+            error_msg = f"Failed to convert metric correlation data: {str(e)[:200]}"
+            rate_limited_logger.warning(error_msg, error_key="metric_correlation_conversion")
             return None
 
     @staticmethod
@@ -261,7 +323,8 @@ class TSDBDataConverter:
                 resource_usage=raw_response.get("resource_usage", {}),
             )
         except Exception as e:
-            logger.warning(f"Failed to convert trace span data: {e}")
+            error_msg = f"Failed to convert trace span data: {str(e)[:200]}"
+            rate_limited_logger.warning(error_msg, error_key="trace_span_conversion")
             return None
 
     @staticmethod
@@ -337,7 +400,8 @@ class TSDBDataConverter:
                 metadata=metadata,
             )
         except Exception as e:
-            logger.warning(f"Failed to convert task data: {e}")
+            error_msg = f"Failed to convert task data: {str(e)[:200]}"
+            rate_limited_logger.warning(error_msg, error_key="task_data_conversion")
             return None
 
     @staticmethod
@@ -376,7 +440,8 @@ class TSDBDataConverter:
                 depth=raw_thought.depth,
             )
         except Exception as e:
-            logger.warning(f"Failed to convert thought data: {e}")
+            error_msg = f"Failed to convert thought data: {str(e)[:200]}"
+            rate_limited_logger.warning(error_msg, error_key="thought_data_conversion")
             return None
 
     @staticmethod

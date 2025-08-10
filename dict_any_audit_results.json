@@ -1013,7 +1013,7 @@
       },
       {
         "file": "ciris_engine/schemas/services/nodes.py",
-        "line": 275,
+        "line": 276,
         "class": "IdentitySnapshot",
         "function": null,
         "context": "other",
@@ -1021,7 +1021,7 @@
       },
       {
         "file": "ciris_engine/schemas/services/nodes.py",
-        "line": 529,
+        "line": 530,
         "class": "IdentityNode",
         "function": null,
         "context": "other",

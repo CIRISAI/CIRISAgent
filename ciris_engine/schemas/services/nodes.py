@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
 
@@ -689,7 +690,7 @@ class IdentityNode(TypedGraphNode):
                 approval_required=self.approval_required,
                 approved_by=self.approved_by,
                 approval_timestamp=self.approval_timestamp,
-                version="1.0.0",
+                version=CIRIS_VERSION,
                 previous_versions=[],
             ),
             permitted_actions=self.permitted_actions,

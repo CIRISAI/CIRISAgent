@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.config.agent import AgentTemplate
 from ciris_engine.schemas.config.essential import EssentialConfig
@@ -156,6 +157,7 @@ class IdentityManager:
                 approval_required=True,
                 approved_by=None,
                 approval_timestamp=None,
+                version=CIRIS_VERSION,  # Use actual CIRIS version
             ),
             permitted_actions=[
                 HandlerActionType.OBSERVE,

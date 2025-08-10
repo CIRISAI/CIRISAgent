@@ -1,7 +1,8 @@
 description: 'Agent profile: test'
 name: test
+role_description: 'Test Agent - Minimal agent for development and debugging purposes only. Limited to observe action for safety.'
 permitted_actions:
-- OBSERVE
+- observe
 stewardship:
   stewardship_tier: 1
   creator_intent_statement:
@@ -11,7 +12,7 @@ stewardship:
     - Not intended for production use.
     limitations_and_design_choices:
     - Designed with a fixed ethical framework (Covenant 1.0b).
-    - Limited to OBSERVE action only.
+    - Limited to observe action only.
     - Minimal configuration for testing purposes.
     anticipated_benefits:
     - Safe testing environment for development.

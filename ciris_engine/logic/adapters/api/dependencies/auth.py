@@ -81,34 +81,10 @@ async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency in
 
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 
-        # Audit successful service token use
-        audit_service = getattr(request.app.state, "audit_service", None)
-        if audit_service:
-            import hashlib
-
-            from ciris_engine.schemas.services.graph.audit import AuditEventData
-
-            # Hash the token for audit logging
-            token_hash = hashlib.sha256(service_token.encode()).hexdigest()[:16]
-            audit_event = AuditEventData(
-                entity_id="auth_service",
-                actor=service_user.wa_id,
-                outcome="success",
-                severity="info",
-                action="service_token_validation",
-                resource="api_auth",
-                reason="service_token_accepted",
-                metadata={
-                    "ip_address": request.client.host if request.client else "unknown",
-                    "user_agent": request.headers.get("user-agent", "unknown"),
-                    "token_hash": token_hash,
-                    "request_path": str(request.url.path),
-                    "request_method": request.method,
-                },
-            )
-            import asyncio
-
-            asyncio.create_task(audit_service.log_event("service_token_auth_success", audit_event))
+        # Service token authentication successful
+        # NOTE: We do not audit successful service token auth to avoid log spam
+        # Service tokens are used frequently by the manager and other services
+        # Only failed attempts are audited for security monitoring
 
         # Create auth context for service account
         from ciris_engine.schemas.api.auth import UserRole as AuthUserRole

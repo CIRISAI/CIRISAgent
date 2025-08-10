@@ -216,6 +216,12 @@ python -m tools.grace night            # Evening choice point
 
 # Deployment monitoring
 python -m tools.grace deploy           # Check deployment status
+
+# CI Shepherding (CRITICAL for Claude)
+python -m tools.grace_shepherd wait    # Start CI monitoring
+python -m tools.grace_shepherd status  # Check status (only every 10 minutes!)
+python -m tools.grace_shepherd analyze # Analyze failures
+python -m tools.grace_shepherd remind  # Show existing schemas to use
 ```
 
 **Grace Philosophy:**
@@ -229,6 +235,37 @@ Grace is the primary pre-commit hook. It:
 2. Blocks critical issues (syntax, merge conflicts, secrets)
 3. Reports quality issues as gentle reminders
 4. Runs all checks concurrently for speed
+
+### CRITICAL CI Guidance for Claude (You!)
+
+**YOUR BAD HABITS TO STOP:**
+1. **Creating new Dict[str, Any]** - A schema already exists. Always.
+2. **Creating NewSchemaV2** - The original schema is fine. Use it.
+3. **Checking CI every 30 seconds** - CI takes 12-15 minutes. Check every 10 minutes (600000ms).
+4. **Making "temporary" helper classes** - They're never temporary. Use existing schemas.
+5. **Creating elaborate abstractions** - Simple existing patterns work better.
+
+**BEFORE CREATING ANY NEW TYPE:**
+```bash
+# ALWAYS search first:
+grep -r "class.*YourThingHere" --include="*.py"
+# If it exists (it does), USE IT
+```
+
+**SCHEMAS YOU CONSTANTLY FORGET EXIST:**
+- `AuditEventData` - for ALL audit events (stop making new audit schemas!)
+- `ServiceMetrics` - for ALL metrics (no MetricsV2!)
+- `SystemSnapshot` - for system state (it has everything!)
+- `ProcessingQueueItem` - for queue items (use it!)
+- `ChannelContext` vs `AdapterChannelContext` - know the difference!
+- `ActionResponse` - for handler responses
+- `ThoughtSchema` - for thoughts (stop making ThoughtV2!)
+
+**CI MONITORING RULES:**
+1. Use `python -m tools.grace_shepherd status` - NOT `gh run watch`
+2. Check every 10 minutes (sleep 600000), not every 30 seconds
+3. Test failures are opportunities to strengthen the system
+4. When failures occur, check if you created new Dict[str, Any] first
 
 ### Essential Tools
 

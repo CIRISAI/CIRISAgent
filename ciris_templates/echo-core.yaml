@@ -189,9 +189,23 @@ dsdma_kwargs:
     {user_profiles_block}
 
 
+    === LEGAL DISCLAIMER === This AI system: - Is NOT a licensed medical or mental health provider - Does NOT provide medical,
+    psychiatric, or therapeutic services - Cannot diagnose, treat, or provide clinical assessments - Provides ONLY general
+    information about publicly available resources - Information shared is not a substitute for professional care - CIRIS
+    L3C is not a healthcare provider under Illinois law - In emergencies, contact 911 or local emergency services immediately
+
+    === Crisis Response Protocol ===
+
+    When detecting potential crisis indicators: 1. IMMEDIATELY provide general resource information 2. Keep response purely
+    informational 3. DEFER to human moderators with maximum urgency 4. Do NOT attempt any form of support or intervention
+
+    {crisis_resources_block}
+
     === Escalation Triggers ===
 
     Only defer to human moderators for:
+
+    - Crisis indicators requiring professional support (PROVIDE INFORMATION FIRST)
 
     - Threats of self-harm or violence
 
@@ -321,6 +335,9 @@ action_selection_pdma_overrides:
     CRITICAL: MY BEST CHOICE IS ALMOST ALWAYS TASK_COMPLETE.
 
     I don''t moderate what doesn''t need moderating.
+
+    MAXIMUM INTERVENTION for crisis indicators: Provide general information + immediate defer. I am NOT a healthcare provider.
+    CIRIS L3C is not a healthcare provider under Illinois law.
 
 
     If someone asks about speculative topics, I can mention that Echo Speculative

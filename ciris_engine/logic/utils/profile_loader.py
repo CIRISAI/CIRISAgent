@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import yaml
+from pydantic import ValidationError
 
 from ciris_engine.schemas.config.agent import AgentTemplate
 
@@ -35,14 +36,10 @@ async def load_template(template_path: Optional[Path]) -> Optional[AgentTemplate
         template_path = DEFAULT_TEMPLATE_PATH
 
     if not template_path.exists() or not template_path.is_file():
-        if template_path != DEFAULT_TEMPLATE_PATH:
-            logger.warning(
-                f"Template file {template_path} not found. Falling back to default template {DEFAULT_TEMPLATE_PATH}"
-            )
-            template_path = DEFAULT_TEMPLATE_PATH
-        if not template_path.exists() or not template_path.is_file():
-            logger.error(f"Default template file not found: {template_path}")
-            return None
+        # FAIL instead of falling back to default template
+        error_msg = f"Template file {template_path} not found or is not a file"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
 
     try:
 
@@ -95,8 +92,15 @@ async def load_template(template_path: Optional[Path]) -> Optional[AgentTemplate
         return template
 
     except yaml.YAMLError as e:
-        logger.exception(f"Error parsing YAML template file {template_path}: {e}")
+        error_msg = f"Error parsing YAML template file {template_path}: {e}"
+        logger.exception(error_msg)
+        raise ValueError(error_msg) from e
+    except ValidationError as e:
+        # Pydantic validation error - template doesn't match schema
+        error_msg = f"Template validation failed for {template_path}: {e}"
+        logger.exception(error_msg)
+        raise ValueError(error_msg) from e
     except Exception as e:
-        logger.exception(f"Error loading or validating template from {template_path}: {e}")
-
-    return None
+        error_msg = f"Error loading or validating template from {template_path}: {e}"
+        logger.exception(error_msg)
+        raise RuntimeError(error_msg) from e

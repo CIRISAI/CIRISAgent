@@ -227,7 +227,7 @@ class TestRejectHandler:
     """Test suite for REJECT handler."""
 
     @pytest.mark.asyncio
-    async def test_successful_rejection_with_notification(
+    async def test_successful_rejection_without_notification(
         self,
         reject_handler: RejectHandler,
         action_result: ActionSelectionDMAResult,
@@ -236,17 +236,13 @@ class TestRejectHandler:
         mock_communication_bus: AsyncMock,
         test_task: Task,
     ) -> None:
-        """Test successful rejection with user notification."""
+        """Test successful rejection (notifications removed by design)."""
         with patch_persistence_properly(test_task) as mock_persistence:
             # Execute handler
             follow_up_id = await reject_handler.handle(action_result, test_thought, dispatch_context)
 
-            # Verify user was notified
-            mock_communication_bus.send_message.assert_called_once()
-            message_call = mock_communication_bus.send_message.call_args
-            assert message_call.kwargs["channel_id"] == "test_channel_123"
-            assert "unable to proceed" in message_call.kwargs["content"].lower()
-            assert "ethical guidelines" in message_call.kwargs["content"].lower()
+            # Verify NO user notification is sent (removed by design)
+            mock_communication_bus.send_message.assert_not_called()
 
             # Verify thought status was updated to FAILED (reject marks as failed)
             assert mock_persistence.update_thought_status.called
@@ -288,8 +284,8 @@ class TestRejectHandler:
             # Execute handler
             await reject_handler.handle(result, test_thought, dispatch_context)
 
-            # Verify user was still notified (handler always notifies if channel exists)
-            mock_communication_bus.send_message.assert_called_once()
+            # Verify NO user notification (removed by design)
+            mock_communication_bus.send_message.assert_not_called()
 
             # Task should still be marked as rejected
             mock_persistence.update_task_status.assert_called_once()
@@ -341,9 +337,8 @@ class TestRejectHandler:
                 # Execute handler
                 await reject_handler.handle(result, test_thought, dispatch_context)
 
-                # Verify notification includes the reason
-                message_call = mock_communication_bus.send_message.call_args
-                assert reason in message_call.kwargs["content"]
+                # Verify NO notification (removed by design)
+                mock_communication_bus.send_message.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_filter_priorities(
@@ -419,11 +414,8 @@ class TestRejectHandler:
             # Execute handler
             await reject_handler.handle(result, test_thought, dispatch_context)
 
-            # Verify detailed reason was included in message
-            message_call = mock_communication_bus.send_message.call_args
-            content = message_call.kwargs["content"]
-            # Handler includes the reason in the message
-            assert "non-maleficence" in content or "harmful" in content or "ethical" in content
+            # Verify NO notification (removed by design)
+            mock_communication_bus.send_message.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_task_already_rejected(
@@ -542,10 +534,8 @@ class TestRejectHandler:
                 # Execute handler
                 await reject_handler.handle(result, test_thought, dispatch_context)
 
-                # Verify notification was sent
-                message_call = mock_communication_bus.send_message.call_args
-                assert message_call is not None
-                assert "unable" in message_call.kwargs["content"].lower()
+                # Verify NO notification (removed by design)
+                mock_communication_bus.send_message.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_audit_trail(
@@ -638,7 +628,5 @@ class TestRejectHandler:
             # Execute handler
             await reject_handler.handle(result, test_thought, dispatch_context)
 
-            # Verify rejection message
-            message_call = mock_communication_bus.send_message.call_args
-            content = message_call.kwargs["content"]
-            assert "multiple" in content.lower() or "violations" in content.lower() or "concern" in content.lower()
+            # Verify NO notification (removed by design)
+            mock_communication_bus.send_message.assert_not_called()

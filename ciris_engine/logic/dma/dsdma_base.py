@@ -187,6 +187,11 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
 
         escalation_guidance_block = get_escalation_guidance(0)
 
+        # Import crisis resources formatter
+        from ciris_engine.logic.formatters import format_crisis_resources_block
+
+        crisis_resources_block = format_crisis_resources_block(include_full_disclaimer=False)
+
         task_history_block = ""
 
         template_has_blocks = any(
@@ -196,6 +201,7 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
                 "{escalation_guidance_block}",
                 "{system_snapshot_block}",
                 "{user_profiles_block}",
+                "{crisis_resources_block}",
             ]
         )
 
@@ -206,6 +212,7 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
                     escalation_guidance_block=escalation_guidance_block,
                     system_snapshot_block=system_snapshot_block,
                     user_profiles_block=user_profiles_block,
+                    crisis_resources_block=crisis_resources_block,
                     domain_name=self.domain_name,
                     rules_summary_str=rules_summary_str,
                     context_str=context_str,

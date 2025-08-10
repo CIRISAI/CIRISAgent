@@ -147,25 +147,18 @@ class TestServiceTokenAuthentication:
         test_token = "test-audit-token-789"
 
         with patch.dict(os.environ, {"CIRIS_SERVICE_TOKEN": test_token}):
-            # Test successful authentication
+            # Test successful authentication (should NOT audit)
             auth_context = await get_auth_context(mock_request, f"Bearer service:{test_token}", auth_service)
 
-            # Verify audit was called
-            assert mock_audit_service.log_event.called
-            call_args = mock_audit_service.log_event.call_args[0]
+            # Verify audit was NOT called for successful service token auth
+            # (We removed audit logging for successful service token auth to prevent spam)
+            assert not mock_audit_service.log_event.called
 
-            # Check event type
-            assert call_args[0] == "service_token_auth_success"
+            # Verify the auth context is correct
+            assert auth_context.user_id == "service-account"
+            assert auth_context.role == UserRole.SERVICE_ACCOUNT
 
-            # Check event data
-            event_data = call_args[1]
-            assert isinstance(event_data, AuditEventData)
-            assert event_data.actor == "service-account"
-            assert event_data.outcome == "success"
-            assert event_data.action == "service_token_validation"
-            assert "token_hash" in event_data.metadata
-
-            # Test failed authentication
+            # Test failed authentication (should still audit)
             mock_audit_service.log_event.reset_mock()
 
             with pytest.raises(HTTPException):

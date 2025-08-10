@@ -100,8 +100,13 @@ async def submit_dsar(
     # Log for audit trail
     import logging
 
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_email, sanitize_for_log
+
     logger = logging.getLogger(__name__)
-    logger.info(f"DSAR request submitted: {ticket_id} - Type: {request.request_type} - Email: {request.email}")
+    # Sanitize user input before logging to prevent log injection
+    safe_email = sanitize_email(request.email)
+    safe_type = sanitize_for_log(request.request_type, max_length=50)
+    logger.info(f"DSAR request submitted: {ticket_id} - Type: {safe_type} - Email: {safe_email}")
 
     # Prepare response
     response_data = DSARResponse(
@@ -238,8 +243,13 @@ async def update_dsar_status(
     # Log the update
     import logging
 
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
+
     logger = logging.getLogger(__name__)
-    logger.info(f"DSAR {ticket_id} status updated to {new_status} by {current_user.username}")
+    # Sanitize user input before logging to prevent log injection
+    safe_username = sanitize_username(current_user.username)
+    safe_status = sanitize_for_log(new_status, max_length=50)
+    logger.info(f"DSAR {ticket_id} status updated to {safe_status} by {safe_username}")
 
     return StandardResponse(
         success=True,

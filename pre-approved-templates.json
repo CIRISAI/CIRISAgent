@@ -1,32 +1,32 @@
 {
   "version": "1.0",
-  "created_at": "2025-08-07T15:47:44.337897Z",
+  "created_at": "2025-08-10T17:53:12.668204Z",
   "templates": {
     "default": {
       "checksum": "sha256:cb7adf02f99e357c66e49f3d39a901fd9828b2d9e8803d291578fc04de4e4ecc",
       "description": "Datum - baseline agent template"
     },
     "sage": {
-      "checksum": "sha256:37335305ab535eb778c1882f603c828e903a3f758be0e79c93c3cfa99f0bf823",
+      "checksum": "sha256:32e79a69471b28dbb1e952e8212bd12b758b5b3c7c8cb069e8abc3293ea3daf1",
       "description": "Sage - wise questioning agent"
     },
     "scout": {
-      "checksum": "sha256:2b8f95e13e63cd38320eded5315427488ca12268f350ae688a8e5588ffec17e4",
+      "checksum": "sha256:90940992ff2d64d53efadadbd8486539ecfeb8757193db437f349d5e21c8a54d",
       "description": "Scout - direct action demonstrator"
     },
     "echo-core": {
-      "checksum": "sha256:308a8164d9ac01bebc2edfcb00a26e0025be1fc89dab0ae0e87c5021ad01ba72",
+      "checksum": "sha256:b298716bb805d83c37c03afa2e3ef74418e4944aa891281fd260590d1918009c",
       "description": "Echo-Core - general community moderation"
     },
     "echo-speculative": {
-      "checksum": "sha256:65f405786577ab939ac6ad17b72f45e9b03afa4dff182ffd20e1cf8792478529",
+      "checksum": "sha256:6b08513df5f2c27b852cf9446461e745246c5581d51be17701f2dc8a5a105f0a",
       "description": "Echo-Speculative - speculative discussion moderation"
     },
     "echo": {
-      "checksum": "sha256:28822454acc8c9eee5f029c47d6d0dc303d99659655cc9caff5f800e3ad9182f",
+      "checksum": "sha256:009a45fadb7b5fb44cab3e04824284fbf48e15863d6408327b8ec98ed2138cf1",
       "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "UJa+O0obNdX8xmtgx2N2c0D7+ynUlqSlATLcF12F0yuynhYX3cXZ0MrlNzqH49fe6NYzmVqAU83CPCgBxFtmBQ==",
+  "root_signature": "CZUGZkCkkyYeT2plsOa/ItLKXHyhVDCcqg3+erGkIuOC8itmy7EOVWzh0Oy5IU6dgwdW3Iqit1VoHXOAxBovDA==",
   "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
 }

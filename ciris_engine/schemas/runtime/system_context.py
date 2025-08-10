@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-# Import ToolInfo directly - no Dict[str, Any] allowed per our principles
+# Import typed schemas directly - no Dict[str, Any] allowed per our principles
 from ciris_engine.schemas.adapters.tools import ToolInfo
 
 # Import ShutdownContext directly to avoid forward reference issues
@@ -116,8 +116,10 @@ class SystemSnapshot(BaseModel):
     )
 
     # Adapter channels - for agent visibility into available communication channels
-    adapter_channels: Dict[str, List[Dict[str, Union[str, int, bool]]]] = Field(
-        default_factory=dict, description="Available channels by adapter type with typed channel info"
+    # Type-safe: Use ChannelContext objects from processors.base, not dicts
+    # Using forward reference to avoid circular import
+    adapter_channels: Dict[str, List["ChannelContext"]] = Field(
+        default_factory=dict, description="Available channels by adapter type with ChannelContext objects"
     )
 
     # Available tools - for agent visibility into tools across all adapters

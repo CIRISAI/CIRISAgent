@@ -40,18 +40,12 @@ class RejectHandler(BaseActionHandler):
             return None
 
         follow_up_content_key_info = f"Rejected thought {thought_id}. Reason: {params.reason}"
-        if original_event_channel_id and params.reason:
-            try:
-                # Use the communication bus
-                await self.bus_manager.communication.send_message(
-                    channel_id=original_event_channel_id,
-                    content=f"Unable to proceed: {params.reason}",
-                    handler_name=self.__class__.__name__,
-                )
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to send REJECT notification via communication service for thought {thought_id}: {e}"
-                )
+        # NOTE: Rejection notifications to users have been removed by design.
+        # If rejection logging or user notifications are needed in the future,
+        # they can be added/controlled here based on configuration or context.
+        # Example:
+        # if config.notify_on_rejection and original_event_channel_id and params.reason:
+        #     await self.bus_manager.communication.send_message(...)
         persistence.update_thought_status(
             thought_id=thought_id,
             status=final_thought_status,

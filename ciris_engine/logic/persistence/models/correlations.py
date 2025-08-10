@@ -7,6 +7,7 @@ from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
+from ciris_engine.schemas.persistence.correlations import ChannelInfo, CorrelationRequestData, CorrelationResponseData
 from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation, ServiceCorrelationStatus
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ def _parse_response_data(
         # Use the correlation timestamp or current time as fallback
         response_data_json["response_timestamp"] = (timestamp or datetime.now(timezone.utc)).isoformat()
 
+    # Note: We keep returning Dict for backward compatibility with database storage
+    # The typed schemas are used at the API boundaries
     return response_data_json
 
 
@@ -670,7 +673,7 @@ def get_active_channels_by_adapter(
     since_days: int = 30,
     time_service: Optional[TimeServiceProtocol] = None,
     db_path: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> List[ChannelInfo]:
     """
     Get active channels for a specific adapter type from correlations.
 
@@ -685,12 +688,7 @@ def get_active_channels_by_adapter(
         db_path: Optional database path
 
     Returns:
-        List of channel information dicts with:
-        - channel_id: str
-        - channel_type: str (adapter type)
-        - last_activity: datetime
-        - message_count: int
-        - is_active: bool
+        List of ChannelInfo objects with channel details
     """
     # Calculate cutoff time
     if time_service:
@@ -698,7 +696,7 @@ def get_active_channels_by_adapter(
     else:
         cutoff_time = datetime.now(timezone.utc) - timedelta(days=since_days)
 
-    channels: Dict[str, Dict[str, Any]] = {}
+    channels: Dict[str, ChannelInfo] = {}
 
     # Query recent correlations for speak/observe actions
     sql = """
@@ -737,13 +735,13 @@ def get_active_channels_by_adapter(
                         except (ValueError, AttributeError):
                             last_activity = cutoff_time
 
-                    channels[channel_id] = {
-                        "channel_id": channel_id,
-                        "channel_type": adapter_type,
-                        "last_activity": last_activity or cutoff_time,
-                        "message_count": row[2] or 0,
-                        "is_active": True,
-                    }
+                    channels[channel_id] = ChannelInfo(
+                        channel_id=channel_id,
+                        channel_type=adapter_type,
+                        last_activity=last_activity or cutoff_time,
+                        message_count=row[2] or 0,
+                        is_active=True,
+                    )
     except Exception as e:
         logger.warning("Failed to query recent correlations: %s", e)
 
@@ -795,7 +793,7 @@ def get_active_channels_by_adapter(
 
     # Convert to list and sort by last activity
     channel_list = list(channels.values())
-    channel_list.sort(key=lambda x: x["last_activity"], reverse=True)
+    channel_list.sort(key=lambda x: x.last_activity, reverse=True)
 
     return channel_list
 

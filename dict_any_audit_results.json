@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 160,
+    "occurrences": 158,
     "files_affected": 77,
     "categories": {
-      "generic_data": 140,
+      "generic_data": 138,
       "parameters": 5,
       "configuration": 3,
       "api_request": 2,
@@ -572,38 +572,6 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/logic/context/batch_context.py",
-        "line": 22,
-        "class": "BatchContextData",
-        "function": "__init__",
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/context/batch_context.py",
-        "line": 28,
-        "class": "BatchContextData",
-        "function": "__init__",
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/context/batch_context.py",
-        "line": 29,
-        "class": "BatchContextData",
-        "function": "__init__",
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/context/batch_context.py",
-        "line": 32,
-        "class": "BatchContextData",
-        "function": "__init__",
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
         "file": "ciris_engine/logic/adapters/base_observer.py",
         "line": 127,
         "class": "BaseObserver",
@@ -917,14 +885,6 @@
       },
       {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 16,
-        "class": null,
-        "function": "_parse_response_data",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/persistence/models/correlations.py",
         "line": 17,
         "class": null,
         "function": "_parse_response_data",
@@ -933,17 +893,9 @@
       },
       {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 701,
+        "line": 18,
         "class": null,
-        "function": "get_active_channels_by_adapter",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 673,
-        "class": null,
-        "function": "get_active_channels_by_adapter",
+        "function": "_parse_response_data",
         "context": "other",
         "usage_hint": "generic_data"
       },
@@ -1281,6 +1233,38 @@
         "class": "ActionSelectionDMAResult",
         "function": null,
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 21,
+        "class": "CorrelationRequestData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 23,
+        "class": "CorrelationRequestData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 36,
+        "class": "CorrelationResponseData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 51,
+        "class": "ChannelInfo",
+        "function": null,
+        "context": "variable_annotation",
         "usage_hint": "generic_data"
       },
       {
@@ -2600,7 +2584,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 322,
+    "occurrences": 320,
     "files_affected": 110
   }
 }

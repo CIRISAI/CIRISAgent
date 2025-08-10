@@ -182,9 +182,9 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
             if current_value == compare_value:
                 # No change needed
                 # Sanitize key for logging
-                safe_key = "".join(c if c.isprintable() and c not in "\n\r\t" else "?" for c in key)
-                if len(safe_key) > 100:
-                    safe_key = safe_key[:100] + "..."
+                from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+                safe_key = sanitize_for_log(key, max_length=100)
                 logger.debug(f"Config {safe_key} unchanged, skipping update")
                 return
 
@@ -248,9 +248,9 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
             self._config_listeners[key_pattern] = []
         self._config_listeners[key_pattern].append(callback)
         # Sanitize pattern for logging
-        safe_pattern = "".join(c if c.isprintable() and c not in "\n\r\t" else "?" for c in key_pattern)
-        if len(safe_pattern) > 100:
-            safe_pattern = safe_pattern[:100] + "..."
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+        safe_pattern = sanitize_for_log(key_pattern, max_length=100)
         logger.info(f"Registered config listener for pattern: {safe_pattern}")
 
     def unregister_config_listener(self, key_pattern: str, callback: Callable) -> None:
@@ -276,17 +276,15 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
                         else:
                             callback(key, old_value, new_value)
                     except Exception as e:
-                        # Sanitize key for logging to prevent log injection
-                        # Remove all control characters and non-printable characters
-                        safe_key = "".join(c if c.isprintable() and c not in "\n\r\t" else "?" for c in key)
-                        if len(safe_key) > 100:
-                            safe_key = safe_key[:100] + "..."
-                        # Also sanitize the pattern in case it contains user input
-                        safe_pattern = "".join(c if c.isprintable() and c not in "\n\r\t" else "?" for c in pattern)
-                        if len(safe_pattern) > 50:
-                            safe_pattern = safe_pattern[:50] + "..."
+                        # Use centralized log sanitization to prevent log injection
+                        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+                        safe_key = sanitize_for_log(key, max_length=100)
+                        safe_pattern = sanitize_for_log(pattern, max_length=50)
+                        safe_error = sanitize_for_log(str(e), max_length=200)
+
                         logger.error(
-                            f"Error notifying config listener for config key: {safe_key}, pattern: {safe_pattern}, error: {str(e)[:200]}"
+                            f"Error notifying config listener for config key: {safe_key}, pattern: {safe_pattern}, error: {safe_error}"
                         )
 
     # Required methods for BaseGraphService

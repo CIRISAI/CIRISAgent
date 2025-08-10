@@ -10,9 +10,8 @@ from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.memory_service import LocalGraphMemoryService
 from ciris_engine.logic.utils import GraphQLContextProvider
 from ciris_engine.schemas.adapters.tools import ToolInfo
-from ciris_engine.schemas.processors.base import ChannelContext
 from ciris_engine.schemas.runtime.models import Task
-from ciris_engine.schemas.runtime.system_context import SystemSnapshot, UserProfile
+from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot, UserProfile
 from ciris_engine.schemas.services.core.runtime import ServiceHealthStatus
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
@@ -163,12 +162,17 @@ async def build_system_snapshot(
 
             if identity_result and identity_result.attributes:
                 # The identity is stored as a TypedGraphNode (IdentityNode)
-                # Attributes must be a Pydantic model
-                if not hasattr(identity_result.attributes, "model_dump"):
-                    raise TypeError(
-                        f"Invalid graph node attributes type: {type(identity_result.attributes)}, expected Pydantic model"
+                # Handle both dict and Pydantic model attributes
+                if isinstance(identity_result.attributes, dict):
+                    attrs_dict = identity_result.attributes
+                elif hasattr(identity_result.attributes, "model_dump"):
+                    attrs_dict = identity_result.attributes.model_dump()
+                else:
+                    # Log warning but continue with empty dict instead of raising
+                    logger.warning(
+                        f"Unexpected graph node attributes type: {type(identity_result.attributes)}, using empty dict"
                     )
-                attrs_dict = identity_result.attributes.model_dump()
+                    attrs_dict = {}
 
                 identity_data = {
                     "agent_id": attrs_dict.get("agent_id", ""),
@@ -482,10 +486,12 @@ async def build_system_snapshot(
             context_data["user_profiles"] = user_profiles_list
 
             # Add other enriched context data
-            if enriched_context.identity_context:
-                context_data["identity_context"] = enriched_context.identity_context
-            if enriched_context.community_context:
-                context_data["community_context"] = enriched_context.community_context
+            # Note: identity_context and community_context are not SystemSnapshot fields
+            # They would need to be added to the schema if needed
+            # if enriched_context.identity_context:
+            #     context_data["identity_context"] = enriched_context.identity_context
+            # if enriched_context.community_context:
+            #     context_data["community_context"] = enriched_context.community_context
 
     # Enrich user profiles from memory graph (supplement or replace GraphQL data)
     if memory_service and thought:
@@ -532,15 +538,19 @@ async def build_system_snapshot(
 
                 if user_results:
                     user_node = user_results[0]
-                    # Extract ALL attributes from the user node - must be Pydantic model
+                    # Extract ALL attributes from the user node - handle both dict and Pydantic model
                     if not user_node.attributes:
                         attrs = {}
+                    elif isinstance(user_node.attributes, dict):
+                        attrs = user_node.attributes
                     elif hasattr(user_node.attributes, "model_dump"):
                         attrs = user_node.attributes.model_dump()
                     else:
-                        raise TypeError(
-                            f"Invalid user node attributes type for user {user_id}: {type(user_node.attributes)}, expected Pydantic model"
+                        # Log warning but continue with empty dict instead of raising
+                        logger.warning(
+                            f"Unexpected user node attributes type for user {user_id}: {type(user_node.attributes)}, using empty dict"
                         )
+                        attrs = {}
 
                     # Get edges and connected nodes
                     connected_nodes_info = []

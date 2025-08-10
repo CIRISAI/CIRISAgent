@@ -19,6 +19,7 @@ from ciris_engine.schemas.adapters.discord import (
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage
+from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
     DeferralApprovalContext,
@@ -1326,80 +1327,82 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         logger.debug(f"DiscordAdapter.get_home_channel_id: formatted_id = {formatted_id}")
         return formatted_id
 
-    def get_channel_list(self) -> List[DiscordChannelInfo]:
+    def get_channel_list(self) -> List[ChannelContext]:
         """
         Get list of available Discord channels.
 
         Returns:
-            List of channel information dicts with:
-            - channel_id: str
-            - channel_name: Optional[str]
-            - channel_type: str (always "discord")
-            - is_active: bool
-            - last_activity: Optional[datetime]
-            - is_monitored: bool (if in monitored_channel_ids)
-            - is_home: bool (if is home_channel_id)
-            - is_deferral: bool (if is deferral_channel_id)
+            List of ChannelContext objects for Discord channels.
         """
-        channels: List[DiscordChannelInfo] = []
+        channels: List[ChannelContext] = []
 
         # Add configured channels from config
         if self.discord_config:
             # Add monitored channels
             for channel_id in self.discord_config.monitored_channel_ids:
-                channel_info = DiscordChannelInfo(
+                # Determine allowed actions based on channel type
+                allowed_actions = ["speak", "observe", "memorize", "recall"]
+                if channel_id == self.discord_config.home_channel_id:
+                    allowed_actions.append("wa_defer")  # Home channel can defer to WA
+                if channel_id == self.discord_config.deferral_channel_id:
+                    allowed_actions.append("wa_approve")  # Deferral channel for WA approvals
+
+                channel_name = None
+                # If bot is connected, get actual channel name
+                if self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready():
+                    try:
+                        discord_channel = self._channel_manager.client.get_channel(int(channel_id))
+                        if discord_channel and hasattr(discord_channel, "name"):
+                            channel_name = f"#{discord_channel.name}"
+                    except Exception as e:
+                        logger.debug(f"Could not get Discord channel info for {channel_id}: {e}")
+
+                channel = ChannelContext(
                     channel_id=channel_id,
-                    channel_name=None,  # Will be populated if bot is connected
                     channel_type="discord",
+                    created_at=datetime.now(),  # We don't have creation time, use now
+                    channel_name=channel_name,
+                    is_private=False,  # Discord channels are generally not private
+                    participants=[],  # Could be populated from guild members if needed
                     is_active=True,
-                    last_activity=None,
-                    message_count=0,
-                    is_monitored=True,
-                    is_home=channel_id == self.discord_config.home_channel_id,
-                    is_deferral=channel_id == self.discord_config.deferral_channel_id,
+                    last_activity=None,  # Could be populated from correlations
+                    message_count=0,  # Could be populated from correlations
+                    allowed_actions=allowed_actions,
+                    moderation_level="standard",
                 )
-                channels.append(channel_info)
+                channels.append(channel)
 
             # Add deferral channel if not already in monitored
             if (
                 self.discord_config.deferral_channel_id
                 and self.discord_config.deferral_channel_id not in self.discord_config.monitored_channel_ids
             ):
+                channel_name = None
+                if self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready():
+                    try:
+                        discord_channel = self._channel_manager.client.get_channel(
+                            int(self.discord_config.deferral_channel_id)
+                        )
+                        if discord_channel and hasattr(discord_channel, "name"):
+                            channel_name = f"#{discord_channel.name}"
+                    except Exception as e:
+                        logger.debug(f"Could not get Discord channel info for deferral channel: {e}")
+
                 channels.append(
-                    DiscordChannelInfo(
+                    ChannelContext(
                         channel_id=self.discord_config.deferral_channel_id,
-                        channel_name=None,
                         channel_type="discord",
+                        created_at=datetime.now(),
+                        channel_name=channel_name,
+                        is_private=False,
+                        participants=[],
                         is_active=True,
                         last_activity=None,
                         message_count=0,
-                        is_monitored=False,
-                        is_home=False,
-                        is_deferral=True,
+                        allowed_actions=["wa_approve", "speak", "observe"],  # Deferral channel
+                        moderation_level="strict",  # Higher moderation for deferral channel
                     )
                 )
-
-        # If bot is connected, enhance with actual channel names
-        if self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready():
-            for channel_info in channels:
-                try:
-                    channel_id_str = channel_info.channel_id
-                    if channel_id_str and isinstance(channel_id_str, str):
-                        discord_channel = self._channel_manager.client.get_channel(int(channel_id_str))
-                        if discord_channel and hasattr(discord_channel, "name"):
-                            channel_info.channel_name = f"#{discord_channel.name}"
-                            channel_info.guild_id = (
-                                str(discord_channel.guild.id)
-                                if hasattr(discord_channel, "guild") and discord_channel.guild
-                                else None
-                            )
-                            channel_info.guild_name = (
-                                discord_channel.guild.name
-                                if hasattr(discord_channel, "guild") and discord_channel.guild
-                                else None
-                            )
-                except Exception as e:
-                    logger.debug(f"Could not get Discord channel info for {channel_info.channel_id}: {e}")
 
         return channels
 

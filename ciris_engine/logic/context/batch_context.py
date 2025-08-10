@@ -4,11 +4,11 @@ Separates per-batch vs per-thought operations for performance.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.runtime.models import Task
-from ciris_engine.schemas.runtime.system_context import SystemSnapshot, TaskSummary
+from ciris_engine.schemas.runtime.system_context import SystemSnapshot, TaskSummary, TelemetrySummary
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
 
@@ -19,18 +19,28 @@ class BatchContextData:
     """Pre-fetched data that's the same for all thoughts in a batch."""
 
     def __init__(self) -> None:
-        self.agent_identity: Dict[str, Any] = {}
+        # Agent identity - using typed values per SystemSnapshot definition
+        self.agent_identity: Dict[str, Union[str, int, float, bool, list, dict]] = {}
         self.identity_purpose: Optional[str] = None
         self.identity_capabilities: List[str] = []
         self.identity_restrictions: List[str] = []
+        # Task tracking
         self.recent_tasks: List[TaskSummary] = []
         self.top_tasks: List[TaskSummary] = []
-        self.service_health: Dict[str, Any] = {}
-        self.circuit_breaker_status: Dict[str, Any] = {}
-        self.resource_alerts: List[Any] = []
-        self.telemetry_summary: Optional[Any] = None
-        self.secrets_snapshot: Dict[str, Any] = {}
-        self.shutdown_context: Optional[Any] = None
+        # Service health - bool for is_healthy per SystemSnapshot
+        self.service_health: Dict[str, bool] = {}
+        # Circuit breaker - string state per SystemSnapshot
+        self.circuit_breaker_status: Dict[str, str] = {}
+        # Resource alerts are strings
+        self.resource_alerts: List[str] = []
+        # Telemetry uses the schema
+        self.telemetry_summary: Optional[TelemetrySummary] = None
+        # Secrets snapshot with typed fields
+        self.secrets_snapshot: Dict[str, Union[List[str], int]] = {}
+        # Shutdown context from runtime.extended
+        from ciris_engine.schemas.runtime.extended import ShutdownContext
+
+        self.shutdown_context: Optional[ShutdownContext] = None
 
 
 async def prefetch_batch_context(

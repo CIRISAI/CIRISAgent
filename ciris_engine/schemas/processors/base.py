@@ -53,8 +53,13 @@ class ProcessorServices(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class ChannelContext(BaseModel):
-    """Context information for a specific channel."""
+class AdapterChannelContext(BaseModel):
+    """Context information for a specific channel from an adapter's perspective.
+
+    This is the lightweight schema used by adapters to pass channel information
+    to the system. For the comprehensive system-internal channel context, see
+    ciris_engine.schemas.runtime.system_context.ChannelContext.
+    """
 
     channel_id: str = Field(..., description="Channel identifier")
     channel_type: str = Field(..., description="Type of channel (discord, api, cli)")
@@ -74,7 +79,7 @@ class ProcessorContext(BaseModel):
     processor_name: str = Field(..., description="Name of the processor")
     current_state: str = Field(..., description="Current agent state")
     round_number: int = Field(..., description="Current round number")
-    channel_context: Optional[ChannelContext] = Field(None, description="Channel context if available")
+    channel_context: Optional[AdapterChannelContext] = Field(None, description="Channel context if available")
     task_context: Optional[str] = Field(None, description="Current task being processed")
     memory_context: Optional[str] = Field(None, description="Relevant memory context")
 

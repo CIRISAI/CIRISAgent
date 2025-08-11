@@ -252,6 +252,7 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         template_has_blocks = any(
             placeholder in self.prompt_template
             for placeholder in [
+                "{identity_block}",
                 "{task_history_block}",
                 "{escalation_guidance_block}",
                 "{system_snapshot_block}",
@@ -263,6 +264,7 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         if template_has_blocks:
             try:
                 system_message_content = self.prompt_template.format(
+                    identity_block=identity_block,
                     task_history_block=task_history_block,
                     escalation_guidance_block=escalation_guidance_block,
                     system_snapshot_block=system_snapshot_block,
@@ -305,6 +307,11 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         logger.debug(
             f"DSDMA '{self.domain_name}' input to LLM for thought {thought_item.thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
         )
+
+        # CRITICAL: Identity block must ALWAYS be first in system message after covenant
+        # Prepend identity to system message if not already included
+        if identity_block and "CORE IDENTITY" not in system_message_content:
+            system_message_content = identity_block + "\n\n" + system_message_content
 
         messages = [
             {"role": "system", "content": COVENANT_TEXT},

@@ -182,20 +182,14 @@ class TestActionSelectionPDMAEvaluator:
         evaluator.sink = Mock()
         evaluator.sink.llm = Mock()
 
-        # The identity validation happens in _create_messages which is called by call_llm_structured
-        # So we need to actually let it call through
-        evaluator.call_llm_structured = AsyncMock(
-            side_effect=ValueError(
-                "CRITICAL: role is missing from identity in ActionSelectionPDMA! This is a fatal error."
-            )
-        )
+        # The error gets caught and returns a fallback PONDER result
+        result = await evaluator.evaluate(inputs)
 
-        # Should raise ValueError about missing role
-        with pytest.raises(ValueError) as exc_info:
-            await evaluator.evaluate(inputs)
-
-        assert "CRITICAL" in str(exc_info.value)
-        assert "role is missing" in str(exc_info.value)
+        # Should return a fallback PONDER result due to missing role
+        assert isinstance(result, ActionSelectionDMAResult)
+        assert result.selected_action == HandlerActionType.PONDER
+        assert "CRITICAL" in result.rationale
+        assert "role is missing" in result.rationale
 
     @pytest.mark.asyncio
     async def test_aspdma_handles_llm_failure(self, mock_service_registry, valid_dma_inputs):

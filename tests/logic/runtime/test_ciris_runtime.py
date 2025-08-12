@@ -112,8 +112,15 @@ class TestCIRISRuntimeCreation:
         # Mock adapter loading since adapters may not be available
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
             mock_adapter_class = MagicMock()
-            mock_adapter_instance = MagicMock()
-            mock_adapter_class.return_value = mock_adapter_instance
+
+            # Create a mock adapter instance that accepts runtime as first arg
+            def create_adapter(runtime, **kwargs):
+                mock_instance = MagicMock()
+                mock_instance.get_service_registrations = MagicMock(return_value=[])
+                mock_instance.start = MagicMock()
+                return mock_instance
+
+            mock_adapter_class.side_effect = create_adapter
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -144,7 +151,11 @@ class TestCIRISRuntimeCreation:
         os.environ["CIRIS_MOCK_LLM"] = "true"
 
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
+            # Create a callable that returns an adapter
+            def create_adapter(runtime, **kwargs):
+                return MagicMock()
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -165,11 +176,14 @@ class TestCIRISRuntimeInitialization:
     async def test_initialize_runtime(self, essential_config, allow_runtime_creation):
         """Test the initialization process with real components."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
-            mock_adapter_instance = MagicMock()
-            mock_adapter_instance.start = MagicMock()
-            mock_adapter_instance.get_service_registrations = MagicMock(return_value=[])
-            mock_adapter_class.return_value = mock_adapter_instance
+            # Create adapter factory
+            def create_adapter(runtime, **kwargs):
+                mock_instance = MagicMock()
+                mock_instance.start = MagicMock()
+                mock_instance.get_service_registrations = MagicMock(return_value=[])
+                return mock_instance
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -209,7 +223,11 @@ class TestCIRISRuntimeLifecycle:
     def test_request_shutdown(self, essential_config, allow_runtime_creation):
         """Test requesting shutdown."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
+
+            def create_adapter(runtime, **kwargs):
+                return MagicMock()
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -228,7 +246,11 @@ class TestCIRISRuntimeLifecycle:
     async def test_run_with_rounds(self, essential_config, allow_runtime_creation):
         """Test running the runtime for a specific number of rounds."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
+
+            def create_adapter(runtime, **kwargs):
+                return MagicMock()
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -263,7 +285,11 @@ class TestCIRISRuntimeServices:
     def test_service_properties(self, essential_config, allow_runtime_creation):
         """Test accessing services through properties."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
+
+            def create_adapter(runtime, **kwargs):
+                return MagicMock()
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -285,7 +311,11 @@ class TestCIRISRuntimeServices:
     def test_bus_manager_property(self, essential_config, allow_runtime_creation):
         """Test accessing bus manager."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
+
+            def create_adapter(runtime, **kwargs):
+                return MagicMock()
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -306,14 +336,21 @@ class TestCIRISRuntimeAdapters:
         """Test loading multiple adapters."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
             # Create different mock adapters
-            cli_adapter_class = MagicMock(name="CLIAdapter")
-            api_adapter_class = MagicMock(name="APIAdapter")
+            def create_cli_adapter(runtime, **kwargs):
+                adapter = MagicMock(name="CLIAdapter")
+                adapter.name = "cli"
+                return adapter
+
+            def create_api_adapter(runtime, **kwargs):
+                adapter = MagicMock(name="APIAdapter")
+                adapter.name = "api"
+                return adapter
 
             def load_side_effect(adapter_name):
                 if adapter_name == "cli":
-                    return cli_adapter_class
+                    return MagicMock(side_effect=create_cli_adapter)
                 elif adapter_name == "api":
-                    return api_adapter_class
+                    return MagicMock(side_effect=create_api_adapter)
                 return MagicMock()
 
             mock_load.side_effect = load_side_effect
@@ -333,7 +370,7 @@ class TestCIRISRuntimeAdapters:
             # Make the first adapter fail
             mock_load.side_effect = [
                 Exception("Failed to load CLI adapter"),
-                MagicMock(),  # API adapter succeeds
+                MagicMock(side_effect=lambda runtime, **kwargs: MagicMock()),  # API adapter succeeds
             ]
 
             runtime = CIRISRuntime(
@@ -352,12 +389,15 @@ class TestCIRISRuntimeIntegration:
     async def test_full_lifecycle(self, essential_config, allow_runtime_creation):
         """Test complete runtime lifecycle: init -> run -> shutdown."""
         with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
-            mock_adapter_instance = MagicMock()
-            mock_adapter_instance.start = MagicMock()
-            mock_adapter_instance.stop = AsyncMock()
-            mock_adapter_instance.get_service_registrations = MagicMock(return_value=[])
-            mock_adapter_class.return_value = mock_adapter_instance
+
+            def create_adapter(runtime, **kwargs):
+                mock_instance = MagicMock()
+                mock_instance.start = MagicMock()
+                mock_instance.stop = AsyncMock()
+                mock_instance.get_service_registrations = MagicMock(return_value=[])
+                return mock_instance
+
+            mock_adapter_class = MagicMock(side_effect=create_adapter)
             mock_load.return_value = mock_adapter_class
 
             runtime = CIRISRuntime(
@@ -389,5 +429,5 @@ class TestCIRISRuntimeIntegration:
                 await runtime.shutdown()
 
             # Verify adapter was stopped
-            mock_adapter_instance.stop.assert_called_once()
+            runtime.adapters[0].stop.assert_called_once()
             runtime.agent_processor.stop.assert_called_once()

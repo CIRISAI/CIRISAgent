@@ -1,10 +1,10 @@
 {
   "production": {
-    "occurrences": 154,
+    "occurrences": 155,
     "files_affected": 74,
     "categories": {
       "generic_data": 136,
-      "parameters": 5,
+      "parameters": 6,
       "configuration": 3,
       "api_request": 1,
       "api_response": 3,
@@ -746,6 +746,14 @@
         "function": "_prepare_log_context",
         "context": "return_type",
         "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 113,
+        "class": null,
+        "function": "_get_correlation_context",
+        "context": "function_parameter",
+        "usage_hint": "parameters"
       },
       {
         "file": "ciris_engine/logic/dma/dma_executor.py",
@@ -2584,7 +2592,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 320,
+    "occurrences": 321,
     "files_affected": 108
   }
 }

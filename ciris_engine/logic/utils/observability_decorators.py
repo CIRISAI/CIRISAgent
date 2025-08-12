@@ -77,7 +77,7 @@ def _log_execution_result(
         result_str = str(result)[:200] if result is not None else "None"
         log_method = getattr(logger_instance, log_level.lower(), logger_instance.debug)
         log_method(
-            f"[{service_name.upper()} DEBUG] {method_name} completed in {elapsed_ms:.2f}ms, " f"result: {result_str}"
+            f"[{service_name.upper()} DEBUG] {method_name} completed in {elapsed_ms:.2f}ms, result: {result_str}"
         )
 
 
@@ -110,6 +110,172 @@ def _extract_service_name(instance: Any) -> str:
     return "unknown"
 
 
+def _get_correlation_context(self: Any, kwargs: Dict[str, Any]) -> tuple[str, Optional[Any]]:
+    """Extract correlation ID and trace context from self or kwargs."""
+    # Get correlation ID
+    if hasattr(self, "correlation_id"):
+        correlation_id = self.correlation_id
+    elif "correlation_id" in kwargs:
+        correlation_id = kwargs["correlation_id"]
+    else:
+        correlation_id = str(uuid4())
+
+    # Get trace context
+    trace_context = None
+    if hasattr(self, "trace_context"):
+        trace_context = self.trace_context
+    elif "trace_context" in kwargs:
+        trace_context = kwargs["trace_context"]
+
+    return correlation_id, trace_context
+
+
+def _create_trace_context(trace_context: Any, span_id: str, actual_span_name: str, span_kind: str) -> TraceContext:
+    """Create a new trace context for this span."""
+    if trace_context and isinstance(trace_context, dict):
+        parent_span_id = trace_context.get("span_id")
+        trace_id = trace_context.get("trace_id", str(uuid4()))
+    else:
+        parent_span_id = None
+        trace_id = str(uuid4())
+
+    return TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name=actual_span_name,
+        span_kind=span_kind,
+    )
+
+
+def _capture_request_data(
+    func: Callable, self: Any, args: Any, kwargs: Any, actual_span_name: str
+) -> Optional[ServiceRequestData]:
+    """Capture request data from function arguments."""
+    # Convert args to string representation for storage
+    params = {}
+    sig = inspect.signature(func)
+    bound_args = sig.bind(self, *args, **kwargs)
+    bound_args.apply_defaults()
+
+    for param_name, param_value in bound_args.arguments.items():
+        if param_name != "self":
+            params[param_name] = str(param_value)[:200]  # Limit length
+
+    return ServiceRequestData(
+        service_type=_extract_service_name(self),
+        method_name=actual_span_name,
+        parameters=params,
+        request_timestamp=datetime.now(timezone.utc),
+    )
+
+
+async def _store_correlation_async(self: Any, correlation: ServiceCorrelation) -> None:
+    """Store correlation asynchronously if telemetry service is available."""
+    if hasattr(self, "_telemetry_service"):
+        try:
+
+            async def bounded_store_correlation(telemetry_service, correlation):
+                async with TELEMETRY_TASK_SEMAPHORE:
+                    await telemetry_service._store_correlation(correlation)
+
+            # Store asynchronously with bounded concurrency
+            task = asyncio.create_task(bounded_store_correlation(self._telemetry_service, correlation))
+            # Fire and forget - we don't await the task
+            task.add_done_callback(lambda t: None)  # Suppress warnings
+        except Exception:
+            pass  # Don't fail the method if telemetry fails
+
+
+async def _execute_with_logging(
+    func: Callable,
+    self: Any,
+    args: Any,
+    kwargs: Any,
+    service_name: str,
+    method_logger: Any,
+    log_message: str,
+    log_level: str,
+    include_result: bool,
+) -> Any:
+    """Execute a function with debug logging."""
+    # Log the call
+    log_method = getattr(method_logger, log_level.lower(), method_logger.debug)
+    log_method(log_message)
+
+    # Execute the method
+    start_time = time.time()
+    try:
+        result = await func(self, *args, **kwargs)
+        _log_execution_result(method_logger, service_name, func.__name__, start_time, result, include_result, log_level)
+        return result
+    except Exception as e:
+        _log_execution_error(method_logger, service_name, func.__name__, start_time, e)
+        raise
+
+
+def _execute_with_logging_sync(
+    func: Callable,
+    self: Any,
+    args: Any,
+    kwargs: Any,
+    service_name: str,
+    method_logger: Any,
+    log_message: str,
+    log_level: str,
+    include_result: bool,
+) -> Any:
+    """Execute a sync function with debug logging."""
+    # Log the call
+    log_method = getattr(method_logger, log_level.lower(), method_logger.debug)
+    log_method(log_message)
+
+    # Execute the method
+    start_time = time.time()
+    try:
+        result = func(self, *args, **kwargs)
+        _log_execution_result(method_logger, service_name, func.__name__, start_time, result, include_result, log_level)
+        return result
+    except Exception as e:
+        _log_execution_error(method_logger, service_name, func.__name__, start_time, e)
+        raise
+
+
+async def _record_performance_metrics(
+    self: Any,
+    service_name: str,
+    func_name: str,
+    actual_metric_name: str,
+    duration_ms: float,
+    success: bool,
+    path_type: Optional[str],
+    module: str,
+) -> None:
+    """Record performance metrics if telemetry service is available."""
+    if hasattr(self, "_telemetry_service") and self._telemetry_service:
+        try:
+            # Record the metric
+            await self._telemetry_service.record_metric(
+                metric_name=f"{service_name}.{actual_metric_name}",
+                value=duration_ms,
+                tags={"method": func_name, "success": str(success), "service": service_name},
+                path_type=path_type,
+                source_module=module,
+            )
+
+            # Record success/failure count
+            status_metric = f"{service_name}.{func_name}_{'success' if success else 'failure'}"
+            await self._telemetry_service.record_metric(
+                metric_name=status_metric,
+                value=1.0,
+                tags={"service": service_name},
+                path_type=path_type,
+                source_module=module,
+            )
+        except Exception:
+            pass  # Don't fail the method if metrics fail
+
+
 def trace_span(
     span_name: Optional[str] = None, span_kind: str = "internal", capture_args: bool = True
 ) -> Callable[[F], F]:
@@ -132,57 +298,16 @@ def trace_span(
             # Generate span ID
             span_id = str(uuid4())
 
-            # Try to get correlation context from self or kwargs
-            correlation_id = None
-            trace_context = None
-
-            if hasattr(self, "correlation_id"):
-                correlation_id = self.correlation_id
-            elif "correlation_id" in kwargs:
-                correlation_id = kwargs["correlation_id"]
-            else:
-                correlation_id = str(uuid4())
-
-            if hasattr(self, "trace_context"):
-                trace_context = self.trace_context
-            elif "trace_context" in kwargs:
-                trace_context = kwargs["trace_context"]
+            # Get correlation context
+            correlation_id, trace_context = _get_correlation_context(self, kwargs)
 
             # Create trace context for this span
-            if trace_context and isinstance(trace_context, dict):
-                parent_span_id = trace_context.get("span_id")
-                trace_id = trace_context.get("trace_id", str(uuid4()))
-            else:
-                parent_span_id = None
-                trace_id = str(uuid4())
-
-            new_trace_context = TraceContext(
-                trace_id=trace_id,
-                span_id=span_id,
-                parent_span_id=parent_span_id,
-                span_name=actual_span_name,
-                span_kind=span_kind,
-            )
+            new_trace_context = _create_trace_context(trace_context, span_id, actual_span_name, span_kind)
 
             # Capture request data
             request_data = None
             if capture_args:
-                # Convert args to string representation for storage
-                params = {}
-                sig = inspect.signature(func)
-                bound_args = sig.bind(self, *args, **kwargs)
-                bound_args.apply_defaults()
-
-                for param_name, param_value in bound_args.arguments.items():
-                    if param_name != "self":
-                        params[param_name] = str(param_value)[:200]  # Limit length
-
-                request_data = ServiceRequestData(
-                    service_type=_extract_service_name(self),
-                    method_name=actual_span_name,
-                    parameters=params,
-                    request_timestamp=datetime.now(timezone.utc),
-                )
+                request_data = _capture_request_data(func, self, args, kwargs, actual_span_name)
 
             # Create correlation record
             correlation = ServiceCorrelation(
@@ -226,19 +351,7 @@ def trace_span(
                 raise
             finally:
                 # Store correlation if we have access to telemetry
-                if hasattr(self, "_telemetry_service"):
-                    try:
-
-                        async def bounded_store_correlation(telemetry_service, correlation):
-                            async with TELEMETRY_TASK_SEMAPHORE:
-                                await telemetry_service._store_correlation(correlation)
-
-                        # Store asynchronously with bounded concurrency
-                        task = asyncio.create_task(bounded_store_correlation(self._telemetry_service, correlation))
-                        # Fire and forget - we don't await the task
-                        task.add_done_callback(lambda t: None)  # Suppress warnings
-                    except Exception:
-                        pass  # Don't fail the method if telemetry fails
+                await _store_correlation_async(self, correlation)
 
         @functools.wraps(func)
         def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
@@ -278,30 +391,16 @@ def debug_log(
 
             # Check if debug mode is enabled
             if not _get_debug_env_var(service_name):
-                # Debug mode not enabled, just execute the method
                 return await func(self, *args, **kwargs)
 
-            # Get logger
+            # Get logger and prepare context
             method_logger = getattr(self, "_logger", logger)
-
-            # Prepare log context
             context = _prepare_log_context(func, self, args, kwargs, service_name, message_template)
 
-            # Log the call
-            log_method = getattr(method_logger, log_level.lower(), method_logger.debug)
-            log_method(context["log_message"])
-
-            # Execute the method
-            start_time = time.time()
-            try:
-                result = await func(self, *args, **kwargs)
-                _log_execution_result(
-                    method_logger, service_name, func.__name__, start_time, result, include_result, log_level
-                )
-                return result
-            except Exception as e:
-                _log_execution_error(method_logger, service_name, func.__name__, start_time, e)
-                raise
+            # Execute with logging
+            return await _execute_with_logging(
+                func, self, args, kwargs, service_name, method_logger, context["log_message"], log_level, include_result
+            )
 
         @functools.wraps(func)
         def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
@@ -309,30 +408,16 @@ def debug_log(
 
             # Check if debug mode is enabled
             if not _get_debug_env_var(service_name):
-                # Debug mode not enabled, just execute the method
                 return func(self, *args, **kwargs)
 
-            # Get logger
+            # Get logger and prepare context
             method_logger = getattr(self, "_logger", logger)
-
-            # Prepare log context - reuse common function
             context = _prepare_log_context(func, self, args, kwargs, service_name, message_template)
 
-            # Log the call
-            log_method = getattr(method_logger, log_level.lower(), method_logger.debug)
-            log_method(context["log_message"])
-
-            # Execute the method
-            start_time = time.time()
-            try:
-                result = func(self, *args, **kwargs)
-                _log_execution_result(
-                    method_logger, service_name, func.__name__, start_time, result, include_result, log_level
-                )
-                return result
-            except Exception as e:
-                _log_execution_error(method_logger, service_name, func.__name__, start_time, e)
-                raise
+            # Execute with logging
+            return _execute_with_logging_sync(
+                func, self, args, kwargs, service_name, method_logger, context["log_message"], log_level, include_result
+            )
 
         # Return appropriate wrapper based on function type
         if asyncio.iscoroutinefunction(func):
@@ -363,43 +448,28 @@ def measure_performance(
         @functools.wraps(func)
         async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
+            success = False
 
             try:
                 result = await func(self, *args, **kwargs)
                 success = True
                 return result
             except Exception:
-                success = False
                 raise
             finally:
-                # Calculate duration
+                # Calculate duration and record metrics
                 duration_ms = (time.time() - start_time) * 1000
-
-                # Try to record metric if telemetry service is available
-                if hasattr(self, "_telemetry_service") and self._telemetry_service:
-                    try:
-                        service_name = _extract_service_name(self)
-
-                        # Record the metric
-                        await self._telemetry_service.record_metric(
-                            metric_name=f"{service_name}.{actual_metric_name}",
-                            value=duration_ms,
-                            tags={"method": func.__name__, "success": str(success), "service": service_name},
-                            path_type=path_type,
-                            source_module=func.__module__,
-                        )
-
-                        # Record success/failure count
-                        status_metric = f"{service_name}.{func.__name__}_{'success' if success else 'failure'}"
-                        await self._telemetry_service.record_metric(
-                            metric_name=status_metric,
-                            value=1.0,
-                            tags={"service": service_name},
-                            path_type=path_type,
-                            source_module=func.__module__,
-                        )
-                    except Exception:
-                        pass  # Don't fail the method if metrics fail
+                service_name = _extract_service_name(self)
+                await _record_performance_metrics(
+                    self,
+                    service_name,
+                    func.__name__,
+                    actual_metric_name,
+                    duration_ms,
+                    success,
+                    path_type,
+                    func.__module__,
+                )
 
         @functools.wraps(func)
         def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
@@ -418,7 +488,7 @@ def measure_performance(
 
                 # Log performance for sync methods
                 service_name = _extract_service_name(self)
-                logger.debug(f"{service_name}.{func.__name__} took {duration_ms:.2f}ms " f"(success={success})")
+                logger.debug(f"{service_name}.{func.__name__} took {duration_ms:.2f}ms (success={success})")
 
         # Return appropriate wrapper based on function type
         if asyncio.iscoroutinefunction(func):

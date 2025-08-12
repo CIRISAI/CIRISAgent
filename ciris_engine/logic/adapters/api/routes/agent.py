@@ -812,32 +812,57 @@ async def _get_channels_from_bootstrap_adapters(runtime) -> List[ChannelInfo]:
     return channels
 
 
-async def _get_channels_from_dynamic_adapters(runtime, request) -> List[ChannelInfo]:
-    """Get channels from dynamically loaded adapters."""
-    channels = []
-
-    # Get main runtime control service
+def _get_control_service(runtime, request):
+    """Get the runtime control service from app state or registry."""
+    # Try app state first
     control_service = getattr(request.app.state, "main_runtime_control_service", None)
+    if control_service:
+        return control_service
 
     # Fallback to service registry
-    if not control_service and runtime and hasattr(runtime, "service_registry") and runtime.service_registry:
-        from ciris_engine.schemas.runtime.enums import ServiceType
+    if not runtime or not hasattr(runtime, "service_registry") or not runtime.service_registry:
+        return None
 
-        providers = runtime.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
-        if providers:
-            control_service = providers[0]
+    from ciris_engine.schemas.runtime.enums import ServiceType
 
-    if control_service and hasattr(control_service, "adapter_manager") and control_service.adapter_manager:
-        adapter_manager = control_service.adapter_manager
-        if hasattr(adapter_manager, "loaded_adapters"):
-            for adapter_id, instance in adapter_manager.loaded_adapters.items():
-                adapter_channels = await _get_channels_from_adapter(instance.adapter, instance.adapter_type)
-                # Filter out duplicates
-                for ch in adapter_channels:
-                    if not any(existing.channel_id == ch.channel_id for existing in channels):
-                        channels.append(ch)
+    providers = runtime.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
+    return providers[0] if providers else None
+
+
+def _get_adapter_manager(control_service):
+    """Get adapter manager from control service."""
+    if not control_service:
+        return None
+    if not hasattr(control_service, "adapter_manager"):
+        return None
+    return control_service.adapter_manager
+
+
+async def _collect_unique_channels(adapter_manager) -> List[ChannelInfo]:
+    """Collect unique channels from loaded adapters."""
+    if not adapter_manager or not hasattr(adapter_manager, "loaded_adapters"):
+        return []
+
+    channels = []
+    seen_channel_ids = set()
+
+    for adapter_id, instance in adapter_manager.loaded_adapters.items():
+        adapter_channels = await _get_channels_from_adapter(instance.adapter, instance.adapter_type)
+
+        # Add only unique channels
+        for ch in adapter_channels:
+            if ch.channel_id not in seen_channel_ids:
+                channels.append(ch)
+                seen_channel_ids.add(ch.channel_id)
 
     return channels
+
+
+async def _get_channels_from_dynamic_adapters(runtime, request) -> List[ChannelInfo]:
+    """Get channels from dynamically loaded adapters."""
+    control_service = _get_control_service(runtime, request)
+    adapter_manager = _get_adapter_manager(control_service)
+    return await _collect_unique_channels(adapter_manager)
 
 
 def _add_default_api_channels(channels: List[ChannelInfo], request: Request, auth: AuthContext) -> None:

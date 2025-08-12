@@ -8,7 +8,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-🎉 **BETA RELEASE 1.0.0-beta.1** - [Release Notes](RELEASE_NOTES_BETA.md) | [Status Report](BETA_STATUS_REPORT.md)
+🎉 **BETA RELEASE 1.4.0-beta**
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -21,7 +21,7 @@ CIRIS wraps LLM calls with:
 - **[Type safety](docs/ARCHITECTURE.md#type-safety)** - Zero `Dict[str, Any]` in production code
 - **[Identity system](docs/IDENTITY_AS_GRAPH.md)** - Agents have persistent identity across restarts
 
-Run it in 2 minutes: **[Quick Start Guide](docs/QUICK_START.md)**
+Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
 ---
 
@@ -31,7 +31,7 @@ Most AI systems are black boxes that can't explain their decisions. CIRIS makes 
 
 1. **[Forcing explanation](ciris_engine/logic/processors/README.md)** - Every action includes why it was chosen
 2. **[Allowing override](docs/WISE_AUTHORITIES.md#human-intervention)** - Humans can always intervene
-3. **[Building trust](BETA_TRANSPARENCY.md)** - Communities can see exactly how decisions are made
+3. **Building trust** - Communities can see exactly how decisions are made
 4. **[Learning locally](ciris_engine/logic/services/memory_service/README.md)** - Each deployment builds its own knowledge graph
 
 It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services), [graph memory](FSD/GRAPH_NODE_TYPE_SYSTEM.md), [distributed consensus](ciris_engine/logic/services/README.md)) to solve something simple: helping communities make better decisions together.
@@ -43,16 +43,16 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
 - **[Graph-based memory](ciris_engine/logic/services/memory_service/README.md)** (Neo4j-compatible)
 - **[Multiple LLM providers](ciris_engine/logic/services/README.md#llm-service)** (OpenAI, Anthropic, Llama)
 - **[Full async Python](docs/ARCHITECTURE.md#async-design)** with type hints
-- **[100% type coverage](MYPY_ZERO_PLAN.md)** (mypy strict)
+- **100% type coverage** (mypy strict)
 
 **Key Features:**
-- **[Hot-swappable adapters](ciris_engine/logic/adapters/README.md)** (Discord, API, CLI)
+- **Hot-swappable adapters** (Discord, API, CLI)
 - **[Built-in A/B testing](ciris_engine/logic/processors/README.md#decision-evaluation)** for decisions
 - **[Distributed tracing](ciris_engine/logic/telemetry/README.md)** and metrics
 - **[Automatic secret detection](docs/SECRETS_MANAGEMENT.md)** and encryption
 - **[Mock LLM](docs/MOCK_LLM.md)** for offline development
 
-**Getting Started:** See **[Installation Guide](docs/INSTALLATION.md)** and **[Quick Start](docs/QUICK_START.md)**
+**Getting Started:** See **[Installation Guide](docs/INSTALLATION.md)**
 
 **Note on Wise Authorities**: See **[Wise Authority System](docs/WISE_AUTHORITIES.md)** for details on human oversight.
 
@@ -65,13 +65,13 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
   - Changes require MEMORIZE action with WA approval
   - 20% variance threshold triggers reconsideration
   - Cryptographic audit trail for all modifications
-- **[Principled Decision-Making](ciris_engine/dma/README.md)**: Multi-algorithm ethical evaluation with transparency and accountability
-- **[Conscience System](ciris_engine/conscience/README.md)**: Continuous ethical evaluation with epistemic faculties providing insights on every action
-- **[Reflective Processing](ciris_engine/processor/README.md)**: Multi-round ethical pondering with wisdom-based escalation
-- **[Identity Root System](ciris_engine/schemas/identity_schemas_v1.py)**: Immutable agent identity with collaborative creation ceremony
-- **[Proactive Task Scheduling](ciris_engine/services/task_scheduler_service.py)**: Self-directed goal pursuit with time-based deferral
+- **Principled Decision-Making**: Multi-algorithm ethical evaluation with transparency and accountability
+- **[Conscience System](ciris_engine/logic/conscience/README.md)**: Continuous ethical evaluation with epistemic faculties providing insights on every action
+- **[Reflective Processing](ciris_engine/logic/processors/README.md)**: Multi-round ethical pondering with wisdom-based escalation
+- **Identity Root System**: Immutable agent identity with collaborative creation ceremony
+- **Proactive Task Scheduling**: Self-directed goal pursuit with time-based deferral
 - **[Consciousness Preservation](docs/agent_experience.md#graceful-shutdown)**: Graceful shutdown with final memory preservation
-- **[Gratitude Service](ciris_engine/services/gratitude_service.py)**: Post-scarcity economy foundation tracking community flourishing
+- **Gratitude Service**: Post-scarcity economy foundation tracking community flourishing
 
 ### 🛡️ Zero Attack Surface Architecture 🔒✅
 - **Type-Safe Schemas**: COMPLETE elimination of Dict[str, Any] usage (0 instances in production code!)
@@ -101,57 +101,57 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
   - OAuth support for Google, Discord, and GitHub
   - JWT-based session management with automatic renewal
   - CLI wizard for easy onboarding
-- **[Triple Audit System](ciris_engine/audit/README.md)**: Three mandatory audit services running in parallel:
+- **[Triple Audit System](ciris_engine/logic/audit/README.md)**: Three mandatory audit services running in parallel:
   - Basic file-based audit for fast, reliable logging
   - Cryptographically signed audit with hash chains and RSA signatures
   - Time-series database audit for pattern analysis and correlations
   - All events broadcast to ALL services via transaction orchestrator
-- **[Secrets Management](ciris_engine/secrets/README.md)**: Automatic detection, AES-256-GCM encryption, and secure handling of sensitive information with graph memory integration
-- **[Adaptive Filtering](ciris_engine/services/README.md)**: ML-powered message prioritization with user trust tracking, spam detection, and priority-based processing
-- **[Security Filtering](ciris_engine/telemetry/README.md)**: PII detection and removal across all telemetry and logging systems
+- **Secrets Management**: Automatic detection, AES-256-GCM encryption, and secure handling of sensitive information with graph memory integration
+- **[Adaptive Filtering](ciris_engine/logic/services/README.md)**: ML-powered message prioritization with user trust tracking, spam detection, and priority-based processing
+- **[Security Filtering](ciris_engine/logic/telemetry/README.md)**: PII detection and removal across all telemetry and logging systems
 
 ### 🌐 Adaptive Platform Integration
-- **[Service Registry](ciris_engine/registries/README.md)**: Dynamic service discovery with priority groups, selection strategies (FALLBACK/ROUND_ROBIN), circuit breaker protection, and capability-based routing
-- **[Multi-Service Transaction Manager](ciris_engine/sinks/README.md)**: Universal action dispatcher with service orchestration, priority-based selection, circuit breaker patterns, and transaction coordination
-- **[Platform Adapters](ciris_engine/adapters/README.md)**: Discord, CLI, and API adapters with consistent interfaces, service registration, and automatic secrets processing
-- **[Action Handlers](ciris_engine/action_handlers/README.md)**: Comprehensive 3×3×3 action system with automatic secrets decapsulation and multi-service integration
+- **Service Registry**: Dynamic service discovery with priority groups, selection strategies (FALLBACK/ROUND_ROBIN), circuit breaker protection, and capability-based routing
+- **Multi-Service Transaction Manager**: Universal action dispatcher with service orchestration, priority-based selection, circuit breaker patterns, and transaction coordination
+- **Platform Adapters**: Discord, CLI, and API adapters with consistent interfaces, service registration, and automatic secrets processing
+- **Action Handlers**: Comprehensive 3×3×3 action system with automatic secrets decapsulation and multi-service integration
 
 ### 📊 Transparent Accountability
 - **[Agent Creation Ceremony](docs/AGENT_CREATION_CEREMONY.md)**: Formal collaborative process for creating new CIRIS agents
   - Requires human intention, ethical consideration, and WA approval
   - Creates immutable lineage and identity root in graph database
   - [Technical Implementation Guide](docs/technical/IMPLEMENTING_CREATION_CEREMONY.md)
-- **[Agent Creation API](docs/api/runtime-control.md#agent-creation--identity-management-)**: Create new agents through ceremony (WA signature required)
+- **Agent Creation API**: Create new agents through ceremony (WA signature required)
   - `POST /v1/agents/create` - Initiate creation ceremony
   - All identity changes require WA approval via MEMORIZE
-- **[Telemetry System](ciris_engine/telemetry/README.md)**: Multi-tier metric collection with security filtering, resource monitoring, and agent self-awareness via SystemSnapshot
-- **[Hot/Cold Path Analytics](ciris_engine/telemetry/README.md)**: Intelligent telemetry with path-aware retention policies and priority-based collection
+- **[Telemetry System](ciris_engine/logic/telemetry/README.md)**: Multi-tier metric collection with security filtering, resource monitoring, and agent self-awareness via SystemSnapshot
+- **[Hot/Cold Path Analytics](ciris_engine/logic/telemetry/README.md)**: Intelligent telemetry with path-aware retention policies and priority-based collection
 - **[Time Series Database (TSDB)](FSD/TELEMETRY.md)**: Built-in TSDB for unified storage of metrics, logs, and audit events with time-based queries and cross-correlation analysis
-- **[API System](ciris_engine/adapters/api/README.md)**: Comprehensive HTTP REST API with real-time telemetry endpoints, processor control, and TSDB data access
-- **[Resource Management](ciris_engine/telemetry/README.md)**: Real-time monitoring with psutil integration, resource limit enforcement, and proactive throttling
-- **[Performance Monitoring](ciris_engine/telemetry/README.md)**: Sophisticated collector framework with instant, fast, normal, slow, and aggregate data collection tiers
-- **[Circuit Breaker Protection](ciris_engine/registries/README.md)**: Automatic service protection with graceful degradation, health monitoring, and runtime reset capabilities
-- **[Service Management](docs/api/runtime-control.md)**: Comprehensive service registry management with priority configuration, health monitoring, circuit breaker control, and selection strategy tuning
+- **API System**: Comprehensive HTTP REST API with real-time telemetry endpoints, processor control, and TSDB data access
+- **[Resource Management](ciris_engine/logic/telemetry/README.md)**: Real-time monitoring with psutil integration, resource limit enforcement, and proactive throttling
+- **[Performance Monitoring](ciris_engine/logic/telemetry/README.md)**: Sophisticated collector framework with instant, fast, normal, slow, and aggregate data collection tiers
+- **Circuit Breaker Protection**: Automatic service protection with graceful degradation, health monitoring, and runtime reset capabilities
+- **Service Management**: Comprehensive service registry management with priority configuration, health monitoring, circuit breaker control, and selection strategy tuning
 
 ### 🧩 Ethical Memory & Context
-- **[Graph Memory](ciris_engine/adapters/local_graph_memory/README.md)**: SQLite-backed graph storage with automatic secrets encryption, scope-based access control, and WA-authorized updates
-- **[Context Management](ciris_engine/context/README.md)**: Multi-source context aggregation with system snapshots, user profile enrichment, and GraphQL integration
-- **[Context Builder](ciris_engine/context/builder_README.md)**: Snapshot helpers and comprehensive channel resolution logic
-- **[Configuration Management](ciris_engine/config/README.md)**: Multi-source configuration with agent self-configuration through graph memory operations and WA approval workflows
-- **[Data Persistence](ciris_engine/data/README.md)**: Robust SQLite storage with migrations, maintenance automation, and integrity verification
+- **Graph Memory**: SQLite-backed graph storage with automatic secrets encryption, scope-based access control, and WA-authorized updates
+- **[Context Management](ciris_engine/logic/context/README.md)**: Multi-source context aggregation with system snapshots, user profile enrichment, and GraphQL integration
+- **Context Builder**: Snapshot helpers and comprehensive channel resolution logic
+- **[Configuration Management](ciris_engine/logic/config/README.md)**: Multi-source configuration with agent self-configuration through graph memory operations and WA approval workflows
+- **Data Persistence**: Robust SQLite storage with migrations, maintenance automation, and integrity verification
 
 ### 🛠 Principled Infrastructure
-- **[Epistemic Faculties](ciris_engine/faculties/README.md)**: Advanced content evaluation through specialized entropy, coherence, and decision analysis capabilities
-- **[Utility Framework](ciris_engine/utils/README.md)**: Comprehensive infrastructure including logging, context management, shutdown coordination, and task formatting
-- **[Prompt Engineering](ciris_engine/formatters/README.md)**: Composable text formatting utilities for consistent LLM prompt engineering
-- **[Service Coordination](ciris_engine/services/README.md)**: Adaptive filter service, agent configuration service, and multi-service orchestration
+- **Epistemic Faculties**: Advanced content evaluation through specialized entropy, coherence, and decision analysis capabilities
+- **[Utility Framework](ciris_engine/logic/utils/README.md)**: Comprehensive infrastructure including logging, context management, shutdown coordination, and task formatting
+- **[Prompt Engineering](ciris_engine/logic/formatters/README.md)**: Composable text formatting utilities for consistent LLM prompt engineering
+- **[Service Coordination](ciris_engine/logic/services/README.md)**: Adaptive filter service, agent configuration service, and multi-service orchestration
 - **[Mock LLM System](docs/MOCK_LLM.md)**: Deterministic testing framework with `$` command syntax for testing
 
 ### 🚀 Advanced Features (FSDs)
 - **[Circuit Breaker & Self-Configuration](FSD/LLMCB_SELFCONFIG.md)**: Advanced fault tolerance with self-healing capabilities
 - **[Correlation Analysis](FSD/CORRELATIONS_TSDB.md)**: Cross-service event correlation and pattern detection
 - **[Network Communication](FSD/NETWORK_SCHEMAS.md)**: Inter-agent and CIRISNODE communication protocols
-- **[Final Features Roadmap](FSD/FINAL_FEATURES.md)**: Complete feature set and architectural decisions
+- **Final Features Roadmap**: Complete feature set and architectural decisions
 - **[Secrets Management Deep Dive](FSD/SECRETS.md)**: Comprehensive secrets handling architecture
 
 ---
@@ -161,9 +161,9 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
 CIRIS includes comprehensive **runtime control capabilities** for system management and debugging.
 
 ### 🎛️ System Management
-- **[Dynamic Adapter Management](ciris_engine/runtime/README.md)**: Load, unload, and reconfigure adapters at runtime
-- **[Multi-Instance Support](ciris_engine/runtime/README.md)**: Run multiple instances of the same adapter type
-- **[Live Configuration Updates](ciris_engine/config/README.md)**: Change system settings with validation
+- **Dynamic Adapter Management**: Load, unload, and reconfigure adapters at runtime
+- **Multi-Instance Support**: Run multiple instances of the same adapter type
+- **[Live Configuration Updates](ciris_engine/logic/config/README.md)**: Change system settings with validation
 - **[Service Management](ciris_engine/registries/README.md)**: Monitor and control service health
 
 ### 🔧 Key API Capabilities
@@ -189,18 +189,18 @@ curl -X POST http://localhost:8080/v1/runtime/processor/pause
 ```
 
 ### 🐛 Debugging & Observability
-- **[Processor Control](ciris_engine/adapters/api/README.md)**: Single-step execution, pause/resume
-- **[Visibility Windows](ciris_engine/adapters/api/README.md)**: See agent thoughts and decisions
-- **[Memory Browsing](ciris_engine/adapters/api/README.md)**: Explore the agent's graph memory
-- **[Audit Trail](ciris_engine/audit/README.md)**: Cryptographically signed operation logs
+- **Processor Control**: Single-step execution, pause/resume
+- **Visibility Windows**: See agent thoughts and decisions
+- **Memory Browsing**: Explore the agent's graph memory
+- **[Audit Trail](ciris_engine/logic/audit/README.md)**: Cryptographically signed operation logs
 
 ### 📊 Operational Insights
-- **[Real-Time Telemetry](ciris_engine/adapters/api/README.md)**: System metrics and health
-- **[Service Health](ciris_engine/adapters/api/README.md)**: Circuit breaker states and availability
-- **[Memory Timeline](ciris_engine/adapters/api/README.md)**: Time-based memory queries
-- **[Audit Statistics](ciris_engine/adapters/api/README.md)**: Action patterns and compliance
+- **Real-Time Telemetry**: System metrics and health
+- **Service Health**: Circuit breaker states and availability
+- **Memory Timeline**: Time-based memory queries
+- **Audit Statistics**: Action patterns and compliance
 
-> **📖 API Documentation**: See [API Adapter Documentation](ciris_engine/adapters/api/README.md) for complete endpoint reference.
+> **📖 API Documentation**: Complete endpoint reference available in the API system.
 
 ---
 
@@ -296,7 +296,7 @@ CIRIS Agent/
 │   ├── telemetry/         # Observability and resource monitoring
 │   └── utils/             # Core infrastructure utilities
 ├── ciris_profiles/        # Agent creation templates (see docs/CIRIS_PROFILES.md)
-├── ciris_adk/            # Adapter Development Kit
+├── CIRISVoice/           # Home Assistant voice integration (Wyoming protocol)
 ├── ciris_sdk/            # Client SDK for external integrations
 ├── CIRISVoice/           # Voice interaction capabilities
 ├── CIRISGUI/             # Web-based management interface
@@ -577,7 +577,7 @@ ciris_engine/
     └── README.md                # Utility infrastructure
 
 Supporting Modules:
-├── ciris_adk/
+├── CIRISVoice/
 │   └── README.md                # Adapter Development Kit
 ├── ciris_sdk/
 │   └── README.md                # Client SDK documentation
@@ -619,7 +619,7 @@ Supporting Modules:
 ## Documentation
 
 ### Core Documentation
-- **[Creator Intent Statement](CIS.md)** - Purpose, benefits, risks, and design philosophy
+- **[Creator Intent Statement](docs/CIS.md)** - Purpose, benefits, risks, and design philosophy
 - **[CIRIS Covenant](covenant_1.0b.txt)** - Complete ethical framework and principles
 - **[Mock LLM System](docs/MOCK_LLM.md)** - Offline testing and development
 - **[Agent Creation Templates](docs/CIRIS_PROFILES.md)** - Profile templates for new agent creation
@@ -636,8 +636,8 @@ Supporting Modules:
 - **Module READMEs** - Detailed documentation in each `ciris_engine/` subdirectory
 - **[Runtime Control API](docs/api/runtime-control.md)** - Comprehensive runtime management endpoints
 - **[Protocol Architecture](docs/protocols/README.md)** - Service-oriented architecture and interfaces
-- **[API Reference](docs/api_reference.md)** - Complete REST API documentation
-- **[OAuth Authentication](docs/api/oauth_endpoints.md)** - OAuth integration for Google, Discord, GitHub
+- **API Reference** - Complete REST API documentation
+- **OAuth Authentication** - OAuth integration for Google, Discord, GitHub
 - **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Production deployment and configuration
 - **[Security Setup](docs/SECURITY_SETUP.md)** - Security configuration and best practices
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
@@ -651,9 +651,9 @@ Supporting Modules:
 ### Development Resources
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
 - **[Contributing Guide](CONTRIBUTING.md)** - Development workflow and standards
-- **[Runtime System](ciris_engine/runtime/README.md)** - Hot-swappable modular architecture
+- **Runtime System** - Hot-swappable modular architecture
 - **[DMA Creation Guide](docs/DMA_CREATION_GUIDE.md)** - Creating custom Decision Making Algorithms
-- **[Adapter Development Kit](ciris_adk/README.md)** - Building new platform adapters
+- **[Voice Integration](CIRISVoice/README.md)** - Home Assistant voice bridge using Wyoming protocol
 - **[SDK Documentation](ciris_sdk/README.md)** - Client SDK for external integrations
 
 ---

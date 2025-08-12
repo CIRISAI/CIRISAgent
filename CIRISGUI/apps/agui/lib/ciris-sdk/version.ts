@@ -2,7 +2,7 @@
 // This file is auto-updated during build
 
 export const SDK_VERSION = {
-  version: '1.3.4-beta',
+  version: '1.4.0-beta',
   buildDate: new Date().toISOString(),
   gitHash: process.env.NEXT_PUBLIC_GIT_HASH || 'development',
   gitBranch: process.env.NEXT_PUBLIC_GIT_BRANCH || 'main',

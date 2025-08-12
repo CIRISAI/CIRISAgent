@@ -47,3 +47,9 @@ data/*
 *.tar
 *.tar.gz
 data_backup_*
+
+# Hypothesis testing cache
+.hypothesis/
+
+# Crush database files
+.crush/

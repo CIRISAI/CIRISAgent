@@ -159,12 +159,27 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
                 raise ValueError(
                     f"CRITICAL: Agent identity is required for DSDMA evaluation in domain '{self.domain_name}'"
                 )
-            # Format identity block from agent_identity data
-            identity_block = f"Agent: {system_snapshot.agent_identity.get('agent_id', 'Unknown')}\n"
-            identity_block += f"Description: {system_snapshot.agent_identity.get('description', 'No description')}\n"
-            identity_block += f"Role: {system_snapshot.agent_identity.get('role', 'No role defined')}"
+            # Format identity block from agent_identity data - FAIL FAST if incomplete
+            agent_id = system_snapshot.agent_identity.get("agent_id")
+            description = system_snapshot.agent_identity.get("description")
+            role = system_snapshot.agent_identity.get("role")
+
+            # CRITICAL: Identity must be complete - no defaults allowed
+            if not agent_id:
+                raise ValueError(f"CRITICAL: agent_id is missing from identity! This is a fatal error.")
+            if not description:
+                raise ValueError(f"CRITICAL: description is missing from identity! This is a fatal error.")
+            if not role:
+                raise ValueError(f"CRITICAL: role is missing from identity! This is a fatal error.")
+
+            identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+            identity_block += f"Agent: {agent_id}\n"
+            identity_block += f"Description: {description}\n"
+            identity_block += f"Role: {role}\n"
+            identity_block += "============================================"
         else:
-            # Fallback to old logic for backwards compatibility
+            # NO FALLBACK - STRICT TYPE CHECKING ONLY
+            # When no DMAInputData, we still need to get identity from ProcessingQueueItem
             context_str = "No specific platform context provided."
             rules_summary_str = (
                 self.domain_specific_knowledge.get("rules_summary", "General domain guidance")
@@ -172,18 +187,58 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
                 else "General domain guidance"
             )
 
-            system_snapshot_block = ""
-            user_profiles_block = ""
-            identity_block = ""
+            # STRICT TYPE CHECKING - initial_context MUST be a dict
+            if not isinstance(thought_item.initial_context, dict):
+                raise ValueError(
+                    f"CRITICAL: initial_context must be a dict, got {type(thought_item.initial_context).__name__}! "
+                    f"This is a fatal error. DSDMA domain '{self.domain_name}' requires properly typed inputs."
+                )
 
-            if hasattr(thought_item, "context") and thought_item.context:
-                system_snapshot = thought_item.context.get("system_snapshot")
-                if system_snapshot:
-                    user_profiles_data = system_snapshot.get("user_profiles")
-                    user_profiles_block = format_user_profiles(user_profiles_data)
-                    system_snapshot_block = format_system_snapshot(system_snapshot)
+            # Extract system_snapshot - MUST exist
+            system_snapshot = thought_item.initial_context.get("system_snapshot")
+            if not system_snapshot:
+                raise ValueError(
+                    f"CRITICAL: No system_snapshot in initial_context for DSDMA domain '{self.domain_name}'! "
+                    "This is a fatal error. Identity is required for ALL DMA evaluations."
+                )
 
-                identity_block = thought_item.context.get("identity_context", "")
+            # Extract agent_identity - MUST exist and be complete
+            agent_identity = system_snapshot.get("agent_identity") if isinstance(system_snapshot, dict) else None
+            if not agent_identity:
+                raise ValueError(
+                    f"CRITICAL: No agent_identity found in system_snapshot for DSDMA domain '{self.domain_name}'! "
+                    "Identity is required for ALL DMA evaluations. This is a fatal error."
+                )
+
+            # Validate ALL required identity fields
+            agent_id = agent_identity.get("agent_id")
+            description = agent_identity.get("description")
+            role = agent_identity.get("role")
+
+            if not agent_id:
+                raise ValueError(
+                    f"CRITICAL: agent_id is missing from identity in DSDMA domain '{self.domain_name}'! This is a fatal error."
+                )
+            if not description:
+                raise ValueError(
+                    f"CRITICAL: description is missing from identity in DSDMA domain '{self.domain_name}'! This is a fatal error."
+                )
+            if not role:
+                raise ValueError(
+                    f"CRITICAL: role is missing from identity in DSDMA domain '{self.domain_name}'! This is a fatal error."
+                )
+
+            # Build identity block
+            identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+            identity_block += f"Agent: {agent_id}\n"
+            identity_block += f"Description: {description}\n"
+            identity_block += f"Role: {role}\n"
+            identity_block += "============================================"
+
+            # Format optional blocks
+            user_profiles_data = system_snapshot.get("user_profiles")
+            user_profiles_block = format_user_profiles(user_profiles_data) if user_profiles_data else ""
+            system_snapshot_block = format_system_snapshot(system_snapshot)
 
         escalation_guidance_block = get_escalation_guidance(0)
 
@@ -197,6 +252,7 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         template_has_blocks = any(
             placeholder in self.prompt_template
             for placeholder in [
+                "{identity_block}",
                 "{task_history_block}",
                 "{escalation_guidance_block}",
                 "{system_snapshot_block}",
@@ -208,6 +264,7 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         if template_has_blocks:
             try:
                 system_message_content = self.prompt_template.format(
+                    identity_block=identity_block,
                     task_history_block=task_history_block,
                     escalation_guidance_block=escalation_guidance_block,
                     system_snapshot_block=system_snapshot_block,
@@ -250,6 +307,11 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         logger.debug(
             f"DSDMA '{self.domain_name}' input to LLM for thought {thought_item.thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
         )
+
+        # CRITICAL: Identity block must ALWAYS be first in system message after covenant
+        # Prepend identity to system message if not already included
+        if identity_block and "CORE IDENTITY" not in system_message_content:
+            system_message_content = identity_block + "\n\n" + system_message_content
 
         messages = [
             {"role": "system", "content": COVENANT_TEXT},

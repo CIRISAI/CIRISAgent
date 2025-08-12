@@ -12,6 +12,7 @@ This tool updates version in:
     - ciris_engine/constants.py (main version source)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
+    - README.md (documentation version)
 """
 
 import json
@@ -110,6 +111,17 @@ def bump_version(bump_type: str):
         with open(sdk_version_file, "w") as f:
             f.write(sdk_content)
         print(f"  Updated SDK version.ts to {new_version}")
+
+    # Update README.md
+    readme_file = Path(__file__).parent.parent / "README.md"
+    if readme_file.exists():
+        with open(readme_file, "r") as f:
+            readme_content = f.read()
+        # Update the BETA RELEASE line
+        readme_content = re.sub(r"\*\*BETA RELEASE [\d\.]+-\w+\*\*", f"**BETA RELEASE {new_version}**", readme_content)
+        with open(readme_file, "w") as f:
+            f.write(readme_content)
+        print(f"  Updated README.md to {new_version}")
 
     print(f"Version bumped to {new_version}")
     return True

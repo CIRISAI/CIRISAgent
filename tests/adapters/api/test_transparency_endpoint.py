@@ -175,9 +175,11 @@ class TestTransparencyEndpoint:
     @patch("ciris_engine.logic.adapters.api.routes.transparency.datetime")
     def test_transparency_feed_updates(self, mock_datetime, client):
         """Test that transparency feed updates over time."""
-        # Mock current time
-        mock_now = datetime(2025, 8, 7, 15, 0, 0)
-        mock_datetime.utcnow.return_value = mock_now
+        # Mock current time with timezone awareness
+        from datetime import timezone
+
+        mock_now = datetime(2025, 8, 7, 15, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = mock_now
         mock_datetime.fromisoformat = datetime.fromisoformat
 
         response = client.get("/v1/transparency/feed?hours=1")

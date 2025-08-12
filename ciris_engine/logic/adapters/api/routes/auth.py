@@ -44,10 +44,8 @@ PROVIDER_NAME_DESC = "Provider name"
 AGENT_ID = os.getenv("CIRIS_AGENT_ID", "datum")
 OAUTH_CALLBACK_PATH = f"/v1/auth/oauth/{AGENT_ID}/{{provider}}/callback"
 DEFAULT_OAUTH_BASE_URL = "https://agents.ciris.ai"
-# Get agent ID from environment, default to 'datum' if not set
-AGENT_ID = os.getenv("CIRIS_AGENT_ID", "datum")
-OAUTH_CALLBACK_PATH = f"/v1/auth/oauth/{AGENT_ID}/{{provider}}/callback"
-DEFAULT_OAUTH_BASE_URL = "https://agents.ciris.ai"
+# Error messages
+FETCH_USER_INFO_ERROR = "Failed to fetch user info"
 
 
 # Helper functions
@@ -125,7 +123,8 @@ async def logout(
     """
     if auth.api_key_id:
         auth_service.revoke_api_key(auth.api_key_id)
-        logger.info(f"User {auth.user_id} logged out, API key {auth.api_key_id} revoked")
+        # Don't log sensitive API key ID
+        logger.info(f"User {auth.user_id} logged out, API key revoked")
 
     return None
 
@@ -513,7 +512,7 @@ async def oauth_callback(
                 )
 
                 if user_response.status_code != 200:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to fetch user info")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
 
                 user_info = user_response.json()
                 external_id = user_info["id"]
@@ -550,7 +549,7 @@ async def oauth_callback(
                 )
 
                 if user_response.status_code != 200:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to fetch user info")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
 
                 user_info = user_response.json()
                 external_id = str(user_info["id"])
@@ -599,7 +598,7 @@ async def oauth_callback(
                 )
 
                 if user_response.status_code != 200:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to fetch user info")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
 
                 user_info = user_response.json()
                 external_id = user_info["id"]
@@ -617,13 +616,21 @@ async def oauth_callback(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported OAuth provider: {provider}"
                 )
 
+        # Determine role based on email domain
+        # Grant admin rights to @ciris.ai email addresses
+        if email and email.endswith("@ciris.ai"):
+            user_role = UserRole.ADMIN
+            logger.info(f"Granting ADMIN role to @ciris.ai user: {email}")
+        else:
+            user_role = UserRole.OBSERVER  # Default role for non-CIRIS users
+
         # Create or update OAuth user
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
             external_id=external_id,
             email=email,
             name=name,
-            role=UserRole.OBSERVER,  # Default role for new OAuth users
+            role=user_role,
         )
 
         # Store OAuth profile data if we have it
@@ -640,8 +647,9 @@ async def oauth_callback(
             else:
                 logger.warning(f"Invalid OAuth picture URL rejected for user {oauth_user.user_id}: {picture}")
 
-        # Generate API key for the user
-        api_key = f"ciris_observer_{secrets.token_urlsafe(32)}"
+        # Generate API key for the user with appropriate prefix based on role
+        role_prefix = "ciris_admin" if user_role == UserRole.ADMIN else "ciris_observer"
+        api_key = f"{role_prefix}_{secrets.token_urlsafe(32)}"
         expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
         auth_service.store_api_key(

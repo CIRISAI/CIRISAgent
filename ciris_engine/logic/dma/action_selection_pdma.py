@@ -220,21 +220,69 @@ class ActionSelectionPDMAEvaluator(BaseDMA, ActionSelectionDMAProtocol):
         identity_block = ""
 
         if processing_context:
+            system_snapshot = None
             if isinstance(processing_context, dict):
                 system_snapshot = processing_context.get("system_snapshot")
                 if system_snapshot:
                     user_profiles_block = format_user_profiles(system_snapshot.get("user_profiles"))
                     system_snapshot_block = format_system_snapshot(system_snapshot)
-                identity_block = processing_context.get("identity_context", "")
             else:
                 # Handle ThoughtContext objects
                 if hasattr(processing_context, "system_snapshot") and processing_context.system_snapshot:
+                    system_snapshot = processing_context.system_snapshot
                     user_profiles_block = format_user_profiles(
                         getattr(processing_context.system_snapshot, "user_profiles", None)
                     )
                     system_snapshot_block = format_system_snapshot(processing_context.system_snapshot)
-                if hasattr(processing_context, "identity_context"):
-                    identity_block = processing_context.identity_context or ""
+
+            # Extract and validate identity - FAIL FAST if missing
+            if system_snapshot:
+                if isinstance(system_snapshot, dict):
+                    agent_identity = system_snapshot.get("agent_identity")
+                else:
+                    agent_identity = getattr(system_snapshot, "agent_identity", None)
+
+                if agent_identity:
+                    if isinstance(agent_identity, dict):
+                        agent_id = agent_identity.get("agent_id")
+                        description = agent_identity.get("description")
+                        role = agent_identity.get("role")
+                    else:
+                        agent_id = getattr(agent_identity, "agent_id", None)
+                        description = getattr(agent_identity, "description", None)
+                        role = getattr(agent_identity, "role", None)
+
+                    # CRITICAL: Identity must be complete - no defaults allowed
+                    if not agent_id:
+                        raise ValueError(
+                            f"CRITICAL: agent_id is missing from identity in ActionSelectionPDMA! This is a fatal error."
+                        )
+                    if not description:
+                        raise ValueError(
+                            f"CRITICAL: description is missing from identity in ActionSelectionPDMA! This is a fatal error."
+                        )
+                    if not role:
+                        raise ValueError(
+                            f"CRITICAL: role is missing from identity in ActionSelectionPDMA! This is a fatal error."
+                        )
+
+                    identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+                    identity_block += f"Agent: {agent_id}\n"
+                    identity_block += f"Description: {description}\n"
+                    identity_block += f"Role: {role}\n"
+                    identity_block += "============================================"
+                else:
+                    # CRITICAL: No identity found - this is a fatal error
+                    raise ValueError(
+                        "CRITICAL: No agent identity found in system_snapshot for ActionSelectionPDMA! "
+                        "Identity is required for ALL DMA evaluations. This is a fatal error."
+                    )
+            else:
+                # No system snapshot means no identity - FAIL FAST
+                raise ValueError(
+                    "CRITICAL: No system_snapshot in processing_context for ActionSelectionPDMA! "
+                    "Identity is required for ALL DMA evaluations. This is a fatal error."
+                )
 
         # Get prompts based on type
         if isinstance(self.prompts, PromptCollection):

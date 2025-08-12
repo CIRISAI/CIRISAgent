@@ -41,7 +41,8 @@ class GoogleSTTService(STTService):
         # api_key is actually the path to service account JSON
         self.credentials_path = api_key
         self.language = language
-        logger.info(f"GoogleSTTService init with credentials_path: {self.credentials_path}")
+        # Don't log sensitive credential paths
+        logger.info("GoogleSTTService initialized")
 
         # Import here to avoid dependency if not using Google
         # Check if file exists
@@ -50,10 +51,8 @@ class GoogleSTTService(STTService):
         from google.oauth2 import service_account
 
         if not os.path.exists(self.credentials_path):
-            logger.error(f"Credentials file not found at: {self.credentials_path}")
-            # List /data directory contents for debugging
-            if os.path.exists("/data"):
-                logger.info(f"/data contents: {os.listdir('/data')}")
+            # Don't log sensitive paths
+            logger.error("Credentials file not found")
             raise FileNotFoundError(f"Google credentials file not found: {self.credentials_path}")
 
         # Log file size for debugging

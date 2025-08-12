@@ -23,6 +23,9 @@ from ..dependencies.auth import AuthContext, require_observer
 
 logger = logging.getLogger(__name__)
 
+# Minimum uptime in seconds before defaulting task count
+MIN_UPTIME_FOR_DEFAULT_TASKS = 60
+
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 # Request/Response schemas
@@ -168,9 +171,8 @@ async def interact(
             # Store the updated user
             auth_service._users[user.wa_id] = user
 
-            logger.info(
-                f"Auto-created permission request for OAuth user {user.oauth_email or user.name} (ID: {user.wa_id})"
-            )
+            # Don't log potentially sensitive email addresses
+            logger.info(f"Auto-created permission request for OAuth user ID: {user.wa_id}")
 
         # Build detailed error response
         error_detail = {
@@ -468,6 +470,98 @@ async def get_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_cognitive_state(runtime) -> str:
+    """Get the agent's cognitive state."""
+    if hasattr(runtime, "state_manager"):
+        return runtime.state_manager.current_state
+    return "WORK"
+
+
+def _calculate_uptime(time_service) -> float:
+    """Calculate the agent's uptime in seconds."""
+    if not time_service:
+        return 0.0
+
+    # Try to get uptime from time service status
+    if hasattr(time_service, "get_status"):
+        time_status = time_service.get_status()
+        if hasattr(time_status, "uptime_seconds"):
+            return time_status.uptime_seconds
+
+    # Calculate uptime manually
+    if hasattr(time_service, "_start_time") and hasattr(time_service, "now"):
+        return (time_service.now() - time_service._start_time).total_seconds()
+
+    return 0.0
+
+
+def _count_wakeup_tasks(uptime: float) -> int:
+    """Count completed WAKEUP tasks."""
+    try:
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        completed_tasks = persistence.get_tasks_by_status(TaskStatus.COMPLETED)
+
+        wakeup_prefixes = [
+            "VERIFY_IDENTITY",
+            "VALIDATE_INTEGRITY",
+            "EVALUATE_RESILIENCE",
+            "ACCEPT_INCOMPLETENESS",
+            "EXPRESS_GRATITUDE",
+        ]
+
+        count = sum(1 for task in completed_tasks if any(task.task_id.startswith(prefix) for prefix in wakeup_prefixes))
+
+        # If no wakeup tasks found but system has been running, assume standard cycle
+        if count == 0 and uptime > MIN_UPTIME_FOR_DEFAULT_TASKS:
+            return 5  # Standard wakeup cycle completes 5 tasks
+
+        return count
+    except Exception as e:
+        logger.warning(f"Failed to count completed tasks: {e}")
+        return 0
+
+
+def _count_active_services(service_registry) -> tuple[int, dict]:
+    """Count active services and get multi-provider service details."""
+    multi_provider_count = 0
+    multi_provider_services = {}
+
+    if service_registry:
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        for service_type in ServiceType:
+            providers = service_registry.get_services_by_type(service_type)
+            count = len(providers)
+            if count > 0:
+                multi_provider_count += count
+                multi_provider_services[service_type.value] = {"providers": count, "type": "multi-provider"}
+
+    # CIRIS has AT LEAST 19 service types:
+    # Multi-provider services can have multiple instances + 12 singleton services
+    services_active = multi_provider_count + 12
+
+    return services_active, multi_provider_services
+
+
+def _get_agent_identity_info(runtime) -> tuple[str, str]:
+    """Get agent ID and name."""
+    agent_id = "ciris_agent"
+    agent_name = "CIRIS"
+
+    if hasattr(runtime, "agent_identity") and runtime.agent_identity:
+        agent_id = runtime.agent_identity.agent_id
+        # Try to get name from various sources
+        if hasattr(runtime.agent_identity, "name"):
+            agent_name = runtime.agent_identity.name
+        elif hasattr(runtime.agent_identity, "core_profile"):
+            # Use first part of description or role as name
+            agent_name = runtime.agent_identity.core_profile.description.split(".")[0]
+
+    return agent_id, agent_name
+
+
 @router.get("/status", response_model=SuccessResponse[AgentStatus])
 async def get_status(request: Request, auth: AuthContext = Depends(require_observer)) -> SuccessResponse[AgentStatus]:
     """
@@ -475,107 +569,35 @@ async def get_status(request: Request, auth: AuthContext = Depends(require_obser
 
     Get comprehensive agent status including state, metrics, and current activity.
     """
-    # Get runtime info
     runtime = getattr(request.app.state, "runtime", None)
     if not runtime:
         raise HTTPException(status_code=503, detail="Runtime not available")
 
     try:
-        # Get cognitive state
-        cognitive_state = "WORK"
-        if hasattr(runtime, "state_manager"):
-            cognitive_state = runtime.state_manager.current_state
-
-        # Get uptime
+        # Get basic state information
+        cognitive_state = _get_cognitive_state(runtime)
         time_service = getattr(request.app.state, "time_service", None)
-        uptime = 0.0
-        if time_service:
-            # Try to get uptime from time service status
-            if hasattr(time_service, "get_status"):
-                time_status = time_service.get_status()
-                if hasattr(time_status, "uptime_seconds"):
-                    uptime = time_status.uptime_seconds
-            elif hasattr(time_service, "_start_time") and hasattr(time_service, "now"):
-                # Calculate uptime manually
-                uptime = (time_service.now() - time_service._start_time).total_seconds()
+        uptime = _calculate_uptime(time_service)
+        messages_processed = _count_wakeup_tasks(uptime)
 
-        # Get tasks completed since last wakeup
-        # This counts WAKEUP tasks (5 for each wakeup cycle)
-        messages_processed = 0
-        try:
-            # Import persistence functions
-            from ciris_engine.logic import persistence
-            from ciris_engine.schemas.runtime.enums import TaskStatus
-
-            # Get completed tasks - wakeup tasks have specific patterns
-            completed_tasks = persistence.get_tasks_by_status(TaskStatus.COMPLETED)
-
-            # Count tasks that start with WAKEUP-related prefixes
-            wakeup_prefixes = [
-                "VERIFY_IDENTITY",
-                "VALIDATE_INTEGRITY",
-                "EVALUATE_RESILIENCE",
-                "ACCEPT_INCOMPLETENESS",
-                "EXPRESS_GRATITUDE",
-            ]
-
-            for task in completed_tasks:
-                if any(task.task_id.startswith(prefix) for prefix in wakeup_prefixes):
-                    messages_processed += 1
-
-            # If no wakeup tasks found, show at least 5 if system has been initialized
-            if messages_processed == 0 and uptime > 60:  # If running for more than a minute
-                messages_processed = 5  # Standard wakeup cycle completes 5 tasks
-
-        except Exception as e:
-            logger.warning(f"Failed to count completed tasks: {e}")
-
-        # Get current task from task scheduler if available
+        # Get current task
         current_task = None
         task_scheduler = getattr(request.app.state, "task_scheduler", None)
         if task_scheduler and hasattr(task_scheduler, "get_current_task"):
             current_task = await task_scheduler.get_current_task()
 
         # Get resource usage
-        resource_monitor = getattr(request.app.state, "resource_monitor", None)
         memory_usage_mb = 0.0
+        resource_monitor = getattr(request.app.state, "resource_monitor", None)
         if resource_monitor and hasattr(resource_monitor, "snapshot"):
             memory_usage_mb = float(resource_monitor.snapshot.memory_mb)
 
-        # Count active services - CIRIS has 19 total services
-        # The service registry only tracks multi-provider services (7 of them)
+        # Count services
         service_registry = getattr(request.app.state, "service_registry", None)
-        multi_provider_count = 0
-        multi_provider_services = {}
+        services_active, multi_provider_services = _count_active_services(service_registry)
 
-        if service_registry:
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            for service_type in ServiceType:
-                providers = service_registry.get_services_by_type(service_type)
-                count = len(providers)
-                if count > 0:
-                    multi_provider_count += count
-                    # Store the service type and provider count
-                    multi_provider_services[service_type.value] = {"providers": count, "type": "multi-provider"}
-
-        # CIRIS has AT LEAST 19 service types:
-        # - Multi-provider services can have multiple instances
-        # - 12 singleton services (direct access)
-        # Total active = registry count + 12 singletons
-        services_active = multi_provider_count + 12
-
-        # Get agent identity
-        agent_id = "ciris_agent"
-        agent_name = "CIRIS"
-        if hasattr(runtime, "agent_identity") and runtime.agent_identity:
-            agent_id = runtime.agent_identity.agent_id
-            # Try to get name from various sources
-            if hasattr(runtime.agent_identity, "name"):
-                agent_name = runtime.agent_identity.name
-            elif hasattr(runtime.agent_identity, "core_profile"):
-                # Use first part of description or role as name
-                agent_name = runtime.agent_identity.core_profile.description.split(".")[0]
+        # Get identity
+        agent_id, agent_name = _get_agent_identity_info(runtime)
 
         # Get version information
         from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
@@ -740,6 +762,120 @@ async def get_identity(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _convert_to_channel_info(ch, adapter_type: str) -> ChannelInfo:
+    """Convert adapter channel data to ChannelInfo format."""
+    if hasattr(ch, "channel_id"):
+        # Pydantic model format
+        return ChannelInfo(
+            channel_id=ch.channel_id,
+            channel_type=getattr(ch, "channel_type", adapter_type),
+            display_name=getattr(ch, "display_name", ch.channel_id),
+            is_active=getattr(ch, "is_active", True),
+            created_at=getattr(ch, "created_at", None),
+            last_activity=getattr(ch, "last_activity", None),
+            message_count=getattr(ch, "message_count", 0),
+        )
+    else:
+        # Dict format (legacy)
+        return ChannelInfo(
+            channel_id=ch.get("channel_id", ""),
+            channel_type=ch.get("channel_type", adapter_type),
+            display_name=ch.get("display_name", ch.get("channel_id", "")),
+            is_active=ch.get("is_active", True),
+            created_at=ch.get("created_at"),
+            last_activity=ch.get("last_activity"),
+            message_count=ch.get("message_count", 0),
+        )
+
+
+async def _get_channels_from_adapter(adapter, adapter_type: str) -> List[ChannelInfo]:
+    """Get channels from a single adapter."""
+    channels = []
+    if hasattr(adapter, "get_active_channels"):
+        try:
+            adapter_channels = await adapter.get_active_channels()
+            for ch in adapter_channels:
+                channels.append(_convert_to_channel_info(ch, adapter_type))
+        except Exception as e:
+            logger.error(f"Error getting channels from adapter {adapter_type}: {e}")
+    return channels
+
+
+async def _get_channels_from_bootstrap_adapters(runtime) -> List[ChannelInfo]:
+    """Get channels from bootstrap adapters."""
+    channels = []
+    if runtime and hasattr(runtime, "adapters"):
+        logger.info(f"Checking {len(runtime.adapters)} bootstrap adapters for channels")
+        for adapter in runtime.adapters:
+            adapter_type = adapter.__class__.__name__.lower().replace("platform", "")
+            channels.extend(await _get_channels_from_adapter(adapter, adapter_type))
+    return channels
+
+
+async def _get_channels_from_dynamic_adapters(runtime, request) -> List[ChannelInfo]:
+    """Get channels from dynamically loaded adapters."""
+    channels = []
+
+    # Get main runtime control service
+    control_service = getattr(request.app.state, "main_runtime_control_service", None)
+
+    # Fallback to service registry
+    if not control_service and runtime and hasattr(runtime, "service_registry") and runtime.service_registry:
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        providers = runtime.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
+        if providers:
+            control_service = providers[0]
+
+    if control_service and hasattr(control_service, "adapter_manager") and control_service.adapter_manager:
+        adapter_manager = control_service.adapter_manager
+        if hasattr(adapter_manager, "loaded_adapters"):
+            for adapter_id, instance in adapter_manager.loaded_adapters.items():
+                adapter_channels = await _get_channels_from_adapter(instance.adapter, instance.adapter_type)
+                # Filter out duplicates
+                for ch in adapter_channels:
+                    if not any(existing.channel_id == ch.channel_id for existing in channels):
+                        channels.append(ch)
+
+    return channels
+
+
+def _add_default_api_channels(channels: List[ChannelInfo], request: Request, auth: AuthContext) -> None:
+    """Add default API channels if not already present."""
+    # Default API channel
+    api_host = getattr(request.app.state, "api_host", "127.0.0.1")
+    api_port = getattr(request.app.state, "api_port", "8080")
+    api_channel_id = f"api_{api_host}_{api_port}"
+
+    if not any(ch.channel_id == api_channel_id for ch in channels):
+        channels.append(
+            ChannelInfo(
+                channel_id=api_channel_id,
+                channel_type="api",
+                display_name=f"API Channel ({api_host}:{api_port})",
+                is_active=True,
+                created_at=None,
+                last_activity=datetime.now(timezone.utc),
+                message_count=0,
+            )
+        )
+
+    # User-specific API channel
+    user_channel_id = f"api_{auth.user_id}"
+    if not any(ch.channel_id == user_channel_id for ch in channels):
+        channels.append(
+            ChannelInfo(
+                channel_id=user_channel_id,
+                channel_type="api",
+                display_name=f"API Channel ({auth.user_id})",
+                is_active=True,
+                created_at=None,
+                last_activity=None,
+                message_count=0,
+            )
+        )
+
+
 @router.get("/channels", response_model=SuccessResponse[ChannelList])
 async def get_channels(request: Request, auth: AuthContext = Depends(require_observer)) -> SuccessResponse[ChannelList]:
     """
@@ -747,169 +883,24 @@ async def get_channels(request: Request, auth: AuthContext = Depends(require_obs
 
     Get all channels where the agent is currently active or has been active.
     """
-    channels = []
-
     try:
-        # Get runtime
+        channels = []
         runtime = getattr(request.app.state, "runtime", None)
 
-        # First check bootstrap adapters
-        if runtime and hasattr(runtime, "adapters"):
-            logger.info(f"Checking {len(runtime.adapters)} bootstrap adapters for channels")
-            for adapter in runtime.adapters:
-                logger.info(
-                    f"Checking adapter: {adapter.__class__.__name__}, has get_active_channels: {hasattr(adapter, 'get_active_channels')}"
-                )
-                if hasattr(adapter, "get_active_channels"):
-                    # Get channels from this adapter
-                    adapter_channels = await adapter.get_active_channels()
+        # Get channels from bootstrap adapters
+        channels.extend(await _get_channels_from_bootstrap_adapters(runtime))
 
-                    for ch in adapter_channels:
-                        # Convert adapter channel info to our format
-                        # Handle both dict and Pydantic model formats
-                        if hasattr(ch, "channel_id"):
-                            # Pydantic model (e.g., DiscordChannelInfo)
-                            channel_info = ChannelInfo(
-                                channel_id=ch.channel_id,
-                                channel_type=getattr(
-                                    ch, "channel_type", adapter.__class__.__name__.lower().replace("platform", "")
-                                ),
-                                display_name=getattr(ch, "display_name", ch.channel_id),
-                                is_active=getattr(ch, "is_active", True),
-                                created_at=getattr(ch, "created_at", None),
-                                last_activity=getattr(ch, "last_activity", None),
-                                message_count=getattr(ch, "message_count", 0),
-                            )
-                        else:
-                            # Dict format (legacy)
-                            channel_info = ChannelInfo(
-                                channel_id=ch.get("channel_id", ""),
-                                channel_type=ch.get(
-                                    "channel_type", adapter.__class__.__name__.lower().replace("platform", "")
-                                ),
-                                display_name=ch.get("display_name", ch.get("channel_id", "")),
-                                is_active=ch.get("is_active", True),
-                                created_at=ch.get("created_at"),
-                                last_activity=ch.get("last_activity"),
-                                message_count=ch.get("message_count", 0),
-                            )
-                        channels.append(channel_info)
+        # Get channels from dynamically loaded adapters
+        dynamic_channels = await _get_channels_from_dynamic_adapters(runtime, request)
+        channels.extend(dynamic_channels)
 
-        # Also check RuntimeControlService's adapter_manager for dynamically loaded adapters
-        # Use the main runtime control service which has the actual adapter_manager
-        control_service = getattr(request.app.state, "main_runtime_control_service", None)
-        logger.info(f"Looking for main_runtime_control_service: found={control_service is not None}")
-        if control_service:
-            logger.info(f"Got main runtime control service: {control_service.__class__.__name__}")
-        else:
-            logger.info("main_runtime_control_service not found in app.state, trying fallback")
-            # Fallback to getting it from service registry
-            if runtime and hasattr(runtime, "service_registry") and runtime.service_registry:
-                from ciris_engine.schemas.runtime.enums import ServiceType
-
-                # Get runtime control service - use get_services_by_type to get all providers
-                providers = runtime.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
-                if providers:
-                    control_service = providers[0]  # Use the first provider
-                    logger.info(f"Got control service from registry: {control_service.__class__.__name__}")
-
-        if control_service:
-            # Access adapter_manager directly
-            if hasattr(control_service, "adapter_manager") and control_service.adapter_manager:
-                adapter_manager = control_service.adapter_manager
-                logger.info("Found adapter_manager on control service")
-
-                if hasattr(adapter_manager, "loaded_adapters"):
-                    loaded = adapter_manager.loaded_adapters
-                    logger.info(f"Checking {len(loaded)} dynamically loaded adapters")
-                    logger.info(f"Adapter manager class: {adapter_manager.__class__.__name__}")
-                    logger.info(f"Adapter manager id: {id(adapter_manager)}")
-
-                    for adapter_id, instance in loaded.items():
-                        adapter = instance.adapter
-                        logger.info(
-                            f"Checking adapter {adapter_id}: {adapter.__class__.__name__}, has get_active_channels: {hasattr(adapter, 'get_active_channels')}"
-                        )
-
-                        if hasattr(adapter, "get_active_channels"):
-                            try:
-                                adapter_channels = await adapter.get_active_channels()
-                                logger.info(f"Adapter {adapter_id} returned {len(adapter_channels)} channels")
-
-                                for ch in adapter_channels:
-                                    # Handle both dict and Pydantic model formats
-                                    ch_id = ch.channel_id if hasattr(ch, "channel_id") else ch.get("channel_id", "")
-
-                                    # Avoid duplicates
-                                    if not any(existing.channel_id == ch_id for existing in channels):
-                                        if hasattr(ch, "channel_id"):
-                                            # Pydantic model
-                                            channel_info = ChannelInfo(
-                                                channel_id=ch.channel_id,
-                                                channel_type=getattr(ch, "channel_type", instance.adapter_type),
-                                                display_name=getattr(ch, "display_name", ch.channel_id),
-                                                is_active=getattr(ch, "is_active", True),
-                                                created_at=getattr(ch, "created_at", None),
-                                                last_activity=getattr(ch, "last_activity", None),
-                                                message_count=getattr(ch, "message_count", 0),
-                                            )
-                                        else:
-                                            # Dict format
-                                            channel_info = ChannelInfo(
-                                                channel_id=ch.get("channel_id", ""),
-                                                channel_type=ch.get("channel_type", instance.adapter_type),
-                                                display_name=ch.get("display_name", ch.get("channel_id", "")),
-                                                is_active=ch.get("is_active", True),
-                                                created_at=ch.get("created_at"),
-                                                last_activity=ch.get("last_activity"),
-                                                message_count=ch.get("message_count", 0),
-                                            )
-                                        channels.append(channel_info)
-                            except Exception as e:
-                                logger.error(f"Error getting channels from adapter {adapter_id}: {e}", exc_info=True)
-            else:
-                logger.warning("Control service has no adapter_manager")
-
-        # Also check if there's a default API channel
-        api_host = getattr(request.app.state, "api_host", "127.0.0.1")
-        api_port = getattr(request.app.state, "api_port", "8080")
-        api_channel_id = f"api_{api_host}_{api_port}"
-
-        # Check if API channel is already in the list
-        if not any(ch.channel_id == api_channel_id for ch in channels):
-            # Add the default API channel
-            channels.append(
-                ChannelInfo(
-                    channel_id=api_channel_id,
-                    channel_type="api",
-                    display_name=f"API Channel ({api_host}:{api_port})",
-                    is_active=True,
-                    created_at=None,
-                    last_activity=datetime.now(timezone.utc),
-                    message_count=0,
-                )
-            )
-
-        # Add user-specific API channel if different
-        user_channel_id = f"api_{auth.user_id}"
-        if not any(ch.channel_id == user_channel_id for ch in channels):
-            channels.append(
-                ChannelInfo(
-                    channel_id=user_channel_id,
-                    channel_type="api",
-                    display_name=f"API Channel ({auth.user_id})",
-                    is_active=True,
-                    created_at=None,
-                    last_activity=None,
-                    message_count=0,
-                )
-            )
+        # Add default API channels
+        _add_default_api_channels(channels, request, auth)
 
         # Sort channels by type and then by id
         channels.sort(key=lambda x: (x.channel_type, x.channel_id))
 
         channel_list = ChannelList(channels=channels, total_count=len(channels))
-
         return SuccessResponse(data=channel_list)
 
     except Exception as e:

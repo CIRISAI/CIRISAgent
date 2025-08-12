@@ -6,10 +6,12 @@ This tool helps Claude (AI assistant) properly shepherd code through CI
 by enforcing good habits and preventing common mistakes.
 """
 
+import json
+import subprocess
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -84,50 +86,171 @@ class CIShepherd:
             click.secho("\n✅ Okay, you can check now!\n", fg="green")
             click.echo("Run: python -m tools.grace shepherd status")
 
+    def get_main_ci_status(self) -> Dict[str, Any]:
+        """Get CI status for main branch."""
+        try:
+            # Get latest run on main branch
+            result = subprocess.run(
+                [
+                    "gh",
+                    "run",
+                    "list",
+                    "--repo",
+                    "CIRISAI/CIRISAgent",
+                    "--branch",
+                    "main",
+                    "--limit",
+                    "1",
+                    "--json",
+                    "databaseId,status,conclusion,name,startedAt,headSha",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout:
+                runs = json.loads(result.stdout)
+                if runs:
+                    return runs[0]
+        except Exception as e:
+            click.echo(f"Error getting main CI status: {e}", err=True)
+        return None
+
+    def get_pr_ci_status(self, pr_number: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get CI status for PRs."""
+        try:
+            if pr_number:
+                # Get specific PR
+                result = subprocess.run(
+                    ["gh", "pr", "view", str(pr_number), "--repo", "CIRISAI/CIRISAgent", "--json", "statusCheckRollup"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            else:
+                # Get all open PRs
+                result = subprocess.run(
+                    [
+                        "gh",
+                        "pr",
+                        "list",
+                        "--repo",
+                        "CIRISAI/CIRISAgent",
+                        "--state",
+                        "open",
+                        "--json",
+                        "number,title,headRefName,statusCheckRollup",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+
+            if result.returncode == 0 and result.stdout:
+                return json.loads(result.stdout)
+        except Exception as e:
+            click.echo(f"Error getting PR CI status: {e}", err=True)
+        return []
+
+    def get_run_details(self, run_id: int) -> Dict[str, Any]:
+        """Get detailed information about a specific CI run."""
+        try:
+            result = subprocess.run(
+                [
+                    "gh",
+                    "run",
+                    "view",
+                    str(run_id),
+                    "--repo",
+                    "CIRISAI/CIRISAgent",
+                    "--json",
+                    "status,conclusion,jobs,startedAt,updatedAt",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout:
+                return json.loads(result.stdout)
+        except Exception as e:
+            click.echo(f"Error getting run details: {e}", err=True)
+        return {}
+
     def check_ci_status(self):
         """Actually check CI status (after appropriate wait)."""
-        # This would integrate with the actual CI system
-        # For now, return mock status
-        return {"running": True, "phase": "Testing", "tests_passed": 1089, "tests_total": 1180, "elapsed": "12:34"}
+        # Get the current branch
+        try:
+            branch_result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=5
+            )
+            current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
+        except:
+            current_branch = "unknown"
 
-    def analyze_failure(self, failure_type: str):
-        """Provide specific guidance for CI failures."""
-        guidance = {
-            "dict_any": """
-                ❌ FAILURE: Dict[str, Any] detected
+        # Get CI status for current branch
+        try:
+            result = subprocess.run(
+                [
+                    "gh",
+                    "run",
+                    "list",
+                    "--repo",
+                    "CIRISAI/CIRISAgent",
+                    "--branch",
+                    current_branch,
+                    "--limit",
+                    "1",
+                    "--json",
+                    "databaseId,status,conclusion,name,startedAt,updatedAt",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
-                1. Find what data this Dict contains
-                2. Search for existing schema:
-                   grep -r "class.*Schema.*BaseModel" --include="*.py" | grep -i [relevant_term]
-                3. Common schemas you missed:
-                   - AuditEventData for audit events
-                   - ServiceMetrics for metrics
-                   - SystemSnapshot for system state
-                4. Use the existing schema. Don't create a new one.
-            """,
-            "mypy": """
-                ❌ FAILURE: Type checking failed
+            if result.returncode == 0 and result.stdout:
+                runs = json.loads(result.stdout)
+                if runs:
+                    run = runs[0]
+                    run_id = run.get("databaseId")
 
-                This is almost always because you:
-                1. Used Dict[str, Any] somewhere
-                2. Created a new schema instead of using existing one
-                3. Forgot to import the proper type
+                    # Get detailed run info
+                    details = self.get_run_details(run_id) if run_id else {}
 
-                Fix: Search for and use existing schemas.
-            """,
-            "black": """
-                ❌ FAILURE: Formatting issues
+                    # Find test job
+                    test_job = None
+                    for job in details.get("jobs", []):
+                        if "Test" in job.get("name", ""):
+                            test_job = job
+                            break
 
-                Simple fix:
-                1. Run: black .
-                2. Commit the changes
-                3. Push again
+                    # Calculate elapsed time
+                    elapsed = "unknown"
+                    if run.get("startedAt"):
+                        start = datetime.fromisoformat(run["startedAt"].replace("Z", "+00:00"))
+                        if run.get("status") == "completed" and run.get("updatedAt"):
+                            end = datetime.fromisoformat(run["updatedAt"].replace("Z", "+00:00"))
+                        else:
+                            end = datetime.now(start.tzinfo)
+                        elapsed_delta = end - start
+                        elapsed = (
+                            f"{int(elapsed_delta.total_seconds() // 60)}:{int(elapsed_delta.total_seconds() % 60):02d}"
+                        )
 
-                But first: Did you create any new Dict[str, Any]? Fix that first.
-            """,
-        }
+                    return {
+                        "running": run.get("status") != "completed",
+                        "phase": test_job.get("status", "Unknown") if test_job else "Waiting",
+                        "conclusion": run.get("conclusion", "pending"),
+                        "run_id": run_id,
+                        "branch": current_branch,
+                        "elapsed": elapsed,
+                        "test_job": test_job,
+                    }
+        except Exception as e:
+            click.echo(f"Error checking CI status: {e}", err=True)
 
-        click.secho(guidance.get(failure_type, "Unknown failure type"), fg="red")
+        # Fallback if something goes wrong
+        return {"running": True, "phase": "Unknown", "branch": current_branch, "elapsed": "unknown"}
 
     def enforce_wait(self) -> bool:
         """Enforce 10-minute wait between checks."""
@@ -147,6 +270,42 @@ class CIShepherd:
 
         self.last_check = datetime.now()
         return True
+
+    def get_test_failures(self, run_id: int) -> Dict[str, Any]:
+        """Get basic failure info from a CI run."""
+        try:
+            # Get job details
+            result = subprocess.run(
+                ["gh", "run", "view", str(run_id), "--repo", "CIRISAI/CIRISAgent", "--json", "jobs,conclusion,name"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                return {"error": "Could not fetch run details"}
+
+            data = json.loads(result.stdout)
+            jobs = data.get("jobs", [])
+
+            # Find failed test job
+            for job in jobs:
+                if "Test" in job.get("name", "") and job.get("conclusion") == "failure":
+                    return {
+                        "run_id": run_id,
+                        "run_name": data.get("name", "Unknown"),
+                        "conclusion": data.get("conclusion", "unknown"),
+                        "failed_job": job.get("name", "Test"),
+                        "failed_step": next(
+                            (s["name"] for s in job.get("steps", []) if s.get("conclusion") == "failure"),
+                            "Unknown step",
+                        ),
+                    }
+
+            return {"error": "No test failures found"}
+
+        except Exception as e:
+            return {"error": str(e)}
 
 
 @click.group()
@@ -188,43 +347,154 @@ def status():
 
     if status["running"]:
         click.secho(f"\n⏳ CI Still Running", fg="yellow")
+        click.echo(f"Branch: {status.get('branch', 'unknown')}")
         click.echo(f"Phase: {status['phase']}")
-        click.echo(f"Tests: {status['tests_passed']}/{status['tests_total']}")
+        click.echo(f"Run ID: {status.get('run_id', 'unknown')}")
         click.echo(f"Elapsed: {status['elapsed']}")
+
+        # Show test job details if available
+        if status.get("test_job"):
+            test_job = status["test_job"]
+            click.echo(f"\nTest Job:")
+            click.echo(f"  Status: {test_job.get('status', 'unknown')}")
+            if test_job.get("steps"):
+                # Count completed steps
+                completed = sum(1 for s in test_job["steps"] if s.get("status") == "completed")
+                total = len(test_job["steps"])
+                click.echo(f"  Steps: {completed}/{total} completed")
+
         click.echo("\nCheck again in 10 minutes:")
         click.echo("  python -m tools.grace shepherd status")
     else:
-        click.secho("\n✅ CI Complete!", fg="green")
-        click.echo("Run: python -m tools.grace shepherd results")
+        conclusion = status.get("conclusion", "unknown")
+        if conclusion == "success":
+            click.secho(f"\n✅ CI Complete - SUCCESS!", fg="green", bold=True)
+        elif conclusion == "failure":
+            click.secho(f"\n❌ CI Complete - FAILED", fg="red", bold=True)
+            click.echo("\nRun: python -m tools.grace shepherd analyze")
+        else:
+            click.secho(f"\n⚠️ CI Complete - {conclusion}", fg="yellow")
+
+        click.echo(f"\nBranch: {status.get('branch', 'unknown')}")
+        click.echo(f"Run ID: {status.get('run_id', 'unknown')}")
+        click.echo(f"Duration: {status['elapsed']}")
 
     click.echo("\n" + "=" * 60)
     click.secho("Remember: Don't check again for 10 minutes!", fg="yellow")
 
 
 @cli.command()
-@click.argument("failure_type", required=False)
-def analyze(failure_type: Optional[str] = None):
-    """Analyze CI failure and provide guidance."""
+def prs():
+    """Show CI status for all open PRs on CIRISAI/CIRISAgent."""
+    shepherd = CIShepherd()
+
+    click.clear()
+    click.secho("🌟 Grace CI Shepherd - PR Status", fg="cyan", bold=True)
+    click.echo("=" * 60)
+
+    prs = shepherd.get_pr_ci_status()
+
+    if not prs:
+        click.echo("\nNo open PRs found on CIRISAI/CIRISAgent.")
+        return
+
+    click.echo(f"\nFound {len(prs)} open PR(s) on CIRISAI/CIRISAgent:\n")
+
+    for pr in prs:
+        pr_num = pr.get("number", "?")
+        title = pr.get("title", "Unknown")
+        branch = pr.get("headRefName", "unknown")
+
+        click.echo(f"PR #{pr_num}: {title}")
+        click.echo(f"  Branch: {branch}")
+
+        # Check status checks
+        checks = pr.get("statusCheckRollup", [])
+        if checks:
+            passed = sum(1 for c in checks if c.get("conclusion") == "SUCCESS")
+            failed = sum(1 for c in checks if c.get("conclusion") == "FAILURE")
+            pending = sum(1 for c in checks if c.get("status") != "COMPLETED")
+
+            if pending:
+                click.secho(f"  Status: ⏳ {pending} checks pending", fg="yellow")
+            elif failed:
+                click.secho(f"  Status: ❌ {failed} checks failed", fg="red")
+            else:
+                click.secho(f"  Status: ✅ All {passed} checks passed", fg="green")
+        else:
+            click.echo("  Status: No checks")
+        click.echo()
+
+
+@cli.command()
+@click.argument("run_id", required=False, type=int)
+def analyze(run_id: Optional[int] = None):
+    """Show what failed in CI."""
     shepherd = CIShepherd()
 
     click.clear()
     click.secho("🌟 Grace CI Shepherd - Failure Analysis", fg="cyan", bold=True)
     click.echo("=" * 60)
 
-    if not failure_type:
-        click.echo("\n🔍 Analyzing CI logs...\n")
-        # Would actually analyze logs here
-        failure_type = "dict_any"  # Mock detection
+    # Get latest failed run if not specified
+    if not run_id:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=5
+            )
+            branch = result.stdout.strip() if result.returncode == 0 else "main"
 
-    click.secho("BEFORE YOU FIX ANYTHING:", fg="red", bold=True)
-    click.echo("\n1. Did you create new Dict[str, Any]? → Remove it")
-    click.echo("2. Did you create a new schema? → Find the existing one")
-    click.echo("3. Did you skip searching? → Go search now\n")
+            result = subprocess.run(
+                [
+                    "gh",
+                    "run",
+                    "list",
+                    "--repo",
+                    "CIRISAI/CIRISAgent",
+                    "--branch",
+                    branch,
+                    "--status",
+                    "failure",
+                    "--limit",
+                    "1",
+                    "--json",
+                    "databaseId",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
-    shepherd.analyze_failure(failure_type)
+            if result.returncode == 0 and result.stdout:
+                runs = json.loads(result.stdout)
+                if runs:
+                    run_id = runs[0]["databaseId"]
+                else:
+                    click.secho("\n✅ No failed runs on current branch!", fg="green")
+                    return
+        except:
+            click.secho("\n❌ Could not find failed runs", fg="red")
+            return
+
+    # Get failure info
+    click.echo(f"\nChecking run {run_id}...\n")
+    failure_info = shepherd.get_test_failures(run_id)
+
+    if "error" in failure_info:
+        click.secho(f"❌ {failure_info['error']}", fg="red")
+    else:
+        click.secho("Failed CI Run:", fg="red", bold=True)
+        click.echo(f"  Run: {failure_info.get('run_name', 'Unknown')}")
+        click.echo(f"  Failed Job: {failure_info.get('failed_job', 'Unknown')}")
+        click.echo(f"  Failed Step: {failure_info.get('failed_step', 'Unknown')}")
+        click.echo(f"\nTo see full logs:")
+        click.echo(f"  gh run view {run_id} --repo CIRISAI/CIRISAgent --log-failed")
 
     click.echo("\n" + "=" * 60)
-    click.secho("Fix the root cause, not the symptom!", fg="yellow")
+    click.secho("Common causes:", fg="yellow")
+    click.echo("1. Dict[str, Any] - search for existing schemas instead")
+    click.echo("2. Import errors - check your imports")
+    click.echo("3. Test failures - run tests locally first")
 
 
 @cli.command()

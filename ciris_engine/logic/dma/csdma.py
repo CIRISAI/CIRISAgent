@@ -122,19 +122,52 @@ class CSDMAEvaluator(BaseDMA, CSDMAProtocol):
                 elif isinstance(env_ctx, str):
                     context_summary = env_ctx
 
-        system_snapshot_block = ""
-        user_profiles_block = ""
+        # STRICT TYPE CHECKING - initial_context MUST be a dict
+        if not isinstance(thought_item.initial_context, dict):
+            raise ValueError(
+                f"CRITICAL: initial_context must be a dict, got {type(thought_item.initial_context).__name__}! "
+                "This is a fatal error. CSDMA requires properly typed inputs."
+            )
 
-        if hasattr(thought_item, "context") and thought_item.context:
-            system_snapshot = thought_item.context.get("system_snapshot")
-            if system_snapshot:
-                user_profiles_data = system_snapshot.get("user_profiles")
-                user_profiles_block = format_user_profiles(user_profiles_data)
-                system_snapshot_block = format_system_snapshot(system_snapshot)
+        # Extract system_snapshot - MUST exist
+        system_snapshot = thought_item.initial_context.get("system_snapshot")
+        if not system_snapshot:
+            raise ValueError(
+                "CRITICAL: No system_snapshot in initial_context for CSDMA! "
+                "This is a fatal error. Identity is required for ALL DMA evaluations."
+            )
 
-        identity_block = ""
-        if hasattr(thought_item, "context") and thought_item.context:
-            identity_block = thought_item.context.get("identity_context", "")
+        # Extract agent_identity - MUST exist and be complete
+        agent_identity = system_snapshot.get("agent_identity") if isinstance(system_snapshot, dict) else None
+        if not agent_identity:
+            raise ValueError(
+                "CRITICAL: No agent_identity found in system_snapshot for CSDMA! "
+                "Identity is required for ALL DMA evaluations. This is a fatal error."
+            )
+
+        # Validate ALL required identity fields
+        agent_id = agent_identity.get("agent_id")
+        description = agent_identity.get("description")
+        role = agent_identity.get("role")
+
+        if not agent_id:
+            raise ValueError("CRITICAL: agent_id is missing from identity in CSDMA! This is a fatal error.")
+        if not description:
+            raise ValueError("CRITICAL: description is missing from identity in CSDMA! This is a fatal error.")
+        if not role:
+            raise ValueError("CRITICAL: role is missing from identity in CSDMA! This is a fatal error.")
+
+        # Build identity block
+        identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+        identity_block += f"Agent: {agent_id}\n"
+        identity_block += f"Description: {description}\n"
+        identity_block += f"Role: {role}\n"
+        identity_block += "============================================"
+
+        # Format optional blocks
+        user_profiles_data = system_snapshot.get("user_profiles")
+        user_profiles_block = format_user_profiles(user_profiles_data) if user_profiles_data else ""
+        system_snapshot_block = format_system_snapshot(system_snapshot)
 
         messages = self._create_csdma_messages_for_instructor(
             thought_content_str,

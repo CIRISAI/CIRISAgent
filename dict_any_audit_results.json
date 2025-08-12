@@ -1,14 +1,14 @@
 {
   "production": {
-    "occurrences": 158,
-    "files_affected": 77,
+    "occurrences": 154,
+    "files_affected": 74,
     "categories": {
-      "generic_data": 138,
+      "generic_data": 136,
       "parameters": 5,
       "configuration": 3,
-      "api_request": 2,
-      "context_data": 7,
-      "api_response": 3
+      "api_request": 1,
+      "api_response": 3,
+      "context_data": 6
     },
     "findings": [
       {
@@ -452,46 +452,6 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_adk/services/comms.py",
-        "line": 20,
-        "class": "CommunicationService",
-        "function": "fetch_messages",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_adk/services/audit.py",
-        "line": 24,
-        "class": "AuditRecord",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "api_request"
-      },
-      {
-        "file": "ciris_adk/services/tool.py",
-        "line": 17,
-        "class": "ToolService",
-        "function": "call_tool",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_adk/services/tool.py",
-        "line": 19,
-        "class": "ToolService",
-        "function": "call_tool",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_adk/services/wa.py",
-        "line": 9,
-        "class": "WiseAuthorityService",
-        "function": "fetch_guidance",
-        "context": "function_parameter",
-        "usage_hint": "context_data"
-      },
-      {
         "file": "ciris_modular_services/mock_llm/schemas.py",
         "line": 33,
         "class": "MockResponseOverride",
@@ -741,7 +701,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/agent.py",
-        "line": 400,
+        "line": 402,
         "class": null,
         "function": "get_history",
         "context": "other",
@@ -777,6 +737,14 @@
         "class": null,
         "function": "load_config",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 38,
+        "class": null,
+        "function": "_prepare_log_context",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -1587,7 +1555,7 @@
     ]
   },
   "tools": {
-    "occurrences": 124,
+    "occurrences": 128,
     "findings": [
       {
         "file": "tools/validate_prod_routes.py",
@@ -1747,6 +1715,38 @@
         "class": "CIRISSystemAuditor",
         "function": "_save_markdown_summary",
         "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/grace_shepherd.py",
+        "line": 89,
+        "class": "CIShepherd",
+        "function": "get_main_ci_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/grace_shepherd.py",
+        "line": 119,
+        "class": "CIShepherd",
+        "function": "get_pr_ci_status",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/grace_shepherd.py",
+        "line": 155,
+        "class": "CIShepherd",
+        "function": "get_run_details",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/grace_shepherd.py",
+        "line": 274,
+        "class": "CIShepherd",
+        "function": "get_test_failures",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -2585,6 +2585,6 @@
   },
   "total_all_code": {
     "occurrences": 320,
-    "files_affected": 110
+    "files_affected": 108
   }
 }

@@ -34,6 +34,9 @@ T = TypeVar("T", bound=BaseModel)
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of validation errors to show in error messages
+MAX_VALIDATION_ERRORS_SHOWN = 3
+
 
 class ActionHandlerDependencies:
     """Dependencies for action handlers - clean and simple."""
@@ -227,14 +230,32 @@ class BaseActionHandler(ABC):
             try:
                 return param_class.model_validate(params)
             except ValidationError as e:
-                raise ValueError(f"Invalid parameters for {param_class.__name__}: {e}")
+                # Extract just the error messages without the verbose Pydantic URLs
+                error_msgs = []
+                for error in e.errors():
+                    field = ".".join(str(x) for x in error["loc"])
+                    msg = error["msg"]
+                    error_msgs.append(f"{field}: {msg}")
+                error_summary = "; ".join(error_msgs[:MAX_VALIDATION_ERRORS_SHOWN])
+                if len(e.errors()) > MAX_VALIDATION_ERRORS_SHOWN:
+                    error_summary += f" (and {len(e.errors()) - MAX_VALIDATION_ERRORS_SHOWN} more)"
+                raise ValueError(f"Invalid parameters for {param_class.__name__}: {error_summary}")
 
         # Try to convert BaseModel to dict first
         if hasattr(params, "model_dump"):
             try:
                 return param_class.model_validate(params.model_dump())
             except ValidationError as e:
-                raise ValueError(f"Invalid parameters for {param_class.__name__}: {e}")
+                # Extract just the error messages without the verbose Pydantic URLs
+                error_msgs = []
+                for error in e.errors():
+                    field = ".".join(str(x) for x in error["loc"])
+                    msg = error["msg"]
+                    error_msgs.append(f"{field}: {msg}")
+                error_summary = "; ".join(error_msgs[:MAX_VALIDATION_ERRORS_SHOWN])
+                if len(e.errors()) > MAX_VALIDATION_ERRORS_SHOWN:
+                    error_summary += f" (and {len(e.errors()) - MAX_VALIDATION_ERRORS_SHOWN} more)"
+                raise ValueError(f"Invalid parameters for {param_class.__name__}: {error_summary}")
 
         raise TypeError(f"Expected {param_class.__name__} or dict, got {type(params).__name__}")
 

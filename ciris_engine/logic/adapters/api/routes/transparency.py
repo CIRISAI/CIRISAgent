@@ -3,7 +3,7 @@ Public transparency feed endpoint.
 Provides anonymized statistics about system operations without auth.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -85,7 +85,7 @@ async def get_transparency_feed(
         )
 
     # Calculate time period
-    period_end = datetime.utcnow()
+    period_end = datetime.now(timezone.utc)
     period_start = period_end - timedelta(hours=hours)
 
     # Get audit service if available
@@ -165,5 +165,5 @@ async def get_system_status() -> Dict[str, Any]:
         "last_incident": None,
         "pause_active": False,
         "pause_reason": None,
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -569,15 +569,21 @@ async def build_system_snapshot(
                             connected_results = await memory_service.recall(connected_query)
                             if connected_results:
                                 connected_node = connected_results[0]
-                                # Attributes must be Pydantic model
+                                # Handle different attribute types
                                 if not connected_node.attributes:
                                     connected_attrs = {}
                                 elif hasattr(connected_node.attributes, "model_dump"):
+                                    # Pydantic model
                                     connected_attrs = connected_node.attributes.model_dump()
+                                elif isinstance(connected_node.attributes, dict):
+                                    # Already a dict (e.g., from tsdb_summary nodes)
+                                    connected_attrs = connected_node.attributes
                                 else:
-                                    raise TypeError(
-                                        f"Invalid connected node attributes type for {connected_node_id}: {type(connected_node.attributes)}, expected Pydantic model"
+                                    # Unknown type - log and skip this node
+                                    logger.debug(
+                                        f"Unexpected attributes type for {connected_node_id}: {type(connected_node.attributes)}"
                                     )
+                                    continue
                                 connected_nodes_info.append(
                                     {
                                         "node_id": connected_node.id,
@@ -590,9 +596,18 @@ async def build_system_snapshot(
                         logger.warning(f"Failed to get connected nodes for user {user_id}: {e}")
 
                     # Create UserProfile with all available data
-                    notes_content = f"All attributes: {json.dumps(attrs)}"
+                    # Use json.dumps with default handler for datetime objects
+                    def json_serial(obj):
+                        """JSON serializer for objects not serializable by default json code"""
+                        if hasattr(obj, "isoformat"):
+                            return obj.isoformat()
+                        if hasattr(obj, "model_dump"):
+                            return obj.model_dump()
+                        return str(obj)
+
+                    notes_content = f"All attributes: {json.dumps(attrs, default=json_serial)}"
                     if connected_nodes_info:
-                        notes_content += f"\nConnected nodes: {json.dumps(connected_nodes_info)}"
+                        notes_content += f"\nConnected nodes: {json.dumps(connected_nodes_info, default=json_serial)}"
 
                     user_profile = UserProfile(
                         user_id=user_id,
@@ -674,9 +689,7 @@ async def build_system_snapshot(
                             # Find the user profile we just added
                             for profile in existing_profiles:
                                 if profile.user_id == user_id:
-                                    profile.notes += (
-                                        f"\nRecent messages from other channels: {json.dumps(recent_messages)}"
-                                    )
+                                    profile.notes += f"\nRecent messages from other channels: {json.dumps(recent_messages, default=json_serial)}"
                                     break
 
             except Exception as e:

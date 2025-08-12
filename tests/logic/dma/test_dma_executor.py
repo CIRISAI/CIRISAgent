@@ -128,8 +128,12 @@ def action_evaluator(service_registry):
     from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
     from ciris_engine.schemas.actions.parameters import SpeakParams
 
-    # ActionSelectionPDMAEvaluator takes llm_service directly
-    evaluator = ActionSelectionPDMAEvaluator(llm_service=service_registry.llm_service)
+    # ActionSelectionPDMAEvaluator takes service_registry as first argument
+    evaluator = ActionSelectionPDMAEvaluator(
+        service_registry=service_registry,
+        model_name="test-model",
+        max_retries=2,
+    )
     evaluator.evaluate = AsyncMock(
         return_value=ActionSelectionDMAResult(
             selected_action=HandlerActionType.SPEAK,

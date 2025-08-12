@@ -273,11 +273,10 @@ class TestRecallMemory:
         request = MagicMock()
         request.app.state.memory_service = None
 
-        query = QueryRequest(node_id="test")
-
         with patch("ciris_engine.logic.adapters.api.routes.memory.require_observer", return_value=auth_context):
             with pytest.raises(HTTPException) as exc_info:
-                await recall_memory(request, query, auth_context)
+                # recall_memory takes node_id as a direct parameter
+                await recall_memory(request, "test", auth=auth_context)
 
         assert exc_info.value.status_code == 503
 

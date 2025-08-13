@@ -443,14 +443,14 @@ class TestStatusEndpoint:
         app.dependency_overrides[require_observer] = lambda: auth_context_observer
 
         try:
-            with patch("ciris_engine.logic.adapters.api.routes.agent._count_wakeup_tasks", return_value=5):
-                with patch(
-                    "ciris_engine.logic.adapters.api.routes.agent._count_active_services",
-                    return_value=(21, {"LLM": {"providers": 2, "type": "multi-provider"}}),
-                ):
-                    transport = ASGITransport(app=app)
-                    async with AsyncClient(transport=transport, base_url="http://test") as client:
-                        response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
+            # Mock the persistence module's get_tasks_by_status function
+            with patch("ciris_engine.logic.persistence.get_tasks_by_status", return_value=[]):
+                # Mock the service registry's get_services_by_type to be synchronous
+                app.state.service_registry.get_services_by_type = MagicMock(return_value=[])
+
+                transport = ASGITransport(app=app)
+                async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
 
         finally:
             app.dependency_overrides.clear()
@@ -462,8 +462,9 @@ class TestStatusEndpoint:
         assert data["data"]["name"] == "Test Agent"
         assert data["data"]["cognitive_state"] == "WORK"
         assert data["data"]["uptime_seconds"] == 3600.0
+        # With no tasks and uptime > 60, defaults to 5
         assert data["data"]["messages_processed"] == 5
-        assert data["data"]["services_active"] == 21
+        assert data["data"]["services_active"] == 12  # Only singleton services since we mocked empty
         assert data["data"]["memory_usage_mb"] == 512.0
 
     @pytest.mark.asyncio
@@ -494,9 +495,14 @@ class TestStatusEndpoint:
         app.dependency_overrides[require_observer] = lambda: auth_context_observer
 
         try:
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
+            # Mock the persistence module to avoid database access
+            with patch("ciris_engine.logic.persistence.get_tasks_by_status", return_value=[]):
+                # Mock the service registry's get_services_by_type to be synchronous
+                app.state.service_registry.get_services_by_type = MagicMock(return_value=[])
+
+                transport = ASGITransport(app=app)
+                async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
 
         finally:
             app.dependency_overrides.clear()

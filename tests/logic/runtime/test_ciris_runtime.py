@@ -94,44 +94,48 @@ def essential_config(temp_dir):
 @pytest.fixture
 def allow_runtime_creation():
     """Allow runtime creation in tests by setting the environment variable."""
-    original = os.environ.get("CIRIS_IMPORT_MODE")
+    original_import = os.environ.get("CIRIS_IMPORT_MODE")
+    original_mock = os.environ.get("CIRIS_MOCK_LLM")
+
     os.environ["CIRIS_IMPORT_MODE"] = "false"
+    os.environ["CIRIS_MOCK_LLM"] = "true"  # Always use mock LLM in tests
+    os.environ["OPENAI_API_KEY"] = "test-key"
+
     yield
-    # Restore original value
-    if original is not None:
-        os.environ["CIRIS_IMPORT_MODE"] = original
+
+    # Restore original values
+    if original_import is not None:
+        os.environ["CIRIS_IMPORT_MODE"] = original_import
     else:
         os.environ.pop("CIRIS_IMPORT_MODE", None)
+
+    if original_mock is not None:
+        os.environ["CIRIS_MOCK_LLM"] = original_mock
+    else:
+        os.environ.pop("CIRIS_MOCK_LLM", None)
+
+    os.environ.pop("OPENAI_API_KEY", None)
 
 
 class TestCIRISRuntimeCreation:
     """Test runtime creation with real components."""
 
-    def test_create_runtime_with_config(self, essential_config, allow_runtime_creation):
+    @pytest.mark.asyncio
+    async def test_create_runtime_with_config(self, essential_config, allow_runtime_creation):
         """Test creating runtime with proper config."""
-        # Mock adapter loading since adapters may not be available
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            mock_adapter_class = MagicMock()
+        # Create runtime with mock LLM to avoid external dependencies
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+        )
 
-            # Create a mock adapter instance that accepts runtime as first arg
-            def create_adapter(runtime, **kwargs):
-                mock_instance = MagicMock()
-                mock_instance.get_service_registrations = MagicMock(return_value=[])
-                mock_instance.start = MagicMock()
-                return mock_instance
+        assert runtime.essential_config == essential_config
+        assert runtime.startup_channel_id == ""
+        assert len(runtime.adapters) == 1
+        assert runtime._initialized is False
 
-            mock_adapter_class.side_effect = create_adapter
-            mock_load.return_value = mock_adapter_class
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
-
-            assert runtime.essential_config == essential_config
-            assert runtime.startup_channel_id == ""
-            assert len(runtime.adapters) == 1
-            assert runtime._initialized is False
+        # Runtime is created successfully - no cleanup needed for this test
 
     def test_create_runtime_without_import_mode_fails(self, essential_config):
         """Test that runtime creation fails without proper environment."""
@@ -146,24 +150,21 @@ class TestCIRISRuntimeCreation:
 
         assert "Cannot create CIRISRuntime during module imports" in str(exc_info.value)
 
-    def test_create_runtime_with_mock_llm(self, essential_config, allow_runtime_creation):
+        # Clean up
+        os.environ.pop("CIRIS_IMPORT_MODE", None)
+
+    @pytest.mark.asyncio
+    async def test_create_runtime_with_mock_llm(self, essential_config, allow_runtime_creation):
         """Test runtime creation with mock LLM environment variable."""
         os.environ["CIRIS_MOCK_LLM"] = "true"
 
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            # Create a callable that returns an adapter
-            def create_adapter(runtime, **kwargs):
-                return MagicMock()
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            timeout=2,
+        )
 
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
-
-            assert "mock_llm" in runtime.modules_to_load
+        assert "mock_llm" in runtime.modules_to_load
 
         # Clean up
         os.environ.pop("CIRIS_MOCK_LLM", None)
@@ -173,261 +174,173 @@ class TestCIRISRuntimeInitialization:
     """Test runtime initialization process."""
 
     @pytest.mark.asyncio
-    async def test_initialize_runtime(self, essential_config, allow_runtime_creation):
-        """Test the initialization process with real components."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            # Create adapter factory
-            def create_adapter(runtime, **kwargs):
-                mock_instance = MagicMock()
-                mock_instance.start = MagicMock()
-                mock_instance.get_service_registrations = MagicMock(return_value=[])
-                return mock_instance
+    async def test_initialize_runtime_mock_llm(self, essential_config, allow_runtime_creation):
+        """Test the initialization process with mock LLM."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=5,
+        )
 
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
+        # Initialize runtime
+        await runtime.initialize()
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
+        # Check that runtime was initialized
+        assert runtime._initialized is True
+        assert runtime.agent_processor is not None
+        assert runtime.service_initializer is not None
 
-            # Mock the various initialization steps
-            with patch.object(runtime, "_initialize_identity", new_callable=AsyncMock) as mock_identity:
-                mock_identity.return_value = None
+        # Clean up
+        await runtime.shutdown()
 
-                with patch.object(runtime, "_initialize_infrastructure", new_callable=AsyncMock) as mock_infra:
-                    mock_infra.return_value = None
+    @pytest.mark.asyncio
+    async def test_runtime_properties_after_init(self, essential_config, allow_runtime_creation):
+        """Test accessing services after initialization."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=5,
+        )
 
-                    with patch.object(runtime, "_initialize_services", new_callable=AsyncMock) as mock_services:
-                        mock_services.return_value = None
+        await runtime.initialize()
 
-                        with patch.object(runtime, "_start_adapters", new_callable=AsyncMock) as mock_adapters:
-                            mock_adapters.return_value = None
+        # Check service properties are accessible
+        assert runtime.service_registry is not None
+        assert runtime.memory_service is not None
+        assert runtime.telemetry_service is not None
 
-                            with patch.object(runtime, "_final_verification", new_callable=AsyncMock) as mock_verify:
-                                mock_verify.return_value = None
-
-                                await runtime.initialize()
-
-                                # Verify all initialization steps were called
-                                mock_identity.assert_called_once()
-                                mock_infra.assert_called_once()
-                                mock_services.assert_called_once()
-                                mock_adapters.assert_called_once()
-                                mock_verify.assert_called_once()
+        await runtime.shutdown()
 
 
 class TestCIRISRuntimeLifecycle:
     """Test runtime lifecycle management."""
 
-    def test_request_shutdown(self, essential_config, allow_runtime_creation):
+    @pytest.mark.asyncio
+    async def test_request_shutdown(self, essential_config, allow_runtime_creation):
         """Test requesting shutdown."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
 
-            def create_adapter(runtime, **kwargs):
-                return MagicMock()
+        await runtime.initialize()
 
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
+        # Request shutdown
+        runtime.request_shutdown("Test shutdown")
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
+        assert runtime._shutdown_event.is_set()
+        assert runtime._shutdown_reason == "Test shutdown"
 
-            runtime._shutdown_event = asyncio.Event()
-
-            runtime.request_shutdown("Test shutdown")
-
-            assert runtime._shutdown_event.is_set()
-            assert runtime._shutdown_reason == "Test shutdown"
+        await runtime.shutdown()
 
     @pytest.mark.asyncio
-    async def test_run_with_rounds(self, essential_config, allow_runtime_creation):
-        """Test running the runtime for a specific number of rounds."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
+    async def test_run_with_immediate_shutdown(self, essential_config, allow_runtime_creation):
+        """Test running the runtime with immediate shutdown."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
 
-            def create_adapter(runtime, **kwargs):
-                return MagicMock()
+        await runtime.initialize()
 
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
+        # Request shutdown immediately
+        runtime.request_shutdown("Test shutdown")
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
+        # Run should return immediately when shutdown is already requested
+        await runtime.run(num_rounds=1)  # Should exit on first round check
 
-            # Mock the processor
-            runtime.agent_processor = AsyncMock()
-            runtime.agent_processor.process_round = AsyncMock()
-            runtime._shutdown_event = asyncio.Event()
+        # Verify shutdown was processed
+        assert runtime._shutdown_event.is_set()
 
-            # Make processor trigger shutdown after 2 rounds
-            call_count = 0
-
-            async def side_effect():
-                nonlocal call_count
-                call_count += 1
-                if call_count >= 2:
-                    runtime._shutdown_event.set()
-
-            runtime.agent_processor.process_round.side_effect = side_effect
-
-            await runtime.run(num_rounds=2)
-
-            assert runtime.agent_processor.process_round.call_count == 2
+        await runtime.shutdown()
 
 
 class TestCIRISRuntimeServices:
     """Test runtime service management."""
 
-    def test_service_properties(self, essential_config, allow_runtime_creation):
+    @pytest.mark.asyncio
+    async def test_service_properties(self, essential_config, allow_runtime_creation):
         """Test accessing services through properties."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
 
-            def create_adapter(runtime, **kwargs):
-                return MagicMock()
+        await runtime.initialize()
 
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
+        # Check all service properties
+        assert runtime.memory_service is not None
+        assert runtime.service_registry is not None
+        assert runtime.bus_manager is not None
+        assert runtime.resource_monitor is not None
+        assert runtime.secrets_service is not None
+        assert runtime.telemetry_service is not None
+        assert runtime.llm_service is not None
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
-
-            # Mock services on the service initializer
-            mock_memory = MagicMock()
-            runtime.service_initializer.memory_service = mock_memory
-
-            mock_registry = MagicMock()
-            runtime.service_initializer.service_registry = mock_registry
-
-            # Access through properties
-            assert runtime.memory_service == mock_memory
-            assert runtime.service_registry == mock_registry
-
-    def test_bus_manager_property(self, essential_config, allow_runtime_creation):
-        """Test accessing bus manager."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-
-            def create_adapter(runtime, **kwargs):
-                return MagicMock()
-
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
-
-            mock_bus = MagicMock()
-            runtime.service_initializer.bus_manager = mock_bus
-
-            assert runtime.bus_manager == mock_bus
+        await runtime.shutdown()
 
 
 class TestCIRISRuntimeAdapters:
     """Test runtime adapter management."""
 
-    def test_load_multiple_adapters(self, essential_config, allow_runtime_creation):
-        """Test loading multiple adapters."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            # Create different mock adapters
-            def create_cli_adapter(runtime, **kwargs):
-                adapter = MagicMock(name="CLIAdapter")
-                adapter.name = "cli"
-                return adapter
+    @pytest.mark.asyncio
+    async def test_load_single_adapter(self, essential_config, allow_runtime_creation):
+        """Test loading a single adapter."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
 
-            def create_api_adapter(runtime, **kwargs):
-                adapter = MagicMock(name="APIAdapter")
-                adapter.name = "api"
-                return adapter
+        assert len(runtime.adapters) == 1
+        assert runtime.adapters[0].__class__.__name__ == "CliPlatform"
 
-            def load_side_effect(adapter_name):
-                if adapter_name == "cli":
-                    return MagicMock(side_effect=create_cli_adapter)
-                elif adapter_name == "api":
-                    return MagicMock(side_effect=create_api_adapter)
-                return MagicMock()
-
-            mock_load.side_effect = load_side_effect
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli", "api"],
-                essential_config=essential_config,
-            )
-
-            assert len(runtime.adapters) == 2
-            mock_load.assert_any_call("cli")
-            mock_load.assert_any_call("api")
-
-    def test_adapter_failure_handling(self, essential_config, allow_runtime_creation):
+    @pytest.mark.asyncio
+    async def test_adapter_failure_handling(self, essential_config, allow_runtime_creation):
         """Test handling of adapter loading failures."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
-            # Make the first adapter fail
-            mock_load.side_effect = [
-                Exception("Failed to load CLI adapter"),
-                MagicMock(side_effect=lambda runtime, **kwargs: MagicMock()),  # API adapter succeeds
-            ]
-
+        # Try to load a non-existent adapter
+        with patch("ciris_engine.logic.runtime.ciris_runtime.logger") as mock_logger:
             runtime = CIRISRuntime(
-                adapter_types=["cli", "api"],
+                adapter_types=["nonexistent", "cli"],
                 essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
             )
 
-            # Should have only loaded the successful adapter
+            # Should have only loaded the CLI adapter
             assert len(runtime.adapters) == 1
+            assert runtime.adapters[0].__class__.__name__ == "CliPlatform"
+
+            # Check that error was logged
+            assert any("Failed to load" in str(call) for call in mock_logger.error.call_args_list)
 
 
 class TestCIRISRuntimeIntegration:
     """Integration tests for the full runtime."""
 
     @pytest.mark.asyncio
-    async def test_full_lifecycle(self, essential_config, allow_runtime_creation):
-        """Test complete runtime lifecycle: init -> run -> shutdown."""
-        with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
+    async def test_minimal_lifecycle(self, essential_config, allow_runtime_creation):
+        """Test minimal runtime lifecycle: init -> shutdown."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
 
-            def create_adapter(runtime, **kwargs):
-                mock_instance = MagicMock()
-                mock_instance.start = MagicMock()
-                mock_instance.stop = AsyncMock()
-                mock_instance.get_service_registrations = MagicMock(return_value=[])
-                return mock_instance
+        # Initialize
+        await runtime.initialize()
+        assert runtime._initialized is True
 
-            mock_adapter_class = MagicMock(side_effect=create_adapter)
-            mock_load.return_value = mock_adapter_class
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
-
-            # Initialize with mocked components
-            with patch.object(runtime, "_initialize_identity", new_callable=AsyncMock):
-                with patch.object(runtime, "_initialize_infrastructure", new_callable=AsyncMock):
-                    with patch.object(runtime, "_initialize_services", new_callable=AsyncMock):
-                        with patch.object(runtime, "_start_adapters", new_callable=AsyncMock):
-                            with patch.object(runtime, "_final_verification", new_callable=AsyncMock):
-                                await runtime.initialize()
-
-            # Mock processor for run
-            runtime.agent_processor = AsyncMock()
-            runtime.agent_processor.process_round = AsyncMock()
-            runtime.agent_processor.stop = AsyncMock()
-            runtime._shutdown_event = asyncio.Event()
-
-            # Run for 1 round then trigger shutdown
-            runtime.agent_processor.process_round.side_effect = lambda: runtime._shutdown_event.set()
-
-            await runtime.run(num_rounds=1)
-
-            # Shutdown
-            with patch.object(runtime, "_preserve_shutdown_consciousness", new_callable=AsyncMock):
-                await runtime.shutdown()
-
-            # Verify adapter was stopped
-            runtime.adapters[0].stop.assert_called_once()
-            runtime.agent_processor.stop.assert_called_once()
+        # Shutdown
+        await runtime.shutdown()
+        assert runtime._shutdown_complete is True

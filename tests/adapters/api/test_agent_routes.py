@@ -319,19 +319,24 @@ class TestHistoryEndpoint:
     @pytest.mark.asyncio
     async def test_history_from_communication_service(self, app, auth_context_admin):
         """Test history from communication service."""
-        # Setup communication service
-        mock_messages = [
-            MagicMock(
-                message_id="msg1",
-                author_id="admin_user",
-                author_name="Admin",
-                content="Test message",
-                channel_id="api_admin_user",
-                timestamp=datetime.now(timezone.utc),
-                is_agent_message=False,
-            )
-        ]
-        app.state.communication_service.fetch_messages = AsyncMock(return_value=mock_messages)
+
+        # Setup communication service to return messages only for the correct channel
+        async def fetch_messages_for_channel(channel_id, limit=None):
+            if channel_id == "api_admin_user":
+                return [
+                    MagicMock(
+                        message_id="msg1",
+                        author_id="admin_user",
+                        author_name="Admin",
+                        content="Test message",
+                        channel_id="api_admin_user",
+                        timestamp=datetime.now(timezone.utc),
+                        is_agent_message=False,
+                    )
+                ]
+            return []  # Return empty for other channels
+
+        app.state.communication_service.fetch_messages = AsyncMock(side_effect=fetch_messages_for_channel)
 
         # Mock auth dependency
         app.dependency_overrides[require_observer] = lambda: auth_context_admin
@@ -411,8 +416,11 @@ class TestHistoryEndpoint:
         try:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
+                # Pass parameters properly - let httpx handle encoding
                 response = await client.get(
-                    f"/agent/history?limit=2&before={before_time}", headers={"Authorization": "Bearer test_token"}
+                    "/agent/history",
+                    params={"limit": 2, "before": before_time},
+                    headers={"Authorization": "Bearer test_token"},
                 )
 
         finally:
@@ -441,8 +449,8 @@ class TestStatusEndpoint:
                     return_value=(21, {"LLM": {"providers": 2, "type": "multi-provider"}}),
                 ):
                     transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
+                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                        response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
 
         finally:
             app.dependency_overrides.clear()

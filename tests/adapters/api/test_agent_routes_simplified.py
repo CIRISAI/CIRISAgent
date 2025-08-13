@@ -53,8 +53,10 @@ def app():
     app.state.tool_service = AsyncMock()
     app.state.time_service = AsyncMock()
     app.state.task_scheduler = AsyncMock()
+    app.state.task_scheduler.get_current_task = AsyncMock(return_value=None)  # Return None by default
     app.state.resource_monitor = AsyncMock()
-    app.state.service_registry = AsyncMock()
+    app.state.service_registry = MagicMock()  # Use MagicMock since get_services_by_type is called synchronously
+    app.state.service_registry.get_services_by_type = MagicMock(return_value=[])  # Return empty list by default
     app.state.runtime = AsyncMock()
     app.state.on_message = AsyncMock()
     app.state.api_config = MagicMock(interaction_timeout=5.0)
@@ -67,18 +69,23 @@ def app():
     # Create a more complete mock for agent identity
     identity_mock = MagicMock()
     identity_mock.agent_id = "test_agent"
-    identity_mock.name = "TestAgent"  # This ensures it returns a string
-    identity_mock.core_profile.description = "Test Agent. A helpful assistant."
-    identity_mock.identity_metadata.created_at = datetime.now(timezone.utc)
-    identity_mock.identity_metadata.model = "test-model"
-    identity_mock.identity_metadata.version = "1.0"
-    identity_mock.identity_metadata.parent_id = None
-    identity_mock.identity_metadata.creation_context = "test"
-    identity_mock.identity_metadata.adaptations = []
+    identity_mock.name = "Test Agent"  # Fix: Added space to match expected value
+    identity_mock.purpose = "Test Agent. A helpful assistant."  # Add purpose attribute
+    core_profile_mock = MagicMock()
+    core_profile_mock.description = "Test Agent. A helpful assistant."  # Explicitly set as string
+    identity_mock.core_profile = core_profile_mock
+    identity_mock.identity_metadata = MagicMock(
+        created_at=datetime.now(timezone.utc),
+        model="test-model",
+        version="1.0",
+        parent_id=None,
+        creation_context="test",
+        adaptations=[],
+    )
 
     app.state.runtime.agent_identity = identity_mock
     app.state.runtime.adapters = []
-    app.state.runtime.service_registry = AsyncMock()
+    app.state.runtime.service_registry = MagicMock()  # Use MagicMock for consistency
 
     # Mock time service
     app.state.time_service._start_time = datetime.now(timezone.utc) - timedelta(seconds=3600)

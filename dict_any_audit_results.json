@@ -1743,7 +1743,7 @@
       },
       {
         "file": "tools/grace_shepherd.py",
-        "line": 155,
+        "line": 164,
         "class": "CIShepherd",
         "function": "get_run_details",
         "context": "return_type",
@@ -1751,7 +1751,7 @@
       },
       {
         "file": "tools/grace_shepherd.py",
-        "line": 274,
+        "line": 283,
         "class": "CIShepherd",
         "function": "get_test_failures",
         "context": "return_type",

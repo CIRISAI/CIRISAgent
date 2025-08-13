@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 import pytest
@@ -22,6 +23,41 @@ async def runtime():
     # The runtime will initialize its own service registry during initialization
     # No need to set it externally - this violates encapsulation
     return runtime
+
+
+@pytest_asyncio.fixture
+async def real_runtime():
+    """Provide a real CIRISRuntime instance with environment properly configured.
+
+    This fixture is for tests that need an actual runtime instance, not a mock.
+    It handles the CIRIS_IMPORT_MODE environment variable to allow runtime creation.
+    """
+    # Save original environment state
+    original_import = os.environ.get("CIRIS_IMPORT_MODE")
+    original_mock = os.environ.get("CIRIS_MOCK_LLM")
+
+    # Allow runtime creation and use mock LLM
+    os.environ["CIRIS_IMPORT_MODE"] = "false"
+    os.environ["CIRIS_MOCK_LLM"] = "true"
+
+    try:
+        # Create runtime with mock LLM module
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            modules=["mock_llm"],
+        )
+        yield runtime
+    finally:
+        # Restore original environment
+        if original_import is not None:
+            os.environ["CIRIS_IMPORT_MODE"] = original_import
+        else:
+            os.environ.pop("CIRIS_IMPORT_MODE", None)
+
+        if original_mock is not None:
+            os.environ["CIRIS_MOCK_LLM"] = original_mock
+        else:
+            os.environ.pop("CIRIS_MOCK_LLM", None)
 
 
 @pytest.fixture(autouse=True)

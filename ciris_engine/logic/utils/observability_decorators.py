@@ -183,8 +183,9 @@ async def _store_correlation_async(self: Any, correlation: ServiceCorrelation) -
             task = asyncio.create_task(bounded_store_correlation(self._telemetry_service, correlation))
             # Fire and forget - we don't await the task
             task.add_done_callback(lambda t: None)  # Suppress warnings
-        except Exception:
-            pass  # Don't fail the method if telemetry fails
+        except Exception:  # noqa: S110
+            # Silently ignore telemetry failures to avoid breaking the decorated method
+            pass
 
 
 async def _execute_with_logging(
@@ -272,8 +273,9 @@ async def _record_performance_metrics(
                 path_type=path_type,
                 source_module=module,
             )
-        except Exception:
-            pass  # Don't fail the method if metrics fail
+        except Exception:  # noqa: S110
+            # Silently ignore metrics failures to avoid breaking the decorated method
+            pass
 
 
 def trace_span(

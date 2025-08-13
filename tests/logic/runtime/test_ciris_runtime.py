@@ -105,6 +105,17 @@ def temp_dir():
 @pytest.fixture
 def essential_config(temp_dir):
     """Create a real EssentialConfig using existing schema."""
+    # Create templates directory and copy test template
+    import shutil
+
+    templates_dir = temp_dir / "templates"
+    templates_dir.mkdir(exist_ok=True)
+
+    # Copy test.yaml template if it exists
+    test_template_src = Path("ciris_templates/test.yaml")
+    if test_template_src.exists():
+        shutil.copy(test_template_src, templates_dir / "test.yaml")
+
     return EssentialConfig(
         database=DatabaseConfig(
             main_db=temp_dir / "test.db",
@@ -150,7 +161,7 @@ def essential_config(temp_dir):
         ),
         log_level="DEBUG",
         debug_mode=True,
-        template_directory=temp_dir / "templates",
+        template_directory=templates_dir,
         default_template="test",
     )
 

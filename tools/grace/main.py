@@ -7,6 +7,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from .ci import CIMonitor
 from .context import WorkContext
 from .health import check_all, check_deployment
 from .schedule import get_current_session, get_next_transition
@@ -18,6 +19,7 @@ class Grace:
     def __init__(self) -> None:
         """Initialize Grace."""
         self.context = WorkContext()
+        self.ci_monitor = CIMonitor()
 
     def status(self) -> str:
         """Current status - time, session, health."""
@@ -86,6 +88,22 @@ class Grace:
         ctx = self.context.load()
         if ctx and ctx.get("uncommitted"):
             message.append("\n📝 You have uncommitted changes")
+
+        # Quick CI check (only if not recently checked)
+        can_check, _ = self.ci_monitor.should_check_ci()
+        if can_check:
+            ci_status = self.ci_monitor.check_current_ci()
+            if "❌" in ci_status:
+                message.append(f"\n{ci_status}")
+            elif "⏳" in ci_status:
+                # Extract just the running status
+                parts = ci_status.split(" ")
+                if "elapsed)" in ci_status:
+                    # Get the elapsed time part
+                    elapsed = ci_status.split("(")[1].split(")")[0]
+                    message.append(f"\n⏳ CI running ({elapsed})")
+                else:
+                    message.append("\n⏳ CI running")
 
         return "\n".join(message)
 
@@ -512,3 +530,54 @@ class Grace:
     def fix(self) -> str:
         """Shortcut for auto-fixing pre-commit issues."""
         return self.precommit(autofix=True)
+
+    def ci(self, subcommand: str = None) -> str:
+        """Check CI/CD status and provide guidance."""
+        message = []
+
+        if subcommand == "prs":
+            # Show all PRs with their status
+            message.append("=== Open PRs ===")
+            message.append(self.ci_monitor.check_prs())
+
+        elif subcommand == "builds":
+            # Show Build & Deploy runs
+            message.append("=== Build & Deploy Status ===")
+            message.append(self.ci_monitor.check_builds())
+
+        elif subcommand == "hints":
+            # Show hints for common failures
+            message.append("=== CI Failure Hints ===")
+            message.append(self.ci_monitor.get_failure_hints())
+
+        else:
+            # Default: current branch CI + PR status
+            can_check, wait_msg = self.ci_monitor.should_check_ci()
+
+            if not can_check:
+                message.append(f"⏰ CI Check {wait_msg}")
+                message.append("CI takes 12-15 minutes. Checking won't make it faster.")
+            else:
+                self.ci_monitor.mark_ci_checked()
+
+                # Current branch CI
+                message.append("=== Current Branch CI ===")
+                message.append(self.ci_monitor.check_current_ci())
+
+                # PR status summary
+                message.append("\n=== PR Status ===")
+                pr_status = self.ci_monitor.check_prs()
+
+                # Only show first 3 PRs in default view
+                lines = pr_status.split("\n")[:3]
+                message.extend(lines)
+                if len(pr_status.split("\n")) > 3:
+                    message.append("... (use 'grace ci prs' for all)")
+
+                # Check for blocking issues
+                if "🚨 CONFLICT" in pr_status:
+                    message.append("\n⚠️ Merge conflicts detected! Resolve before CI can run.")
+                elif "❌" in pr_status and "failed" in pr_status:
+                    message.append("\n⚠️ CI failures detected. Use 'grace ci hints' for help.")
+
+        return "\n".join(message)

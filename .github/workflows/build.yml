@@ -129,19 +129,6 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      - name: Build GUI Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./CIRISGUI
-          file: ./docker/gui/Dockerfile
-          push: ${{ github.repository == 'CIRISAI/CIRISAgent' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-          tags: |
-            ghcr.io/cirisai/ciris-gui:latest
-            ghcr.io/cirisai/ciris-gui:${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
 
 
       - name: Build Summary
@@ -163,7 +150,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Images:" >> $GITHUB_STEP_SUMMARY
           echo "- ciris-agent" >> $GITHUB_STEP_SUMMARY
-          echo "- ciris-gui" >> $GITHUB_STEP_SUMMARY
 
   deploy:
     name: Notify CIRISManager of Update
@@ -201,7 +187,6 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{
               \"agent_image\": \"ghcr.io/cirisai/ciris-agent:latest\",
-              \"gui_image\": \"ghcr.io/cirisai/ciris-gui:latest\",
               \"strategy\": \"canary\",
               \"source\": \"github-actions\",
               \"commit_sha\": \"${{ github.sha }}\",
@@ -252,32 +237,3 @@ jobs:
           echo ""
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
-
-  deploy-gui:
-    name: Deploy GUI Container
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
-    environment: production
-    steps:
-      - name: Deploy GUI Container
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: 108.61.119.117
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /home/ciris/CIRISAgent
-
-            # Pull latest GUI image
-            echo "Pulling latest GUI image..."
-            docker pull ghcr.io/cirisai/ciris-gui:latest
-
-            # Update GUI container (no agent negotiation needed - just infrastructure)
-            echo "Updating GUI container..."
-            docker-compose -f deployment/docker-compose.dev-prod.yml up -d ciris-gui
-
-            # Verify GUI is running
-            docker ps | grep ciris-gui
-
-            echo "GUI deployment complete!"

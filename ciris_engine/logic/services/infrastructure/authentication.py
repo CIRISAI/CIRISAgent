@@ -1324,7 +1324,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     async def bootstrap_if_needed(self) -> None:
         """Bootstrap the system if no WAs exist."""
         was = await self._list_all_was()
-        if not was:
+
+        # Check if we have a root WA
+        has_root = any(wa.role == WARole.ROOT for wa in was)
+
+        if not has_root:
             # Load and insert root certificate
             seed_path = Path(__file__).parent.parent.parent / "seed" / "root_pub.json"
             if seed_path.exists():

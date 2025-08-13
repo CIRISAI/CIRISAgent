@@ -1,6 +1,0 @@
-FROM python:3.11-slim
-WORKDIR /app
-COPY apps/ciris-api/pyproject.toml apps/ciris-api/poetry.lock ./
-RUN pip install poetry && poetry install --no-root
-COPY . .
-CMD ["poetry", "run", "python", "apps/ciris-api/main.py"]

@@ -119,8 +119,13 @@ class TestBatchContextData:
 class TestPrefetchBatchContext:
     """Test prefetch_batch_context with focus on resilience and error handling."""
 
-    async def test_prefetch_resilience_with_no_services(self):
+    @patch("ciris_engine.logic.context.batch_context.persistence")
+    async def test_prefetch_resilience_with_no_services(self, mock_persistence):
         """Test graceful degradation when no services available (Resilience principle)."""
+        # Mock persistence to return empty lists
+        mock_persistence.get_recent_completed_tasks.return_value = []
+        mock_persistence.get_top_tasks.return_value = []
+
         batch_data = await prefetch_batch_context()
 
         # Should return valid empty state, not fail

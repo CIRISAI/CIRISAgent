@@ -162,14 +162,19 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
                     phases[step.phase] = []
                 phases[step.phase].append(step)
 
+            logger.info(f"[InitializationService] Registered {len(self._steps)} steps across {len(phases)} phases")
+
             # Execute phases in order
             for phase in InitializationPhase:
                 if phase not in phases:
+                    logger.debug(f"[InitializationService] Skipping phase {phase.value} - no steps registered")
                     continue
 
+                logger.info(f"[InitializationService] Executing phase {phase.value} with {len(phases[phase])} steps")
                 await self._execute_phase(phase, phases[phase])
 
                 if self._error and phase != InitializationPhase.VERIFICATION:
+                    logger.error(f"[InitializationService] Error in phase {phase.value}: {self._error}")
                     raise self._error
 
             # Set initialization complete

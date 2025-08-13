@@ -203,10 +203,17 @@ Grace is your intelligent pre-commit gatekeeper and development assistant that e
 
 ```bash
 # Quick status check
-python -m tools.grace status           # Current session, health, reminders
+python -m tools.grace status           # Current session, health, CI status
+
+# CI/CD Monitoring (CRITICAL for Claude)
+python -m tools.grace ci               # Current branch CI + PR summary (10min throttle)
+python -m tools.grace ci prs           # All PRs with conflict/block detection
+python -m tools.grace ci builds        # Build & Deploy status across branches
+python -m tools.grace ci hints         # Common CI failure hints & existing schemas
 
 # Pre-commit assistance
 python -m tools.grace precommit        # Detailed pre-commit status and fixes
+python -m tools.grace fix              # Auto-fix pre-commit issues
 
 # Session management
 python -m tools.grace morning          # Morning check-in
@@ -214,14 +221,11 @@ python -m tools.grace pause            # Save context before break
 python -m tools.grace resume           # Resume after break
 python -m tools.grace night            # Evening choice point
 
-# Deployment monitoring
+# Deployment & incidents
 python -m tools.grace deploy           # Check deployment status
+python -m tools.grace incidents        # Check production incidents
 
-# CI Shepherding (CRITICAL for Claude)
-python -m tools.grace_shepherd wait    # Start CI monitoring
-python -m tools.grace_shepherd status  # Check status (only every 10 minutes!)
-python -m tools.grace_shepherd analyze # Analyze failures
-python -m tools.grace_shepherd remind  # Show existing schemas to use
+# Short forms: s, m, p, r, n, d, c, pc, f, i
 ```
 
 **Grace Philosophy:**

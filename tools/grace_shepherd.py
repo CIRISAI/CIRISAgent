@@ -117,18 +117,27 @@ class CIShepherd:
         return None
 
     def get_pr_ci_status(self, pr_number: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get CI status for PRs."""
+        """Get CI status for PRs including merge conflict info."""
         try:
             if pr_number:
-                # Get specific PR
+                # Get specific PR with merge conflict info
                 result = subprocess.run(
-                    ["gh", "pr", "view", str(pr_number), "--repo", "CIRISAI/CIRISAgent", "--json", "statusCheckRollup"],
+                    [
+                        "gh",
+                        "pr",
+                        "view",
+                        str(pr_number),
+                        "--repo",
+                        "CIRISAI/CIRISAgent",
+                        "--json",
+                        "statusCheckRollup,mergeable,mergeStateStatus",
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=10,
                 )
             else:
-                # Get all open PRs
+                # Get all open PRs with merge conflict info
                 result = subprocess.run(
                     [
                         "gh",
@@ -139,7 +148,7 @@ class CIShepherd:
                         "--state",
                         "open",
                         "--json",
-                        "number,title,headRefName,statusCheckRollup",
+                        "number,title,headRefName,statusCheckRollup,mergeable,mergeStateStatus",
                     ],
                     capture_output=True,
                     text=True,
@@ -332,14 +341,11 @@ def status():
         last_check_str = state_file.read_text().strip()
         shepherd.last_check = datetime.fromisoformat(last_check_str)
 
-    if not shepherd.enforce_wait():
-        return
+    # Always check status first
+    status = shepherd.check_ci_status()
 
     # Save check time
     state_file.write_text(datetime.now().isoformat())
-
-    # Actually check status
-    status = shepherd.check_ci_status()
 
     click.clear()
     click.secho("🌟 Grace CI Shepherd - Status Check", fg="cyan", bold=True)
@@ -380,7 +386,18 @@ def status():
         click.echo(f"Duration: {status['elapsed']}")
 
     click.echo("\n" + "=" * 60)
-    click.secho("Remember: Don't check again for 10 minutes!", fg="yellow")
+
+    # Show timing reminder if checking too frequently
+    if shepherd.last_check:
+        elapsed = (datetime.now() - shepherd.last_check).total_seconds() / 60
+        if elapsed < 10:
+            remaining = 10 - int(elapsed)
+            click.secho(
+                f"⚠️  You checked {int(elapsed)} minutes ago - wait {remaining} more minutes next time", fg="yellow"
+            )
+            click.echo("(But I'm showing you the status anyway because you asked nicely)")
+        else:
+            click.secho("Remember: Don't check again for 10 minutes!", fg="yellow")
 
 
 @cli.command()
@@ -404,9 +421,18 @@ def prs():
         pr_num = pr.get("number", "?")
         title = pr.get("title", "Unknown")
         branch = pr.get("headRefName", "unknown")
+        mergeable = pr.get("mergeable", "UNKNOWN")
+        merge_state = pr.get("mergeStateStatus", "UNKNOWN")
 
         click.echo(f"PR #{pr_num}: {title}")
         click.echo(f"  Branch: {branch}")
+
+        # Check for merge conflicts FIRST
+        if mergeable == "CONFLICTING":
+            click.secho(f"  🚨 MERGE CONFLICT - Resolve conflicts before CI can run!", fg="red", bold=True)
+            click.echo(f"  Merge State: {merge_state}")
+        elif merge_state == "BLOCKED":
+            click.secho(f"  ⚠️  BLOCKED - CI checks must pass or other requirements not met", fg="yellow")
 
         # Check status checks
         checks = pr.get("statusCheckRollup", [])
@@ -422,7 +448,10 @@ def prs():
             else:
                 click.secho(f"  Status: ✅ All {passed} checks passed", fg="green")
         else:
-            click.echo("  Status: No checks")
+            if mergeable == "CONFLICTING":
+                click.echo("  Status: No checks (waiting for conflict resolution)")
+            else:
+                click.echo("  Status: No checks")
         click.echo()
 
 
@@ -495,6 +524,102 @@ def analyze(run_id: Optional[int] = None):
     click.echo("1. Dict[str, Any] - search for existing schemas instead")
     click.echo("2. Import errors - check your imports")
     click.echo("3. Test failures - run tests locally first")
+
+
+@cli.command()
+def builds():
+    """Check all Build and Deploy runs across branches."""
+    shepherd = CIShepherd()
+
+    click.clear()
+    click.secho("🌟 Grace CI Shepherd - Build & Deploy Status", fg="cyan", bold=True)
+    click.echo("=" * 60)
+
+    # Get all Build and Deploy runs
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "run",
+                "list",
+                "--repo",
+                "CIRISAI/CIRISAgent",
+                "--workflow",
+                "Build and Deploy",
+                "--limit",
+                "10",
+                "--json",
+                "databaseId,status,conclusion,headBranch,event,createdAt,headSha",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode != 0:
+            click.secho("\n❌ Could not fetch Build and Deploy runs", fg="red")
+            return
+
+        runs = json.loads(result.stdout)
+
+        if not runs:
+            click.echo("\nNo Build and Deploy runs found.")
+            return
+
+        # Group by branch
+        branches = {}
+        for run in runs:
+            branch = run.get("headBranch", "unknown")
+            if branch not in branches:
+                branches[branch] = []
+            branches[branch].append(run)
+
+        # Check PRs for merge conflicts
+        prs = shepherd.get_pr_ci_status()
+        pr_by_branch = {pr.get("headRefName"): pr for pr in prs}
+
+        click.echo(f"\nBuild & Deploy runs by branch:\n")
+
+        for branch, branch_runs in branches.items():
+            latest = branch_runs[0]  # Most recent
+
+            # Check if this branch has a PR with merge conflicts
+            pr = pr_by_branch.get(branch)
+            has_conflict = pr and pr.get("mergeable") == "CONFLICTING"
+
+            click.echo(f"Branch: {branch}")
+
+            if has_conflict:
+                click.secho(f"  🚨 MERGE CONFLICT in PR #{pr.get('number')} - CI blocked!", fg="red", bold=True)
+
+            status = latest.get("status", "unknown")
+            conclusion = latest.get("conclusion", "pending")
+
+            if status == "in_progress":
+                click.secho(f"  ⏳ Currently running (started {latest.get('createdAt', 'unknown')})", fg="yellow")
+            elif status == "completed":
+                if conclusion == "success":
+                    click.secho(f"  ✅ Last run: SUCCESS", fg="green")
+                elif conclusion == "failure":
+                    click.secho(f"  ❌ Last run: FAILED", fg="red")
+                else:
+                    click.secho(f"  ⚠️  Last run: {conclusion}", fg="yellow")
+            else:
+                click.secho(f"  Status: {status}", fg="yellow")
+
+            click.echo(f"  Event: {latest.get('event', 'unknown')}")
+            click.echo(f"  SHA: {latest.get('headSha', 'unknown')[:7]}")
+
+            if len(branch_runs) > 1:
+                click.echo(f"  History: {len(branch_runs)} runs total")
+
+            click.echo()
+
+    except Exception as e:
+        click.secho(f"\n❌ Error: {e}", fg="red")
+
+    click.echo("=" * 60)
+    click.secho("Tip: Merge conflicts will prevent Build & Deploy from running!", fg="yellow")
 
 
 @cli.command()

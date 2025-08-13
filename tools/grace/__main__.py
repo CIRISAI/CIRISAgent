@@ -31,6 +31,7 @@ def main() -> None:
         "precommit": lambda: grace.precommit(autofix="--fix" in sys.argv),
         "fix": grace.fix,
         "incidents": lambda: grace.incidents(sys.argv[2] if len(sys.argv) > 2 else "ciris-agent-datum"),
+        "ci": lambda: grace.ci(sys.argv[2] if len(sys.argv) > 2 else None),
         # Aliases
         "s": grace.status,
         "m": grace.morning,
@@ -41,6 +42,7 @@ def main() -> None:
         "pc": lambda: grace.precommit(autofix="--fix" in sys.argv),
         "f": grace.fix,
         "i": lambda: grace.incidents(sys.argv[2] if len(sys.argv) > 2 else "ciris-agent-datum"),
+        "c": lambda: grace.ci(sys.argv[2] if len(sys.argv) > 2 else None),
     }
 
     if command in commands:
@@ -54,12 +56,15 @@ def main() -> None:
         print("  resume     - Resume after break")
         print("  night      - Evening choice point")
         print("  deploy     - Check deployment status")
+        print("  ci         - Check CI/CD status")
+        print("             Usage: grace ci [prs|builds|hints]")
+        print("             Default: current branch + PR summary")
         print("  precommit  - Check pre-commit issues (--fix to auto-fix)")
         print("  fix        - Auto-fix pre-commit issues")
         print("  incidents  - Check container incidents log")
         print("             Usage: grace incidents [container_name]")
         print("             Default: ciris-agent-datum")
-        print("\nShort forms: s, m, p, r, n, d, pc, f, i")
+        print("\nShort forms: s, m, p, r, n, d, c, pc, f, i")
     else:
         print(f"Unknown command: {command}")
         print("Try 'grace help' for available commands")

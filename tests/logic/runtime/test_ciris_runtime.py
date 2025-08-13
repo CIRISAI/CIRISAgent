@@ -307,20 +307,28 @@ class TestCIRISRuntimeInitialization:
     @pytest.mark.asyncio
     async def test_initialize_runtime_mock_llm(self, essential_config, allow_runtime_creation):
         """Test the initialization process with mock LLM."""
+        print("[test_initialize_runtime_mock_llm] Creating runtime...")
         runtime = CIRISRuntime(
             adapter_types=["cli"],
             essential_config=essential_config,
             modules=["mock_llm"],
             timeout=5,
         )
+        print(f"[test_initialize_runtime_mock_llm] Runtime created: {runtime}")
 
         # Initialize runtime
+        print("[test_initialize_runtime_mock_llm] Starting initialization...")
         await runtime.initialize()
+        print("[test_initialize_runtime_mock_llm] Initialization complete")
 
         # Check that runtime was initialized
+        print(f"[test_initialize_runtime_mock_llm] _initialized: {runtime._initialized}")
+        print(f"[test_initialize_runtime_mock_llm] agent_processor: {runtime.agent_processor}")
+        print(f"[test_initialize_runtime_mock_llm] service_initializer: {runtime.service_initializer}")
+
         assert runtime._initialized is True
-        assert runtime.agent_processor is not None
-        assert runtime.service_initializer is not None
+        assert runtime.agent_processor is not None, "agent_processor is None after initialization"
+        assert runtime.service_initializer is not None, "service_initializer is None after initialization"
 
         # Clean up
         await runtime.shutdown()
@@ -328,19 +336,27 @@ class TestCIRISRuntimeInitialization:
     @pytest.mark.asyncio
     async def test_runtime_properties_after_init(self, essential_config, allow_runtime_creation):
         """Test accessing services after initialization."""
+        print("[test_runtime_properties_after_init] Creating runtime...")
         runtime = CIRISRuntime(
             adapter_types=["cli"],
             essential_config=essential_config,
             modules=["mock_llm"],
             timeout=5,
         )
+        print(f"[test_runtime_properties_after_init] Runtime created: {runtime}")
 
+        print("[test_runtime_properties_after_init] Starting initialization...")
         await runtime.initialize()
+        print("[test_runtime_properties_after_init] Initialization complete")
 
         # Check service properties are accessible
-        assert runtime.service_registry is not None
-        assert runtime.memory_service is not None
-        assert runtime.telemetry_service is not None
+        print(f"[test_runtime_properties_after_init] service_registry: {runtime.service_registry}")
+        print(f"[test_runtime_properties_after_init] memory_service: {runtime.memory_service}")
+        print(f"[test_runtime_properties_after_init] telemetry_service: {runtime.telemetry_service}")
+
+        assert runtime.service_registry is not None, "service_registry is None after initialization"
+        assert runtime.memory_service is not None, "memory_service is None after initialization"
+        assert runtime.telemetry_service is not None, "telemetry_service is None after initialization"
 
         await runtime.shutdown()
 
@@ -398,23 +414,35 @@ class TestCIRISRuntimeServices:
     @pytest.mark.asyncio
     async def test_service_properties(self, essential_config, allow_runtime_creation):
         """Test accessing services through properties."""
+        print("[test_service_properties] Creating runtime...")
         runtime = CIRISRuntime(
             adapter_types=["cli"],
             essential_config=essential_config,
             modules=["mock_llm"],
             timeout=2,
         )
+        print(f"[test_service_properties] Runtime created: {runtime}")
 
+        print("[test_service_properties] Starting initialization...")
         await runtime.initialize()
+        print("[test_service_properties] Initialization complete")
 
         # Check all service properties
-        assert runtime.memory_service is not None
-        assert runtime.service_registry is not None
-        assert runtime.bus_manager is not None
-        assert runtime.resource_monitor is not None
-        assert runtime.secrets_service is not None
-        assert runtime.telemetry_service is not None
-        assert runtime.llm_service is not None
+        print(f"[test_service_properties] memory_service: {runtime.memory_service}")
+        print(f"[test_service_properties] service_registry: {runtime.service_registry}")
+        print(f"[test_service_properties] bus_manager: {runtime.bus_manager}")
+        print(f"[test_service_properties] resource_monitor: {runtime.resource_monitor}")
+        print(f"[test_service_properties] secrets_service: {runtime.secrets_service}")
+        print(f"[test_service_properties] telemetry_service: {runtime.telemetry_service}")
+        print(f"[test_service_properties] llm_service: {runtime.llm_service}")
+
+        assert runtime.memory_service is not None, "memory_service is None after initialization"
+        assert runtime.service_registry is not None, "service_registry is None after initialization"
+        assert runtime.bus_manager is not None, "bus_manager is None after initialization"
+        assert runtime.resource_monitor is not None, "resource_monitor is None after initialization"
+        assert runtime.secrets_service is not None, "secrets_service is None after initialization"
+        assert runtime.telemetry_service is not None, "telemetry_service is None after initialization"
+        assert runtime.llm_service is not None, "llm_service is None after initialization"
 
         await runtime.shutdown()
 

@@ -862,11 +862,30 @@ class CIRISRuntime:
 
     async def _build_components(self) -> None:
         """Build all processing components."""
-        self.component_builder = ComponentBuilder(self)
-        self.agent_processor = self.component_builder.build_all_components()
+        logger.info("[_build_components] Starting component building...")
+        logger.info(f"[_build_components] llm_service: {self.llm_service}")
+        logger.info(f"[_build_components] service_registry: {self.service_registry}")
+        logger.info(f"[_build_components] service_initializer: {self.service_initializer}")
+
+        if self.service_initializer:
+            logger.info(f"[_build_components] service_initializer.llm_service: {self.service_initializer.llm_service}")
+            logger.info(
+                f"[_build_components] service_initializer.service_registry: {self.service_initializer.service_registry}"
+            )
+
+        try:
+            self.component_builder = ComponentBuilder(self)
+            logger.info("[_build_components] ComponentBuilder created successfully")
+
+            self.agent_processor = self.component_builder.build_all_components()
+            logger.info(f"[_build_components] agent_processor created: {self.agent_processor}")
+        except Exception as e:
+            logger.error(f"[_build_components] Failed to build components: {e}", exc_info=True)
+            raise
 
         # Register core services after components are built
         self._register_core_services()
+        logger.info("[_build_components] Component building completed")
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""

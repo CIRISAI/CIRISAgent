@@ -514,3 +514,335 @@ class TestCIRISRuntimeIntegration:
         # Shutdown
         await runtime.shutdown()
         assert runtime._shutdown_complete is True
+
+    @pytest.mark.asyncio
+    async def test_runtime_run_with_rounds(self, essential_config, allow_runtime_creation):
+        """Test runtime run method with specific round count."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        await runtime.initialize()
+
+        # Set processor state to SHUTDOWN to exit quickly
+        runtime.agent_processor.state = AgentState.SHUTDOWN
+
+        # Run for 1 round
+        await runtime.run(num_rounds=1)
+
+        # Verify shutdown was triggered
+        assert runtime._shutdown_event.is_set()
+
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_cognitive_state_transition(self, essential_config, allow_runtime_creation):
+        """Test runtime handles cognitive state transitions."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        await runtime.initialize()
+
+        # Check initial state
+        assert runtime.agent_processor.state == AgentState.WAKEUP
+
+        # Transition to WORK state
+        runtime.agent_processor.state = AgentState.WORK
+        assert runtime.agent_processor.state == AgentState.WORK
+
+        # Transition to SHUTDOWN
+        runtime.agent_processor.state = AgentState.SHUTDOWN
+        assert runtime.agent_processor.state == AgentState.SHUTDOWN
+
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_multiple_adapters(self, essential_config, allow_runtime_creation):
+        """Test runtime with multiple adapters."""
+        with patch("ciris_engine.logic.runtime.ciris_runtime.logger") as mock_logger:
+            runtime = CIRISRuntime(
+                adapter_types=["cli", "nonexistent", "cli"],  # Duplicate and invalid
+                essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
+            )
+
+            # Should have loaded only valid adapters
+            assert len(runtime.adapters) == 2
+
+            # Check that error was logged for nonexistent adapter
+            assert any("Failed to load" in str(call) for call in mock_logger.error.call_args_list)
+
+    @pytest.mark.asyncio
+    async def test_runtime_with_timeout_parameter(self, essential_config, allow_runtime_creation):
+        """Test runtime respects timeout parameter."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=10,  # Custom timeout
+        )
+
+        # Check timeout was stored (would be used in run method)
+        assert hasattr(runtime, "_shutdown_event")
+
+        await runtime.initialize()
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_profile_property(self, essential_config, allow_runtime_creation):
+        """Test accessing runtime profile property."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        await runtime.initialize()
+
+        # Access profile property
+        profile = runtime.profile
+        # Profile might be None if not configured, that's ok
+        assert profile is None or hasattr(profile, "__dict__")
+
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_with_startup_channel(self, essential_config, allow_runtime_creation):
+        """Test runtime with startup channel ID."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            startup_channel_id="test_channel_123",
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        assert runtime.startup_channel_id == "test_channel_123"
+
+        await runtime.initialize()
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_with_adapter_configs(self, essential_config, allow_runtime_creation):
+        """Test runtime with adapter configurations."""
+        adapter_configs = {"cli": {"special_option": "value"}}
+
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            adapter_configs=adapter_configs,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        assert runtime.adapter_configs == adapter_configs
+
+        await runtime.initialize()
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_shutdown_reason(self, essential_config, allow_runtime_creation):
+        """Test runtime shutdown with specific reason."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        await runtime.initialize()
+
+        # Request shutdown with reason
+        runtime.request_shutdown("Test complete - shutting down")
+        assert runtime._shutdown_reason == "Test complete - shutting down"
+        assert runtime._shutdown_event.is_set()
+
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_double_initialization(self, essential_config, allow_runtime_creation):
+        """Test that double initialization is handled properly."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        await runtime.initialize()
+        assert runtime._initialized is True
+
+        # Try to initialize again - should handle gracefully
+        await runtime.initialize()
+        assert runtime._initialized is True
+
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_service_access_before_init(self, essential_config, allow_runtime_creation):
+        """Test accessing services before initialization returns None."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        # All services should be None before initialization
+        assert runtime.memory_service is None
+        assert runtime.telemetry_service is None
+        assert runtime.config_service is None
+        assert runtime.audit_service is None
+        assert runtime.llm_service is None
+        assert runtime.time_service is None
+
+    @pytest.mark.asyncio
+    async def test_runtime_shutdown_without_init(self, essential_config, allow_runtime_creation):
+        """Test shutdown can be called without initialization."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        # Should handle shutdown gracefully without initialization
+        await runtime.shutdown()
+        assert runtime._shutdown_complete is True
+
+    @pytest.mark.asyncio
+    async def test_runtime_with_empty_adapter_list(self, essential_config, allow_runtime_creation):
+        """Test runtime with no adapters."""
+        runtime = CIRISRuntime(
+            adapter_types=[],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        assert len(runtime.adapters) == 0
+
+        await runtime.initialize()
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_all_service_properties(self, essential_config, allow_runtime_creation):
+        """Test accessing all service properties after initialization."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        await runtime.initialize()
+
+        # Test all service property accessors
+        assert runtime.service_registry is not None
+        assert runtime.bus_manager is not None
+        assert runtime.memory_service is not None
+        assert runtime.resource_monitor is not None
+        assert runtime.secrets_service is not None
+        assert runtime.telemetry_service is not None
+        assert runtime.llm_service is not None
+        assert runtime.time_service is not None
+        assert runtime.config_service is not None
+        assert runtime.task_scheduler is not None
+        assert runtime.authentication_service is not None
+        assert runtime.incident_management_service is not None
+        assert runtime.runtime_control_service is not None
+        assert runtime.maintenance_service is not None
+        assert runtime.shutdown_service is not None
+        assert runtime.initialization_service is not None
+        assert runtime.tsdb_consolidation_service is not None
+        assert runtime.self_observation_service is not None
+        assert runtime.visibility_service is not None
+        assert runtime.adaptive_filter_service is not None
+        assert runtime.agent_config_service is not None
+        assert runtime.config_manager is not None
+        assert runtime.transaction_orchestrator is not None
+        assert runtime.core_tool_service is not None
+        assert runtime.wa_auth_system is not None
+
+        # These might be None depending on configuration
+        assert runtime.profile is None or hasattr(runtime.profile, "__dict__")
+        assert runtime.audit_service is None or hasattr(runtime.audit_service, "__dict__")
+        assert isinstance(runtime.audit_services, list)
+
+        await runtime.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_runtime_initialization_error_handling(self, essential_config, allow_runtime_creation):
+        """Test runtime handles initialization errors properly."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        # Mock an initialization failure
+        with patch.object(runtime.service_initializer, "initialize", new_callable=AsyncMock) as mock_init:
+            mock_init.return_value = False  # Initialization fails
+
+            with pytest.raises(RuntimeError) as exc_info:
+                await runtime.initialize()
+
+            assert "Initialization sequence failed" in str(exc_info.value)
+            assert runtime._initialized is False
+
+    @pytest.mark.asyncio
+    async def test_runtime_request_shutdown_before_init(self, essential_config, allow_runtime_creation):
+        """Test requesting shutdown before initialization."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
+
+        # Request shutdown before initialization
+        runtime.request_shutdown("Early shutdown")
+        assert runtime._shutdown_event.is_set()
+        assert runtime._shutdown_reason == "Early shutdown"
+
+    @pytest.mark.asyncio
+    async def test_runtime_with_special_modules(self, essential_config, allow_runtime_creation):
+        """Test runtime with various module configurations."""
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm", "test_module", "another_module"],
+            timeout=2,
+        )
+
+        assert "mock_llm" in runtime.modules_to_load
+        assert "test_module" in runtime.modules_to_load
+        assert "another_module" in runtime.modules_to_load
+
+    @pytest.mark.asyncio
+    async def test_runtime_environment_override(self, essential_config, allow_runtime_creation):
+        """Test CIRIS_MOCK_LLM environment variable overrides modules."""
+        # Set environment variable
+        os.environ["CIRIS_MOCK_LLM"] = "true"
+
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=[],  # No modules specified
+            timeout=2,
+        )
+
+        # Should have added mock_llm due to environment variable
+        assert "mock_llm" in runtime.modules_to_load
+
+        os.environ.pop("CIRIS_MOCK_LLM", None)

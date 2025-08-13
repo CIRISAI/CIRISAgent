@@ -470,6 +470,10 @@ class CIRISRuntime:
         pass
 
         # Now setup proper file logging with TimeService
+        # Run in executor to avoid blocking the async event loop
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+
         from ciris_engine.logic.utils.logging_config import setup_basic_logging
 
         logger.info(f"[_initialize_infrastructure] service_initializer: {self.service_initializer}")
@@ -495,12 +499,23 @@ class CIRISRuntime:
 
             logger.info("Setting up file logging with TimeService")
             try:
-                setup_basic_logging(
-                    level=logging.DEBUG if logger.isEnabledFor(logging.DEBUG) else logging.INFO,
-                    log_to_file=True,
-                    console_output=console_output,
-                    time_service=self.service_initializer.time_service,
-                )
+                # Run the synchronous logging setup in a thread executor to avoid blocking async
+                loop = asyncio.get_event_loop()
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    await loop.run_in_executor(
+                        executor,
+                        setup_basic_logging,
+                        logging.DEBUG if logger.isEnabledFor(logging.DEBUG) else logging.INFO,  # level
+                        None,  # log_format (use default)
+                        None,  # date_format (use default)
+                        None,  # logger_instance (use root)
+                        None,  # prefix
+                        True,  # log_to_file
+                        "logs",  # log_dir
+                        console_output,  # console_output
+                        True,  # enable_incident_capture
+                        self.service_initializer.time_service,  # time_service
+                    )
                 logger.info("[_initialize_infrastructure] File logging setup complete")
             except Exception as e:
                 logger.error(f"[_initialize_infrastructure] Failed to setup file logging: {e}", exc_info=True)

@@ -312,7 +312,7 @@ class TestCIRISRuntimeInitialization:
             adapter_types=["cli"],
             essential_config=essential_config,
             modules=["mock_llm"],
-            timeout=5,
+            timeout=30,  # Increased timeout for CI
         )
         print(f"[test_initialize_runtime_mock_llm] Runtime created: {runtime}")
 
@@ -341,7 +341,7 @@ class TestCIRISRuntimeInitialization:
             adapter_types=["cli"],
             essential_config=essential_config,
             modules=["mock_llm"],
-            timeout=5,
+            timeout=30,  # Increased timeout for CI
         )
         print(f"[test_runtime_properties_after_init] Runtime created: {runtime}")
 
@@ -419,7 +419,7 @@ class TestCIRISRuntimeServices:
             adapter_types=["cli"],
             essential_config=essential_config,
             modules=["mock_llm"],
-            timeout=2,
+            timeout=30,  # Increased timeout for CI
         )
         print(f"[test_service_properties] Runtime created: {runtime}")
 

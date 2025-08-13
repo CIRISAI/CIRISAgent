@@ -324,27 +324,39 @@ class CIRISRuntime:
 
         try:
             # First initialize infrastructure services to get the InitializationService instance
+            logger.info("[initialize] Initializing infrastructure services...")
             await self.service_initializer.initialize_infrastructure_services()
+            logger.info("[initialize] Infrastructure services initialized")
 
             # Get the initialization service from service_initializer
             init_manager = self.service_initializer.initialization_service
             if not init_manager:
                 raise RuntimeError("InitializationService not available from ServiceInitializer")
+            logger.info(f"[initialize] Got initialization service: {init_manager}")
 
             # Register all initialization steps with proper phases
+            logger.info("[initialize] Registering initialization steps...")
             self._register_initialization_steps(init_manager)
+            logger.info("[initialize] Steps registered")
 
             # Run the initialization sequence
-            await init_manager.initialize()
+            logger.info("[initialize] Running initialization sequence...")
+            init_result = await init_manager.initialize()
+            logger.info(f"[initialize] Initialization sequence result: {init_result}")
 
             self._initialized = True
             agent_name = self.agent_identity.agent_id if self.agent_identity else "NO_IDENTITY"
             logger.info(f"CIRIS Runtime initialized successfully with identity '{agent_name}'")
 
+        except asyncio.TimeoutError as e:
+            logger.critical(f"Runtime initialization TIMED OUT: {e}", exc_info=True)
+            self._initialized = False
+            raise
         except Exception as e:
             logger.critical(f"Runtime initialization failed: {e}", exc_info=True)
             if "maintenance" in str(e).lower():
                 logger.critical("Database maintenance failure during initialization - system cannot start safely")
+            self._initialized = False
             raise
 
     async def _initialize_identity(self) -> None:

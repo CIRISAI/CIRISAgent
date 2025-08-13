@@ -7,14 +7,37 @@ Uses ONLY existing schemas from the codebase - no new schemas!
 
 import asyncio
 import os
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+# Add extensive logging to debug CI issues
+print(f"[test_ciris_runtime] Starting imports - Python {sys.version}")
+print(f"[test_ciris_runtime] __name__ = {__name__}")
+print(f"[test_ciris_runtime] Current working directory: {os.getcwd()}")
+print(f"[test_ciris_runtime] CIRIS_IMPORT_MODE before import: {os.environ.get('CIRIS_IMPORT_MODE', 'NOT SET')}")
+print(f"[test_ciris_runtime] CIRIS_MOCK_LLM before import: {os.environ.get('CIRIS_MOCK_LLM', 'NOT SET')}")
+
 # Import the SUT
-from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+try:
+    from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+    print(f"[test_ciris_runtime] Successfully imported CIRISRuntime: {CIRISRuntime}")
+    print(f"[test_ciris_runtime] CIRISRuntime type: {type(CIRISRuntime)}")
+    print(f"[test_ciris_runtime] CIRISRuntime module: {CIRISRuntime.__module__}")
+    print(f"[test_ciris_runtime] CIRISRuntime __class__: {CIRISRuntime.__class__}")
+    print(f"[test_ciris_runtime] CIRISRuntime __new__: {CIRISRuntime.__new__}")
+    print(f"[test_ciris_runtime] CIRISRuntime __init__: {CIRISRuntime.__init__}")
+except Exception as e:
+    print(f"[test_ciris_runtime] ERROR importing CIRISRuntime: {e}")
+    print(f"[test_ciris_runtime] Exception type: {type(e)}")
+    import traceback
+
+    traceback.print_exc()
+    raise
 
 # Import EXISTING schemas - no new ones!
 from ciris_engine.schemas.config.essential import (
@@ -29,6 +52,47 @@ from ciris_engine.schemas.config.essential import (
 )
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import ServiceType
+
+
+def _diagnose_ciris_runtime():
+    """Diagnostic function to understand CIRISRuntime state."""
+    print("\n" + "=" * 60)
+    print("[DIAGNOSTIC] Checking CIRISRuntime state")
+    print("=" * 60)
+
+    # Check if we can import it fresh
+    try:
+        import importlib
+        import sys
+
+        # Check if it's already in sys.modules
+        if "ciris_engine.logic.runtime.ciris_runtime" in sys.modules:
+            print(f"[DIAGNOSTIC] Module already in sys.modules")
+            existing = sys.modules["ciris_engine.logic.runtime.ciris_runtime"]
+            print(f"[DIAGNOSTIC] Existing module: {existing}")
+            if hasattr(existing, "CIRISRuntime"):
+                print(f"[DIAGNOSTIC] Existing CIRISRuntime: {existing.CIRISRuntime}")
+                print(f"[DIAGNOSTIC] Is it a type? {isinstance(existing.CIRISRuntime, type)}")
+
+        # Try fresh import
+        print(f"[DIAGNOSTIC] Attempting fresh import...")
+        mod = importlib.import_module("ciris_engine.logic.runtime.ciris_runtime")
+        cls = getattr(mod, "CIRISRuntime")
+        print(f"[DIAGNOSTIC] Fresh CIRISRuntime: {cls}")
+        print(f"[DIAGNOSTIC] Fresh type: {type(cls)}")
+        print(f"[DIAGNOSTIC] Fresh __new__: {cls.__new__}")
+
+        # Compare with what we have
+        print(f"[DIAGNOSTIC] Comparing with test's CIRISRuntime...")
+        print(f"[DIAGNOSTIC] Are they the same? {cls is CIRISRuntime}")
+
+    except Exception as e:
+        print(f"[DIAGNOSTIC] Error during diagnosis: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+    print("=" * 60 + "\n")
 
 
 @pytest.fixture
@@ -94,6 +158,10 @@ def essential_config(temp_dir):
 @pytest.fixture
 def allow_runtime_creation():
     """Allow runtime creation in tests by setting the environment variable."""
+    print(f"[allow_runtime_creation] Starting fixture")
+    print(f"[allow_runtime_creation] CIRIS_IMPORT_MODE before: {os.environ.get('CIRIS_IMPORT_MODE', 'NOT SET')}")
+    print(f"[allow_runtime_creation] CIRIS_MOCK_LLM before: {os.environ.get('CIRIS_MOCK_LLM', 'NOT SET')}")
+
     original_import = os.environ.get("CIRIS_IMPORT_MODE")
     original_mock = os.environ.get("CIRIS_MOCK_LLM")
 
@@ -101,8 +169,14 @@ def allow_runtime_creation():
     os.environ["CIRIS_MOCK_LLM"] = "true"  # Always use mock LLM in tests
     os.environ["OPENAI_API_KEY"] = "test-key"
 
+    print(f"[allow_runtime_creation] CIRIS_IMPORT_MODE after: {os.environ.get('CIRIS_IMPORT_MODE')}")
+    print(f"[allow_runtime_creation] CIRIS_MOCK_LLM after: {os.environ.get('CIRIS_MOCK_LLM')}")
+    print(f"[allow_runtime_creation] CIRISRuntime is: {CIRISRuntime}")
+    print(f"[allow_runtime_creation] CIRISRuntime type: {type(CIRISRuntime)}")
+
     yield
 
+    print(f"[allow_runtime_creation] Cleaning up fixture")
     # Restore original values
     if original_import is not None:
         os.environ["CIRIS_IMPORT_MODE"] = original_import
@@ -123,17 +197,67 @@ class TestCIRISRuntimeCreation:
     @pytest.mark.asyncio
     async def test_create_runtime_with_config(self, essential_config, allow_runtime_creation):
         """Test creating runtime with proper config."""
-        # Create runtime with mock LLM to avoid external dependencies
-        runtime = CIRISRuntime(
-            adapter_types=["cli"],
-            essential_config=essential_config,
-            modules=["mock_llm"],
-        )
+        print(f"[test_create_runtime_with_config] Starting test")
+        print(f"[test_create_runtime_with_config] CIRISRuntime is: {CIRISRuntime}")
+        print(f"[test_create_runtime_with_config] CIRISRuntime type: {type(CIRISRuntime)}")
+        print(f"[test_create_runtime_with_config] CIRISRuntime module: {CIRISRuntime.__module__}")
+        print(f"[test_create_runtime_with_config] CIRISRuntime __new__: {CIRISRuntime.__new__}")
+        print(f"[test_create_runtime_with_config] CIRISRuntime __init__: {CIRISRuntime.__init__}")
+        print(
+            f"[test_create_runtime_with_config] CIRISRuntime __dict__ keys: {list(CIRISRuntime.__dict__.keys())[:10]}"
+        )  # First 10 keys
+        print(f"[test_create_runtime_with_config] Is CIRISRuntime a class? {isinstance(CIRISRuntime, type)}")
+
+        # Check if CIRISRuntime has been replaced or mocked
+        print(f"[test_create_runtime_with_config] Checking for mock attributes...")
+        if hasattr(CIRISRuntime, "_mock_name"):
+            print(f"[test_create_runtime_with_config] WARNING: CIRISRuntime has _mock_name: {CIRISRuntime._mock_name}")
+        if hasattr(CIRISRuntime, "_spec_class"):
+            print(
+                f"[test_create_runtime_with_config] WARNING: CIRISRuntime has _spec_class: {CIRISRuntime._spec_class}"
+            )
+
+        print(f"[test_create_runtime_with_config] Environment check:")
+        print(f"  CIRIS_IMPORT_MODE: {os.environ.get('CIRIS_IMPORT_MODE')}")
+        print(f"  CIRIS_MOCK_LLM: {os.environ.get('CIRIS_MOCK_LLM')}")
+
+        # Try to create runtime with extensive error catching
+        print(f"[test_create_runtime_with_config] About to instantiate CIRISRuntime...")
+        try:
+            runtime = CIRISRuntime(
+                adapter_types=["cli"],
+                essential_config=essential_config,
+                modules=["mock_llm"],
+            )
+            print(f"[test_create_runtime_with_config] Successfully created runtime: {runtime}")
+            print(f"[test_create_runtime_with_config] Runtime type: {type(runtime)}")
+        except TypeError as e:
+            print(f"[test_create_runtime_with_config] TypeError during instantiation: {e}")
+            print(f"[test_create_runtime_with_config] TypeError args: {e.args}")
+            print(f"[test_create_runtime_with_config] Attempting to call CIRISRuntime.__new__ directly...")
+            try:
+                # Try calling __new__ directly to see what happens
+                instance = CIRISRuntime.__new__(CIRISRuntime)
+                print(f"[test_create_runtime_with_config] __new__ succeeded: {instance}")
+            except Exception as new_error:
+                print(f"[test_create_runtime_with_config] __new__ failed: {new_error}")
+
+            # Re-raise to fail the test
+            raise
+        except Exception as e:
+            print(f"[test_create_runtime_with_config] Unexpected error: {e}")
+            print(f"[test_create_runtime_with_config] Error type: {type(e)}")
+            import traceback
+
+            traceback.print_exc()
+            raise
 
         assert runtime.essential_config == essential_config
         assert runtime.startup_channel_id == ""
         assert len(runtime.adapters) == 1
         assert runtime._initialized is False
+
+        print(f"[test_create_runtime_with_config] Test completed successfully")
 
         # Runtime is created successfully - no cleanup needed for this test
 

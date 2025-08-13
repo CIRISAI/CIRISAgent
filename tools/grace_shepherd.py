@@ -341,14 +341,11 @@ def status():
         last_check_str = state_file.read_text().strip()
         shepherd.last_check = datetime.fromisoformat(last_check_str)
 
-    if not shepherd.enforce_wait():
-        return
+    # Always check status first
+    status = shepherd.check_ci_status()
 
     # Save check time
     state_file.write_text(datetime.now().isoformat())
-
-    # Actually check status
-    status = shepherd.check_ci_status()
 
     click.clear()
     click.secho("🌟 Grace CI Shepherd - Status Check", fg="cyan", bold=True)
@@ -389,7 +386,18 @@ def status():
         click.echo(f"Duration: {status['elapsed']}")
 
     click.echo("\n" + "=" * 60)
-    click.secho("Remember: Don't check again for 10 minutes!", fg="yellow")
+
+    # Show timing reminder if checking too frequently
+    if shepherd.last_check:
+        elapsed = (datetime.now() - shepherd.last_check).total_seconds() / 60
+        if elapsed < 10:
+            remaining = 10 - int(elapsed)
+            click.secho(
+                f"⚠️  You checked {int(elapsed)} minutes ago - wait {remaining} more minutes next time", fg="yellow"
+            )
+            click.echo("(But I'm showing you the status anyway because you asked nicely)")
+        else:
+            click.secho("Remember: Don't check again for 10 minutes!", fg="yellow")
 
 
 @cli.command()

@@ -26,7 +26,7 @@ async def runtime():
 
 
 @pytest_asyncio.fixture
-async def real_runtime():
+async def real_runtime_with_mock():
     """Provide a real CIRISRuntime instance with environment properly configured.
 
     This fixture is for tests that need an actual runtime instance, not a mock.

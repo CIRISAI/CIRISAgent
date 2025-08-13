@@ -66,29 +66,34 @@ def app():
     app.state.tool_service = AsyncMock()
     app.state.time_service = AsyncMock()
     app.state.task_scheduler = AsyncMock()
+    app.state.task_scheduler.get_current_task = AsyncMock(return_value=None)  # Return None by default, not AsyncMock
     app.state.resource_monitor = AsyncMock()
-    app.state.service_registry = AsyncMock()
+    app.state.service_registry = MagicMock()  # Use MagicMock since get_services_by_type is called synchronously
+    app.state.service_registry.get_services_by_type = MagicMock(return_value=[])  # Return empty list by default
     app.state.runtime = AsyncMock()
     app.state.on_message = AsyncMock()
     app.state.api_config = MagicMock(interaction_timeout=5.0)
 
     # Mock runtime properties
     app.state.runtime.state_manager = MagicMock(current_state="WORK")
-    app.state.runtime.agent_identity = MagicMock(
-        agent_id="test_agent",
-        name="TestAgent",
-        core_profile=MagicMock(description="Test Agent. A helpful assistant."),
-        identity_metadata=MagicMock(
-            created_at=datetime.now(timezone.utc),
-            model="test-model",
-            version="1.0",
-            parent_id=None,
-            creation_context="test",
-            adaptations=[],
-        ),
+    identity_mock = MagicMock()
+    identity_mock.agent_id = "test_agent"
+    identity_mock.name = "Test Agent"  # Explicitly set as string, not MagicMock
+    identity_mock.purpose = "Test Agent. A helpful assistant."  # Add purpose attribute
+    core_profile_mock = MagicMock()
+    core_profile_mock.description = "Test Agent. A helpful assistant."  # Explicitly set as string
+    identity_mock.core_profile = core_profile_mock
+    identity_mock.identity_metadata = MagicMock(
+        created_at=datetime.now(timezone.utc),
+        model="test-model",
+        version="1.0",
+        parent_id=None,
+        creation_context="test",
+        adaptations=[],
     )
+    app.state.runtime.agent_identity = identity_mock
     app.state.runtime.adapters = []
-    app.state.runtime.service_registry = AsyncMock()
+    app.state.runtime.service_registry = MagicMock()  # Use MagicMock for consistency
 
     # Mock time service
     app.state.time_service._start_time = datetime.now(timezone.utc) - timedelta(seconds=3600)
@@ -443,18 +448,24 @@ class TestStatusEndpoint:
         app.dependency_overrides[require_observer] = lambda: auth_context_observer
 
         try:
-            # Mock the persistence module's get_tasks_by_status function
-            with patch("ciris_engine.logic.persistence.get_tasks_by_status", return_value=[]):
-                # Mock the service registry's get_services_by_type to be synchronous
-                app.state.service_registry.get_services_by_type = MagicMock(return_value=[])
+            # Patch the helper functions directly in the agent module
+            with patch("ciris_engine.logic.adapters.api.routes.agent._count_wakeup_tasks", return_value=5):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.agent._count_active_services", return_value=(12, {})
+                ):
+                    # Mock the service registry's get_services_by_type to be synchronous
+                    app.state.service_registry.get_services_by_type = MagicMock(return_value=[])
 
-                transport = ASGITransport(app=app)
-                async with AsyncClient(transport=transport, base_url="http://test") as client:
-                    response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
+                    transport = ASGITransport(app=app)
+                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                        response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
 
         finally:
             app.dependency_overrides.clear()
 
+        if response.status_code != 200:
+            print(f"ERROR in test_status_success: Status {response.status_code}")
+            print(f"Response body: {response.text}")
         assert response.status_code == 200
         data = response.json()
         assert "data" in data  # Response structure check
@@ -495,14 +506,17 @@ class TestStatusEndpoint:
         app.dependency_overrides[require_observer] = lambda: auth_context_observer
 
         try:
-            # Mock the persistence module to avoid database access
-            with patch("ciris_engine.logic.persistence.get_tasks_by_status", return_value=[]):
-                # Mock the service registry's get_services_by_type to be synchronous
-                app.state.service_registry.get_services_by_type = MagicMock(return_value=[])
+            # Patch the helper functions directly in the agent module
+            with patch("ciris_engine.logic.adapters.api.routes.agent._count_wakeup_tasks", return_value=5):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.agent._count_active_services", return_value=(12, {})
+                ):
+                    # Mock the service registry's get_services_by_type to be synchronous
+                    app.state.service_registry.get_services_by_type = MagicMock(return_value=[])
 
-                transport = ASGITransport(app=app)
-                async with AsyncClient(transport=transport, base_url="http://test") as client:
-                    response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
+                    transport = ASGITransport(app=app)
+                    async with AsyncClient(transport=transport, base_url="http://test") as client:
+                        response = await client.get("/agent/status", headers={"Authorization": "Bearer test_token"})
 
         finally:
             app.dependency_overrides.clear()
@@ -551,6 +565,9 @@ class TestIdentityEndpoint:
         finally:
             app.dependency_overrides.clear()
 
+        if response.status_code != 200:
+            print(f"ERROR in test_identity_from_memory: Status {response.status_code}")
+            print(f"Response body: {response.text}")
         assert response.status_code == 200
         data = response.json()
         assert "data" in data  # Response structure check
@@ -579,6 +596,9 @@ class TestIdentityEndpoint:
         finally:
             app.dependency_overrides.clear()
 
+        if response.status_code != 200:
+            print(f"ERROR in test_identity_fallback_to_runtime: Status {response.status_code}")
+            print(f"Response body: {response.text}")
         assert response.status_code == 200
         data = response.json()
         assert "data" in data  # Response structure check

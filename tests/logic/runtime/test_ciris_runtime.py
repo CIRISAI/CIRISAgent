@@ -139,19 +139,26 @@ class TestCIRISRuntimeCreation:
 
     def test_create_runtime_without_import_mode_fails(self, essential_config):
         """Test that runtime creation fails without proper environment."""
-        # Set import mode to prevent runtime creation
-        os.environ["CIRIS_IMPORT_MODE"] = "true"
+        # Save original value
+        original = os.environ.get("CIRIS_IMPORT_MODE")
 
-        with pytest.raises(RuntimeError) as exc_info:
-            CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-            )
+        try:
+            # Set import mode to prevent runtime creation
+            os.environ["CIRIS_IMPORT_MODE"] = "true"
 
-        assert "Cannot create CIRISRuntime during module imports" in str(exc_info.value)
+            with pytest.raises(RuntimeError) as exc_info:
+                CIRISRuntime(
+                    adapter_types=["cli"],
+                    essential_config=essential_config,
+                )
 
-        # Clean up
-        os.environ.pop("CIRIS_IMPORT_MODE", None)
+            assert "Cannot create CIRISRuntime during module imports" in str(exc_info.value)
+        finally:
+            # Restore original value
+            if original is not None:
+                os.environ["CIRIS_IMPORT_MODE"] = original
+            else:
+                os.environ.pop("CIRIS_IMPORT_MODE", None)
 
     @pytest.mark.asyncio
     async def test_create_runtime_with_mock_llm(self, essential_config, allow_runtime_creation):

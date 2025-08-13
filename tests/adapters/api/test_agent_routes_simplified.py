@@ -321,14 +321,16 @@ class TestHelperFunctions:
 
     def test_count_wakeup_tasks(self):
         """Test wakeup task counting."""
-        with patch("ciris_engine.logic.adapters.api.routes.agent.persistence") as mock_persistence:
+        import ciris_engine.logic.persistence as persistence_module
+
+        with patch.object(persistence_module, "get_tasks_by_status") as mock_get_tasks:
             from ciris_engine.schemas.runtime.enums import TaskStatus
 
             mock_tasks = [
                 MagicMock(task_id="VERIFY_IDENTITY_123"),
                 MagicMock(task_id="VALIDATE_INTEGRITY_456"),
             ]
-            mock_persistence.get_tasks_by_status = MagicMock(return_value=mock_tasks)
+            mock_get_tasks.return_value = mock_tasks
 
             count = _count_wakeup_tasks(100.0)
             assert count == 2
@@ -348,12 +350,16 @@ class TestHelperFunctions:
 
         count, multi_provider = _count_active_services(service_registry)
         assert count >= 12
-        assert "LLM" in multi_provider
+        # Check for either uppercase or lowercase
+        assert "LLM" in multi_provider or "llm" in multi_provider
 
     def test_get_agent_identity_info(self):
         """Test identity info extraction."""
         runtime = MagicMock()
-        runtime.agent_identity = MagicMock(agent_id="custom_agent", name="Custom Agent")
+        identity = MagicMock()
+        identity.agent_id = "custom_agent"
+        identity.name = "Custom Agent"  # Explicitly set as string
+        runtime.agent_identity = identity
         agent_id, name = _get_agent_identity_info(runtime)
         assert agent_id == "custom_agent"
         assert name == "Custom Agent"

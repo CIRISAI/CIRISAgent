@@ -472,7 +472,12 @@ class CIRISRuntime:
         # Now setup proper file logging with TimeService
         from ciris_engine.logic.utils.logging_config import setup_basic_logging
 
-        if self.service_initializer.time_service:
+        logger.info(f"[_initialize_infrastructure] service_initializer: {self.service_initializer}")
+        logger.info(
+            f"[_initialize_infrastructure] time_service: {self.service_initializer.time_service if self.service_initializer else 'NO SERVICE INITIALIZER'}"
+        )
+
+        if self.service_initializer and self.service_initializer.time_service:
             # Check if we're in CLI interactive mode
             is_cli_interactive = False
             for adapter in self.adapters:
@@ -489,12 +494,19 @@ class CIRISRuntime:
             console_output = not is_cli_interactive
 
             logger.info("Setting up file logging with TimeService")
-            setup_basic_logging(
-                level=logging.DEBUG if logger.isEnabledFor(logging.DEBUG) else logging.INFO,
-                log_to_file=True,
-                console_output=console_output,
-                time_service=self.service_initializer.time_service,
-            )
+            try:
+                setup_basic_logging(
+                    level=logging.DEBUG if logger.isEnabledFor(logging.DEBUG) else logging.INFO,
+                    log_to_file=True,
+                    console_output=console_output,
+                    time_service=self.service_initializer.time_service,
+                )
+                logger.info("[_initialize_infrastructure] File logging setup complete")
+            except Exception as e:
+                logger.error(f"[_initialize_infrastructure] Failed to setup file logging: {e}", exc_info=True)
+                raise
+        else:
+            logger.warning("[_initialize_infrastructure] Skipping file logging setup - no TimeService available")
 
     async def _verify_infrastructure(self) -> bool:
         """Verify infrastructure services are operational."""

@@ -30,11 +30,35 @@ from ciris_engine.logic.config import get_sqlite_db_full_path
 
 
 def generate_secure_password(length: int = 16) -> str:
-    """Generate a cryptographically secure random password."""
-    # Use a mix of letters, digits, and special characters
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*-_+=[]{}|;:,.<>?"
-    password = "".join(secrets.choice(alphabet) for _ in range(length))
-    return password
+    """Generate a cryptographically secure random password.
+
+    Ensures the password contains at least one letter, one digit,
+    and one special character for security requirements.
+    """
+    if length < 3:
+        raise ValueError("Password length must be at least 3 characters")
+
+    # Character sets
+    letters = string.ascii_letters
+    digits = string.digits
+    special = "!@#$%^&*-_+=[]{}|;:,.<>?"
+    all_chars = letters + digits + special
+
+    # Ensure at least one of each type
+    password = [
+        secrets.choice(letters),
+        secrets.choice(digits),
+        secrets.choice(special),
+    ]
+
+    # Fill the rest randomly from all characters
+    for _ in range(length - 3):
+        password.append(secrets.choice(all_chars))
+
+    # Shuffle to avoid predictable patterns
+    secrets.SystemRandom().shuffle(password)
+
+    return "".join(password)
 
 
 def hash_password(password: str) -> str:

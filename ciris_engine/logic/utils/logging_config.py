@@ -37,6 +37,9 @@ def setup_basic_logging(
         console_output: Whether to also output to console (default: False for clean log-file-only operation)
         enable_dead_letter: Whether to enable dead letter queue for WARNING/ERROR messages
     """
+    print(
+        f"[setup_basic_logging] ENTERING FUNCTION with time_service={time_service}, log_to_file={log_to_file}, enable_incident_capture={enable_incident_capture}"
+    )
 
     from ciris_engine.logic.config.env_utils import get_env_var
 
@@ -63,17 +66,22 @@ def setup_basic_logging(
         target_logger.addHandler(console_handler)
 
     if log_to_file:
+        print(f"[setup_basic_logging] log_to_file=True, creating log directory: {log_dir}")
         log_path = Path(log_dir)
         log_path.mkdir(exist_ok=True)
+        print(f"[setup_basic_logging] log_path created: {log_path}")
 
         if not time_service:
             raise RuntimeError("CRITICAL: TimeService is required for logging setup")
+        print(f"[setup_basic_logging] Getting timestamp from time_service")
         timestamp = time_service.now().strftime("%Y%m%d_%H%M%S")
         log_filename = log_path / f"ciris_agent_{timestamp}.log"
+        print(f"[setup_basic_logging] Creating log file: {log_filename}")
 
         file_handler = logging.FileHandler(log_filename, encoding="utf-8")
         file_handler.setFormatter(formatter)
         target_logger.addHandler(file_handler)
+        print(f"[setup_basic_logging] File handler added to logger")
 
         latest_link = log_path / "latest.log"
         if latest_link.exists():
@@ -96,21 +104,28 @@ def setup_basic_logging(
 
     # Add incident capture handler if enabled
     if enable_incident_capture:
+        print(f"[setup_basic_logging] About to import incident_capture_handler")
         from ciris_engine.logic.utils.incident_capture_handler import add_incident_capture_handler
+
+        print(f"[setup_basic_logging] Imported incident_capture_handler successfully")
 
         # Note: Graph audit service will be set later if available
         # Cannot use async service lookup in sync function
 
+        print(f"[setup_basic_logging] About to call add_incident_capture_handler with time_service={time_service}")
         _incident_handler = add_incident_capture_handler(
             target_logger,
             log_dir=log_dir,
             time_service=time_service,
             graph_audit_service=None,  # Will be set later by runtime
         )
+        print(f"[setup_basic_logging] add_incident_capture_handler returned: {_incident_handler}")
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
+
+    print(f"[setup_basic_logging] EXITING FUNCTION SUCCESSFULLY")
 
     log_msg = f"Logging configured. Level: {logging.getLevelName(level)}"
     if log_to_file:

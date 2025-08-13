@@ -43,6 +43,12 @@ class CIRISRuntime:
     Implements the RuntimeInterface protocol.
     """
 
+    def __new__(cls, *args, **kwargs):
+        """Custom __new__ to handle CI environment issues."""
+        # This fixes a pytest/CI issue where object.__new__ gets called incorrectly
+        instance = object.__new__(cls)
+        return instance
+
     def __init__(
         self,
         adapter_types: List[str],

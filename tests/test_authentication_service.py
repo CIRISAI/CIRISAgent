@@ -175,9 +175,11 @@ class TestAuthenticationServiceUnit:
             auth_service._decrypt_secret(b"too short")
 
         # Invalid tag (corrupted data)
+        from cryptography.exceptions import InvalidTag
+
         encrypted = auth_service._encrypt_secret(b"test")
         corrupted = encrypted[:-1] + b"X"  # Corrupt last byte
-        with pytest.raises(Exception):  # Cryptography will raise an exception
+        with pytest.raises(InvalidTag):  # Cryptography raises InvalidTag for corrupted data
             auth_service._decrypt_secret(corrupted)
 
     def test_gateway_secret_persistence(self, temp_db, time_service, temp_dir):

@@ -344,6 +344,9 @@ class CIRISRuntime:
             init_result = await init_manager.initialize()
             logger.info(f"[initialize] Initialization sequence result: {init_result}")
 
+            if not init_result:
+                raise RuntimeError("Initialization sequence failed - check logs for details")
+
             self._initialized = True
             agent_name = self.agent_identity.agent_id if self.agent_identity else "NO_IDENTITY"
             logger.info(f"CIRIS Runtime initialized successfully with identity '{agent_name}'")

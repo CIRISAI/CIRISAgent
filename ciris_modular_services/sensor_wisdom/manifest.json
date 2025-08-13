@@ -1,0 +1,101 @@
+{
+  "module": {
+    "name": "sensor_wisdom",
+    "version": "1.0.0",
+    "description": "IoT sensor wisdom provider for Home Assistant integration",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [{
+    "type": "WISE_AUTHORITY",
+    "priority": "NORMAL",
+    "class": "sensor_wisdom.service.SensorWisdomAdapter",
+    "capabilities": [
+      "get_guidance",
+      "fetch_guidance",
+      "modality:sensor:environmental",
+      "modality:sensor:motion",
+      "modality:sensor:temperature",
+      "modality:sensor:humidity",
+      "modality:sensor:air_quality",
+      "modality:sensor:energy",
+      "domain:home_automation"
+    ]
+  }],
+  "capabilities": [
+    "get_guidance",
+    "fetch_guidance",
+    "modality:sensor:environmental",
+    "modality:sensor:motion",
+    "modality:sensor:temperature",
+    "modality:sensor:humidity",
+    "modality:sensor:air_quality",
+    "modality:sensor:energy",
+    "domain:home_automation"
+  ],
+  "prohibited_sensors": [
+    "heart_rate",
+    "blood_pressure",
+    "blood_glucose",
+    "blood_oxygen",
+    "body_temperature",
+    "weight",
+    "bmi",
+    "spo2",
+    "ecg",
+    "pulse",
+    "medical",
+    "health",
+    "patient",
+    "vital"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.WiseAuthorityService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.authority_core"
+    ],
+    "external": {
+      "aiohttp": ">=3.8.0"
+    }
+  },
+  "exports": {
+    "service_class": "sensor_wisdom.service.SensorWisdomAdapter",
+    "capabilities": [
+      "modality:sensor:environmental",
+      "modality:sensor:motion",
+      "modality:sensor:temperature",
+      "modality:sensor:humidity",
+      "modality:sensor:air_quality",
+      "modality:sensor:energy",
+      "domain:home_automation"
+    ]
+  },
+  "configuration": {
+    "homeassistant_url": {
+      "type": "string",
+      "env": "CIRIS_HOMEASSISTANT_URL",
+      "default": "http://homeassistant.local:8123",
+      "description": "Home Assistant instance URL"
+    },
+    "homeassistant_token": {
+      "type": "string",
+      "env": "CIRIS_HOMEASSISTANT_TOKEN",
+      "default": null,
+      "description": "Home Assistant Long-Lived Access Token (required)"
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "default": 30,
+      "description": "Entity cache time-to-live in seconds"
+    }
+  },
+  "metadata": {
+    "api": "Home Assistant",
+    "requires_api_key": true,
+    "safe_domain": "home_automation",
+    "prohibited": ["medical", "health", "clinical", "patient", "vital"],
+    "critical_note": "Actively filters out medical sensors"
+  }
+}

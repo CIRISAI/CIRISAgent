@@ -257,6 +257,36 @@ class GuidanceRequest(BaseModel):
     recommendation: Optional[str] = None
     urgency: str = Field(default="normal", pattern="^(low|normal|high|critical)$")
 
+    # NEW: Optional capability fields for wisdom extension system
+    capability: Optional[str] = Field(
+        default=None, description="Domain capability tag (e.g., 'domain:navigation', 'modality:audio')"
+    )
+    provider_type: Optional[str] = Field(
+        default=None, description="Provider family hint (audio|geo|sensor|policy|vision)"
+    )
+    inputs: Optional[Dict[str, str]] = Field(default=None, description="Structured inputs for non-text modalities")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class WisdomAdvice(BaseModel):
+    """Capability-tagged advice from a wisdom provider."""
+
+    capability: str = Field(..., description="Domain capability (e.g., 'domain:navigation')")
+    provider_type: Optional[str] = None
+    provider_name: Optional[str] = None
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    risk: Optional[str] = None
+    explanation: Optional[str] = None
+    data: Optional[Dict[str, str]] = None
+
+    # CRITICAL: Liability management
+    disclaimer: str = Field(
+        default="This is informational only, not professional advice",
+        description="Required disclaimer for capability domain",
+    )
+    requires_professional: bool = Field(default=False, description="True if domain requires licensed professional")
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -268,6 +298,9 @@ class GuidanceResponse(BaseModel):
     reasoning: str
     wa_id: str
     signature: str
+
+    # NEW: Aggregated advice from multiple providers
+    advice: Optional[List[WisdomAdvice]] = Field(default=None, description="Per-provider capability-tagged advice")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -318,6 +351,7 @@ __all__ = [
     "DeferralResponse",
     "GuidanceRequest",
     "GuidanceResponse",
+    "WisdomAdvice",
     "DeferralApprovalContext",
     "WAPermission",
 ]

@@ -1,0 +1,66 @@
+{
+  "module": {
+    "name": "geo_wisdom",
+    "version": "1.0.0",
+    "description": "Geographic wisdom provider using OpenStreetMap for navigation guidance",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [{
+    "type": "WISE_AUTHORITY",
+    "priority": "NORMAL",
+    "class": "geo_wisdom.service.GeoWisdomAdapter",
+    "capabilities": [
+      "get_guidance",
+      "fetch_guidance",
+      "domain:navigation",
+      "modality:geo:route",
+      "modality:geo:geocode"
+    ]
+  }],
+  "capabilities": [
+    "get_guidance",
+    "fetch_guidance",
+    "domain:navigation",
+    "modality:geo:route",
+    "modality:geo:geocode"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.WiseAuthorityService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.authority_core"
+    ],
+    "external": {
+      "aiohttp": ">=3.8.0"
+    }
+  },
+  "exports": {
+    "service_class": "geo_wisdom.service.GeoWisdomAdapter",
+    "capabilities": [
+      "domain:navigation",
+      "modality:geo:route",
+      "modality:geo:geocode"
+    ]
+  },
+  "configuration": {
+    "osm_user_agent": {
+      "type": "string",
+      "env": "CIRIS_OSM_USER_AGENT",
+      "default": "CIRIS/1.0 (contact@ciris.ai)",
+      "description": "User agent for OpenStreetMap API (required by OSM policy)"
+    },
+    "rate_limit_seconds": {
+      "type": "float",
+      "default": 1.0,
+      "description": "Minimum seconds between OSM API requests"
+    }
+  },
+  "metadata": {
+    "api": "OpenStreetMap Nominatim + OSRM",
+    "requires_api_key": false,
+    "safe_domain": "navigation",
+    "prohibited": ["medical", "health", "clinical"]
+  }
+}

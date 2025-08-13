@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 155,
-    "files_affected": 74,
+    "occurrences": 163,
+    "files_affected": 77,
     "categories": {
-      "generic_data": 136,
+      "generic_data": 144,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -449,6 +449,70 @@
         "class": "WiseAuthorityResource",
         "function": "modify_deferral",
         "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/sensor_wisdom/service.py",
+        "line": 165,
+        "class": "SensorWisdomAdapter",
+        "function": "_get_sensor_data",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/sensor_wisdom/service.py",
+        "line": 221,
+        "class": "SensorWisdomAdapter",
+        "function": "_analyze_environment",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/geo_wisdom/service.py",
+        "line": 72,
+        "class": "GeoWisdomAdapter",
+        "function": "_geocode",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/geo_wisdom/service.py",
+        "line": 104,
+        "class": "GeoWisdomAdapter",
+        "function": "_get_route",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/weather_wisdom/service.py",
+        "line": 74,
+        "class": "WeatherWisdomAdapter",
+        "function": "_get_grid_point",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/weather_wisdom/service.py",
+        "line": 105,
+        "class": "WeatherWisdomAdapter",
+        "function": "_get_noaa_forecast",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/weather_wisdom/service.py",
+        "line": 135,
+        "class": "WeatherWisdomAdapter",
+        "function": "_get_noaa_alerts",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_modular_services/weather_wisdom/service.py",
+        "line": 165,
+        "class": "WeatherWisdomAdapter",
+        "function": "_get_owm_weather",
+        "context": "other",
         "usage_hint": "generic_data"
       },
       {
@@ -2592,7 +2656,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 321,
-    "files_affected": 108
+    "occurrences": 329,
+    "files_affected": 111
   }
 }

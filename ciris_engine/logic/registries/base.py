@@ -339,6 +339,44 @@ class ServiceRegistry:
 
         return False
 
+    async def get_services(
+        self,
+        service_type: ServiceType,
+        required_capabilities: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+    ) -> List[Any]:
+        """
+        Return multiple healthy providers matching capabilities.
+
+        Args:
+            service_type: Type of service to retrieve
+            required_capabilities: Optional list of required capabilities
+            limit: Maximum number of services to return
+
+        Returns:
+            List of service instances matching criteria
+        """
+        providers = self._services.get(service_type, [])
+        results = []
+
+        for p in sorted(providers, key=lambda x: (x.priority_group, x.priority.value)):
+            # Check if provider is healthy
+            if p.circuit_breaker and not p.circuit_breaker.is_available():
+                continue
+
+            # Check capabilities if specified
+            if required_capabilities:
+                if not p.capabilities:
+                    continue
+                if not all(cap in p.capabilities for cap in required_capabilities):
+                    continue
+
+            results.append(p.instance)
+            if limit and len(results) >= limit:
+                break
+
+        return results
+
     def get_services_by_type(self, service_type: Union[str, ServiceType]) -> List[Any]:
         """
         Get ALL services of a given type (for broadcasting/aggregation).

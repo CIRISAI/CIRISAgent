@@ -108,3 +108,6 @@ Modular services are loaded at runtime when:
 ## Examples
 
 - `mock_llm/` - Mock LLM for testing (first modular service)
+- `geo_wisdom/` - Geographic navigation via OpenStreetMap (safe domain)
+- `weather_wisdom/` - Weather advisories via NOAA API (safe domain)
+- `sensor_wisdom/` - IoT sensor interpretation via Home Assistant (safe domain, filters medical sensors)

@@ -504,17 +504,14 @@ class CIRISRuntime:
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     await loop.run_in_executor(
                         executor,
-                        setup_basic_logging,
-                        logging.DEBUG if logger.isEnabledFor(logging.DEBUG) else logging.INFO,  # level
-                        None,  # log_format (use default)
-                        None,  # date_format (use default)
-                        None,  # logger_instance (use root)
-                        None,  # prefix
-                        True,  # log_to_file
-                        "logs",  # log_dir
-                        console_output,  # console_output
-                        True,  # enable_incident_capture
-                        self.service_initializer.time_service,  # time_service
+                        lambda: setup_basic_logging(
+                            level=logging.DEBUG if logger.isEnabledFor(logging.DEBUG) else logging.INFO,
+                            log_to_file=True,
+                            log_dir="logs",
+                            console_output=console_output,
+                            enable_incident_capture=True,
+                            time_service=self.service_initializer.time_service,
+                        ),
                     )
                 logger.info("[_initialize_infrastructure] File logging setup complete")
             except Exception as e:

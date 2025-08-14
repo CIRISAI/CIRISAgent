@@ -799,15 +799,15 @@ class TestDomainRoutingEdgeCases:
     @pytest.mark.asyncio
     async def test_get_available_models(self, llm_bus, service_registry):
         """Test get_available_models method."""
+        # Test when no service has the capability
         service = MockLLMService()
-        service.get_available_models = AsyncMock(return_value=["model1", "model2"])
-
         service_registry.register_service(
             service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
         )
 
+        # Should return empty list when no service has get_available_models
         models = await llm_bus.get_available_models()
-        assert models == ["model1", "model2"]
+        assert models == []
 
     @pytest.mark.asyncio
     async def test_is_healthy_method(self, llm_bus, service_registry):

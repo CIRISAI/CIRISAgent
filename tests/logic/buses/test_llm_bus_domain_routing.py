@@ -484,6 +484,121 @@ class TestDomainAwareLLMRouting:
         assert medical_backup.call_count == 1
         assert usage.model_used == "biogpt"
 
+    @pytest.mark.asyncio
+    async def test_no_services_available_error(self, llm_bus, service_registry):
+        """Test error when no services are available."""
+        # Don't register any services
+
+        with pytest.raises(RuntimeError, match="No LLM services available"):
+            await llm_bus.call_llm_structured(
+                messages=[{"role": "user", "content": "test"}], response_model=TestResponse, handler_name="test_handler"
+            )
+
+    @pytest.mark.asyncio
+    async def test_telemetry_recording(self, llm_bus, service_registry, telemetry_service):
+        """Test that telemetry is properly recorded for domain routing."""
+        # Register a service
+        service = MockLLMService(domain="medical", model="test-model")
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=service,
+            priority=Priority.NORMAL,
+            metadata={"domain": "medical", "model": "test-model"},
+        )
+
+        # Make a call
+        await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=TestResponse, domain="medical"
+        )
+
+        # Verify telemetry was called
+        assert telemetry_service.record_metric.called
+
+    @pytest.mark.asyncio
+    async def test_get_stats(self, llm_bus, service_registry):
+        """Test getting bus statistics."""
+        # Register and use a service
+        service = MockLLMService()
+        service_registry.register_service(
+            service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+        )
+
+        await llm_bus.call_llm_structured(messages=[{"role": "user", "content": "test"}], response_model=TestResponse)
+
+        stats = llm_bus.get_stats()
+        assert "service_stats" in stats
+        assert "distribution_strategy" in stats
+
+    @pytest.mark.asyncio
+    async def test_clear_circuit_breakers(self, llm_bus):
+        """Test clearing circuit breakers."""
+        # This should not fail even with no circuit breakers
+        llm_bus.clear_circuit_breakers()
+        assert len(llm_bus.circuit_breakers) == 0
+
+    @pytest.mark.asyncio
+    async def test_random_distribution_strategy(self, service_registry):
+        """Test random distribution strategy."""
+        from datetime import datetime
+
+        from ciris_engine.logic.buses.llm_bus import DistributionStrategy
+
+        time_service = MagicMock(spec=TimeServiceProtocol)
+        time_service.now.return_value = datetime.now()
+        time_service.timestamp.return_value = 1234567890.0
+
+        llm_bus = LLMBus(
+            service_registry=service_registry,
+            time_service=time_service,
+            distribution_strategy=DistributionStrategy.RANDOM,
+        )
+
+        # Register multiple services
+        services = [MockLLMService(model=f"model-{i}") for i in range(3)]
+        for service in services:
+            service_registry.register_service(
+                service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+            )
+
+        # Make multiple calls
+        for _ in range(5):
+            await llm_bus.call_llm_structured(
+                messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+            )
+
+        # At least one service should have been called
+        assert any(s.call_count > 0 for s in services)
+
+    @pytest.mark.asyncio
+    async def test_least_loaded_distribution_strategy(self, service_registry):
+        """Test least loaded distribution strategy."""
+        from datetime import datetime
+
+        from ciris_engine.logic.buses.llm_bus import DistributionStrategy
+
+        time_service = MagicMock(spec=TimeServiceProtocol)
+        time_service.now.return_value = datetime.now()
+        time_service.timestamp.return_value = 1234567890.0
+
+        llm_bus = LLMBus(
+            service_registry=service_registry,
+            time_service=time_service,
+            distribution_strategy=DistributionStrategy.LEAST_LOADED,
+        )
+
+        # Register multiple services
+        services = [MockLLMService(model=f"model-{i}") for i in range(2)]
+        for service in services:
+            service_registry.register_service(
+                service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+            )
+
+        # Make calls
+        await llm_bus.call_llm_structured(messages=[{"role": "user", "content": "test"}], response_model=TestResponse)
+
+        # Should use least loaded
+        assert services[0].call_count == 1 or services[1].call_count == 1
+
 
 class TestDomainRoutingIntegration:
     """Integration tests for domain routing with real-world scenarios."""
@@ -580,6 +695,146 @@ class TestDomainRoutingIntegration:
         assert legal_llm.call_count == 1
         assert usage.model_used == "legal-bert-large"
         assert "legal" in response.answer.lower()
+
+
+class TestDomainRoutingEdgeCases:
+    """Test edge cases and error conditions for domain routing."""
+
+    @pytest.fixture
+    def service_registry(self):
+        """Create mock service registry."""
+        return ServiceRegistry()
+
+    @pytest.fixture
+    def llm_bus(self, service_registry):
+        """Create LLMBus instance."""
+        from datetime import datetime
+
+        time_service = MagicMock(spec=TimeServiceProtocol)
+        time_service.now.return_value = datetime.now()
+        time_service.timestamp.return_value = 1234567890.0
+
+        return LLMBus(
+            service_registry=service_registry,
+            time_service=time_service,
+            telemetry_service=AsyncMock(spec=TelemetryServiceProtocol),
+        )
+
+    @pytest.mark.asyncio
+    async def test_service_without_metadata(self, llm_bus, service_registry):
+        """Test handling of services without metadata."""
+        service = MockLLMService()
+        # Register without metadata
+        service_registry.register_service(service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL)
+
+        # Should still work (defaults to general domain)
+        response, usage = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+        )
+        assert service.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_all_services_fail(self, llm_bus, service_registry):
+        """Test when all services fail."""
+        # Register multiple failing services
+        for i in range(3):
+            service = MockLLMService(model=f"failing-{i}")
+            service.call_llm_structured = AsyncMock(side_effect=Exception(f"Service {i} failed"))
+            service_registry.register_service(
+                service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+            )
+
+        with pytest.raises(RuntimeError, match="All LLM services failed"):
+            await llm_bus.call_llm_structured(
+                messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+            )
+
+    @pytest.mark.asyncio
+    async def test_service_health_check_failure(self, llm_bus, service_registry):
+        """Test when service health check fails."""
+        service = MockLLMService()
+        service.is_healthy_flag = False
+
+        service_registry.register_service(
+            service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+        )
+
+        with pytest.raises(RuntimeError, match="No LLM services available"):
+            await llm_bus.call_llm_structured(
+                messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+            )
+
+    @pytest.mark.asyncio
+    async def test_empty_domain_string(self, llm_bus, service_registry):
+        """Test handling of empty domain string."""
+        service = MockLLMService()
+        service_registry.register_service(
+            service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+        )
+
+        # Empty domain should work like no domain
+        response, usage = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=TestResponse, domain=""
+        )
+        assert service.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_domain_with_special_characters(self, llm_bus, service_registry):
+        """Test domain names with special characters."""
+        service = MockLLMService(domain="domain-with-dashes_and_underscores")
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=service,
+            priority=Priority.NORMAL,
+            metadata={"domain": "domain-with-dashes_and_underscores"},
+        )
+
+        response, usage = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}],
+            response_model=TestResponse,
+            domain="domain-with-dashes_and_underscores",
+        )
+        assert service.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_get_available_models(self, llm_bus, service_registry):
+        """Test get_available_models method."""
+        service = MockLLMService()
+        service.get_available_models = AsyncMock(return_value=["model1", "model2"])
+
+        service_registry.register_service(
+            service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+        )
+
+        models = await llm_bus.get_available_models()
+        assert models == ["model1", "model2"]
+
+    @pytest.mark.asyncio
+    async def test_is_healthy_method(self, llm_bus, service_registry):
+        """Test is_healthy bus method."""
+        service = MockLLMService()
+        service_registry.register_service(
+            service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+        )
+
+        is_healthy = await llm_bus.is_healthy()
+        assert is_healthy is True
+
+        # Test with unhealthy service
+        service.is_healthy_flag = False
+        is_healthy = await llm_bus.is_healthy()
+        assert is_healthy is False
+
+    @pytest.mark.asyncio
+    async def test_get_capabilities_method(self, llm_bus, service_registry):
+        """Test get_capabilities bus method."""
+        service = MockLLMService()
+        service_registry.register_service(
+            service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
+        )
+
+        capabilities = await llm_bus.get_capabilities()
+        assert LLMCapabilities.CALL_LLM_STRUCTURED.value in capabilities
 
 
 # Run tests with: pytest tests/logic/buses/test_llm_bus_domain_routing.py -v

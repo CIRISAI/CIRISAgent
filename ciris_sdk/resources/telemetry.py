@@ -391,3 +391,182 @@ class TelemetryResource:
         params = {"hours": str(hours)}
         data = await self._transport.request("GET", "/v1/telemetry/resources/history", params=params)
         return TelemetryResourcesHistory.from_api_response(data)
+
+    # Additional telemetry endpoints for comprehensive monitoring
+
+    async def get_service_registry(self) -> dict:
+        """
+        Get service registry details including providers, circuit breakers, and capabilities.
+
+        Returns detailed information about all registered services.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/service-registry")
+        return data
+
+    async def get_llm_usage(self) -> dict:
+        """
+        Get LLM usage metrics including tokens, costs, and provider statistics.
+
+        Returns comprehensive LLM usage data by model and provider.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/llm/usage")
+        return data
+
+    async def get_circuit_breakers(self) -> dict:
+        """
+        Get circuit breaker status for all services.
+
+        Returns state, failure counts, and recovery information.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/circuit-breakers")
+        return data
+
+    async def get_security_incidents(self, hours: int = 24) -> dict:
+        """
+        Get security incidents from the last N hours.
+
+        Args:
+            hours: Number of hours to look back (default 24)
+
+        Returns security incidents and threat analysis.
+        """
+        params = {"hours": str(hours)}
+        data = await self._transport.request("GET", "/v1/telemetry/security/incidents", params=params)
+        return data
+
+    async def get_handlers(self) -> dict:
+        """
+        Get handler metrics including invocations, durations, and errors.
+
+        Returns performance metrics for all message handlers.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/handlers")
+        return data
+
+    async def get_errors(self, hours: int = 1) -> dict:
+        """
+        Get recent errors with stack traces and resolution status.
+
+        Args:
+            hours: Number of hours to look back (default 1)
+
+        Returns error details and diagnostics.
+        """
+        params = {"hours": str(hours)}
+        data = await self._transport.request("GET", "/v1/telemetry/errors", params=params)
+        return data
+
+    async def get_trace(self, trace_id: str) -> dict:
+        """
+        Get detailed trace information for a specific trace ID.
+
+        Args:
+            trace_id: The trace identifier
+
+        Returns complete trace with all spans and timings.
+        """
+        data = await self._transport.request("GET", f"/v1/telemetry/traces/{trace_id}")
+        return data
+
+    async def get_rate_limits(self) -> dict:
+        """
+        Get current rate limit status and quotas.
+
+        Returns rate limits, current usage, and reset times.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/rate-limits")
+        return data
+
+    async def get_tsdb_status(self) -> dict:
+        """
+        Get time-series database consolidation status.
+
+        Returns consolidation schedule, compression ratios, and storage metrics.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/tsdb/status")
+        return data
+
+    async def get_discord_status(self) -> dict:
+        """
+        Get Discord connection status and metrics.
+
+        Returns connection health, latency, and message processing stats.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/discord/status")
+        return data
+
+    async def get_aggregates_hourly(self, hours: int = 24) -> dict:
+        """
+        Get hourly aggregated metrics for the last N hours.
+
+        Args:
+            hours: Number of hours to retrieve (default 24)
+
+        Returns hourly summaries of all key metrics.
+        """
+        params = {"hours": str(hours)}
+        data = await self._transport.request("GET", "/v1/telemetry/aggregates/hourly", params=params)
+        return data
+
+    async def get_summary_daily(self) -> dict:
+        """
+        Get daily summary of system metrics and performance.
+
+        Returns comprehensive daily statistics.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/summary/daily")
+        return data
+
+    async def export_telemetry(
+        self, format: str = "json", start: Optional[datetime] = None, end: Optional[datetime] = None
+    ) -> Union[dict, str]:
+        """
+        Export telemetry data in specified format.
+
+        Args:
+            format: Export format (json, csv, prometheus)
+            start: Start time for export
+            end: End time for export
+
+        Returns exported data in requested format.
+        """
+        params = {"format": format}
+        if start:
+            params["start"] = start.isoformat()
+        if end:
+            params["end"] = end.isoformat()
+
+        data = await self._transport.request("GET", "/v1/telemetry/export", params=params)
+        return data
+
+    async def get_telemetry_history(self, days: int = 7, metric: str = "llm_requests") -> dict:
+        """
+        Get historical telemetry data for specific metrics.
+
+        Args:
+            days: Number of days of history (default 7)
+            metric: Metric name to retrieve
+
+        Returns historical data points for the specified metric.
+        """
+        params = {"days": str(days), "metric": metric}
+        data = await self._transport.request("GET", "/v1/telemetry/history", params=params)
+        return data
+
+    async def get_backups(self) -> dict:
+        """
+        Get telemetry backup status and history.
+
+        Returns backup schedule, last backup time, and restoration points.
+        """
+        data = await self._transport.request("GET", "/v1/telemetry/backups")
+        return data
+
+    async def get_prometheus_metrics(self) -> str:
+        """
+        Get metrics in Prometheus format for monitoring integration.
+
+        Returns metrics in Prometheus exposition format.
+        """
+        data = await self._transport.request("GET", "/v1/metrics", raw_response=True)
+        return data

@@ -1,0 +1,242 @@
+{
+  "statistics": {
+    "total": 485,
+    "by_type": {
+      "counter": 199,
+      "gauge": 158,
+      "calculated": 2,
+      "timestamp": 12,
+      "enum": 8,
+      "implicit": 1,
+      "boolean": 34,
+      "string": 2,
+      "list": 12,
+      "histogram": 12,
+      "ratio": 3,
+      "computed": 1,
+      "constant": 4,
+      "dict": 8,
+      "time-series": 2,
+      "enum counts": 1,
+      "config": 7,
+      "array": 1,
+      "integer": 1,
+      "log": 1,
+      "percentage": 1,
+      "duration": 1,
+      "rate": 1,
+      "metadata": 1,
+      "timedelta": 1,
+      "correlation": 2,
+      "metric": 1,
+      "memory graph": 1,
+      "timer": 3,
+      "records": 4
+    },
+    "by_access": {
+      "HOT": 202,
+      "COLD": 81,
+      "WARM": 202
+    },
+    "by_module": {
+      "LLM_BUS": 17,
+      "MEMORY_BUS": 2,
+      "COMMUNICATION_BUS": 5,
+      "WISE_BUS": 5,
+      "TOOL_BUS": 4,
+      "RUNTIME_CONTROL_BUS": 6,
+      "MEMORY_SERVICE": 18,
+      "CONFIG_SERVICE": 12,
+      "TELEMETRY_SERVICE": 10,
+      "AUDIT_SERVICE": 15,
+      "INCIDENT_SERVICE": 14,
+      "TSDB_CONSOLIDATION_SERVICE": 21,
+      "TIME_SERVICE": 9,
+      "SHUTDOWN_SERVICE": 9,
+      "INITIALIZATION_SERVICE": 16,
+      "AUTHENTICATION_SERVICE": 16,
+      "RESOURCE_MONITOR_SERVICE": 14,
+      "DATABASE_MAINTENANCE_SERVICE": 18,
+      "SECRETS_SERVICE": 18,
+      "WISE_AUTHORITY_SERVICE": 11,
+      "ADAPTIVE_FILTER_SERVICE": 15,
+      "VISIBILITY_SERVICE": 12,
+      "SELF_OBSERVATION_SERVICE": 17,
+      "LLM_SERVICE": 27,
+      "RUNTIME_CONTROL_SERVICE": 25,
+      "TASK_SCHEDULER_SERVICE": 19,
+      "SECRETS_TOOL_SERVICE": 12,
+      "SERVICE_REGISTRY_REGISTRY": 12,
+      "CIRCUIT_BREAKER_COMPONENT": 10,
+      "PROCESSING_QUEUE_COMPONENT": 16,
+      "AGENT_PROCESSOR_PROCESSOR": 12,
+      "SERVICE_INITIALIZER_COMPONENT": 13,
+      "DISCORD_ADAPTER": 19,
+      "API_ADAPTER": 22,
+      "CLI_ADAPTER": 14
+    }
+  },
+  "tasks": [
+    {
+      "module": "LLM_BUS",
+      "metric": "total_requests",
+      "type": "counter",
+      "task": "Register total_requests with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/total_requests",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "failed_requests",
+      "type": "counter",
+      "task": "Register failed_requests with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/failed_requests",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "total_latency_ms",
+      "type": "gauge",
+      "task": "Register total_latency_ms with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/total_latency_ms",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "average_latency_ms",
+      "type": "calculated",
+      "task": "Register average_latency_ms with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/average_latency_ms",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "consecutive_failures",
+      "type": "counter",
+      "task": "Register consecutive_failures with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/consecutive_failures",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "last_request_time",
+      "type": "timestamp",
+      "task": "Register last_request_time with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/last_request_time",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "last_failure_time",
+      "type": "timestamp",
+      "task": "Register last_failure_time with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/last_failure_time",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "circuit_breaker_state",
+      "type": "enum",
+      "task": "Register circuit_breaker_state with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/circuit_breaker_state",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "failure_count",
+      "type": "counter",
+      "task": "Register failure_count with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/failure_count",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "success_count",
+      "type": "counter",
+      "task": "Register success_count with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/success_count",
+      "priority": "HIGH"
+    },
+    {
+      "module": "LLM_BUS",
+      "metric": "round_robin_index",
+      "type": "counter",
+      "task": "Register round_robin_index with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/round_robin_index",
+      "priority": "HIGH"
+    },
+    {
+      "module": "MEMORY_BUS",
+      "metric": "service_availability",
+      "type": "boolean",
+      "task": "Register service_availability with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/service_availability",
+      "priority": "HIGH"
+    },
+    {
+      "module": "COMMUNICATION_BUS",
+      "metric": "queue_size",
+      "type": "gauge",
+      "task": "Register queue_size with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/queue_size",
+      "priority": "HIGH"
+    },
+    {
+      "module": "COMMUNICATION_BUS",
+      "metric": "processed",
+      "type": "counter",
+      "task": "Register processed with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/processed",
+      "priority": "HIGH"
+    },
+    {
+      "module": "COMMUNICATION_BUS",
+      "metric": "failed",
+      "type": "counter",
+      "task": "Register failed with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/failed",
+      "priority": "HIGH"
+    },
+    {
+      "module": "COMMUNICATION_BUS",
+      "metric": "running",
+      "type": "boolean",
+      "task": "Register running with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/running",
+      "priority": "HIGH"
+    },
+    {
+      "module": "WISE_BUS",
+      "metric": "processed_count",
+      "type": "counter",
+      "task": "Register processed_count with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/processed_count",
+      "priority": "HIGH"
+    },
+    {
+      "module": "WISE_BUS",
+      "metric": "failed_count",
+      "type": "counter",
+      "task": "Register failed_count with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/failed_count",
+      "priority": "HIGH"
+    },
+    {
+      "module": "WISE_BUS",
+      "metric": "queue_size",
+      "type": "gauge",
+      "task": "Register queue_size with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/queue_size",
+      "priority": "HIGH"
+    },
+    {
+      "module": "WISE_BUS",
+      "metric": "running",
+      "type": "boolean",
+      "task": "Register running with telemetry service",
+      "endpoint": "/v1/telemetry/metrics/running",
+      "priority": "HIGH"
+    }
+  ],
+  "total_tasks": 485
+}

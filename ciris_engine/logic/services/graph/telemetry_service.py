@@ -78,6 +78,212 @@ class ConsolidationCandidate:
     grace_reasons: List[str]
 
 
+class TelemetryAggregator:
+    """
+    Enterprise telemetry aggregation for unified monitoring.
+
+    Collects metrics from all 21 required services in parallel and
+    provides aggregated views for different stakeholders.
+    """
+
+    # Static service mappings - these NEVER change
+    CATEGORIES = {
+        "buses": ["llm_bus", "memory_bus", "communication_bus", "wise_bus", "tool_bus", "runtime_control_bus"],
+        "graph": ["memory", "config", "telemetry", "audit", "incident_management", "tsdb_consolidation"],
+        "infrastructure": [
+            "time",
+            "shutdown",
+            "initialization",
+            "authentication",
+            "resource_monitor",
+            "database_maintenance",
+            "secrets",
+        ],
+        "governance": ["wise_authority", "adaptive_filter", "visibility", "self_observation"],
+        "runtime": ["llm", "runtime_control", "task_scheduler", "secrets_tool"],
+        "adapters": ["api", "discord", "cli"],  # API always present
+        "components": [
+            "circuit_breaker",
+            "processing_queue",
+            "service_registry",
+            "service_initializer",
+            "agent_processor",
+        ],
+    }
+
+    def __init__(self, service_registry: Any, time_service: Any):
+        """Initialize the aggregator with service registry and time service."""
+        self.service_registry = service_registry
+        self.time_service = time_service
+        self.cache: Dict[str, Tuple[datetime, Dict]] = {}
+        self.cache_ttl = timedelta(seconds=30)
+
+    async def collect_all_parallel(self) -> Dict[str, Any]:
+        """
+        Collect telemetry from all services in parallel.
+
+        Returns hierarchical telemetry organized by category.
+        """
+        tasks = []
+        service_info = []
+
+        # Create collection tasks for all services
+        for category, services in self.CATEGORIES.items():
+            for service_name in services:
+                task = asyncio.create_task(self.collect_service(service_name))
+                tasks.append(task)
+                service_info.append((category, service_name))
+
+        # Execute all collections in parallel with timeout
+        done, pending = await asyncio.wait(tasks, timeout=5.0, return_when=asyncio.ALL_COMPLETED)
+
+        # Cancel any timed-out tasks
+        for task in pending:
+            task.cancel()
+
+        # Organize results by category
+        telemetry = {cat: {} for cat in self.CATEGORIES.keys()}
+
+        for idx, task in enumerate(tasks):
+            if idx < len(service_info):
+                category, service_name = service_info[idx]
+
+                if task in done:
+                    try:
+                        result = task.result()
+                        telemetry[category][service_name] = result
+                    except Exception as e:
+                        logger.warning(f"Failed to collect from {service_name}: {e}")
+                        telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+                else:
+                    # Task timed out
+                    telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+
+        return telemetry
+
+    async def collect_service(self, service_name: str) -> Dict[str, Any]:
+        """Collect telemetry from a single service."""
+        try:
+            # Special handling for buses
+            if service_name.endswith("_bus"):
+                return await self.collect_from_bus(service_name)
+
+            # Try to get service from registry
+            service = None
+            service_type_map = {
+                "memory": ServiceType.MEMORY,
+                "config": ServiceType.CONFIG,
+                "telemetry": ServiceType.TELEMETRY,
+                "audit": ServiceType.AUDIT,
+                "llm": ServiceType.LLM,
+                "wise_authority": ServiceType.WISE_AUTHORITY,
+                # Add more mappings as needed
+            }
+
+            if service_name in service_type_map:
+                service_type = service_type_map[service_name]
+                services = self.service_registry.get_services_by_type(service_type)
+                if services:
+                    service = services[0]
+
+            if service and hasattr(service, "get_telemetry"):
+                telemetry = await service.get_telemetry()
+                return telemetry if isinstance(telemetry, dict) else {}
+            elif service and hasattr(service, "get_status"):
+                status = service.get_status()
+                if asyncio.iscoroutine(status):
+                    status = await status
+                return self.status_to_telemetry(status)
+            else:
+                return self.get_fallback_metrics(service_name)
+
+        except Exception as e:
+            logger.error(f"Failed to collect from {service_name}: {e}")
+            return self.get_fallback_metrics(service_name, healthy=False)
+
+    async def collect_from_bus(self, bus_name: str) -> Dict[str, Any]:
+        """Collect telemetry from a message bus."""
+        try:
+            # Get the bus from agent/registry
+            bus = None
+            if hasattr(self.service_registry, "_agent"):
+                agent = self.service_registry._agent
+                bus = getattr(agent, bus_name, None)
+
+            if bus and hasattr(bus, "collect_telemetry"):
+                return await bus.collect_telemetry()
+            else:
+                return self.get_fallback_metrics(bus_name)
+
+        except Exception as e:
+            logger.error(f"Failed to collect from {bus_name}: {e}")
+            return self.get_fallback_metrics(bus_name, healthy=False)
+
+    def get_fallback_metrics(self, service_name: str, healthy: bool = True) -> Dict[str, Any]:
+        """Return fallback metrics when collection fails."""
+        return {
+            "service_name": service_name,
+            "healthy": healthy,
+            "available": healthy,
+            "uptime_seconds": 0,
+            "error_count": 0 if healthy else 1,
+            "error_rate": 0.0 if healthy else 1.0,
+            "request_count": 0,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def status_to_telemetry(self, status: Any) -> Dict[str, Any]:
+        """Convert ServiceStatus to telemetry dict."""
+        if hasattr(status, "model_dump"):
+            return status.model_dump()
+        elif hasattr(status, "__dict__"):
+            return status.__dict__
+        else:
+            return {"status": str(status)}
+
+    def calculate_aggregates(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate system-wide aggregate metrics."""
+        total_services = 0
+        healthy_services = 0
+        total_errors = 0
+        total_requests = 0
+        min_uptime = float("inf")
+        error_rates = []
+
+        # Process all services
+        for category_data in telemetry.values():
+            for service_data in category_data.values():
+                total_services += 1
+
+                if service_data.get("healthy", False) or service_data.get("available", False):
+                    healthy_services += 1
+
+                total_errors += service_data.get("error_count", 0)
+                total_requests += service_data.get("request_count", 0)
+
+                error_rate = service_data.get("error_rate", 0.0)
+                if error_rate > 0:
+                    error_rates.append(error_rate)
+
+                uptime = service_data.get("uptime_seconds", 0)
+                if uptime > 0 and uptime < min_uptime:
+                    min_uptime = uptime
+
+        # Calculate overall metrics
+        overall_error_rate = sum(error_rates) / len(error_rates) if error_rates else 0.0
+
+        return {
+            "system_healthy": healthy_services >= (total_services * 0.9),
+            "services_online": healthy_services,
+            "services_total": total_services,
+            "overall_error_rate": round(overall_error_rate, 4),
+            "overall_uptime_seconds": int(min_uptime) if min_uptime != float("inf") else 0,
+            "total_errors": total_errors,
+            "total_requests": total_requests,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
 class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
     """
     Consolidated TelemetryService that stores all metrics as graph memories.
@@ -118,6 +324,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         self._process = psutil.Process() if PSUTIL_AVAILABLE else None
 
         # Consolidation settings
+
+        # Enterprise telemetry aggregator
+        self._telemetry_aggregator: Optional[TelemetryAggregator] = None
 
     def _set_service_registry(self, registry: object) -> None:
         """Set the service registry for accessing memory bus and time service (internal method)."""
@@ -1043,6 +1252,53 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
     def get_service_type(self) -> ServiceType:
         """Get the service type."""
         return ServiceType.TELEMETRY
+
+    async def get_aggregated_telemetry(self) -> Dict[str, Any]:
+        """
+        Get aggregated telemetry from all services using parallel collection.
+
+        Returns enterprise telemetry with all service metrics collected in parallel.
+        """
+        # Initialize aggregator if needed
+        if not self._telemetry_aggregator and self._service_registry:
+            self._telemetry_aggregator = TelemetryAggregator(
+                service_registry=self._service_registry, time_service=self._time_service
+            )
+
+        if not self._telemetry_aggregator:
+            logger.warning("No telemetry aggregator available")
+            return {
+                "error": "Telemetry aggregator not initialized",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+        # Check cache first
+        cache_key = "aggregated_telemetry"
+        now = datetime.now(timezone.utc)
+
+        if cache_key in self._telemetry_aggregator.cache:
+            cached_time, cached_data = self._telemetry_aggregator.cache[cache_key]
+            if now - cached_time < self._telemetry_aggregator.cache_ttl:
+                cached_data["_cache_hit"] = True
+                return cached_data
+
+        # Collect from all services in parallel
+        telemetry = await self._telemetry_aggregator.collect_all_parallel()
+
+        # Calculate aggregates
+        aggregates = self._telemetry_aggregator.calculate_aggregates(telemetry)
+
+        # Combine telemetry and aggregates
+        result = {
+            **aggregates,
+            "services": telemetry,
+            "_metadata": {"collection_method": "parallel", "cache_ttl_seconds": 30, "timestamp": now.isoformat()},
+        }
+
+        # Cache the result
+        self._telemetry_aggregator.cache[cache_key] = (now, result)
+
+        return result
 
     def _get_actions(self) -> List[str]:
         """Get the list of actions this service supports."""

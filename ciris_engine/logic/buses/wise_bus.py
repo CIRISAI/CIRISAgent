@@ -388,3 +388,63 @@ class WiseBus(BaseBus[WiseAuthorityService]):
     async def _process_message(self, message: BusMessage) -> None:
         """Process a wise authority message - currently all WA operations are synchronous"""
         logger.warning(f"Wise authority operations should be synchronous, got queued message: {type(message)}")
+
+    async def collect_telemetry(self) -> dict[str, Any]:
+        """
+        Collect telemetry from all wise authority providers in parallel.
+
+        Returns aggregated metrics including:
+        - failed_count: Total deferrals failed across providers
+        - processed_count: Total guidance requests processed
+        - provider_count: Number of active providers
+        - capability_blocks: Number of blocked medical capabilities
+        """
+        all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+
+        if not all_wa_services:
+            return {
+                "service_name": "wise_bus",
+                "healthy": False,
+                "failed_count": 0,
+                "processed_count": 0,
+                "provider_count": 0,
+                "capability_blocks": 0,
+                "error": "No wise authority services available",
+            }
+
+        # Create tasks to collect telemetry from all providers
+        tasks = []
+        for service in all_wa_services:
+            if hasattr(service, "get_telemetry"):
+                tasks.append(asyncio.create_task(service.get_telemetry()))
+
+        # Collect results with timeout
+        aggregated = {
+            "service_name": "wise_bus",
+            "healthy": True,
+            "failed_count": 0,
+            "processed_count": 0,
+            "provider_count": len(all_wa_services),
+            "capability_blocks": len(PROHIBITED_CAPABILITIES),
+            "providers": [],
+        }
+
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+
+            # Cancel timed-out tasks
+            for task in pending:
+                task.cancel()
+
+            # Aggregate results
+            for task in done:
+                try:
+                    telemetry = task.result()
+                    if telemetry:
+                        aggregated["providers"].append(telemetry.get("service_name", "unknown"))
+                        aggregated["failed_count"] += telemetry.get("failed_count", 0)
+                        aggregated["processed_count"] += telemetry.get("processed_count", 0)
+                except Exception as e:
+                    logger.warning(f"Failed to collect telemetry from provider: {e}")
+
+        return aggregated

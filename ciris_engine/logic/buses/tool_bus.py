@@ -239,3 +239,86 @@ class ToolBus(BaseBus[ToolService]):
     async def _process_message(self, message: BusMessage) -> None:
         """Process a tool message - currently all tool operations are synchronous"""
         logger.warning(f"Tool operations should be synchronous, got queued message: {type(message)}")
+
+    async def collect_telemetry(self) -> dict[str, Any]:
+        """
+        Collect telemetry from all tool providers in parallel.
+
+        Returns aggregated metrics including:
+        - failed_count: Total tool executions failed
+        - processed_count: Total tool executions processed
+        - provider_count: Number of active providers
+        - total_tools: Total unique tools available
+        """
+        import asyncio
+
+        all_tool_services = []
+
+        # Get all tool services
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            if hasattr(self.service_registry, "_services"):
+                tool_providers = self.service_registry._services.get(ServiceType.TOOL, [])
+                for provider in tool_providers:
+                    if hasattr(provider, "instance"):
+                        all_tool_services.append(provider.instance)
+        except Exception as e:
+            logger.error(f"Failed to get all tool services: {e}")
+
+        if not all_tool_services:
+            return {
+                "service_name": "tool_bus",
+                "healthy": False,
+                "failed_count": 0,
+                "processed_count": 0,
+                "provider_count": 0,
+                "total_tools": 0,
+                "error": "No tool services available",
+            }
+
+        # Create tasks to collect telemetry from all providers
+        tasks = []
+        for service in all_tool_services:
+            if hasattr(service, "get_telemetry"):
+                tasks.append(asyncio.create_task(service.get_telemetry()))
+
+        # Collect results with timeout
+        aggregated = {
+            "service_name": "tool_bus",
+            "healthy": True,
+            "failed_count": 0,
+            "processed_count": 0,
+            "provider_count": len(all_tool_services),
+            "total_tools": 0,
+            "unique_tools": set(),
+            "providers": [],
+        }
+
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+
+            # Cancel timed-out tasks
+            for task in pending:
+                task.cancel()
+
+            # Aggregate results
+            for task in done:
+                try:
+                    telemetry = task.result()
+                    if telemetry:
+                        aggregated["providers"].append(telemetry.get("service_name", "unknown"))
+                        aggregated["failed_count"] += telemetry.get("error_count", 0)
+                        aggregated["processed_count"] += telemetry.get("tool_executions", 0)
+
+                        # Collect available tools
+                        if "available_tools" in telemetry:
+                            aggregated["unique_tools"].add(telemetry["available_tools"])
+                except Exception as e:
+                    logger.warning(f"Failed to collect telemetry from tool provider: {e}")
+
+        # Count unique tools
+        aggregated["total_tools"] = len(aggregated["unique_tools"])
+        del aggregated["unique_tools"]  # Remove set from final result
+
+        return aggregated

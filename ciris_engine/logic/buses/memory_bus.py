@@ -353,3 +353,74 @@ class MemoryBus(BaseBus[MemoryService]):
         # For now, all memory operations are synchronous
         # This bus mainly exists for consistency and future async operations
         logger.warning(f"Memory operations should be synchronous, got queued message: {type(message)}")
+
+    async def collect_telemetry(self) -> Dict[str, any]:
+        """
+        Collect telemetry from all memory providers in parallel.
+
+        Returns aggregated metrics including:
+        - total_nodes: Total nodes across all providers
+        - query_count: Total queries processed
+        - provider_count: Number of active providers
+        - cache_hit_rate: Average cache hit rate
+        """
+        import asyncio
+
+        all_memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
+
+        if not all_memory_services:
+            return {
+                "service_name": "memory_bus",
+                "healthy": False,
+                "total_nodes": 0,
+                "query_count": 0,
+                "provider_count": 0,
+                "cache_hit_rate": 0.0,
+                "error": "No memory services available",
+            }
+
+        # Create tasks to collect telemetry from all providers
+        tasks = []
+        for service in all_memory_services:
+            if hasattr(service, "get_telemetry"):
+                tasks.append(asyncio.create_task(service.get_telemetry()))
+
+        # Collect results with timeout
+        aggregated = {
+            "service_name": "memory_bus",
+            "healthy": True,
+            "total_nodes": 0,
+            "query_count": 0,
+            "provider_count": len(all_memory_services),
+            "cache_hit_rate": 0.0,
+            "providers": [],
+        }
+
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+
+            # Cancel timed-out tasks
+            for task in pending:
+                task.cancel()
+
+            # Aggregate results
+            cache_rates = []
+            for task in done:
+                try:
+                    telemetry = task.result()
+                    if telemetry:
+                        aggregated["providers"].append(telemetry.get("service_name", "unknown"))
+                        aggregated["total_nodes"] += telemetry.get("total_nodes", 0)
+                        aggregated["query_count"] += telemetry.get("query_count", 0)
+
+                        # Collect cache hit rates for averaging
+                        if "cache_hit_rate" in telemetry:
+                            cache_rates.append(telemetry["cache_hit_rate"])
+                except Exception as e:
+                    logger.warning(f"Failed to collect telemetry from memory provider: {e}")
+
+            # Calculate average cache hit rate
+            if cache_rates:
+                aggregated["cache_hit_rate"] = sum(cache_rates) / len(cache_rates)
+
+        return aggregated

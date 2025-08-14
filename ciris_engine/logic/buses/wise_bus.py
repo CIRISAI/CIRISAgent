@@ -209,7 +209,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         # Try to get multiple services if capability routing is supported
         try:
-            services = self.service_registry.get_services(
+            services = await self.service_registry.get_services(
                 service_type=ServiceType.WISE_AUTHORITY,
                 required_capabilities=required_caps,
                 limit=5,  # Prevent unbounded fan-out

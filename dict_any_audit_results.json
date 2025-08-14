@@ -453,7 +453,7 @@
       },
       {
         "file": "ciris_modular_services/sensor_wisdom/service.py",
-        "line": 165,
+        "line": 161,
         "class": "SensorWisdomAdapter",
         "function": "_get_sensor_data",
         "context": "return_type",
@@ -461,7 +461,7 @@
       },
       {
         "file": "ciris_modular_services/sensor_wisdom/service.py",
-        "line": 221,
+        "line": 217,
         "class": "SensorWisdomAdapter",
         "function": "_analyze_environment",
         "context": "function_parameter",
@@ -469,7 +469,7 @@
       },
       {
         "file": "ciris_modular_services/geo_wisdom/service.py",
-        "line": 72,
+        "line": 74,
         "class": "GeoWisdomAdapter",
         "function": "_geocode",
         "context": "other",
@@ -477,7 +477,7 @@
       },
       {
         "file": "ciris_modular_services/geo_wisdom/service.py",
-        "line": 104,
+        "line": 99,
         "class": "GeoWisdomAdapter",
         "function": "_get_route",
         "context": "other",
@@ -485,7 +485,7 @@
       },
       {
         "file": "ciris_modular_services/weather_wisdom/service.py",
-        "line": 74,
+        "line": 75,
         "class": "WeatherWisdomAdapter",
         "function": "_get_grid_point",
         "context": "other",
@@ -493,7 +493,7 @@
       },
       {
         "file": "ciris_modular_services/weather_wisdom/service.py",
-        "line": 105,
+        "line": 104,
         "class": "WeatherWisdomAdapter",
         "function": "_get_noaa_forecast",
         "context": "other",
@@ -501,7 +501,7 @@
       },
       {
         "file": "ciris_modular_services/weather_wisdom/service.py",
-        "line": 135,
+        "line": 132,
         "class": "WeatherWisdomAdapter",
         "function": "_get_noaa_alerts",
         "context": "other",
@@ -509,7 +509,7 @@
       },
       {
         "file": "ciris_modular_services/weather_wisdom/service.py",
-        "line": 165,
+        "line": 164,
         "class": "WeatherWisdomAdapter",
         "function": "_get_owm_weather",
         "context": "other",

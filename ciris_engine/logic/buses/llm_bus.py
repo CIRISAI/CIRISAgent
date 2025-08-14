@@ -120,21 +120,31 @@ class LLMBus(BaseBus[LLMService]):
         max_tokens: int = 1024,
         temperature: float = 0.0,
         handler_name: str = "default",
+        domain: Optional[str] = None,  # NEW: Domain-aware routing
     ) -> Tuple[BaseModel, ResourceUsage]:
         """
-        Generate structured output using LLM.
+        Generate structured output using LLM with optional domain routing.
 
         This method handles:
+        - Domain-aware service filtering (e.g., medical, legal, financial)
         - Service discovery by priority
         - Distribution based on strategy
         - Circuit breaker checks
         - Automatic failover
         - Metrics collection
+
+        Args:
+            messages: List of message dictionaries
+            response_model: Pydantic model for structured response
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            handler_name: Handler identifier for metrics
+            domain: Optional domain for routing to specialized LLMs
         """
         start_time = self._time_service.timestamp()
 
-        # Get all available LLM services
-        services = await self._get_prioritized_services(handler_name)
+        # Get all available LLM services, filtered by domain if specified
+        services = await self._get_prioritized_services(handler_name, domain=domain)
 
         if not services:
             raise RuntimeError(f"No LLM services available for {handler_name}")
@@ -203,9 +213,10 @@ class LLMBus(BaseBus[LLMService]):
         handler_name: str,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        domain: Optional[str] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """
-        Synchronous version of generate_structured.
+        Synchronous version of generate_structured with domain routing.
 
         This is what the handlers will call directly.
         """
@@ -215,16 +226,25 @@ class LLMBus(BaseBus[LLMService]):
             handler_name=handler_name,
             max_tokens=max_tokens,
             temperature=temperature,
+            domain=domain,
         )
 
-    async def _get_prioritized_services(self, handler_name: str) -> List[Tuple[Any, int]]:
-        """Get all available LLM services with their priorities"""
+    async def _get_prioritized_services(self, handler_name: str, domain: Optional[str] = None) -> List[Tuple[Any, int]]:
+        """Get all available LLM services with their priorities, optionally filtered by domain.
+
+        Args:
+            handler_name: Handler identifier
+            domain: Optional domain filter (e.g., 'medical', 'legal', 'financial')
+
+        Returns:
+            List of (service, priority) tuples
+        """
         services = []
 
         # Get all registered LLM services
         all_llm_services = self.service_registry.get_services_by_type(ServiceType.LLM)
 
-        # For each service, check capabilities and health
+        # For each service, check capabilities, health, and domain
         for service in all_llm_services:
             # Check if service has required capabilities
             has_capabilities = True
@@ -236,17 +256,32 @@ class LLMBus(BaseBus[LLMService]):
                     has_capabilities = LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.actions
 
             if has_capabilities and await self._is_service_healthy(service):
-                # Get the provider info to determine priority
+                # Get the provider info to determine priority and metadata
                 provider_info = self.service_registry.get_provider_info(service_type=ServiceType.LLM)
 
-                # Find this service's priority
+                # Find this service's priority and metadata
                 priority_value = 0  # Default to highest priority
+                service_metadata = {}
+
                 for providers in provider_info.get("services", {}).get(ServiceType.LLM, []):
                     if providers["name"].endswith(str(id(service))):
                         # Convert priority name to value
                         priority_map = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3, "FALLBACK": 9}
                         priority_value = priority_map.get(providers["priority"], 2)
+                        service_metadata = providers.get("metadata", {})
                         break
+
+                # Check domain matching if specified
+                if domain:
+                    service_domain = service_metadata.get("domain", "general")
+                    # Only include services that match the domain or are general purpose
+                    if service_domain != domain and service_domain != "general":
+                        logger.debug(f"Skipping service with domain {service_domain} (requested: {domain})")
+                        continue
+                    # Prefer domain-specific services over general ones
+                    if service_domain == domain:
+                        # Boost priority for exact domain match
+                        priority_value = max(0, priority_value - 1)
 
                 services.append((service, priority_value))
 

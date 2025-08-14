@@ -246,10 +246,11 @@ async def update_dsar_status(
     from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
 
     logger = logging.getLogger(__name__)
-    # Sanitize user input before logging to prevent log injection
+    # Sanitize ALL user input before logging to prevent log injection
+    safe_ticket_id = sanitize_for_log(ticket_id, max_length=100)  # Sanitize ticket_id too
     safe_username = sanitize_username(current_user.username)
     safe_status = sanitize_for_log(new_status, max_length=50)
-    logger.info(f"DSAR {ticket_id} status updated to {safe_status} by {safe_username}")
+    logger.info(f"DSAR {safe_ticket_id} status updated to {safe_status} by {safe_username}")
 
     return StandardResponse(
         success=True,

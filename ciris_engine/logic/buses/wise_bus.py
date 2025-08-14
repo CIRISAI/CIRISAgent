@@ -4,7 +4,7 @@ Wise Authority message bus - handles all WA service operations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -201,6 +201,71 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     f"Medical implementations require separate licensed system (CIRISMedical)."
                 )
 
+    async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
+        """Get services matching the request capability."""
+        required_caps = []
+        if hasattr(request, "capability") and request.capability:
+            required_caps = [request.capability]
+
+        # Try to get multiple services if capability routing is supported
+        try:
+            services = self.service_registry.get_services(
+                service_type=ServiceType.WISE_AUTHORITY,
+                required_capabilities=required_caps,
+                limit=5,  # Prevent unbounded fan-out
+            )
+        except Exception as e:
+            logger.debug(f"Multi-provider lookup failed, falling back to single provider: {e}")
+            services = []
+
+        # Fallback to single service if multi-provider not available
+        if not services:
+            service = await self.get_service(handler_name="request_guidance", required_capabilities=["fetch_guidance"])
+            if service:
+                services = [service]
+
+        return services
+
+    def _create_guidance_task(self, svc: Any, request: GuidanceRequest) -> Optional[asyncio.Task]:
+        """Create an appropriate guidance task for the service."""
+        if hasattr(svc, "get_guidance"):
+            return asyncio.create_task(svc.get_guidance(request))
+        elif hasattr(svc, "fetch_guidance"):
+            # Convert to GuidanceContext for backward compatibility
+            context = GuidanceContext(
+                thought_id=f"guidance_{id(request)}",
+                task_id=f"task_{id(request)}",
+                question=request.context,
+                ethical_considerations=[],
+                domain_context={"urgency": request.urgency} if request.urgency else {},
+            )
+            return asyncio.create_task(self._fetch_guidance_compat(svc, context, request.options))
+        return None
+
+    async def _collect_guidance_responses(self, tasks: List[asyncio.Task], timeout: float) -> List[GuidanceResponse]:
+        """Collect responses from guidance tasks with timeout."""
+        if not tasks:
+            return []
+
+        # Wait for responses with timeout
+        done, pending = await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.ALL_COMPLETED)
+
+        # Cancel timed-out tasks
+        for task in pending:
+            task.cancel()
+
+        # Collect successful responses
+        responses = []
+        for task in done:
+            try:
+                resp = task.result()
+                if resp:
+                    responses.append(resp)
+            except Exception as e:
+                logger.warning(f"Provider failed: {e}")
+
+        return responses
+
     async def request_guidance(self, request: GuidanceRequest, timeout: float = 5.0) -> GuidanceResponse:
         """
         Request guidance from capability-matching providers with medical prohibition.
@@ -220,49 +285,20 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         if hasattr(request, "capability"):
             self._validate_capability(request.capability)
 
-        # Get matching services based on capability
-        required_caps = []
-        if hasattr(request, "capability") and request.capability:
-            required_caps = [request.capability]
-
-        # Try to get multiple services if capability routing is supported
-        try:
-            # Use the new get_services method with capability filtering
-            services = await self.service_registry.get_services(
-                service_type=ServiceType.WISE_AUTHORITY,
-                required_capabilities=required_caps,
-                limit=5,  # Prevent unbounded fan-out
-            )
-        except Exception as e:
-            logger.debug(f"Multi-provider lookup failed, falling back to single provider: {e}")
-            services = []
-
-        # Fallback to single service if multi-provider not available
+        # Get matching services
+        services = await self._get_matching_services(request)
         if not services:
-            service = await self.get_service(handler_name="request_guidance", required_capabilities=["fetch_guidance"])
-            if not service:
-                raise RuntimeError("No WiseAuthority service available")
-            services = [service]
+            raise RuntimeError("No WiseAuthority service available")
 
-        # Query all services with timeout
+        # Create tasks for all services
         tasks = []
         for svc in services:
-            # Use appropriate method based on service capabilities
-            if hasattr(svc, "get_guidance"):
-                tasks.append(asyncio.create_task(svc.get_guidance(request)))
-            elif hasattr(svc, "fetch_guidance"):
-                # Convert to GuidanceContext for backward compatibility
-                context = GuidanceContext(
-                    thought_id=f"guidance_{id(request)}",
-                    task_id=f"task_{id(request)}",
-                    question=request.context,
-                    ethical_considerations=[],
-                    domain_context={"urgency": request.urgency} if request.urgency else {},
-                )
-                tasks.append(asyncio.create_task(self._fetch_guidance_compat(svc, context, request.options)))
+            task = self._create_guidance_task(svc, request)
+            if task:
+                tasks.append(task)
 
+        # Handle case where no compatible methods found
         if not tasks:
-            # No compatible methods found
             return GuidanceResponse(
                 reasoning="No compatible guidance methods available",
                 wa_id="wisebus",
@@ -270,22 +306,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 custom_guidance="Service lacks guidance capabilities",
             )
 
-        # Wait for responses with timeout
-        responses = []
-        done, pending = await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.ALL_COMPLETED)
-
-        # Cancel timed-out tasks
-        for task in pending:
-            task.cancel()
-
-        # Collect successful responses
-        for task in done:
-            try:
-                resp = task.result()
-                if resp:
-                    responses.append(resp)
-            except Exception as e:
-                logger.warning(f"Provider failed: {e}")
+        # Collect responses
+        responses = await self._collect_guidance_responses(tasks, timeout)
 
         # Arbitrate responses
         return self._arbitrate_responses(responses, request)
@@ -306,7 +328,13 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 )
         except Exception as e:
             logger.debug(f"Compatibility fetch failed: {e}")
-        return None
+        # Return empty response instead of None to match return type
+        return GuidanceResponse(
+            reasoning="fetch_guidance unavailable",
+            wa_id="error",
+            signature="none",
+            custom_guidance="Service unavailable",
+        )
 
     def _arbitrate_responses(self, responses: List[GuidanceResponse], request: GuidanceRequest) -> GuidanceResponse:
         """

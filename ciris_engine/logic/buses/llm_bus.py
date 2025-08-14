@@ -229,6 +229,53 @@ class LLMBus(BaseBus[LLMService]):
             domain=domain,
         )
 
+    def _check_service_capabilities(self, service: Any) -> bool:
+        """Check if service has required LLM capabilities."""
+        if not hasattr(service, "get_capabilities"):
+            return True
+
+        caps = service.get_capabilities()
+        if hasattr(caps, "supports_operation_list"):
+            return LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.supports_operation_list
+        elif hasattr(caps, "actions"):
+            return LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.actions
+        return True
+
+    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, dict]:
+        """Get priority value and metadata for a service."""
+        provider_info = self.service_registry.get_provider_info(service_type=ServiceType.LLM)
+        priority_map = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3, "FALLBACK": 9}
+
+        for providers in provider_info.get("services", {}).get(ServiceType.LLM, []):
+            if providers["name"].endswith(str(id(service))):
+                priority_value = priority_map.get(providers["priority"], 2)
+                service_metadata = providers.get("metadata", {})
+                return priority_value, service_metadata
+
+        return 0, {}  # Default to highest priority, empty metadata
+
+    def _should_include_service_for_domain(self, service_metadata: dict, domain: Optional[str]) -> Tuple[bool, int]:
+        """Check if service should be included based on domain and get priority adjustment.
+
+        Returns:
+            Tuple of (should_include, priority_adjustment)
+        """
+        if not domain:
+            return True, 0
+
+        service_domain = service_metadata.get("domain", "general")
+
+        # Skip services that don't match domain and aren't general
+        if service_domain != domain and service_domain != "general":
+            logger.debug(f"Skipping service with domain {service_domain} (requested: {domain})")
+            return False, 0
+
+        # Boost priority for exact domain match
+        if service_domain == domain:
+            return True, -1
+
+        return True, 0
+
     async def _get_prioritized_services(self, handler_name: str, domain: Optional[str] = None) -> List[Tuple[Any, int]]:
         """Get all available LLM services with their priorities, optionally filtered by domain.
 
@@ -240,50 +287,28 @@ class LLMBus(BaseBus[LLMService]):
             List of (service, priority) tuples
         """
         services = []
-
-        # Get all registered LLM services
         all_llm_services = self.service_registry.get_services_by_type(ServiceType.LLM)
 
-        # For each service, check capabilities, health, and domain
         for service in all_llm_services:
-            # Check if service has required capabilities
-            has_capabilities = True
-            if hasattr(service, "get_capabilities"):
-                caps = service.get_capabilities()
-                if hasattr(caps, "supports_operation_list"):
-                    has_capabilities = LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.supports_operation_list
-                elif hasattr(caps, "actions"):
-                    has_capabilities = LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.actions
+            # Check capabilities
+            if not self._check_service_capabilities(service):
+                continue
 
-            if has_capabilities and await self._is_service_healthy(service):
-                # Get the provider info to determine priority and metadata
-                provider_info = self.service_registry.get_provider_info(service_type=ServiceType.LLM)
+            # Check health
+            if not await self._is_service_healthy(service):
+                continue
 
-                # Find this service's priority and metadata
-                priority_value = 0  # Default to highest priority
-                service_metadata = {}
+            # Get priority and metadata
+            priority_value, service_metadata = self._get_service_priority_and_metadata(service)
 
-                for providers in provider_info.get("services", {}).get(ServiceType.LLM, []):
-                    if providers["name"].endswith(str(id(service))):
-                        # Convert priority name to value
-                        priority_map = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3, "FALLBACK": 9}
-                        priority_value = priority_map.get(providers["priority"], 2)
-                        service_metadata = providers.get("metadata", {})
-                        break
+            # Check domain filtering
+            should_include, priority_adjustment = self._should_include_service_for_domain(service_metadata, domain)
+            if not should_include:
+                continue
 
-                # Check domain matching if specified
-                if domain:
-                    service_domain = service_metadata.get("domain", "general")
-                    # Only include services that match the domain or are general purpose
-                    if service_domain != domain and service_domain != "general":
-                        logger.debug(f"Skipping service with domain {service_domain} (requested: {domain})")
-                        continue
-                    # Prefer domain-specific services over general ones
-                    if service_domain == domain:
-                        # Boost priority for exact domain match
-                        priority_value = max(0, priority_value - 1)
-
-                services.append((service, priority_value))
+            # Apply priority adjustment for domain matching
+            priority_value = max(0, priority_value + priority_adjustment)
+            services.append((service, priority_value))
 
         return services
 

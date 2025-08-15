@@ -1352,7 +1352,7 @@ async def _get_telemetry_fallback(app_state, view: str, category: Optional[str])
     return result
 
 
-@router.get("/unified")
+@router.get("/unified", response_model=None)
 async def get_unified_telemetry(
     request: Request,
     auth: AuthContext = Depends(require_observer),

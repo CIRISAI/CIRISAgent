@@ -1,25 +1,25 @@
 {
   "collected": {
     "telemetry_service": [
+      "tokens_input",
       "tokens_used",
+      "cost_cents",
       "energy_kwh",
       "tokens_output",
       "carbon_grams",
-      "telemetry_service.shutdown",
-      "cost_cents",
-      "tokens_input"
+      "telemetry_service.shutdown"
     ],
     "memory_service": [],
     "api_routes": [],
     "processors": [
-      "errors",
-      "thoughts_processed"
+      "thoughts_processed",
+      "errors"
     ],
     "services": [
-      "consecutive_failures",
       "failed_requests",
+      "total_requests",
       "total_latency_ms",
-      "total_requests"
+      "consecutive_failures"
     ]
   },
   "exposed": {
@@ -68,29 +68,29 @@
     ]
   },
   "summary_metrics": [
-    "thoughts_processed_24h",
-    "window_start_24h",
-    "carbon_grams",
-    "tasks_completed_24h",
-    "messages_24h",
-    "carbon_last_hour_grams",
     "tokens_last_hour",
-    "energy_24h",
-    "tokens_1h",
-    "errors_24h",
-    "cost_1h_cents",
-    "energy_last_hour_kwh",
-    "cost_24h",
-    "messages_processed_24h",
-    "cost_last_hour_cents",
-    "tokens_24h",
     "energy_kwh",
+    "window_start_24h",
+    "energy_24h",
+    "cost_24h",
+    "energy_last_hour_kwh",
+    "cost_1h_cents",
     "tasks_24h",
-    "carbon_1h_grams",
-    "energy_1h_kwh",
+    "carbon_grams",
     "carbon_24h",
     "thoughts_24h",
-    "error_rate_percent"
+    "thoughts_processed_24h",
+    "error_rate_percent",
+    "tokens_1h",
+    "tokens_24h",
+    "tasks_completed_24h",
+    "messages_processed_24h",
+    "carbon_last_hour_grams",
+    "cost_last_hour_cents",
+    "errors_24h",
+    "energy_1h_kwh",
+    "carbon_1h_grams",
+    "messages_24h"
   ],
   "total_collected": 13,
   "total_exposed": 53,

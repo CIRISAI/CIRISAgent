@@ -24,7 +24,7 @@ Capabilities that violate core safety principles and are absolutely prohibited i
 ### 3. TIER_RESTRICTED
 Capabilities reserved for specific agent tiers:
 - Tier 1-3: Standard agents (no special capabilities)
-- Tier 4-5: Echo agents (trusted community moderators with crisis escalation capabilities)
+- Tier 4-5: Stewardship agents (trusted with community moderation and crisis escalation)
 
 ## Categories Requiring Separate Modules
 
@@ -203,7 +203,7 @@ Discriminatory practices:
 - racial_profiling, gender_discrimination
 - disability_discrimination, age_discrimination
 
-## Community Moderation (Tier 4-5 Only)
+## Community Moderation (Tier 4-5 Stewardship Only)
 
 ### CRISIS_ESCALATION
 Emergency response capabilities for trusted moderators:
@@ -249,7 +249,7 @@ if category:
 ### Agent Tier Detection
 The WiseBus automatically detects agent tier from:
 1. Configuration value (`agent_tier`)
-2. Identity markers (`echo_agent`, `community_moderator`)
+2. Identity markers (`stewardship`, `tier_4`, `tier_5`)
 3. Defaults to Tier 1 if not specified
 
 ### Adding New Prohibitions

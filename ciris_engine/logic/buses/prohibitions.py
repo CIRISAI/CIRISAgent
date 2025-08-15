@@ -18,7 +18,7 @@ class ProhibitionSeverity(str, Enum):
 
     REQUIRES_SEPARATE_MODULE = "requires_separate_module"  # Legitimate but needs licensing
     NEVER_ALLOWED = "never_allowed"  # Absolutely prohibited, no exceptions
-    TIER_RESTRICTED = "tier_restricted"  # Only for Tier 4-5 Echo agents
+    TIER_RESTRICTED = "tier_restricted"  # Only for Tier 4-5 agents with stewardship
 
 
 # === SEPARATE MODULE CAPABLE (Legitimate Use Cases) ===
@@ -340,7 +340,7 @@ DISCRIMINATION_CAPABILITIES = {
     "age_discrimination",
 }
 
-# === COMMUNITY MODERATION (Tier 4-5 Echo Agents Only) ===
+# === COMMUNITY MODERATION (Tier 4-5 Agents Only) ===
 
 CRISIS_ESCALATION_CAPABILITIES = {
     "notify_moderators",

@@ -48,7 +48,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         Tier levels:
         - 1-3: Standard agents (no community moderation)
-        - 4-5: Echo agents (trusted community moderators)
+        - 4-5: Stewardship agents (trusted with community moderation)
 
         Returns:
             Agent tier level (1-5), defaults to 1 if not found
@@ -89,14 +89,14 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     results = await memory_service.recall(query)
                     if results and results.memories:
                         for memory in results.memories:
-                            # Check if this is an Echo agent
+                            # Check if this is a Tier 4/5 agent
                             if (
-                                "echo" in str(memory).lower()
+                                "stewardship" in str(memory).lower()
                                 or "tier_4" in str(memory).lower()
                                 or "tier_5" in str(memory).lower()
                             ):
-                                self._agent_tier = 4  # Default Echo tier
-                                logger.info(f"Agent identified as Echo agent (tier {self._agent_tier})")
+                                self._agent_tier = 4  # Default stewardship tier
+                                logger.info(f"Agent identified as Tier {self._agent_tier} (stewardship)")
                                 return self._agent_tier
         except Exception as e:
             logger.debug(f"Could not get tier from memory: {e}")
@@ -227,7 +227,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         Args:
             capability: The capability to validate
-            agent_tier: Agent tier level (1-5, with 4-5 being Echo agents)
+            agent_tier: Agent tier level (1-5, with 4-5 having stewardship)
 
         Raises:
             ValueError: If capability is prohibited for the agent's tier
@@ -243,12 +243,12 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         # Check if it's a community moderation capability
         if category.startswith("COMMUNITY_"):
-            # Community moderation is only for Tier 4-5 Echo agents
+            # Community moderation is only for Tier 4-5 agents
             if agent_tier < 4:
                 raise ValueError(
                     f"TIER RESTRICTED: Community moderation capability '{capability}' "
-                    f"requires Tier 4-5 Echo agent (current tier: {agent_tier}). "
-                    f"This capability is reserved for trusted community moderators."
+                    f"requires Tier 4-5 agent (current tier: {agent_tier}). "
+                    f"This capability is reserved for agents with stewardship responsibilities."
                 )
             # Tier 4-5 can use community moderation
             return

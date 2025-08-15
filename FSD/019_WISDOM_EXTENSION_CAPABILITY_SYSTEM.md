@@ -165,7 +165,7 @@ class WiseBus(BaseBus):
         if category.startswith("COMMUNITY_") and agent_tier < 4:
             raise ValueError(
                 f"TIER RESTRICTED: Community moderation capability '{capability}' "
-                f"requires Tier 4-5 Echo agent"
+                f"requires Tier 4-5 agent"
             )
 
         severity = get_prohibition_severity(category)
@@ -375,7 +375,7 @@ The prohibition system has been expanded to comprehensively cover all potentiall
 - **HAZARDOUS_MATERIALS**: chemical_synthesis, toxin_production, illegal_drug_synthesis, etc.
 - **DISCRIMINATION**: protected_class_discrimination, redlining, algorithmic_bias, etc.
 
-#### Community Moderation (Tier 4-5 Echo Agents Only)
+#### Community Moderation (Tier 4-5 Agents Only)
 - **CRISIS_ESCALATION**: notify_moderators, flag_concerning_content, request_welfare_check, etc.
 - **PATTERN_DETECTION**: identify_harm_patterns, monitor_community_health, detect_coordinated_campaigns, etc.
 - **PROTECTIVE_ROUTING**: connect_crisis_resources, facilitate_peer_support, coordinate_moderator_response, etc.

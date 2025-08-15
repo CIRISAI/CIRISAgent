@@ -1,11 +1,13 @@
 """
 CI/CD monitoring and guidance for Grace.
 Helps track build status, detect blocks, and guide through failures.
+Includes Claude-specific guidance from the shepherd.
 """
 
 import json
 import subprocess
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -13,20 +15,35 @@ from typing import Any, Dict, List, Optional
 class CIMonitor:
     """Monitor CI/CD status and provide guidance."""
 
+    # Claude's bad habits we need to prevent
+    CLAUDE_ANTIPATTERNS = [
+        "Creating new Dict[str, Any] instead of using existing schemas",
+        "Making NewSchemaV2 when OriginalSchema already exists",
+        "Checking CI status every 30 seconds (wasteful anxiety)",
+        "Creating 'temporary' helper classes that duplicate existing ones",
+        "Writing elaborate abstractions instead of using what's there",
+    ]
+
     # Common schemas that exist (reminder for Claude)
     EXISTING_SCHEMAS = {
-        "audit": "AuditEventData",
-        "metrics": "ServiceMetrics",
-        "snapshot": "SystemSnapshot",
-        "queue": "ProcessingQueueItem",
-        "channel": "ChannelContext vs AdapterChannelContext",
-        "response": "ActionResponse",
-        "thought": "ThoughtSchema",
+        "audit": "AuditEventData - ciris_engine/schemas/services/graph/audit.py",
+        "metrics": "ServiceMetrics - ciris_engine/schemas/services/telemetry.py",
+        "snapshot": "SystemSnapshot - ciris_engine/schemas/runtime/system_snapshot.py",
+        "queue": "ProcessingQueueItem - ciris_engine/schemas/processors/base.py",
+        "channel": "ChannelContext (system) vs AdapterChannelContext (adapter)",
+        "response": "ActionResponse - ciris_engine/schemas/processors/actions.py",
+        "config": "ServiceConfig - ciris_engine/schemas/config/service.py",
+        "thought": "ThoughtSchema - ciris_engine/schemas/thought.py",
+        "guidance": "GuidanceRequest/Response - ciris_engine/schemas/wise_authority.py",
     }
+
+    # Minimum time between CI checks (10 minutes)
+    MIN_CHECK_INTERVAL = timedelta(minutes=10)
 
     def __init__(self):
         """Initialize CI monitor."""
         self.last_check_file = Path("/tmp/.grace_ci_last_check")
+        self.start_time = None
 
     def check_prs(self) -> str:
         """Check status of all open PRs."""
@@ -231,9 +248,59 @@ class CIMonitor:
         except:
             return True, ""
 
-    def mark_ci_checked(self):
-        """Mark that CI was just checked."""
+    def record_check(self):
+        """Record that we just checked CI."""
         self.last_check_file.write_text(datetime.now().isoformat())
+
+    def get_reminders(self) -> str:
+        """Get schema and antipattern reminders for Claude."""
+        reminders = ["🧠 Schema Reminders:"]
+        for key, schema in self.EXISTING_SCHEMAS.items():
+            reminders.append(f"  • {key}: {schema}")
+
+        reminders.append("\n⚠️ Avoid These Patterns:")
+        for pattern in self.CLAUDE_ANTIPATTERNS:
+            reminders.append(f"  • {pattern}")
+
+        return "\n".join(reminders)
+
+    def analyze_failure(self, run_id: Optional[int] = None) -> str:
+        """Analyze CI failure and provide guidance."""
+        try:
+            # Get failed logs
+            cmd = ["gh", "run", "view"]
+            if run_id:
+                cmd.append(str(run_id))
+            cmd.extend(["--log-failed", "--repo", "CIRISAI/CIRISAgent"])
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+            if result.returncode != 0:
+                return "Could not fetch failure logs"
+
+            logs = result.stdout
+            if not logs:
+                return "No failure logs available"
+
+            # Analyze common patterns
+            analysis = []
+
+            if "Dict[str, Any]" in logs:
+                analysis.append("🚨 Dict[str, Any] detected - a schema already exists!")
+            if "ModuleNotFoundError" in logs:
+                analysis.append("📦 Import error - check module paths")
+            if "FAILED" in logs:
+                failed_count = logs.count("FAILED")
+                analysis.append(f"❌ {failed_count} test failures detected")
+            if "SonarQube" in logs or "Quality Gate" in logs:
+                analysis.append("📊 SonarCloud quality gate issue")
+
+            if analysis:
+                return "CI Failure Analysis:\n" + "\n".join(analysis)
+            return "Check logs manually for details"
+
+        except Exception as e:
+            return f"Error analyzing failure: {e}"
 
     def get_failure_hints(self) -> str:
         """Get hints for common CI failures."""

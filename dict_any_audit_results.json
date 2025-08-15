@@ -1707,7 +1707,7 @@
     ]
   },
   "tools": {
-    "occurrences": 177,
+    "occurrences": 173,
     "findings": [
       {
         "file": "tools/validate_prod_routes.py",
@@ -1867,38 +1867,6 @@
         "class": "CIRISSystemAuditor",
         "function": "_save_markdown_summary",
         "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/grace_shepherd.py",
-        "line": 89,
-        "class": "CIShepherd",
-        "function": "get_main_ci_status",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/grace_shepherd.py",
-        "line": 119,
-        "class": "CIShepherd",
-        "function": "get_pr_ci_status",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/grace_shepherd.py",
-        "line": 164,
-        "class": "CIShepherd",
-        "function": "get_run_details",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/grace_shepherd.py",
-        "line": 283,
-        "class": "CIShepherd",
-        "function": "get_test_failures",
-        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -3128,7 +3096,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 388,
-    "files_affected": 121
+    "occurrences": 384,
+    "files_affected": 120
   }
 }

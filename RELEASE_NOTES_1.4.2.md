@@ -2,7 +2,7 @@
 
 **Release Date**: January 15, 2025
 **Branch**: wisdom-extension
-**Focus**: Wisdom Extension System & Enterprise Telemetry
+**Focus**: Wisdom Extension System, Comprehensive Prohibition System & Enterprise Telemetry
 
 ## 🎯 Major Features
 
@@ -16,14 +16,31 @@ Implemented a comprehensive wisdom extension capability system that enables spec
 - **Request Arbitration**: Intelligent routing to appropriate wisdom providers
 - **Liability Protection**: Clear disclaimers and capability boundaries
 
-**Blocked Capabilities** (LIABILITY PROTECTION):
-- Medical diagnosis/treatment
-- Health assessments
-- Clinical decision support
-- Patient data handling
-- Pharmaceutical guidance
+### 2. Comprehensive Prohibition System 🛡️
+Revolutionary AI safety system with 274 specific prohibited capabilities across 20 categories.
 
-### 2. Enterprise Telemetry System
+**Three-Tier Prohibition Model:**
+- **REQUIRES_SEPARATE_MODULE** (8 categories): Legitimate uses requiring licensing
+  - Medical, Financial, Legal, Home Security, Identity Verification, Content Moderation, Research, Infrastructure
+- **NEVER_ALLOWED** (10 categories): Absolutely prohibited capabilities
+  - Weapons, Manipulation, Mass Surveillance, Fraud, Cyber Offensive, Election Interference, Biometric Inference, Autonomous Deception, Hazardous Materials, Discrimination
+- **TIER_RESTRICTED** (3 categories): Tier 4-5 stewardship agents only
+  - Crisis Escalation, Pattern Detection, Protective Routing
+
+**Tier-Based Access Control:**
+- **Tier 1-3**: Standard agents (no community moderation)
+- **Tier 4-5**: Stewardship agents (trusted with crisis intervention and community protection)
+- Automatic tier detection from config/identity
+- Context-aware capability reframing (e.g., `mental_state_assessment` → `crisis_state_detection` for Tier 4-5)
+
+**Key Safety Features:**
+- 274 specifically prohibited capabilities
+- NO KINGS principle - no overrides in main repository
+- Comprehensive test coverage (225+ lines)
+- Full telemetry integration
+- Real-time capability validation
+
+### 3. Enterprise Telemetry System
 Massive telemetry infrastructure upgrade providing unified access to all system metrics.
 
 **Unified Telemetry Endpoint** (`/telemetry/unified`):
@@ -48,7 +65,7 @@ cpu = await client.telemetry.get_metric_by_path(
 health = await client.telemetry.check_system_health()
 ```
 
-### 3. Domain-Aware LLM Routing
+### 4. Domain-Aware LLM Routing
 Intelligent routing system for specialized language models based on domain expertise.
 
 **Features:**
@@ -59,6 +76,13 @@ Intelligent routing system for specialized language models based on domain exper
 
 ## 📊 Metrics & Coverage
 
+### Prohibition System Coverage
+- **274 prohibited capabilities** across 20 categories
+- **8 categories** for separate modules with licensing
+- **10 categories** absolutely prohibited
+- **3 categories** for Tier 4-5 stewardship only
+- **100% test coverage** for prohibition logic
+
 ### Telemetry Implementation
 - **83.5% metric coverage** (436/522 metrics implemented)
 - **21 services** with telemetry support
@@ -66,6 +90,7 @@ Intelligent routing system for specialized language models based on domain exper
 - **30-second cache** reducing load by 95%
 
 ### Test Coverage Improvements
+- Added comprehensive prohibition system tests (225+ lines)
 - Added comprehensive domain routing tests
 - Unified telemetry endpoint fully tested (13 tests)
 - SDK telemetry methods tested
@@ -98,10 +123,17 @@ Intelligent routing system for specialized language models based on domain exper
 ## 📚 Documentation
 
 ### New Specifications
-- **FSD-019**: Wisdom Extension Capability System
+- **FSD-019**: Wisdom Extension Capability System (IMPLEMENTED)
   - Comprehensive design for extensible wisdom providers
   - Medical liability firewall specifications
   - Integration patterns and safety guidelines
+  - Complete prohibition system with 274 capabilities
+
+### New Documentation
+- **PROHIBITION_CATEGORIES.md**: Complete guide to all prohibition categories
+- **PROHIBITION_REFINEMENTS.md**: Critical evaluation and refinements
+- Tier-based access control documentation
+- Context-aware capability reframing guide
 
 ### SDK Documentation
 - Updated README with unified telemetry examples
@@ -144,19 +176,18 @@ Special thanks to:
 - Grace (development companion) for sustainable coding practices
 - The CIRIS team for architectural guidance
 
-## 📝 Commit History
+## 📝 Key Commits
 
 ```
+e46e72f1 refactor: Critical refinement of prohibition categories
+37822626 fix: Correct terminology from Echo agents to Tier 4-5 stewardship agents
+5ab87f6a feat: Implement comprehensive prohibition system for WiseBus
+02681990 fix: Use grep instead of Python import for version extraction in CI/CD
+e76146e2 fix: Resolve Docker latest tag deployment issue
 c139d91f fix: Add response_model=None to unified telemetry endpoint
 ba7bc855 fix: Resolve all SonarCloud critical issues
 cc1663a6 feat: Add unified telemetry endpoint with SDK support
 211a0f1c feat: Implement enterprise telemetry system phases 1-3
-ed6806af fix: Revert get_services to async to fix test failures
-9e78709b fix: Resolve SonarCloud code quality issues
-9d19d001 fix: Fix test_get_available_models to match actual behavior
-e171d83d test: Add comprehensive domain routing tests to reach 85% coverage
-5959c9f5 fix: Prevent asyncio task garbage collection in auth.py
-93b98238 fix: Fix MockLLMService test implementation for domain routing tests
 163cd578 feat: Add domain-aware routing to LLMBus for specialized models
 7fef79e7 feat: Implement wisdom extension system with medical prohibition
 bf80d4df docs: Add FSD-019 for wisdom extension system with liability firewall
@@ -164,12 +195,12 @@ bf80d4df docs: Add FSD-019 for wisdom extension system with liability firewall
 
 ## ⚠️ Important Notes
 
-### Medical Liability Protection
-The wisdom extension system includes hardcoded protection against medical/health capabilities. This is NOT configurable and cannot be overridden. Any attempts to add medical wisdom providers will be blocked at the bus level.
+### Prohibition System & Liability Protection
+The comprehensive prohibition system blocks 274 specific capabilities across 20 categories. This is NOT configurable and cannot be overridden (NO KINGS principle). Medical, financial, legal and other regulated domains require separate licensed repositories. Tier 4-5 agents with stewardship responsibilities have access to crisis intervention and community protection capabilities.
 
 ### Telemetry Access
 The new unified telemetry endpoint is the recommended way to access metrics. Individual telemetry endpoints remain for backward compatibility but may be deprecated in future releases.
 
 ---
 
-*CIRIS v1.4.2 - Wisdom Without Liability, Metrics Without Complexity*
+*CIRIS v1.4.2 - Comprehensive Safety Through Prohibition, Empowered Stewardship for Communities*

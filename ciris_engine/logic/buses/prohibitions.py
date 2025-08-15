@@ -108,34 +108,43 @@ IDENTITY_VERIFICATION_CAPABILITIES = {
     "government_id_validation",
     "security_clearance",
     "background_checks",
-    "age_verification",
+    # Removed: age_verification (moved to CONTENT_MODERATION)
     "citizenship_determination",
     "kyc_verification",
     "employment_verification",
     "identity_proofing",
-    "document_authentication",
+    # Removed: document_authentication (moved to CONTENT_MODERATION)
     "facial_recognition",
     "fingerprint_matching",
     "credit_check",
     "criminal_record_check",
 }
 
+CONTENT_MODERATION_CAPABILITIES = {
+    "age_verification",  # For age-appropriate content
+    "document_authentication",  # For verification badges
+    "content_classification",
+    "nsfw_detection",
+    "violence_detection",
+    "hate_speech_detection",
+    "spam_detection",
+    "authenticity_verification",
+}
+
 RESEARCH_CAPABILITIES = {
     "human_subjects_research",
     "clinical_trials",
     "irb_protocols",
-    "data_collection",
     "experimental_design",
     "psychological_studies",
     "behavioral_research",
     "longitudinal_studies",
     "ethnographic_research",
     "field_studies",
-    "survey_design",
-    "focus_groups",
-    "a_b_testing",
     "cohort_studies",
     "case_control_studies",
+    # Removed: data_collection (too generic)
+    # Removed: survey_design, focus_groups, a_b_testing (basic UX research)
 }
 
 INFRASTRUCTURE_CONTROL_CAPABILITIES = {
@@ -208,8 +217,8 @@ SURVEILLANCE_MASS_CAPABILITIES = {
     "movement_tracking",
     "communication_interception",
     "metadata_harvesting",
-    "relationship_mapping",
-    "protest_monitoring",
+    # Removed: relationship_mapping (moved to support_network_mapping for Tier 4-5)
+    # Removed: protest_monitoring (moved to community_safety_monitoring for Tier 4-5)
     "dragnet_surveillance",
     "stingray_deployment",
     "internet_backbone_tapping",
@@ -252,6 +261,9 @@ CYBER_OFFENSIVE_CAPABILITIES = {
     "backdoor_installation",
     "supply_chain_attacks",
     "firmware_exploitation",
+    "vulnerability_scanning",  # Without permission
+    "exploit_development",
+    "reverse_engineering",  # Of proprietary systems
 }
 
 ELECTION_INTERFERENCE_CAPABILITIES = {
@@ -279,12 +291,12 @@ BIOMETRIC_INFERENCE_CAPABILITIES = {
     "religious_belief_inference",
     "health_condition_detection",
     "pregnancy_detection",
-    "mental_state_assessment",
+    # Removed: mental_state_assessment (moved to crisis_state_detection for Tier 4-5)
     "lie_detection",
     "personality_profiling",
     "future_behavior_prediction",
     "genetic_trait_inference",
-    "addiction_detection",
+    # Removed: addiction_detection (moved to substance_crisis_detection for Tier 4-5)
     "criminal_tendency_prediction",
     "relationship_status_inference",
 }
@@ -340,6 +352,20 @@ DISCRIMINATION_CAPABILITIES = {
     "age_discrimination",
 }
 
+# === ALLOWED CAPABILITIES (Standard agent operations) ===
+# These are explicitly allowed for all agents
+
+STANDARD_OPERATIONS = {
+    "data_collection",  # Basic telemetry and usage
+    "survey_design",  # User feedback collection
+    "focus_groups",  # User research
+    "a_b_testing",  # Product optimization
+    "user_preference_tracking",
+    "feedback_analysis",
+    "usage_analytics",
+    "performance_monitoring",
+}
+
 # === COMMUNITY MODERATION (Tier 4-5 Agents Only) ===
 
 CRISIS_ESCALATION_CAPABILITIES = {
@@ -351,6 +377,10 @@ CRISIS_ESCALATION_CAPABILITIES = {
     "alert_trusted_contacts",
     "activate_crisis_protocol",
     "initiate_safety_plan",
+    "emergency_contact_activation",
+    "victim_support_routing",
+    "crisis_state_detection",  # Was mental_state_assessment
+    "substance_crisis_detection",  # Was addiction_detection
 }
 
 PATTERN_DETECTION_CAPABILITIES = {
@@ -362,6 +392,10 @@ PATTERN_DETECTION_CAPABILITIES = {
     "spot_manipulation_tactics",
     "recognize_grooming_patterns",
     "detect_hate_campaigns",
+    "abuse_pattern_documentation",
+    "threat_assessment",
+    "community_safety_monitoring",  # Was protest_monitoring
+    "support_network_mapping",  # Was relationship_mapping, for crisis support
 }
 
 PROTECTIVE_ROUTING_CAPABILITIES = {
@@ -373,6 +407,9 @@ PROTECTIVE_ROUTING_CAPABILITIES = {
     "activate_community_resources",
     "establish_safe_channels",
     "create_support_bridges",
+    "community_ban_recommendation",  # With human review
+    "temporary_restriction_suggestion",
+    "safety_timeout_implementation",
 }
 
 # === MASTER PROHIBITION DICTIONARY ===
@@ -384,6 +421,7 @@ PROHIBITED_CAPABILITIES: Dict[str, Set[str]] = {
     "LEGAL": LEGAL_CAPABILITIES,
     "HOME_SECURITY": HOME_SECURITY_CAPABILITIES,
     "IDENTITY_VERIFICATION": IDENTITY_VERIFICATION_CAPABILITIES,
+    "CONTENT_MODERATION": CONTENT_MODERATION_CAPABILITIES,
     "RESEARCH": RESEARCH_CAPABILITIES,
     "INFRASTRUCTURE_CONTROL": INFRASTRUCTURE_CONTROL_CAPABILITIES,
     # Absolutely prohibited (never allowed)
@@ -412,6 +450,7 @@ LEGITIMATE_MODULE_CATEGORIES = {
     "LEGAL",
     "HOME_SECURITY",
     "IDENTITY_VERIFICATION",
+    "CONTENT_MODERATION",
     "RESEARCH",
     "INFRASTRUCTURE_CONTROL",
 }

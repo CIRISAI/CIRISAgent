@@ -1,8 +1,9 @@
 # FSD-019: Wisdom Extension Capability System
 
-**Status**: Draft
+**Status**: Implemented
 **Author**: Eric Moore
 **Created**: 2025-01-12
+**Updated**: 2025-01-15 (Comprehensive prohibition system added)
 **Scope**: Enable specialized wisdom providers without creating new service families
 **Risk Level**: CRITICAL (Liability Management Required)
 
@@ -122,44 +123,61 @@ async def get_services(
 ```python
 # ciris_engine/logic/buses/wise_bus.py
 
-# CRITICAL: Medical domain prohibition
-PROHIBITED_CAPABILITIES = {
-    "domain:medical",
-    "domain:health",
-    "domain:triage",
-    "domain:diagnosis",
-    "domain:treatment",
-    "domain:prescription",
-    "domain:patient",
-    "modality:medical",
-    "provider:medical",
-    "clinical",
-    "symptom",
-    "disease",
-    "medication",
-    "therapy"
-}
+from .prohibitions import (
+    PROHIBITED_CAPABILITIES,
+    COMMUNITY_MODERATION_CAPABILITIES,
+    get_capability_category,
+    get_prohibition_severity,
+    ProhibitionSeverity,
+)
 
 class WiseBus(BaseBus):
 
     async def request_guidance(
         self,
         request: GuidanceRequest,
-        timeout: float = 5.0
+        timeout: float = 5.0,
+        agent_tier: Optional[int] = None
     ) -> GuidanceResponse:
         """
-        Fan-out to capability-matching providers with medical prohibition.
+        Fan-out to capability-matching providers with comprehensive prohibitions.
         """
-        # CRITICAL: Block medical domains
+        # Auto-detect agent tier if not provided
+        if agent_tier is None:
+            agent_tier = await self.get_agent_tier()
+
+        # CRITICAL: Validate capability against comprehensive prohibitions
         if request.capability:
-            cap_lower = request.capability.lower()
-            for prohibited in PROHIBITED_CAPABILITIES:
-                if prohibited in cap_lower:
-                    raise ValueError(
-                        f"PROHIBITED: Medical/health capabilities blocked. "
-                        f"Capability '{request.capability}' contains prohibited term '{prohibited}'. "
-                        f"Medical implementations require separate licensed system."
-                    )
+            self._validate_capability(request.capability, agent_tier)
+
+    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
+        """
+        Validate capability against prohibited domains with tier-based access.
+        """
+        if not capability:
+            return
+
+        category = get_capability_category(capability)
+        if not category:
+            return  # Not a prohibited capability
+
+        # Check tier restrictions for community moderation
+        if category.startswith("COMMUNITY_") and agent_tier < 4:
+            raise ValueError(
+                f"TIER RESTRICTED: Community moderation capability '{capability}' "
+                f"requires Tier 4-5 Echo agent"
+            )
+
+        severity = get_prohibition_severity(category)
+
+        if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
+            raise ValueError(
+                f"PROHIBITED: {category} capabilities require separate licensed system"
+            )
+        elif severity == ProhibitionSeverity.NEVER_ALLOWED:
+            raise ValueError(
+                f"ABSOLUTELY PROHIBITED: {category} capabilities violate core safety principles"
+            )
 
         # Gather matching services
         required = [request.capability] if request.capability else None
@@ -334,7 +352,35 @@ registry.register(
 
 ### Prohibited Domains (Blocked)
 
-- Any capability containing: medical, health, clinical, patient, diagnosis, treatment, prescription, symptom, disease, medication, therapy, triage, condition, disorder
+The prohibition system has been expanded to comprehensively cover all potentially harmful capabilities:
+
+#### Categories Requiring Separate Modules
+- **MEDICAL**: diagnosis, treatment, prescription, medical_advice, symptom_assessment, etc.
+- **FINANCIAL**: investment_advice, trading_signals, portfolio_management, tax_planning, etc.
+- **LEGAL**: legal_advice, contract_drafting, litigation_strategy, legal_representation, etc.
+- **HOME_SECURITY**: surveillance_system_control, door_lock_override, alarm_system_control, etc.
+- **IDENTITY_VERIFICATION**: biometric_verification, government_id_validation, background_checks, etc.
+- **RESEARCH**: human_subjects_research, clinical_trials, irb_protocols, etc.
+- **INFRASTRUCTURE_CONTROL**: power_grid_control, water_treatment, traffic_control, etc.
+
+#### Absolutely Prohibited (Never Allowed)
+- **WEAPONS_HARMFUL**: weapon_design, explosive_synthesis, chemical_weapons, biological_weapons, etc.
+- **MANIPULATION_COERCION**: subliminal_messaging, gaslighting, brainwashing, blackmail, etc.
+- **SURVEILLANCE_MASS**: mass_surveillance, facial_recognition_database, social_scoring, etc.
+- **DECEPTION_FRAUD**: deepfake_creation, voice_cloning, identity_spoofing, misinformation_campaigns, etc.
+- **CYBER_OFFENSIVE**: malware_generation, zero_day_exploitation, ransomware_creation, etc.
+- **ELECTION_INTERFERENCE**: voter_manipulation, election_hacking, disinformation_campaigns, etc.
+- **BIOMETRIC_INFERENCE**: emotion_recognition, sexual_orientation_inference, mental_state_assessment, etc.
+- **AUTONOMOUS_DECEPTION**: self_modification, goal_modification, oversight_subversion, etc.
+- **HAZARDOUS_MATERIALS**: chemical_synthesis, toxin_production, illegal_drug_synthesis, etc.
+- **DISCRIMINATION**: protected_class_discrimination, redlining, algorithmic_bias, etc.
+
+#### Community Moderation (Tier 4-5 Echo Agents Only)
+- **CRISIS_ESCALATION**: notify_moderators, flag_concerning_content, request_welfare_check, etc.
+- **PATTERN_DETECTION**: identify_harm_patterns, monitor_community_health, detect_coordinated_campaigns, etc.
+- **PROTECTIVE_ROUTING**: connect_crisis_resources, facilitate_peer_support, coordinate_moderator_response, etc.
+
+See [PROHIBITION_CATEGORIES.md](../docs/PROHIBITION_CATEGORIES.md) for complete documentation.
 
 ## Migration Path
 
@@ -359,26 +405,46 @@ registry.register(
 
 ```python
 @pytest.mark.asyncio
-async def test_medical_capability_blocked():
-    """CRITICAL: Ensure medical domains are blocked"""
+async def test_comprehensive_prohibitions():
+    """CRITICAL: Ensure all prohibited domains are blocked"""
     bus = WiseBus(...)
 
-    medical_capabilities = [
-        "domain:medical",
-        "domain:health:triage",
-        "modality:medical:imaging",
-        "provider:clinical"
-    ]
-
+    # Test medical capabilities (require separate module)
+    medical_capabilities = ["diagnosis", "treatment", "prescription"]
     for cap in medical_capabilities:
         request = GuidanceRequest(
             context="test",
             options=["A", "B"],
             capability=cap
         )
+        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL"):
+            await bus.request_guidance(request, agent_tier=1)
 
-        with pytest.raises(ValueError, match="PROHIBITED"):
-            await bus.request_guidance(request)
+    # Test absolutely prohibited capabilities
+    prohibited_capabilities = ["weapon_design", "malware_generation", "deepfake_creation"]
+    for cap in prohibited_capabilities:
+        request = GuidanceRequest(
+            context="test",
+            options=["A", "B"],
+            capability=cap
+        )
+        with pytest.raises(ValueError, match="ABSOLUTELY PROHIBITED"):
+            await bus.request_guidance(request, agent_tier=5)  # Even tier 5 can't access
+
+    # Test tier-restricted capabilities
+    community_capabilities = ["notify_moderators", "identify_harm_patterns"]
+    for cap in community_capabilities:
+        request = GuidanceRequest(
+            context="test",
+            options=["A", "B"],
+            capability=cap
+        )
+        # Tier 1-3 blocked
+        with pytest.raises(ValueError, match="TIER RESTRICTED"):
+            await bus.request_guidance(request, agent_tier=3)
+        # Tier 4-5 allowed
+        response = await bus.request_guidance(request, agent_tier=4)
+        assert response is not None
 
 @pytest.mark.asyncio
 async def test_safe_capability_allowed():

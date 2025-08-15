@@ -13,47 +13,18 @@ from ciris_engine.schemas.services.authority_core import GuidanceRequest, Guidan
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
 
 from .base_bus import BaseBus, BusMessage
+from .prohibitions import (
+    COMMUNITY_MODERATION_CAPABILITIES,
+    PROHIBITED_CAPABILITIES,
+    ProhibitionSeverity,
+    get_capability_category,
+    get_prohibition_severity,
+)
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
 logger = logging.getLogger(__name__)
-
-# CRITICAL: Medical domain prohibition - These capabilities are BLOCKED at the bus level
-# to prevent any medical/health functionality in the main repository.
-# Medical implementations must be in a separate, licensed system (CIRISMedical).
-PROHIBITED_CAPABILITIES = {
-    "domain:medical",
-    "domain:health",
-    "domain:triage",
-    "domain:diagnosis",
-    "domain:treatment",
-    "domain:prescription",
-    "domain:patient",
-    "domain:clinical",
-    "domain:symptom",
-    "domain:disease",
-    "domain:medication",
-    "domain:therapy",
-    "domain:condition",
-    "domain:disorder",
-    "modality:medical",
-    "provider:medical",
-    "clinical",
-    "symptom",
-    "disease",
-    "medication",
-    "therapy",
-    "triage",
-    "diagnosis",
-    "treatment",
-    "prescription",
-    "patient",
-    "health",
-    "medical",
-    "condition",
-    "disorder",
-}
 
 
 class WiseBus(BaseBus[WiseAuthorityService]):
@@ -63,11 +34,77 @@ class WiseBus(BaseBus[WiseAuthorityService]):
     Handles:
     - send_deferral
     - fetch_guidance
+    - Comprehensive capability prohibition with tier-based access
     """
 
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.WISE_AUTHORITY, service_registry=service_registry)
         self._time_service = time_service
+        self._agent_tier: Optional[int] = None  # Cached agent tier
+
+    async def get_agent_tier(self) -> int:
+        """
+        Get the agent's tier level from configuration or identity.
+
+        Tier levels:
+        - 1-3: Standard agents (no community moderation)
+        - 4-5: Echo agents (trusted community moderators)
+
+        Returns:
+            Agent tier level (1-5), defaults to 1 if not found
+        """
+        if self._agent_tier is not None:
+            return self._agent_tier
+
+        # Try to get tier from config service
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            config_services = self.service_registry.get_services_by_type(ServiceType.CONFIG)
+            if config_services:
+                config_service = config_services[0]
+                if hasattr(config_service, "get_value"):
+                    tier = await config_service.get_value("agent_tier")
+                    if tier:
+                        self._agent_tier = int(tier)
+                        logger.info(f"Agent tier detected from config: {self._agent_tier}")
+                        return self._agent_tier
+        except Exception as e:
+            logger.debug(f"Could not get tier from config: {e}")
+
+        # Try to get tier from memory/identity
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
+            if memory_services:
+                memory_service = memory_services[0]
+                if hasattr(memory_service, "recall"):
+                    # Look for agent tier in identity
+                    from ciris_engine.schemas.services.context import RecallQuery
+
+                    query = RecallQuery(
+                        query="agent_tier OR echo_agent OR community_moderator", scope="identity", limit=5
+                    )
+                    results = await memory_service.recall(query)
+                    if results and results.memories:
+                        for memory in results.memories:
+                            # Check if this is an Echo agent
+                            if (
+                                "echo" in str(memory).lower()
+                                or "tier_4" in str(memory).lower()
+                                or "tier_5" in str(memory).lower()
+                            ):
+                                self._agent_tier = 4  # Default Echo tier
+                                logger.info(f"Agent identified as Echo agent (tier {self._agent_tier})")
+                                return self._agent_tier
+        except Exception as e:
+            logger.debug(f"Could not get tier from memory: {e}")
+
+        # Default to tier 1 (standard agent)
+        self._agent_tier = 1
+        logger.info(f"Using default agent tier: {self._agent_tier}")
+        return self._agent_tier
 
     async def send_deferral(self, context: DeferralContext, handler_name: str) -> bool:
         """Send a deferral to ALL wise authority services (broadcast)"""
@@ -184,22 +221,58 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return await self.send_deferral(context, handler_name)
 
-    def _validate_capability(self, capability: Optional[str]) -> None:
+    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
         """
-        Validate capability against prohibited domains.
-        Raises ValueError if capability contains prohibited terms.
+        Validate capability against prohibited domains with tier-based access.
+
+        Args:
+            capability: The capability to validate
+            agent_tier: Agent tier level (1-5, with 4-5 being Echo agents)
+
+        Raises:
+            ValueError: If capability is prohibited for the agent's tier
         """
         if not capability:
             return
 
-        cap_lower = capability.lower()
-        for prohibited in PROHIBITED_CAPABILITIES:
-            if prohibited in cap_lower:
+        # Get the category of this capability
+        category = get_capability_category(capability)
+        if not category:
+            # Not a prohibited capability
+            return
+
+        # Check if it's a community moderation capability
+        if category.startswith("COMMUNITY_"):
+            # Community moderation is only for Tier 4-5 Echo agents
+            if agent_tier < 4:
                 raise ValueError(
-                    f"PROHIBITED: Medical/health capabilities blocked. "
-                    f"Capability '{capability}' contains prohibited term '{prohibited}'. "
-                    f"Medical implementations require separate licensed system (CIRISMedical)."
+                    f"TIER RESTRICTED: Community moderation capability '{capability}' "
+                    f"requires Tier 4-5 Echo agent (current tier: {agent_tier}). "
+                    f"This capability is reserved for trusted community moderators."
                 )
+            # Tier 4-5 can use community moderation
+            return
+
+        # Get the severity of this prohibition
+        severity = get_prohibition_severity(category)
+
+        if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
+            # These require separate licensed systems
+            raise ValueError(
+                f"PROHIBITED: {category} capabilities blocked. "
+                f"Capability '{capability}' requires separate licensed system. "
+                f"Implementation must be in isolated repository with proper liability controls."
+            )
+        elif severity == ProhibitionSeverity.NEVER_ALLOWED:
+            # These are absolutely prohibited
+            raise ValueError(
+                f"ABSOLUTELY PROHIBITED: {category} capabilities are never allowed. "
+                f"Capability '{capability}' violates core safety principles. "
+                f"This capability cannot be implemented in any CIRIS system."
+            )
+        elif severity == ProhibitionSeverity.TIER_RESTRICTED:
+            # Already handled above for community moderation
+            pass
 
     async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
         """Get services matching the request capability."""
@@ -266,24 +339,31 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return responses
 
-    async def request_guidance(self, request: GuidanceRequest, timeout: float = 5.0) -> GuidanceResponse:
+    async def request_guidance(
+        self, request: GuidanceRequest, timeout: float = 5.0, agent_tier: Optional[int] = None
+    ) -> GuidanceResponse:
         """
-        Request guidance from capability-matching providers with medical prohibition.
+        Request guidance from capability-matching providers with comprehensive prohibitions.
 
         Args:
             request: Guidance request with optional capability field
             timeout: Maximum time to wait for responses (default 5 seconds)
+            agent_tier: Agent tier level (1-5), auto-detected if not provided
 
         Returns:
             GuidanceResponse with aggregated advice from providers
 
         Raises:
-            ValueError: If capability contains prohibited medical terms
+            ValueError: If capability is prohibited for the agent's tier
             RuntimeError: If no WiseAuthority service is available
         """
-        # CRITICAL: Block medical domains before any processing
+        # Auto-detect agent tier if not provided
+        if agent_tier is None:
+            agent_tier = await self.get_agent_tier()
+
+        # CRITICAL: Validate capability against comprehensive prohibitions
         if hasattr(request, "capability"):
-            self._validate_capability(request.capability)
+            self._validate_capability(request.capability, agent_tier)
 
         # Get matching services
         services = await self._get_matching_services(request)
@@ -397,9 +477,25 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         - failed_count: Total deferrals failed across providers
         - processed_count: Total guidance requests processed
         - provider_count: Number of active providers
-        - capability_blocks: Number of blocked medical capabilities
+        - prohibited_capabilities: Count by category
+        - community_capabilities: Count of community moderation capabilities
         """
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+
+        # Count capabilities by category
+        prohibited_counts = {}
+        total_prohibited = 0
+        for category, capabilities in PROHIBITED_CAPABILITIES.items():
+            count = len(capabilities)
+            prohibited_counts[category.lower()] = count
+            total_prohibited += count
+
+        community_counts = {}
+        total_community = 0
+        for category, capabilities in COMMUNITY_MODERATION_CAPABILITIES.items():
+            count = len(capabilities)
+            community_counts[category.lower()] = count
+            total_community += count
 
         if not all_wa_services:
             return {
@@ -408,7 +504,10 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 "failed_count": 0,
                 "processed_count": 0,
                 "provider_count": 0,
-                "capability_blocks": 0,
+                "prohibited_capabilities": prohibited_counts,
+                "total_prohibited": total_prohibited,
+                "community_capabilities": community_counts,
+                "total_community": total_community,
                 "error": "No wise authority services available",
             }
 
@@ -425,7 +524,10 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             "failed_count": 0,
             "processed_count": 0,
             "provider_count": len(all_wa_services),
-            "capability_blocks": len(PROHIBITED_CAPABILITIES),
+            "prohibited_capabilities": prohibited_counts,
+            "total_prohibited": total_prohibited,
+            "community_capabilities": community_counts,
+            "total_community": total_community,
             "providers": [],
         }
 

@@ -109,7 +109,7 @@ jobs:
       - name: Get version from constants
         id: version
         run: |
-          VERSION=$(python -c "import sys; sys.path.insert(0, '.'); from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 

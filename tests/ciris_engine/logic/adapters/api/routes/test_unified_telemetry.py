@@ -205,8 +205,8 @@ class TestUnifiedTelemetryEndpoint:
         # Remove get_aggregated_telemetry method
         app.state.telemetry_service = Mock(spec=[])
 
-        # Mock TelemetryAggregator
-        with patch("ciris_engine.logic.services.graph.telemetry_service.TelemetryAggregator") as MockAggregator:
+        # Mock TelemetryAggregator - patch it where it's imported in telemetry_helpers
+        with patch("ciris_engine.logic.adapters.api.routes.telemetry_helpers.TelemetryAggregator") as MockAggregator:
             mock_aggregator = Mock()
             mock_aggregator.collect_all_parallel = AsyncMock(
                 return_value={

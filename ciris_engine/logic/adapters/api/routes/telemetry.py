@@ -31,73 +31,28 @@ from ..constants import (
 )
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
+# Import extracted modules
+from .telemetry_converters import convert_to_graphite, convert_to_prometheus
+from .telemetry_helpers import get_telemetry_fallback, get_telemetry_from_service
+from .telemetry_models import (
+    LogEntry,
+    MetricData,
+    MetricSeries,
+    ResourceHistoryResponse,
+    ResourceMetricData,
+    ResourceUsage,
+    ServiceHealth,
+    ServiceHealthOverview,
+    SystemOverview,
+    TimePeriod,
+    TraceSpan,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
-# Request/Response schemas
-
-
-class MetricData(BaseModel):
-    """Single metric data point."""
-
-    timestamp: datetime = Field(..., description="When metric was recorded")
-    value: float = Field(..., description="Metric value")
-    tags: MetricTags = Field(default_factory=lambda: MetricTags.model_validate({}), description="Metric tags")
-
-    @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
-        return timestamp.isoformat() if timestamp else None
-
-
-class MetricSeries(BaseModel):
-    """Time series data for a metric."""
-
-    metric_name: str = Field(..., description="Name of the metric")
-    data_points: List[MetricData] = Field(..., description="Time series data")
-    unit: Optional[str] = Field(None, description="Metric unit")
-    description: Optional[str] = Field(None, description="Metric description")
-
-
-class SystemOverview(BaseModel):
-    """System overview combining all observability data."""
-
-    # Core metrics
-    uptime_seconds: float = Field(..., description="System uptime")
-    cognitive_state: str = Field(..., description=DESC_CURRENT_COGNITIVE_STATE)
-    messages_processed_24h: int = Field(0, description="Messages in last 24 hours")
-    thoughts_processed_24h: int = Field(0, description="Thoughts in last 24 hours")
-    tasks_completed_24h: int = Field(0, description="Tasks completed in last 24 hours")
-    errors_24h: int = Field(0, description="Errors in last 24 hours")
-
-    # Resource usage (last hour actuals)
-    tokens_last_hour: float = Field(0.0, description="Total tokens in last hour")
-    cost_last_hour_cents: float = Field(0.0, description="Total cost in last hour (cents)")
-    carbon_last_hour_grams: float = Field(0.0, description="Total carbon in last hour (grams)")
-    energy_last_hour_kwh: float = Field(0.0, description="Total energy in last hour (kWh)")
-
-    # Resource usage (24 hour totals)
-    tokens_24h: float = Field(0.0, description="Total tokens in last 24 hours")
-    cost_24h_cents: float = Field(0.0, description="Total cost in last 24 hours (cents)")
-    carbon_24h_grams: float = Field(0.0, description="Total carbon in last 24 hours (grams)")
-    energy_24h_kwh: float = Field(0.0, description="Total energy in last 24 hours (kWh)")
-    memory_mb: float = Field(0.0, description="Current memory usage")
-    cpu_percent: float = Field(0.0, description="Current CPU usage")
-
-    # Service health
-    healthy_services: int = Field(0, description="Number of healthy services")
-    degraded_services: int = Field(0, description="Number of degraded services")
-    error_rate_percent: float = Field(0.0, description="System error rate")
-
-    # Agent activity
-    current_task: Optional[str] = Field(None, description="Current task description")
-    reasoning_depth: int = Field(0, description="Current reasoning depth")
-    active_deferrals: int = Field(0, description="Pending WA deferrals")
-    recent_incidents: int = Field(0, description="Incidents in last hour")
-
-    # Telemetry metrics
-    total_metrics: int = Field(0, description="Total metrics collected")
-    active_services: int = Field(0, description="Number of active services reporting telemetry")
+# Additional request/response schemas not in telemetry_models.py
 
 
 class DetailedMetric(BaseModel):
@@ -1273,93 +1228,10 @@ class ResourceMetricData(BaseModel):
     unit: str = Field(..., description="Unit of measurement")
 
 
-class TimePeriod(BaseModel):
-    """Time period specification."""
-
-    start: str = Field(..., description="Start time (ISO format)")
-    end: str = Field(..., description="End time (ISO format)")
-    hours: int = Field(..., description="Period length in hours")
+# TimePeriod and ResourceHistoryResponse models moved to telemetry_models.py
 
 
-class ResourceHistoryResponse(BaseModel):
-    """Historical resource usage response."""
-
-    period: TimePeriod = Field(..., description="Time period covered")
-    cpu: ResourceMetricData = Field(..., description="CPU usage data")
-    memory: ResourceMetricData = Field(..., description="Memory usage data")
-    disk: ResourceMetricData = Field(..., description="Disk usage data")
-
-
-def _convert_to_prometheus(data: Dict) -> str:
-    """Convert telemetry data to Prometheus format."""
-    lines = []
-
-    def flatten(d, prefix=""):
-        for k, v in d.items():
-            if k.startswith("_"):
-                continue
-            key = f"{prefix}_{k}" if prefix else k
-            if isinstance(v, dict):
-                flatten(v, key)
-            elif isinstance(v, bool):
-                metric_name = f"ciris_{key}".replace(".", "_").replace("-", "_")
-                lines.append(f"{metric_name} {1 if v else 0}")
-            elif isinstance(v, (int, float)):
-                metric_name = f"ciris_{key}".replace(".", "_").replace("-", "_")
-                lines.append(f"{metric_name} {v}")
-
-    flatten(data)
-    return "\n".join(lines)
-
-
-def _convert_to_graphite(data: Dict) -> str:
-    """Convert telemetry data to Graphite format."""
-    lines = []
-    timestamp = int(datetime.now(timezone.utc).timestamp())
-
-    def flatten(d, prefix="ciris"):
-        for k, v in d.items():
-            if k.startswith("_"):
-                continue
-            key = f"{prefix}.{k}"
-            if isinstance(v, dict):
-                flatten(v, key)
-            elif isinstance(v, bool):
-                lines.append(f"{key} {1 if v else 0} {timestamp}")
-            elif isinstance(v, (int, float)):
-                lines.append(f"{key} {v} {timestamp}")
-
-    flatten(data)
-    return "\n".join(lines)
-
-
-async def _get_telemetry_from_service(
-    telemetry_service, view: str, category: Optional[str], format: str, live: bool
-) -> Dict:
-    """Get telemetry from the service's built-in aggregator."""
-    return await telemetry_service.get_aggregated_telemetry(view=view, category=category, format=format, live=live)
-
-
-async def _get_telemetry_fallback(app_state, view: str, category: Optional[str]) -> Dict:
-    """Fallback method to get telemetry using TelemetryAggregator."""
-    from ciris_engine.logic.services.graph.telemetry_service import TelemetryAggregator
-
-    aggregator = TelemetryAggregator(app_state)
-    telemetry_data = await aggregator.collect_all_parallel()
-    result = aggregator.calculate_aggregates(telemetry_data)
-
-    if view != "detailed":
-        result = aggregator.apply_view_filter(result, view)
-
-    result["_metadata"] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "view": view,
-        "category": category,
-        "cached": False,
-        "format": "json",
-    }
-
-    return result
+# Helper functions moved to telemetry_helpers.py
 
 
 @router.get("/unified", response_model=None)
@@ -1402,16 +1274,16 @@ async def get_unified_telemetry(
 
         # Get telemetry data
         if hasattr(telemetry_service, "get_aggregated_telemetry"):
-            result = await _get_telemetry_from_service(telemetry_service, view, category, format, live)
+            result = await get_telemetry_from_service(telemetry_service, view, category, format, live)
         else:
-            result = await _get_telemetry_fallback(request.app.state, view, category)
+            result = await get_telemetry_fallback(request.app.state, view, category)
 
         # Handle export formats
         if format == "prometheus":
-            content = _convert_to_prometheus(result)
+            content = convert_to_prometheus(result)
             return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
         elif format == "graphite":
-            content = _convert_to_graphite(result)
+            content = convert_to_graphite(result)
             return Response(content=content, media_type="text/plain; charset=utf-8")
 
         return result

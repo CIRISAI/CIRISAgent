@@ -185,8 +185,9 @@ jobs:
           fi
 
           # Extract version (use short SHA)
-          VERSION="${{ github.sha }}"
-          VERSION="${VERSION:0:7}"
+          # Extract semantic version from constants.py
+          SEMANTIC_VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
+          echo "Semantic version: $SEMANTIC_VERSION"
 
           # Notify CIRISManager about new images with rich context
           # CIRISManager will orchestrate the deployment
@@ -200,7 +201,7 @@ jobs:
               \"commit_sha\": \"${{ github.sha }}\",
               \"changelog\": \"$CHANGELOG\",
               \"risk_level\": \"$RISK_LEVEL\",
-              \"version\": \"$VERSION\"
+              \"version\": \"$SEMANTIC_VERSION\"
             }")
 
           # Extract HTTP status

@@ -339,7 +339,7 @@ class ServiceRegistry:
 
         return False
 
-    async def get_services(
+    def get_services(
         self,
         service_type: ServiceType,
         required_capabilities: Optional[List[str]] = None,

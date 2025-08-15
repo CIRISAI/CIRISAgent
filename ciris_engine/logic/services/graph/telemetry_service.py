@@ -241,8 +241,18 @@ class TelemetryAggregator:
         else:
             return {"status": str(status)}
 
-    def calculate_aggregates(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
-        """Calculate system-wide aggregate metrics."""
+    def _process_service_metrics(self, service_data: Dict) -> tuple:
+        """Process metrics for a single service."""
+        is_healthy = service_data.get("healthy", False) or service_data.get("available", False)
+        errors = service_data.get("error_count", 0)
+        requests = service_data.get("request_count", 0)
+        error_rate = service_data.get("error_rate", 0.0)
+        uptime = service_data.get("uptime_seconds", 0)
+
+        return is_healthy, errors, requests, error_rate, uptime
+
+    def _aggregate_service_metrics(self, telemetry: Dict[str, Any]) -> tuple:
+        """Aggregate metrics from all services."""
         total_services = 0
         healthy_services = 0
         total_errors = 0
@@ -250,24 +260,31 @@ class TelemetryAggregator:
         min_uptime = float("inf")
         error_rates = []
 
-        # Process all services
         for category_data in telemetry.values():
             for service_data in category_data.values():
                 total_services += 1
+                is_healthy, errors, requests, error_rate, uptime = self._process_service_metrics(service_data)
 
-                if service_data.get("healthy", False) or service_data.get("available", False):
+                if is_healthy:
                     healthy_services += 1
 
-                total_errors += service_data.get("error_count", 0)
-                total_requests += service_data.get("request_count", 0)
+                total_errors += errors
+                total_requests += requests
 
-                error_rate = service_data.get("error_rate", 0.0)
                 if error_rate > 0:
                     error_rates.append(error_rate)
 
-                uptime = service_data.get("uptime_seconds", 0)
                 if uptime > 0 and uptime < min_uptime:
                     min_uptime = uptime
+
+        return total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates
+
+    def calculate_aggregates(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate system-wide aggregate metrics."""
+        # Get aggregated metrics
+        total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates = (
+            self._aggregate_service_metrics(telemetry)
+        )
 
         # Calculate overall metrics
         overall_error_rate = sum(error_rates) / len(error_rates) if error_rates else 0.0

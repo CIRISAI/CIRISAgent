@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 172,
+    "occurrences": 173,
     "files_affected": 79,
     "categories": {
-      "generic_data": 153,
+      "generic_data": 154,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -605,7 +605,15 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 244,
+        "line": 254,
+        "class": "TelemetryAggregator",
+        "function": "_aggregate_service_metrics",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
+        "line": 282,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "function_parameter",
@@ -613,7 +621,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 244,
+        "line": 282,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "return_type",
@@ -621,7 +629,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1256,
+        "line": 1273,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",
@@ -3120,7 +3128,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 387,
+    "occurrences": 388,
     "files_affected": 121
   }
 }

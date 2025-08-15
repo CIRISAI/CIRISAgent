@@ -8,7 +8,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_serializer
@@ -1280,6 +1280,78 @@ class ResourceHistoryResponse(BaseModel):
     disk: ResourceMetricData = Field(..., description="Disk usage data")
 
 
+def _convert_to_prometheus(data: Dict) -> str:
+    """Convert telemetry data to Prometheus format."""
+    lines = []
+
+    def flatten(d, prefix=""):
+        for k, v in d.items():
+            if k.startswith("_"):
+                continue
+            key = f"{prefix}_{k}" if prefix else k
+            if isinstance(v, dict):
+                flatten(v, key)
+            elif isinstance(v, bool):
+                metric_name = f"ciris_{key}".replace(".", "_").replace("-", "_")
+                lines.append(f"{metric_name} {1 if v else 0}")
+            elif isinstance(v, (int, float)):
+                metric_name = f"ciris_{key}".replace(".", "_").replace("-", "_")
+                lines.append(f"{metric_name} {v}")
+
+    flatten(data)
+    return "\n".join(lines)
+
+
+def _convert_to_graphite(data: Dict) -> str:
+    """Convert telemetry data to Graphite format."""
+    lines = []
+    timestamp = int(datetime.now(timezone.utc).timestamp())
+
+    def flatten(d, prefix="ciris"):
+        for k, v in d.items():
+            if k.startswith("_"):
+                continue
+            key = f"{prefix}.{k}"
+            if isinstance(v, dict):
+                flatten(v, key)
+            elif isinstance(v, bool):
+                lines.append(f"{key} {1 if v else 0} {timestamp}")
+            elif isinstance(v, (int, float)):
+                lines.append(f"{key} {v} {timestamp}")
+
+    flatten(data)
+    return "\n".join(lines)
+
+
+async def _get_telemetry_from_service(
+    telemetry_service, view: str, category: Optional[str], format: str, live: bool
+) -> Dict:
+    """Get telemetry from the service's built-in aggregator."""
+    return await telemetry_service.get_aggregated_telemetry(view=view, category=category, format=format, live=live)
+
+
+async def _get_telemetry_fallback(app_state, view: str, category: Optional[str]) -> Dict:
+    """Fallback method to get telemetry using TelemetryAggregator."""
+    from ciris_engine.logic.services.graph.telemetry_service import TelemetryAggregator
+
+    aggregator = TelemetryAggregator(app_state)
+    telemetry_data = await aggregator.collect_all_parallel()
+    result = aggregator.calculate_aggregates(telemetry_data)
+
+    if view != "detailed":
+        result = aggregator.apply_view_filter(result, view)
+
+    result["_metadata"] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "view": view,
+        "category": category,
+        "cached": False,
+        "format": "json",
+    }
+
+    return result
+
+
 @router.get("/unified")
 async def get_unified_telemetry(
     request: Request,
@@ -1290,7 +1362,7 @@ async def get_unified_telemetry(
     ),
     format: str = Query("json", description="Output format: json|prometheus|graphite"),
     live: bool = Query(False, description="Force live collection (bypass cache)"),
-) -> Dict:
+) -> Union[Dict, Response]:
     """
     Unified enterprise telemetry endpoint.
 
@@ -1318,93 +1390,21 @@ async def get_unified_telemetry(
         if not telemetry_service:
             raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
 
-        # Use the aggregator to collect telemetry
+        # Get telemetry data
         if hasattr(telemetry_service, "get_aggregated_telemetry"):
-            # Use the service's built-in aggregator
-            result = await telemetry_service.get_aggregated_telemetry(
-                view=view, category=category, format=format, live=live
-            )
-
-            # Handle export formats
-            if format == "prometheus":
-                # Convert to Prometheus format
-                def convert_to_prometheus(data: Dict) -> str:
-                    lines = []
-
-                    def flatten(d, prefix=""):
-                        for k, v in d.items():
-                            if k.startswith("_"):
-                                continue
-                            key = f"{prefix}_{k}" if prefix else k
-                            if isinstance(v, dict):
-                                flatten(v, key)
-                            elif isinstance(v, bool):
-                                # Check bool BEFORE int/float since bool is subclass of int
-                                metric_name = f"ciris_{key}".replace(".", "_").replace("-", "_")
-                                lines.append(f"{metric_name} {1 if v else 0}")
-                            elif isinstance(v, (int, float)):
-                                metric_name = f"ciris_{key}".replace(".", "_").replace("-", "_")
-                                lines.append(f"{metric_name} {v}")
-
-                    flatten(data)
-                    return "\n".join(lines)
-
-                content = convert_to_prometheus(result)
-                return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
-
-            elif format == "graphite":
-                # Convert to Graphite format
-                def convert_to_graphite(data: Dict) -> str:
-                    lines = []
-                    timestamp = int(datetime.now(timezone.utc).timestamp())
-
-                    def flatten(d, prefix="ciris"):
-                        for k, v in d.items():
-                            if k.startswith("_"):
-                                continue
-                            key = f"{prefix}.{k}"
-                            if isinstance(v, dict):
-                                flatten(v, key)
-                            elif isinstance(v, bool):
-                                # Check bool BEFORE int/float since bool is subclass of int
-                                lines.append(f"{key} {1 if v else 0} {timestamp}")
-                            elif isinstance(v, (int, float)):
-                                lines.append(f"{key} {v} {timestamp}")
-
-                    flatten(data)
-                    return "\n".join(lines)
-
-                content = convert_to_graphite(result)
-                return Response(content=content, media_type="text/plain; charset=utf-8")
-
-            return result
-
+            result = await _get_telemetry_from_service(telemetry_service, view, category, format, live)
         else:
-            # Fallback: Create basic aggregation
-            from ciris_engine.logic.services.graph.telemetry_service import TelemetryAggregator
+            result = await _get_telemetry_fallback(request.app.state, view, category)
 
-            aggregator = TelemetryAggregator(request.app.state)
+        # Handle export formats
+        if format == "prometheus":
+            content = _convert_to_prometheus(result)
+            return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
+        elif format == "graphite":
+            content = _convert_to_graphite(result)
+            return Response(content=content, media_type="text/plain; charset=utf-8")
 
-            # Collect from all services in parallel
-            telemetry_data = await aggregator.collect_all_parallel()
-
-            # Calculate aggregates
-            result = aggregator.calculate_aggregates(telemetry_data)
-
-            # Apply view filter
-            if view != "detailed":
-                result = aggregator.apply_view_filter(result, view)
-
-            # Add metadata
-            result["_metadata"] = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "view": view,
-                "category": category,
-                "cached": False,
-                "format": format,
-            }
-
-            return result
+        return result
 
     except HTTPException:
         raise

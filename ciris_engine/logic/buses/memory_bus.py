@@ -354,6 +354,38 @@ class MemoryBus(BaseBus[MemoryService]):
         # This bus mainly exists for consistency and future async operations
         logger.warning(f"Memory operations should be synchronous, got queued message: {type(message)}")
 
+    def _create_empty_telemetry(self) -> Dict[str, any]:
+        """Create empty telemetry response when no services available."""
+        return {
+            "service_name": "memory_bus",
+            "healthy": False,
+            "total_nodes": 0,
+            "query_count": 0,
+            "provider_count": 0,
+            "cache_hit_rate": 0.0,
+            "error": "No memory services available",
+        }
+
+    def _create_telemetry_tasks(self, services) -> List:
+        """Create telemetry collection tasks for all services."""
+        import asyncio
+
+        tasks = []
+        for service in services:
+            if hasattr(service, "get_telemetry"):
+                tasks.append(asyncio.create_task(service.get_telemetry()))
+        return tasks
+
+    def _aggregate_telemetry_result(self, telemetry: Dict, aggregated: Dict, cache_rates: List):
+        """Aggregate a single telemetry result into the combined metrics."""
+        if telemetry:
+            aggregated["providers"].append(telemetry.get("service_name", "unknown"))
+            aggregated["total_nodes"] += telemetry.get("total_nodes", 0)
+            aggregated["query_count"] += telemetry.get("query_count", 0)
+
+            if "cache_hit_rate" in telemetry:
+                cache_rates.append(telemetry["cache_hit_rate"])
+
     async def collect_telemetry(self) -> Dict[str, any]:
         """
         Collect telemetry from all memory providers in parallel.
@@ -369,23 +401,12 @@ class MemoryBus(BaseBus[MemoryService]):
         all_memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
 
         if not all_memory_services:
-            return {
-                "service_name": "memory_bus",
-                "healthy": False,
-                "total_nodes": 0,
-                "query_count": 0,
-                "provider_count": 0,
-                "cache_hit_rate": 0.0,
-                "error": "No memory services available",
-            }
+            return self._create_empty_telemetry()
 
         # Create tasks to collect telemetry from all providers
-        tasks = []
-        for service in all_memory_services:
-            if hasattr(service, "get_telemetry"):
-                tasks.append(asyncio.create_task(service.get_telemetry()))
+        tasks = self._create_telemetry_tasks(all_memory_services)
 
-        # Collect results with timeout
+        # Initialize aggregated metrics
         aggregated = {
             "service_name": "memory_bus",
             "healthy": True,
@@ -396,31 +417,27 @@ class MemoryBus(BaseBus[MemoryService]):
             "providers": [],
         }
 
-        if tasks:
-            done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+        if not tasks:
+            return aggregated
 
-            # Cancel timed-out tasks
-            for task in pending:
-                task.cancel()
+        # Collect results with timeout
+        done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
 
-            # Aggregate results
-            cache_rates = []
-            for task in done:
-                try:
-                    telemetry = task.result()
-                    if telemetry:
-                        aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-                        aggregated["total_nodes"] += telemetry.get("total_nodes", 0)
-                        aggregated["query_count"] += telemetry.get("query_count", 0)
+        # Cancel timed-out tasks
+        for task in pending:
+            task.cancel()
 
-                        # Collect cache hit rates for averaging
-                        if "cache_hit_rate" in telemetry:
-                            cache_rates.append(telemetry["cache_hit_rate"])
-                except Exception as e:
-                    logger.warning(f"Failed to collect telemetry from memory provider: {e}")
+        # Aggregate results
+        cache_rates = []
+        for task in done:
+            try:
+                telemetry = task.result()
+                self._aggregate_telemetry_result(telemetry, aggregated, cache_rates)
+            except Exception as e:
+                logger.warning(f"Failed to collect telemetry from memory provider: {e}")
 
-            # Calculate average cache hit rate
-            if cache_rates:
-                aggregated["cache_hit_rate"] = sum(cache_rates) / len(cache_rates)
+        # Calculate average cache hit rate
+        if cache_rates:
+            aggregated["cache_hit_rate"] = sum(cache_rates) / len(cache_rates)
 
         return aggregated

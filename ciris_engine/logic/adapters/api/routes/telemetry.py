@@ -218,6 +218,45 @@ class QueryResponse(BaseModel):
 # Helper functions
 
 
+async def _update_telemetry_summary(overview: SystemOverview, telemetry_service) -> None:
+    """Update overview with telemetry summary metrics."""
+    if telemetry_service and hasattr(telemetry_service, "get_telemetry_summary"):
+        try:
+            summary = await telemetry_service.get_telemetry_summary()
+            overview.messages_processed_24h = summary.messages_processed_24h
+            overview.thoughts_processed_24h = summary.thoughts_processed_24h
+            overview.tasks_completed_24h = summary.tasks_completed_24h
+            overview.errors_24h = summary.errors_24h
+            overview.tokens_last_hour = summary.tokens_last_hour
+            overview.cost_last_hour_cents = summary.cost_last_hour_cents
+            overview.carbon_last_hour_grams = summary.carbon_last_hour_grams
+            overview.energy_last_hour_kwh = summary.energy_last_hour_kwh
+            overview.tokens_24h = summary.tokens_24h
+            overview.cost_24h_cents = summary.cost_24h_cents
+            overview.carbon_24h_grams = summary.carbon_24h_grams
+            overview.energy_24h_kwh = summary.energy_24h_kwh
+            overview.error_rate_percent = summary.error_rate_percent
+        except Exception as e:
+            logger.warning(
+                f"Telemetry metric retrieval failed for telemetry summary: {type(e).__name__}: {str(e)} - Returning default/empty value"
+            )
+
+
+async def _update_visibility_state(overview: SystemOverview, visibility_service) -> None:
+    """Update overview with visibility state information."""
+    if visibility_service:
+        try:
+            snapshot = await visibility_service.get_current_state()
+            if snapshot:
+                overview.reasoning_depth = snapshot.reasoning_depth
+                if snapshot.current_task:
+                    overview.current_task = snapshot.current_task.description
+        except Exception as e:
+            logger.warning(
+                f"Telemetry metric retrieval failed for visibility state: {type(e).__name__}: {str(e)} - Returning default/empty value"
+            )
+
+
 async def _get_system_overview(request: Request) -> SystemOverview:
     """Build comprehensive system overview from all services."""
     # Get core services
@@ -267,45 +306,16 @@ async def _get_system_overview(request: Request) -> SystemOverview:
                 f"Telemetry metric retrieval failed for uptime: {type(e).__name__}: {str(e)} - Returning default/empty value"
             )
 
-    # Get telemetry summary if available
-    if telemetry_service and hasattr(telemetry_service, "get_telemetry_summary"):
-        try:
-            summary = await telemetry_service.get_telemetry_summary()
-            overview.messages_processed_24h = summary.messages_processed_24h
-            overview.thoughts_processed_24h = summary.thoughts_processed_24h
-            overview.tasks_completed_24h = summary.tasks_completed_24h
-            overview.errors_24h = summary.errors_24h
-            overview.tokens_last_hour = summary.tokens_last_hour
-            overview.cost_last_hour_cents = summary.cost_last_hour_cents
-            overview.carbon_last_hour_grams = summary.carbon_last_hour_grams
-            overview.energy_last_hour_kwh = summary.energy_last_hour_kwh
-            overview.tokens_24h = summary.tokens_24h
-            overview.cost_24h_cents = summary.cost_24h_cents
-            overview.carbon_24h_grams = summary.carbon_24h_grams
-            overview.energy_24h_kwh = summary.energy_24h_kwh
-            overview.error_rate_percent = summary.error_rate_percent
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for telemetry summary: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+    # Update with telemetry summary
+    await _update_telemetry_summary(overview, telemetry_service)
 
     # Get cognitive state from runtime
     runtime = getattr(request.app.state, "runtime", None)
     if runtime and hasattr(runtime, "state_manager"):
         overview.cognitive_state = runtime.state_manager.current_state
 
-    # Get reasoning depth and current task from visibility
-    if visibility_service:
-        try:
-            snapshot = await visibility_service.get_current_state()
-            if snapshot:
-                overview.reasoning_depth = snapshot.reasoning_depth
-                if snapshot.current_task:
-                    overview.current_task = snapshot.current_task.description
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for visibility state: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+    # Update with visibility state
+    await _update_visibility_state(overview, visibility_service)
 
     # Get resource usage
     if resource_monitor:
@@ -1362,7 +1372,7 @@ async def get_unified_telemetry(
     ),
     format: str = Query("json", description="Output format: json|prometheus|graphite"),
     live: bool = Query(False, description="Force live collection (bypass cache)"),
-) -> Union[Dict, Response]:
+) -> Dict | Response:
     """
     Unified enterprise telemetry endpoint.
 

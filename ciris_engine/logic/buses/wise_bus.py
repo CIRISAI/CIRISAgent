@@ -42,6 +42,57 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         self._time_service = time_service
         self._agent_tier: Optional[int] = None  # Cached agent tier
 
+    async def _get_tier_from_config(self) -> Optional[int]:
+        """Try to get agent tier from configuration service."""
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            config_services = self.service_registry.get_services_by_type(ServiceType.CONFIG)
+            if not config_services:
+                return None
+
+            config_service = config_services[0]
+            if not hasattr(config_service, "get_value"):
+                return None
+
+            tier = await config_service.get_value("agent_tier")
+            if tier:
+                return int(tier)
+        except Exception as e:
+            logger.debug(f"Could not get tier from config: {e}")
+        return None
+
+    async def _get_tier_from_memory(self) -> Optional[int]:
+        """Try to get agent tier from memory/identity."""
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+            from ciris_engine.schemas.services.context import RecallQuery
+
+            memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
+            if not memory_services:
+                return None
+
+            memory_service = memory_services[0]
+            if not hasattr(memory_service, "recall"):
+                return None
+
+            # Look for agent tier in identity
+            query = RecallQuery(query="agent_tier OR echo_agent OR community_moderator", scope="identity", limit=5)
+            results = await memory_service.recall(query)
+
+            if not results or not results.memories:
+                return None
+
+            # Check if this is a Tier 4/5 agent
+            for memory in results.memories:
+                memory_str = str(memory).lower()
+                if any(marker in memory_str for marker in ["stewardship", "tier_4", "tier_5"]):
+                    return 4  # Default stewardship tier
+
+        except Exception as e:
+            logger.debug(f"Could not get tier from memory: {e}")
+        return None
+
     async def get_agent_tier(self) -> int:
         """
         Get the agent's tier level from configuration or identity.
@@ -57,49 +108,18 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             return self._agent_tier
 
         # Try to get tier from config service
-        try:
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            config_services = self.service_registry.get_services_by_type(ServiceType.CONFIG)
-            if config_services:
-                config_service = config_services[0]
-                if hasattr(config_service, "get_value"):
-                    tier = await config_service.get_value("agent_tier")
-                    if tier:
-                        self._agent_tier = int(tier)
-                        logger.info(f"Agent tier detected from config: {self._agent_tier}")
-                        return self._agent_tier
-        except Exception as e:
-            logger.debug(f"Could not get tier from config: {e}")
+        tier = await self._get_tier_from_config()
+        if tier:
+            self._agent_tier = tier
+            logger.info(f"Agent tier detected from config: {self._agent_tier}")
+            return self._agent_tier
 
         # Try to get tier from memory/identity
-        try:
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
-            if memory_services:
-                memory_service = memory_services[0]
-                if hasattr(memory_service, "recall"):
-                    # Look for agent tier in identity
-                    from ciris_engine.schemas.services.context import RecallQuery
-
-                    query = RecallQuery(
-                        query="agent_tier OR echo_agent OR community_moderator", scope="identity", limit=5
-                    )
-                    results = await memory_service.recall(query)
-                    if results and results.memories:
-                        for memory in results.memories:
-                            # Check if this is a Tier 4/5 agent
-                            if (
-                                "stewardship" in str(memory).lower()
-                                or "tier_4" in str(memory).lower()
-                                or "tier_5" in str(memory).lower()
-                            ):
-                                self._agent_tier = 4  # Default stewardship tier
-                                logger.info(f"Agent identified as Tier {self._agent_tier} (stewardship)")
-                                return self._agent_tier
-        except Exception as e:
-            logger.debug(f"Could not get tier from memory: {e}")
+        tier = await self._get_tier_from_memory()
+        if tier:
+            self._agent_tier = tier
+            logger.info(f"Agent identified as Tier {self._agent_tier} (stewardship)")
+            return self._agent_tier
 
         # Default to tier 1 (standard agent)
         self._agent_tier = 1
@@ -270,9 +290,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 f"Capability '{capability}' violates core safety principles. "
                 f"This capability cannot be implemented in any CIRIS system."
             )
-        elif severity == ProhibitionSeverity.TIER_RESTRICTED:
-            # Already handled above for community moderation
-            pass
+        # TIER_RESTRICTED already handled above for community moderation
 
     async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
         """Get services matching the request capability."""
@@ -469,6 +487,32 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         """Process a wise authority message - currently all WA operations are synchronous"""
         logger.warning(f"Wise authority operations should be synchronous, got queued message: {type(message)}")
 
+    def _count_capability_categories(self) -> tuple[dict, int, dict, int]:
+        """Count prohibited and community capabilities by category."""
+        prohibited_counts = {
+            category.lower(): len(capabilities) for category, capabilities in PROHIBITED_CAPABILITIES.items()
+        }
+        total_prohibited = sum(prohibited_counts.values())
+
+        community_counts = {
+            category.lower(): len(capabilities) for category, capabilities in COMMUNITY_MODERATION_CAPABILITIES.items()
+        }
+        total_community = sum(community_counts.values())
+
+        return prohibited_counts, total_prohibited, community_counts, total_community
+
+    def _create_telemetry_base(
+        self, prohibited_counts: dict, total_prohibited: int, community_counts: dict, total_community: int
+    ) -> dict:
+        """Create base telemetry dictionary."""
+        return {
+            "service_name": "wise_bus",
+            "prohibited_capabilities": prohibited_counts,
+            "total_prohibited": total_prohibited,
+            "community_capabilities": community_counts,
+            "total_community": total_community,
+        }
+
     async def collect_telemetry(self) -> dict[str, Any]:
         """
         Collect telemetry from all wise authority providers in parallel.
@@ -483,70 +527,62 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
 
         # Count capabilities by category
-        prohibited_counts = {}
-        total_prohibited = 0
-        for category, capabilities in PROHIBITED_CAPABILITIES.items():
-            count = len(capabilities)
-            prohibited_counts[category.lower()] = count
-            total_prohibited += count
-
-        community_counts = {}
-        total_community = 0
-        for category, capabilities in COMMUNITY_MODERATION_CAPABILITIES.items():
-            count = len(capabilities)
-            community_counts[category.lower()] = count
-            total_community += count
+        prohibited_counts, total_prohibited, community_counts, total_community = self._count_capability_categories()
+        base_telemetry = self._create_telemetry_base(
+            prohibited_counts, total_prohibited, community_counts, total_community
+        )
 
         if not all_wa_services:
             return {
-                "service_name": "wise_bus",
+                **base_telemetry,
                 "healthy": False,
                 "failed_count": 0,
                 "processed_count": 0,
                 "provider_count": 0,
-                "prohibited_capabilities": prohibited_counts,
-                "total_prohibited": total_prohibited,
-                "community_capabilities": community_counts,
-                "total_community": total_community,
                 "error": "No wise authority services available",
             }
 
         # Create tasks to collect telemetry from all providers
-        tasks = []
-        for service in all_wa_services:
-            if hasattr(service, "get_telemetry"):
-                tasks.append(asyncio.create_task(service.get_telemetry()))
+        tasks = [
+            asyncio.create_task(service.get_telemetry())
+            for service in all_wa_services
+            if hasattr(service, "get_telemetry")
+        ]
 
-        # Collect results with timeout
+        # Initialize aggregated telemetry
         aggregated = {
-            "service_name": "wise_bus",
+            **base_telemetry,
             "healthy": True,
             "failed_count": 0,
             "processed_count": 0,
             "provider_count": len(all_wa_services),
-            "prohibited_capabilities": prohibited_counts,
-            "total_prohibited": total_prohibited,
-            "community_capabilities": community_counts,
-            "total_community": total_community,
             "providers": [],
         }
 
-        if tasks:
-            done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+        if not tasks:
+            return aggregated
 
-            # Cancel timed-out tasks
-            for task in pending:
-                task.cancel()
+        # Collect and aggregate provider telemetry
+        done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
 
-            # Aggregate results
-            for task in done:
-                try:
-                    telemetry = task.result()
-                    if telemetry:
-                        aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-                        aggregated["failed_count"] += telemetry.get("failed_count", 0)
-                        aggregated["processed_count"] += telemetry.get("processed_count", 0)
-                except Exception as e:
-                    logger.warning(f"Failed to collect telemetry from provider: {e}")
+        # Cancel timed-out tasks
+        for task in pending:
+            task.cancel()
+
+        # Aggregate results from completed tasks
+        self._aggregate_provider_telemetry(aggregated, done)
 
         return aggregated
+
+    def _aggregate_provider_telemetry(self, aggregated: dict, completed_tasks: set) -> None:
+        """Aggregate telemetry from completed provider tasks."""
+        for task in completed_tasks:
+            try:
+                telemetry = task.result()
+                if not telemetry:
+                    continue
+                aggregated["providers"].append(telemetry.get("service_name", "unknown"))
+                aggregated["failed_count"] += telemetry.get("failed_count", 0)
+                aggregated["processed_count"] += telemetry.get("processed_count", 0)
+            except Exception as e:
+                logger.warning(f"Failed to collect telemetry from provider: {e}")

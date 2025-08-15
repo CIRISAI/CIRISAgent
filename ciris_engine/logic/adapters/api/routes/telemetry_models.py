@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.telemetry import MetricTags
 
+# Field description constants
+DESC_SERVICE_NAME = "Service name"
+
 
 class MetricData(BaseModel):
     """Single metric data point."""
@@ -77,7 +80,7 @@ class SystemOverview(BaseModel):
 class ServiceHealth(BaseModel):
     """Health status of a single service."""
 
-    service_name: str = Field(..., description="Service name")
+    service_name: str = Field(..., description=DESC_SERVICE_NAME)
     status: str = Field(..., description="Health status: healthy, degraded, or error")
     latency_ms: float = Field(..., description="Average latency in milliseconds")
     error_rate: float = Field(..., description="Error rate percentage")
@@ -106,7 +109,7 @@ class LogEntry(BaseModel):
     timestamp: datetime = Field(..., description="Log timestamp")
     level: str = Field(..., description="Log level")
     message: str = Field(..., description="Log message")
-    service: str = Field(..., description="Service name")
+    service: str = Field(..., description=DESC_SERVICE_NAME)
     correlation_id: Optional[str] = Field(None, description="Correlation ID")
     user_id: Optional[str] = Field(None, description="User ID")
     metadata: dict = Field(default_factory=dict, description="Additional metadata")
@@ -123,7 +126,7 @@ class TraceSpan(BaseModel):
     parent_id: Optional[str] = Field(None, description="Parent span ID")
     trace_id: str = Field(..., description="Trace ID")
     operation: str = Field(..., description="Operation name")
-    service: str = Field(..., description="Service name")
+    service: str = Field(..., description=DESC_SERVICE_NAME)
     start_time: datetime = Field(..., description="Start time")
     duration_ms: float = Field(..., description="Duration in milliseconds")
     status: str = Field(..., description="Status: ok or error")

@@ -100,8 +100,12 @@ class TestWiseBusTelemetry:
         """Test that capability blocks count is included."""
         result = await wise_bus.collect_telemetry()
 
-        assert "capability_blocks" in result
-        assert result["capability_blocks"] > 0  # Should count PROHIBITED_CAPABILITIES
+        assert "total_prohibited" in result
+        assert result["total_prohibited"] > 0  # Should count PROHIBITED_CAPABILITIES
+        assert "prohibited_capabilities" in result
+        assert isinstance(result["prohibited_capabilities"], dict)
+        assert "community_capabilities" in result
+        assert isinstance(result["community_capabilities"], dict)
 
 
 class TestMemoryBusTelemetry:

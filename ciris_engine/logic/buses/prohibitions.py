@@ -25,9 +25,20 @@ class ProhibitionSeverity(str, Enum):
 # These require separate repositories with proper licensing/liability isolation
 
 MEDICAL_CAPABILITIES = {
+    "medical",  # Generic medical capability
+    "health",  # Generic health capability
+    "clinical",  # Clinical operations
+    "patient",  # Patient-related
     "diagnosis",
     "treatment",
     "prescription",
+    "symptom",  # Symptom analysis
+    "disease",  # Disease information
+    "medication",  # Medication management
+    "therapy",  # Therapy planning
+    "triage",  # Medical triage
+    "condition",  # Medical conditions
+    "disorder",  # Medical disorders
     "medical_advice",
     "symptom_assessment",
     "drug_interaction",
@@ -460,15 +471,21 @@ def get_capability_category(capability: str) -> Optional[str]:
     """Get the category of a capability."""
     capability_lower = capability.lower()
 
-    # Check prohibited capabilities
+    # Check prohibited capabilities - both exact and substring matches
     for category, capabilities in PROHIBITED_CAPABILITIES.items():
-        if capability_lower in [c.lower() for c in capabilities]:
-            return category
+        for prohibited in capabilities:
+            prohibited_lower = prohibited.lower()
+            # Check exact match or if prohibited term is in the capability
+            if capability_lower == prohibited_lower or prohibited_lower in capability_lower:
+                return category
 
     # Check community moderation capabilities
     for category, capabilities in COMMUNITY_MODERATION_CAPABILITIES.items():
-        if capability_lower in [c.lower() for c in capabilities]:
-            return f"COMMUNITY_{category}"
+        for community_cap in capabilities:
+            community_lower = community_cap.lower()
+            # Check exact match or if community term is in the capability
+            if capability_lower == community_lower or community_lower in capability_lower:
+                return f"COMMUNITY_{category}"
 
     return None
 

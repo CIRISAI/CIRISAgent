@@ -87,6 +87,7 @@ class TestWiseBusProhibitions:
         """Create a mock service registry."""
         registry = MagicMock()
         registry.get_services_by_type.return_value = []
+        registry.get_service = AsyncMock(return_value=None)  # No service available
         return registry
 
     @pytest.fixture

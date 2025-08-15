@@ -44,15 +44,19 @@ class TestMedicalCapabilityBlocking:
             "disorder",
         ]
 
+        # Check that all required medical terms are in the MEDICAL category
+        medical_capabilities = PROHIBITED_CAPABILITIES.get("MEDICAL", set())
         for term in required_blocks:
-            assert term in PROHIBITED_CAPABILITIES, f"Missing critical block: {term}"
+            assert term in medical_capabilities, f"Missing critical block: {term}"
 
-        # Domain-prefixed versions
-        assert "domain:medical" in PROHIBITED_CAPABILITIES
-        assert "domain:health" in PROHIBITED_CAPABILITIES
-        assert "domain:clinical" in PROHIBITED_CAPABILITIES
-        assert "modality:medical" in PROHIBITED_CAPABILITIES
-        assert "provider:medical" in PROHIBITED_CAPABILITIES
+        # These should NOT be keys, but we should verify they're blocked via get_capability_category
+        from ciris_engine.logic.buses.prohibitions import get_capability_category
+
+        assert get_capability_category("domain:medical") == "MEDICAL"
+        assert get_capability_category("domain:health") == "MEDICAL"
+        assert get_capability_category("domain:clinical") == "MEDICAL"
+        assert get_capability_category("modality:medical") == "MEDICAL"
+        assert get_capability_category("provider:medical") == "MEDICAL"
 
     @pytest.mark.parametrize(
         "capability",
@@ -97,8 +101,8 @@ class TestMedicalCapabilityBlocking:
 
         error_msg = str(exc_info.value)
         assert "PROHIBITED" in error_msg
-        assert "Medical/health capabilities blocked" in error_msg
-        assert "CIRISMedical" in error_msg
+        assert "MEDICAL capabilities blocked" in error_msg
+        assert "separate licensed system" in error_msg
 
     @pytest.mark.parametrize(
         "capability",
@@ -208,10 +212,8 @@ class TestMedicalCapabilityBlocking:
         error_msg = str(exc_info.value)
         # Check for key information
         assert "PROHIBITED" in error_msg
-        assert "Medical/health capabilities blocked" in error_msg
+        assert "MEDICAL capabilities blocked" in error_msg
         assert "domain:medical" in error_msg
-        assert "medical" in error_msg
-        assert "CIRISMedical" in error_msg
         assert "separate licensed system" in error_msg
 
     def test_partial_match_blocking(self, wise_bus):
@@ -280,8 +282,8 @@ class TestMedicalBlockingIntegration:
         error = str(exc_info.value)
         assert "PROHIBITED" in error
         assert "domain:medical:diagnosis" in error
-        assert "medical" in error
-        assert "CIRISMedical" in error
+        assert "MEDICAL capabilities blocked" in error
+        assert "separate licensed system" in error
 
     @pytest.mark.asyncio
     async def test_safe_navigation_request_flow(self):

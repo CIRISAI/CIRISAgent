@@ -628,7 +628,7 @@ class IncidentManagementService(BaseGraphService):
             else:
                 incidents_1h = loop.run_until_complete(self.get_incident_count(hours=1))
                 incidents_24h = loop.run_until_complete(self.get_incident_count(hours=24))
-        except (RuntimeError, asyncio.CancelledError, Exception) as e:
+        except (RuntimeError, asyncio.CancelledError):
             # Handle async errors when getting incident counts
             incidents_1h = 0
             incidents_24h = 0

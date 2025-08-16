@@ -172,7 +172,7 @@ class TelemetryAggregator:
             service = self._get_service_from_registry(service_name)
 
             # Try different collection methods
-            metrics = await self._try_collect_metrics(service, service_name)
+            metrics = await self._try_collect_metrics(service)
             return metrics if metrics is not None else self.get_fallback_metrics(service_name)
 
         except Exception as e:
@@ -197,7 +197,7 @@ class TelemetryAggregator:
         services = self.service_registry.get_services_by_type(service_type)
         return services[0] if services else None
 
-    async def _try_collect_metrics(self, service, service_name: str) -> Optional[Dict[str, Any]]:
+    async def _try_collect_metrics(self, service) -> Optional[Dict[str, Any]]:
         """Try different methods to collect metrics from service."""
         if not service:
             return None

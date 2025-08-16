@@ -168,42 +168,58 @@ class TelemetryAggregator:
             if service_name.endswith("_bus"):
                 return await self.collect_from_bus(service_name)
 
-            # Try to get service from registry
-            service = None
-            service_type_map = {
-                "memory": ServiceType.MEMORY,
-                "config": ServiceType.CONFIG,
-                "telemetry": ServiceType.TELEMETRY,
-                "audit": ServiceType.AUDIT,
-                "llm": ServiceType.LLM,
-                "wise_authority": ServiceType.WISE_AUTHORITY,
-                # Add more mappings as needed
-            }
+            # Get service from registry
+            service = self._get_service_from_registry(service_name)
 
-            if service_name in service_type_map:
-                service_type = service_type_map[service_name]
-                services = self.service_registry.get_services_by_type(service_type)
-                if services:
-                    service = services[0]
-
-            if service and hasattr(service, "get_metrics"):
-                metrics = await service.get_metrics()
-                return metrics if isinstance(metrics, dict) else {}
-            elif service and hasattr(service, "_collect_metrics"):
-                # Fallback for services that haven't exposed get_metrics() yet
-                metrics = service._collect_metrics()
-                return metrics if isinstance(metrics, dict) else {}
-            elif service and hasattr(service, "get_status"):
-                status = service.get_status()
-                if asyncio.iscoroutine(status):
-                    status = await status
-                return self.status_to_telemetry(status)
-            else:
-                return self.get_fallback_metrics(service_name)
+            # Try different collection methods
+            metrics = await self._try_collect_metrics(service, service_name)
+            return metrics if metrics is not None else self.get_fallback_metrics(service_name)
 
         except Exception as e:
             logger.error(f"Failed to collect from {service_name}: {e}")
             return self.get_fallback_metrics(service_name, healthy=False)
+
+    def _get_service_from_registry(self, service_name: str):
+        """Get service from registry by name."""
+        service_type_map = {
+            "memory": ServiceType.MEMORY,
+            "config": ServiceType.CONFIG,
+            "telemetry": ServiceType.TELEMETRY,
+            "audit": ServiceType.AUDIT,
+            "llm": ServiceType.LLM,
+            "wise_authority": ServiceType.WISE_AUTHORITY,
+        }
+
+        if service_name not in service_type_map:
+            return None
+
+        service_type = service_type_map[service_name]
+        services = self.service_registry.get_services_by_type(service_type)
+        return services[0] if services else None
+
+    async def _try_collect_metrics(self, service, service_name: str) -> Optional[Dict[str, Any]]:
+        """Try different methods to collect metrics from service."""
+        if not service:
+            return None
+
+        # Try get_metrics first
+        if hasattr(service, "get_metrics"):
+            metrics = await service.get_metrics()
+            return metrics if isinstance(metrics, dict) else {}
+
+        # Try _collect_metrics
+        if hasattr(service, "_collect_metrics"):
+            metrics = service._collect_metrics()
+            return metrics if isinstance(metrics, dict) else {}
+
+        # Try get_status
+        if hasattr(service, "get_status"):
+            status = service.get_status()
+            if asyncio.iscoroutine(status):
+                status = await status
+            return self.status_to_telemetry(status)
+
+        return None
 
     async def collect_from_bus(self, bus_name: str) -> Dict[str, Any]:
         """Collect telemetry from a message bus."""

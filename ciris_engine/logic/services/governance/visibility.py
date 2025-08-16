@@ -345,7 +345,8 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         try:
             if hasattr(self, "_subscribers"):
                 subscriber_count = len(self._subscribers)
-        except:
+        except (AttributeError, TypeError):
+            # Ignore attribute errors when checking subscribers
             pass
 
         metrics.update(

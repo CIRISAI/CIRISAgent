@@ -1689,7 +1689,8 @@ class TSDBConsolidationService(BaseGraphService):
 
             now = datetime.now(timezone.utc)
             hours_until_next = 6 - (now.hour % 6)  # Every 6 hours
-        except:
+        except (ImportError, ValueError):
+            # Ignore import and value errors when calculating time
             pass
 
         metrics = {

@@ -531,6 +531,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 "tasks_failed": float(self._tasks_failed),
                 "task_success_rate": success_rate,
                 "recurring_tasks": float(recurring),
+                "oneshot_tasks": float(oneshot),
             }
         )
 

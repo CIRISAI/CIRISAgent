@@ -868,7 +868,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             if os.path.exists(self.db_path):
                 storage_size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
-        except:
+        except (OSError, IOError, ImportError):
+            # Ignore file system and import errors when checking storage size
             pass
 
         # Resource monitor service handles process-level metrics

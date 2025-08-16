@@ -558,7 +558,8 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         vault_size = 0
         try:
             vault_size = len(self._vault) if hasattr(self, "_vault") else 0
-        except:
+        except (AttributeError, TypeError):
+            # Ignore attribute errors when checking vault size
             pass
 
         metrics.update(

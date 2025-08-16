@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 172,
+    "occurrences": 173,
     "files_affected": 78,
     "categories": {
-      "generic_data": 153,
+      "generic_data": 154,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -573,7 +573,15 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 208,
+        "line": 200,
+        "class": "TelemetryAggregator",
+        "function": "_try_collect_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
+        "line": 224,
         "class": "TelemetryAggregator",
         "function": "collect_from_bus",
         "context": "return_type",
@@ -581,7 +589,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 226,
+        "line": 242,
         "class": "TelemetryAggregator",
         "function": "get_fallback_metrics",
         "context": "return_type",
@@ -589,7 +597,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 239,
+        "line": 255,
         "class": "TelemetryAggregator",
         "function": "status_to_telemetry",
         "context": "return_type",
@@ -597,7 +605,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 258,
+        "line": 274,
         "class": "TelemetryAggregator",
         "function": "_aggregate_service_metrics",
         "context": "function_parameter",
@@ -605,7 +613,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 286,
+        "line": 302,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "function_parameter",
@@ -613,7 +621,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 286,
+        "line": 302,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "return_type",
@@ -621,7 +629,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1281,
+        "line": 1297,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",
@@ -3168,7 +3176,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 393,
+    "occurrences": 394,
     "files_affected": 122
   }
 }

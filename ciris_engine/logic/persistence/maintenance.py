@@ -392,7 +392,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             db_path = get_sqlite_db_full_path()
             if os.path.exists(db_path):
                 db_size_mb = os.path.getsize(db_path) / (1024 * 1024)
-        except:
+        except (OSError, IOError, ImportError):
+            # Ignore file system and import errors when checking database size
             pass
 
         metrics.update(

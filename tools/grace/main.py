@@ -46,7 +46,8 @@ class Grace:
             message.append(f"\n🚀 {health['deployment']}")
 
         # ALWAYS check production incidents - they can happen even when service is UP
-        prod_containers = ["ciris-agent-datum", "container0", "container1"]
+        # Updated container names to match actual production deployment
+        prod_containers = ["ciris-datum", "ciris-sage-2wnuc8", "container0", "container1"]
         ssh_key = os.path.expanduser("~/.ssh/ciris_deploy")
 
         if os.path.exists(ssh_key):
@@ -184,11 +185,12 @@ class Grace:
 
         return "\n".join(message)
 
-    def incidents(self, container_name: str = "ciris-agent-datum") -> str:
+    def incidents(self, container_name: str = "ciris-datum") -> str:
         """Check incidents log for a specific container.
 
         Args:
-            container_name: Docker container name (default: ciris-agent-datum)
+            container_name: Docker container name (default: ciris-datum)
+                          Common containers: ciris-datum, ciris-sage-2wnuc8
 
         Returns:
             Formatted incidents report
@@ -196,7 +198,8 @@ class Grace:
         message = [f"Incidents Check: {container_name}\n" + "─" * 40]
 
         # Check if this is a production container and SSH key exists
-        prod_containers = ["ciris-agent-datum", "container0", "container1"]
+        # Updated container names to match actual production deployment
+        prod_containers = ["ciris-datum", "ciris-sage-2wnuc8", "container0", "container1"]
         ssh_key = os.path.expanduser("~/.ssh/ciris_deploy")
 
         if container_name in prod_containers and os.path.exists(ssh_key):
@@ -308,6 +311,32 @@ class Grace:
             message.append("  Check traces, thoughts, and handler metrics")
         else:
             message.append("✅ No ERROR entries found in recent logs")
+
+        return "\n".join(message)
+
+    def prod_incidents(self) -> str:
+        """Check incidents for both datum and sage production containers.
+
+        Returns:
+            Formatted incidents report for both containers
+        """
+        message = ["Production Incidents Check\n" + "=" * 40]
+
+        # Check datum
+        message.append("\n📦 DATUM Container:")
+        datum_incidents = self.incidents("ciris-datum")
+        # Extract just the relevant part (skip header)
+        datum_lines = datum_incidents.split("\n")[2:]  # Skip title and separator
+        if datum_lines:
+            message.extend(datum_lines[:5])  # Show first 5 lines
+
+        # Check sage
+        message.append("\n📦 SAGE Container:")
+        sage_incidents = self.incidents("ciris-sage-2wnuc8")
+        # Extract just the relevant part (skip header)
+        sage_lines = sage_incidents.split("\n")[2:]  # Skip title and separator
+        if sage_lines:
+            message.extend(sage_lines[:5])  # Show first 5 lines
 
         return "\n".join(message)
 

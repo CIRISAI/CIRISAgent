@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import time
 from typing import Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 
 import instructor
@@ -118,12 +119,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         except Exception as e:
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
-        # Memory tracking (process is inherited from BaseService)
-        # Use proper types for response cache instead of Dict[str, Any]
-        from ciris_engine.schemas.services.llm import CachedLLMResponse
-
-        self._response_cache: Dict[str, CachedLLMResponse] = {}  # Typed response cache
-        self._max_cache_size = 100  # Maximum cache entries
+        # Metrics tracking (no caching - we never cache LLM responses)
+        self._response_times = []  # List of response times in ms
+        self._max_response_history = 100  # Keep last 100 response times
+        self._total_api_calls = 0
+        self._successful_api_calls = 0
 
     # Required BaseService abstract methods
 
@@ -192,17 +192,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""
-        import sys
-
         cb_stats = self.circuit_breaker.get_stats()
 
-        # Calculate cache size
-        cache_size_mb = 0.0
-        try:
-            cache_size = sys.getsizeof(self._response_cache)
-            cache_size_mb = cache_size / 1024 / 1024
-        except Exception:
-            pass
+        # Calculate average response time
+        avg_response_time_ms = 0.0
+        if self._response_times:
+            avg_response_time_ms = sum(self._response_times) / len(self._response_times)
+
+        # Calculate API success rate
+        api_success_rate = 0.0
+        if self._total_api_calls > 0:
+            api_success_rate = self._successful_api_calls / self._total_api_calls
 
         # Build custom metrics
         metrics = {
@@ -216,12 +216,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             "success_rate": cb_stats.get("success_rate", 1.0),
             "call_count": float(cb_stats.get("call_count", 0)),
             "failure_count": float(cb_stats.get("failure_count", 0)),
-            # Cache metrics
-            "cache_size_mb": cache_size_mb,
-            "cache_entries": float(len(self._response_cache)),
-            "response_cache_hit_rate": 0.0,  # TODO: Track cache hits
-            # Performance metrics
-            "avg_response_time_ms": 0.0,  # TODO: Track response times
+            # Performance metrics (no caching)
+            "avg_response_time_ms": avg_response_time_ms,
+            "max_response_time_ms": max(self._response_times) if self._response_times else 0.0,
+            "min_response_time_ms": min(self._response_times) if self._response_times else 0.0,
+            "total_api_calls": float(self._total_api_calls),
+            "successful_api_calls": float(self._successful_api_calls),
+            "api_success_rate": api_success_rate,
             # Model pricing info
             "model_cost_per_1k_tokens": 0.15 if "gpt-4o-mini" in self.model_name else 2.5,  # Cents
             "retry_delay_base": self.base_delay,

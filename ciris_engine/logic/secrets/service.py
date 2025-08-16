@@ -63,6 +63,16 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         self._auto_forget_enabled = True
         self._current_task_secrets: Dict[str, str] = {}  # UUID -> original_value
 
+        # Tracking variables for metrics
+        self._secrets_stored = 0
+        self._secrets_retrieved = 0
+        self._secrets_deleted = 0
+        self._encryption_operations = 0
+        self._decryption_operations = 0
+        self._filter_detections = 0
+        self._auto_encryptions = 0
+        self._failed_decryptions = 0
+
     async def process_incoming_text(self, text: str, source_message_id: str) -> Tuple[str, List[SecretReference]]:
         """
         Process incoming text for secrets detection and replacement.
@@ -522,59 +532,6 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             logger.error(f"Re-encryption failed with error: {e}")
             return False
 
-    async def get_telemetry(self) -> Dict[str, any]:
-        """
-        Get telemetry data for the secrets service.
-
-        Returns metrics including:
-        - encryption_enabled: Whether encryption is enabled
-        - error_count: Number of errors encountered
-        - access_count: Number of secret accesses
-        - stored_secrets: Number of secrets in storage
-        - active_patterns: Number of active detection patterns
-        """
-        try:
-            # Get filter and store stats
-            filter_stats = self.filter.get_pattern_stats()
-            all_secrets = await self.store.list_secrets()
-
-            # Calculate total access count
-            total_access_count = sum(s.access_count for s in all_secrets)
-
-            # Get base metrics
-            error_count = self._error_count if hasattr(self, "_error_count") else 0
-
-            # Calculate uptime
-            uptime_seconds = 0
-            if hasattr(self, "_start_time") and self._start_time:
-                uptime_seconds = int((self._now() - self._start_time).total_seconds())
-
-            return {
-                "service_name": "secrets",
-                "healthy": await self.is_healthy(),
-                "encryption_enabled": self.store.encryption_enabled if self.store else False,
-                "error_count": error_count,
-                "access_count": total_access_count,
-                "stored_secrets": len(all_secrets),
-                "active_patterns": filter_stats.total_patterns,
-                "default_patterns": filter_stats.default_patterns,
-                "custom_patterns": filter_stats.custom_patterns,
-                "auto_forget_enabled": self._auto_forget_enabled,
-                "uptime_seconds": uptime_seconds,
-                "last_updated": self._now().isoformat(),
-            }
-        except Exception as e:
-            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
-            return {
-                "service_name": "secrets",
-                "healthy": False,
-                "error": str(e),
-                "encryption_enabled": False,
-                "error_count": 1,
-                "access_count": 0,
-                "uptime_seconds": 0,
-            }
-
     def _get_actions(self) -> List[str]:
         """Get list of actions this service provides."""
         return [
@@ -592,6 +549,34 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             "retrieve_secret",
             "reencrypt_all",
         ]
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect secrets service metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Count vault size
+        vault_size = 0
+        try:
+            vault_size = len(self._vault) if hasattr(self, "_vault") else 0
+        except:
+            pass
+
+        metrics.update(
+            {
+                "secrets_stored": float(self._secrets_stored),
+                "secrets_retrieved": float(self._secrets_retrieved),
+                "secrets_deleted": float(self._secrets_deleted),
+                "vault_size": float(vault_size),
+                "encryption_operations": float(self._encryption_operations),
+                "decryption_operations": float(self._decryption_operations),
+                "filter_detections": float(self._filter_detections),
+                "auto_encryptions": float(self._auto_encryptions),
+                "failed_decryptions": float(self._failed_decryptions),
+                "filter_enabled": 1.0 if self.filter and self.filter.enabled else 0.0,
+            }
+        )
+
+        return metrics
 
     def get_status(self) -> ServiceStatus:
         """Get service status."""

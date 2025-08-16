@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 173,
-    "files_affected": 79,
+    "occurrences": 172,
+    "files_affected": 78,
     "categories": {
-      "generic_data": 154,
+      "generic_data": 153,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -556,14 +556,6 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/logic/services/tools/secrets_tool_service.py",
-        "line": 301,
-        "class": "SecretsToolService",
-        "function": "get_telemetry",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
         "line": 121,
         "class": "TelemetryAggregator",
@@ -581,7 +573,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 204,
+        "line": 208,
         "class": "TelemetryAggregator",
         "function": "collect_from_bus",
         "context": "return_type",
@@ -589,7 +581,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 222,
+        "line": 226,
         "class": "TelemetryAggregator",
         "function": "get_fallback_metrics",
         "context": "return_type",
@@ -597,7 +589,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 235,
+        "line": 239,
         "class": "TelemetryAggregator",
         "function": "status_to_telemetry",
         "context": "return_type",
@@ -605,7 +597,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 254,
+        "line": 258,
         "class": "TelemetryAggregator",
         "function": "_aggregate_service_metrics",
         "context": "function_parameter",
@@ -613,7 +605,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 282,
+        "line": 286,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "function_parameter",
@@ -621,7 +613,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 282,
+        "line": 286,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "return_type",
@@ -629,7 +621,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1277,
+        "line": 1281,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",
@@ -1029,7 +1021,7 @@
       },
       {
         "file": "ciris_engine/logic/registries/base.py",
-        "line": 88,
+        "line": 95,
         "class": "ServiceRegistry",
         "function": "register_service",
         "context": "other",
@@ -1707,7 +1699,7 @@
     ]
   },
   "tools": {
-    "occurrences": 173,
+    "occurrences": 183,
     "findings": [
       {
         "file": "tools/validate_prod_routes.py",
@@ -1998,6 +1990,14 @@
         "usage_hint": "generic_data"
       },
       {
+        "file": "tools/telemetry_tool/taxonomy_aware_scanner.py",
+        "line": 148,
+        "class": "TaxonomyAwareScanner",
+        "function": "scan_all",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
         "file": "tools/telemetry_tool/mission_analysis.py",
         "line": 52,
         "class": "MissionAlignmentAnalyzer",
@@ -2115,6 +2115,62 @@
         "class": "CIRISTelemetryTool",
         "function": "_generate_summary_report",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 25,
+        "class": "MetricMechanism",
+        "function": "scan",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 107,
+        "class": "GetTelemetryMechanism",
+        "function": "scan",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 283,
+        "class": "CustomMetricsMechanism",
+        "function": "scan",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 495,
+        "class": "MemorizeMetricMechanism",
+        "function": "scan",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 531,
+        "class": "RecordMetricMechanism",
+        "function": "scan",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 592,
+        "class": "HandlerMetricMechanism",
+        "function": "scan",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/modular_metric_scanner.py",
+        "line": 647,
+        "class": "ModularMetricScanner",
+        "function": "scan_all",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -2315,6 +2371,22 @@
         "class": "MissionScorer",
         "function": "_explain_criticality",
         "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/verification/api_scanner.py",
+        "line": 316,
+        "class": "APIMetricScanner",
+        "function": "_flatten_dict",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/telemetry_tool/verification/api_scanner.py",
+        "line": 316,
+        "class": "APIMetricScanner",
+        "function": "_flatten_dict",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -3096,7 +3168,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 384,
-    "files_affected": 120
+    "occurrences": 393,
+    "files_affected": 122
   }
 }

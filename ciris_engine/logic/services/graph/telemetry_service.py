@@ -186,9 +186,13 @@ class TelemetryAggregator:
                 if services:
                     service = services[0]
 
-            if service and hasattr(service, "get_telemetry"):
-                telemetry = await service.get_telemetry()
-                return telemetry if isinstance(telemetry, dict) else {}
+            if service and hasattr(service, "get_metrics"):
+                metrics = await service.get_metrics()
+                return metrics if isinstance(metrics, dict) else {}
+            elif service and hasattr(service, "_collect_metrics"):
+                # Fallback for services that haven't exposed get_metrics() yet
+                metrics = service._collect_metrics()
+                return metrics if isinstance(metrics, dict) else {}
             elif service and hasattr(service, "get_status"):
                 status = service.get_status()
                 if asyncio.iscoroutine(status):

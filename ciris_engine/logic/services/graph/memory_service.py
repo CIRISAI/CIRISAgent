@@ -6,18 +6,6 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 from uuid import uuid4
 
-# Optional import for psutil
-try:
-    import psutil
-
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    psutil = None  # type: ignore
-    PSUTIL_AVAILABLE = False
-
-if TYPE_CHECKING:
-    from psutil import Process
-
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence import get_db_connection, initialize_database
@@ -32,6 +20,9 @@ from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, No
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
+
+# No longer using psutil - resource_monitor handles process metrics
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +58,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         initialize_database(db_path=self.db_path)
         self.secrets_service = secrets_service  # Must be provided, not created here
         self._start_time: Optional[datetime] = None
-        self._process: Optional["Process"] = None
-        if PSUTIL_AVAILABLE and psutil is not None:
-            try:
-                self._process = psutil.Process()  # For memory tracking
-            except Exception:
-                pass  # Failed to create process object
 
     async def memorize(self, node: GraphNode) -> MemoryOpResult:
         """Store a node with automatic secrets detection and processing."""
@@ -855,23 +840,49 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         """Collect memory-specific metrics."""
         metrics = super()._collect_custom_metrics()
 
-        # Count graph nodes for metrics
+        # Count graph nodes and edges
         node_count = 0
+        edge_count = 0
+        storage_size_mb = 0.0
+
         try:
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
+
+                # Get node count
                 cursor.execute("SELECT COUNT(*) FROM graph_nodes")
                 result = cursor.fetchone()
                 node_count = result[0] if result else 0
+
+                # Get edge count
+                cursor.execute("SELECT COUNT(*) FROM graph_edges")
+                result = cursor.fetchone()
+                edge_count = result[0] if result else 0
+
         except Exception:
             pass
+
+        # Get database file size
+        try:
+            import os
+
+            if os.path.exists(self.db_path):
+                storage_size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
+        except:
+            pass
+
+        # Resource monitor service handles process-level metrics
+        # This service just tracks its database storage
 
         # Add memory-specific metrics
         metrics.update(
             {
                 "secrets_enabled": 1.0 if self.secrets_service else 0.0,
                 "graph_node_count": float(node_count),
+                "total_nodes": float(node_count),
+                "total_edges": float(edge_count),
                 "storage_backend": 1.0,  # 1.0 = sqlite
+                "storage_size_mb": storage_size_mb,
             }
         )
 

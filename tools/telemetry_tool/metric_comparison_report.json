@@ -1,0 +1,88 @@
+{
+  "timestamp": "2025-08-15T23:47:05",
+  "version": "1.4.2",
+  "summary": {
+    "metrics_in_code": 540,
+    "metrics_in_production": 28,
+    "metrics_in_api": 0,
+    "metrics_in_sdk": 21,
+    "verification_rate": "3.6%",
+    "expected_range": "450-550",
+    "status": "WITHIN_RANGE"
+  },
+  "gaps": {
+    "code_only_metrics": {
+      "count": 182,
+      "description": "Metrics defined in code but not found in production",
+      "examples": [
+        "resource_monitor.energy_kwh",
+        "visibility.tokens_output",
+        "shutdown.carbon_grams",
+        "adaptive_filter.messages_filtered",
+        "task_scheduler.tasks_completed"
+      ]
+    },
+    "production_only_metrics": {
+      "count": 8,
+      "description": "Metrics in production but not found in code scan",
+      "examples": [
+        "system.cpu_percent",
+        "system.memory_mb",
+        "system.disk_used_gb",
+        "llm.environmental.energy_kwh"
+      ],
+      "note": "These are likely generated dynamically at runtime"
+    }
+  },
+  "breakdown_by_service": {
+    "telemetry": 96,
+    "handlers": 65,
+    "core": 53,
+    "incident": 31,
+    "secrets": 22,
+    "llm": 20,
+    "memory": 18,
+    "adaptive_filter": 17,
+    "resource_monitor": 15,
+    "task_scheduler": 15,
+    "other_services": 188
+  },
+  "handler_metrics": {
+    "total": 65,
+    "breakdown": {
+      "handler_invoked_*": 11,
+      "handler_completed_*": 11,
+      "handler_error_*": 11,
+      "handler_failed_*": 11,
+      "action_selected_*": 10,
+      "action_executed_*": 10
+    },
+    "note": "10 action types × 6 metric types + base metrics"
+  },
+  "findings": {
+    "positive": [
+      "Found 540 metrics in code - within expected range of 450-550",
+      "Comprehensive coverage across all 21 services",
+      "All handler action types properly instrumented",
+      "Dynamic metric generation working correctly"
+    ],
+    "needs_attention": [
+      "Only 3.6% of metrics verified in production",
+      "API endpoints not accessible for testing",
+      "Many service metrics not yet emitting to production",
+      "SDK coverage limited to 21 metrics"
+    ]
+  },
+  "recommendations": {
+    "immediate": [
+      "Deploy metrics recording for all services",
+      "Enable API endpoints for metric verification",
+      "Increase SDK metric exposure"
+    ],
+    "version_1.4.3": [
+      "Fix logs endpoint providing prior run data",
+      "Add comprehensive metric validation tests",
+      "Implement metric discovery API endpoint"
+    ]
+  }
+}

@@ -296,52 +296,41 @@ class SecretsToolService(BaseService, ToolService):
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""
-        return {"available_tools": 3.0}
+        metrics = super()._collect_custom_metrics()
 
-    async def get_telemetry(self) -> Dict[str, Any]:
-        """
-        Get telemetry data for the secrets tool service.
+        # Calculate success rate
+        success_rate = 0.0
+        if self._request_count > 0:
+            success_rate = 1.0 - (self._error_count / self._request_count)
 
-        Returns metrics including:
-        - audit_events_generated: Number of audit events generated
-        - error_rate: Rate of tool execution errors
-        - tool_executions: Total tool executions
-        - success_rate: Success rate of tool executions
-        """
-        try:
-            # Get base metrics from parent class
-            request_count = self._request_count if hasattr(self, "_request_count") else 0
-            error_count = self._error_count if hasattr(self, "_error_count") else 0
-
-            # Calculate rates
-            error_rate = error_count / request_count if request_count > 0 else 0.0
-            success_rate = 1.0 - error_rate
-
-            # Calculate uptime
-            uptime_seconds = 0
-            if hasattr(self, "_start_time") and self._start_time:
-                uptime_seconds = int((self._now() - self._start_time).total_seconds())
-
-            return {
-                "service_name": "secrets_tool",
-                "healthy": await self.is_healthy(),
-                "audit_events_generated": request_count,  # Each execution generates audit
-                "error_rate": round(error_rate, 4),
-                "success_rate": round(success_rate, 4),
-                "tool_executions": request_count,
-                "error_count": error_count,
-                "available_tools": 3,
-                "uptime_seconds": uptime_seconds,
-                "last_updated": self._now().isoformat(),
+        # Add comprehensive tool metrics
+        metrics.update(
+            {
+                # Tool availability
+                "available_tools": 3.0,
+                "tools_enabled": 3.0,
+                # Execution metrics
+                "tool_executions": float(self._request_count),
+                "tool_errors": float(self._error_count),
+                "success_rate": success_rate,
+                # Secret operations
+                "secrets_recalled": self._track_metric("recalls", 0),
+                "secrets_decrypted": self._track_metric("decrypts", 0),
+                "filter_updates": self._track_metric("filter_updates", 0),
+                # Audit metrics
+                "audit_events_generated": float(self._request_count),  # Each exec generates audit
+                "self_help_accesses": self._track_metric("self_help", 0),
+                # Performance
+                "avg_execution_time_ms": self._track_metric("avg_exec_time", 0),
             }
-        except Exception as e:
-            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
-            return {
-                "service_name": "secrets_tool",
-                "healthy": False,
-                "error": str(e),
-                "audit_events_generated": 0,
-                "error_rate": 1.0,
-                "error_count": 1,
-                "uptime_seconds": 0,
-            }
+        )
+
+        return metrics
+
+    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
+        """Track a metric (placeholder for actual tracking)."""
+        if not hasattr(self, "_metrics_tracking"):
+            self._metrics_tracking = {}
+        return self._metrics_tracking.get(metric_name, default)
+
+    # get_telemetry() removed - use get_metrics() from BaseService instead

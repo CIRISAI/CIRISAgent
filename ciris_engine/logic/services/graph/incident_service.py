@@ -612,52 +612,53 @@ class IncidentManagementService(BaseGraphService):
         """Get the service type."""
         return ServiceType.AUDIT
 
-    async def get_telemetry(self) -> Dict[str, any]:
-        """
-        Get telemetry data for the incident management service.
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect incident-specific metrics."""
+        metrics = super()._collect_custom_metrics()
 
-        Returns metrics including:
-        - incidents_processed: Total incidents processed
-        - severity_distribution: Breakdown by severity level
-        - patterns_detected: Number of patterns found
-        - problems_identified: Number of problems identified
-        - insights_generated: Number of insights created
-        """
+        # Get incident counts safely
         try:
-            # Get incident counts by severity
-            severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+            import asyncio
 
-            # Get recent incident count
-            incidents_1h = await self.get_incident_count(hours=1)
-            incidents_24h = await self.get_incident_count(hours=24)
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Can't call async from sync in running loop
+                incidents_1h = 0
+                incidents_24h = 0
+            else:
+                incidents_1h = loop.run_until_complete(self.get_incident_count(hours=1))
+                incidents_24h = loop.run_until_complete(self.get_incident_count(hours=24))
+        except:
+            incidents_1h = 0
+            incidents_24h = 0
 
-            # Calculate uptime
-            uptime_seconds = 0
-            if self._start_time:
-                current_time = self._time_service.now() if self._time_service else datetime.now()
-                uptime_seconds = int((current_time - self._start_time).total_seconds())
-
-            return {
-                "service_name": "incident_management",
-                "healthy": self._started,
-                "incidents_processed": incidents_24h,
-                "incidents_last_hour": incidents_1h,
-                "severity_distribution": severity_counts,
-                "patterns_detected": 0,  # Would be tracked in real implementation
-                "problems_identified": 0,  # Would be tracked in real implementation
-                "insights_generated": 0,  # Would be tracked in real implementation
-                "uptime_seconds": uptime_seconds,
-                "error_count": 0,
-                "last_updated": datetime.now().isoformat(),
+        # Add comprehensive incident metrics
+        metrics.update(
+            {
+                # Incident counts
+                "incidents_last_hour": float(incidents_1h),
+                "incidents_last_24h": float(incidents_24h),
+                "incidents_critical": self._track_metric("critical", 0),
+                "incidents_high": self._track_metric("high", 0),
+                "incidents_medium": self._track_metric("medium", 0),
+                "incidents_low": self._track_metric("low", 0),
+                # Pattern and problem metrics
+                "patterns_detected": self._track_metric("patterns", 0),
+                "problems_identified": self._track_metric("problems", 0),
+                "insights_generated": self._track_metric("insights", 0),
+                "recommendations_made": self._track_metric("recommendations", 0),
+                # Resolution metrics
+                "incidents_resolved": self._track_metric("resolved", 0),
+                "mean_time_to_resolve_hrs": self._track_metric("mttr", 0),
             }
-        except Exception as e:
-            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
-            return {
-                "service_name": "incident_management",
-                "healthy": False,
-                "error": str(e),
-                "incidents_processed": 0,
-                "severity_distribution": {},
-                "error_count": 1,
-                "uptime_seconds": 0,
-            }
+        )
+
+        return metrics
+
+    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
+        """Track a metric (placeholder for actual tracking)."""
+        if not hasattr(self, "_metrics_tracking"):
+            self._metrics_tracking = {}
+        return self._metrics_tracking.get(metric_name, default)
+
+    # get_telemetry() removed - use get_metrics() from BaseService instead

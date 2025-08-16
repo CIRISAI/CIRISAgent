@@ -80,6 +80,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._started = False
         self._start_time: Optional[datetime] = None
 
+        # Authentication metrics tracking
+        self._auth_attempts = 0
+        self._auth_successes = 0
+        self._auth_failures = 0
+        self._token_validations = 0
+        self._permission_checks = 0
+        self._role_assignments = 0
+        self._session_count = 0
+        self._expired_sessions = 0
+        self._active_tokens = 0
+        self._revoked_tokens = 0
+
     def get_service_type(self) -> ServiceType:
         """Get service type - authentication is part of wise authority infrastructure."""
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1540,6 +1552,32 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._token_cache.clear()
         self._channel_token_cache.clear()
         logger.info("AuthenticationService stopped")
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect authentication-specific metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate auth success rate
+        auth_rate = 0.0
+        if self._auth_attempts > 0:
+            auth_rate = self._auth_successes / self._auth_attempts
+
+        metrics.update(
+            {
+                "auth_attempts": float(self._auth_attempts),
+                "auth_successes": float(self._auth_successes),
+                "auth_failures": float(self._auth_failures),
+                "auth_success_rate": auth_rate,
+                "token_validations": float(self._token_validations),
+                "permission_checks": float(self._permission_checks),
+                "role_assignments": float(self._role_assignments),
+                "active_sessions": float(self._session_count),
+                "expired_sessions": float(self._expired_sessions),
+                "active_tokens": float(self._active_tokens),
+            }
+        )
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

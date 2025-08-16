@@ -66,11 +66,12 @@ class MemorizeHandler(BaseActionHandler):
         if node.type == NodeType.USER or node.id.startswith("user/"):
             if hasattr(node, "attributes") and node.attributes:
                 # Handle both dict and GraphNodeAttributes types
-                attrs_to_check = (
-                    node.attributes
-                    if isinstance(node.attributes, dict)
-                    else (node.attributes.__dict__ if hasattr(node.attributes, "__dict__") else {})
-                )
+                if isinstance(node.attributes, dict):
+                    attrs_to_check = node.attributes
+                elif hasattr(node.attributes, "__dict__"):
+                    attrs_to_check = node.attributes.__dict__
+                else:
+                    attrs_to_check = {}
 
                 # Check for any managed attributes
                 for attr_name, rationale in MANAGED_USER_ATTRIBUTES.items():

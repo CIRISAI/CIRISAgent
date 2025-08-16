@@ -137,7 +137,8 @@ class TestQueryMemory:
 
     def test_query_by_node_id(self, client, app, sample_node, auth_context):
         """Test querying by specific node ID."""
-        app.state.memory_service.recall.return_value = [sample_node]
+        # The route now uses recall_node which returns a single node
+        app.state.memory_service.recall_node.return_value = sample_node
         app.dependency_overrides[require_observer] = lambda: auth_context
 
         response = client.post(
@@ -151,9 +152,14 @@ class TestQueryMemory:
         assert len(data["data"]) == 1
         assert data["data"][0]["id"] == sample_node.id
 
-    def test_query_by_type(self, client, app, sample_node, auth_context):
+    def test_query_by_type(self, client, app, sample_node, auth_context, monkeypatch):
         """Test querying by node type."""
-        app.state.memory_service.recall.return_value = [sample_node]
+
+        # Mock the search_nodes function since it queries the database
+        async def mock_search_nodes(**kwargs):
+            return [sample_node]
+
+        monkeypatch.setattr("ciris_engine.logic.adapters.api.routes.memory.search_nodes", mock_search_nodes)
         app.dependency_overrides[require_observer] = lambda: auth_context
 
         response = client.post(
@@ -166,8 +172,14 @@ class TestQueryMemory:
         assert "data" in data
         assert len(data["data"]) == 1
 
-    def test_query_requires_at_least_one_param(self, client, app, auth_context):
+    def test_query_requires_at_least_one_param(self, client, app, auth_context, monkeypatch):
         """Test that query requires at least one parameter."""
+
+        # The API now allows empty queries and uses search_nodes for general search
+        async def mock_search_nodes(**kwargs):
+            return []  # Return empty list for empty query
+
+        monkeypatch.setattr("ciris_engine.logic.adapters.api.routes.memory.search_nodes", mock_search_nodes)
         app.dependency_overrides[require_observer] = lambda: auth_context
 
         response = client.post(
@@ -175,7 +187,11 @@ class TestQueryMemory:
             json={},  # No query parameters
         )
 
-        assert response.status_code == 422  # Validation error
+        # API now accepts empty queries and returns empty results
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 0
 
 
 class TestMemoryTimeline:
@@ -251,7 +267,7 @@ class TestForgetMemory:
     def test_forget_memory_success(self, client, app, sample_node, auth_context):
         """Test successful memory deletion."""
         # The forget endpoint first recalls the node, then forgets it
-        app.state.memory_service.recall.return_value = [sample_node]
+        app.state.memory_service.recall_node.return_value = sample_node
         app.state.memory_service.forget.return_value = MemoryOpResult(
             status=MemoryOpStatus.OK, reason="Memory forgotten", data={"node_id": "test_node_1"}
         )

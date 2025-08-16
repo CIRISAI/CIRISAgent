@@ -1087,17 +1087,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         service_latency: Dict[str, List[float]] = {}
 
         try:
-            # Query different metric types
+            # Query different metric types - use actual metric names that exist
             metric_types = [
                 ("llm.tokens.total", "tokens"),
+                ("llm_tokens_used", "tokens"),  # Legacy metric name
+                ("llm.tokens.input", "tokens"),
+                ("llm.tokens.output", "tokens"),
                 ("llm.cost.cents", "cost"),
                 ("llm.environmental.carbon_grams", "carbon"),
                 ("llm.environmental.energy_kwh", "energy"),
                 ("llm.latency.ms", "latency"),
-                ("message.processed", "messages"),
-                ("thought.processed", "thoughts"),
-                ("task.completed", "tasks"),
-                ("error.occurred", "errors"),
+                ("thought_processing_completed", "thoughts"),
+                ("thought_processing_started", "thoughts"),
+                ("action_selected_task_complete", "tasks"),
+                ("handler_invoked_total", "messages"),  # Use handler invocations as proxy for messages
+                ("error.occurred", "errors"),  # This might not exist yet
             ]
 
             for metric_name, metric_type in metric_types:

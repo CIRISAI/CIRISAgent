@@ -219,6 +219,23 @@ class BaseActionHandler(ABC):
             exc_info=True,
         )
 
+        # Track error metric
+        if self.bus_manager and hasattr(self.bus_manager, "memory_bus"):
+            try:
+                await self.bus_manager.memory_bus.memorize_metric(
+                    metric_name="error.occurred",
+                    value=1.0,
+                    tags={
+                        "handler": self.__class__.__name__,
+                        "action_type": action_type.value,
+                        "error_type": type(error).__name__,
+                        "thought_id": thought_id,
+                    },
+                    timestamp=self.time_service.now() if self.time_service else datetime.now(),
+                )
+            except Exception as metric_error:
+                self.logger.debug(f"Failed to track error metric: {metric_error}")
+
         await self._audit_log(action_type, dispatch_context, outcome=f"error:{type(error).__name__}")
 
     def _format_validation_errors(self, e: ValidationError, param_class: Type[T]) -> str:

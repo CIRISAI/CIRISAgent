@@ -629,7 +629,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1273,
+        "line": 1277,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",

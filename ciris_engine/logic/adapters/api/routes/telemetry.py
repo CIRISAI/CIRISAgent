@@ -347,13 +347,12 @@ async def _get_system_overview(request: Request) -> SystemOverview:
             elif hasattr(telemetry_service, "query_metrics"):
                 # Estimate from common metrics
                 metric_names = [
-                    "messages_processed",
-                    "thoughts_processed",
-                    "tasks_completed",
-                    "errors",
-                    "tokens_consumed",
-                    "api_requests",
-                    "memory_operations",
+                    "llm.tokens.total",  # Total tokens used
+                    "llm_tokens_used",  # Legacy token metric
+                    "thought_processing_completed",  # Thoughts completed
+                    "action_selected_task_complete",  # Tasks completed
+                    "handler_invoked_total",  # Total handler invocations
+                    "action_selected_memorize",  # Memory operations
                 ]
                 total = 0
                 for metric in metric_names:
@@ -555,18 +554,22 @@ async def get_detailed_metrics(
         raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Common metrics to query
+        # Common metrics to query - use actual metric names that exist in TSDB nodes
         metric_names = [
-            "messages_processed",
-            "thoughts_processed",
-            "tasks_completed",
-            "errors",
-            "tokens_consumed",
-            "api_requests",
-            "memory_operations",
-            "llm_calls",
-            "deferrals_created",
-            "incidents_detected",
+            "llm_tokens_used",  # Legacy LLM token usage
+            "llm_api_call_structured",  # Legacy LLM API calls
+            "llm.tokens.total",  # New format: total tokens
+            "llm.tokens.input",  # New format: input tokens
+            "llm.tokens.output",  # New format: output tokens
+            "llm.cost.cents",  # Cost tracking
+            "llm.environmental.carbon_grams",  # Carbon footprint
+            "llm.environmental.energy_kwh",  # Energy usage
+            "handler_completed_total",  # Handler completions
+            "handler_invoked_total",  # Handler invocations
+            "thought_processing_completed",  # Thought completion
+            "thought_processing_started",  # Thought starts
+            "action_selected_task_complete",  # Task completions
+            "action_selected_memorize",  # Memory operations
         ]
 
         metrics = []

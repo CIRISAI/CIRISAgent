@@ -609,15 +609,81 @@ async def build_system_snapshot(
                     if connected_nodes_info:
                         notes_content += f"\nConnected nodes: {json.dumps(connected_nodes_info, default=json_serial)}"
 
+                    # Validate and parse last_seen - FAIL FAST AND LOUD on bad data
+                    last_seen_raw = attrs.get("last_seen")
+                    last_interaction = None
+                    if last_seen_raw is not None:
+                        if isinstance(last_seen_raw, datetime):
+                            last_interaction = last_seen_raw
+                        elif isinstance(last_seen_raw, str):
+                            # Check for template placeholders or invalid strings
+                            if "[insert" in last_seen_raw.lower() or "placeholder" in last_seen_raw.lower():
+                                logger.error(
+                                    f"INVALID DATA: User node {user_id} has template placeholder in last_seen: '{last_seen_raw}'. "
+                                    f"This indicates LLM corruption of managed attributes. Setting to None."
+                                )
+                                # Don't fail the entire snapshot, but log the error loudly
+                                last_interaction = None
+                            else:
+                                try:
+                                    # Try to parse as ISO datetime
+                                    last_interaction = datetime.fromisoformat(last_seen_raw.replace("Z", "+00:00"))
+                                except (ValueError, AttributeError) as e:
+                                    logger.error(
+                                        f"INVALID DATA: User node {user_id} has unparseable last_seen: '{last_seen_raw}'. "
+                                        f"Error: {e}. Setting to None."
+                                    )
+                                    last_interaction = None
+                        else:
+                            logger.error(
+                                f"INVALID DATA: User node {user_id} has non-string/non-datetime last_seen: {type(last_seen_raw)}. "
+                                f"Setting to None."
+                            )
+                            last_interaction = None
+
+                    # Validate and parse created_at/first_seen - use first_seen if available, else created_at, else now
+                    created_at_raw = attrs.get("first_seen") or attrs.get("created_at")
+                    created_at = None
+                    if created_at_raw is not None:
+                        if isinstance(created_at_raw, datetime):
+                            created_at = created_at_raw
+                        elif isinstance(created_at_raw, str):
+                            # Check for template placeholders
+                            if "[insert" in created_at_raw.lower() or "placeholder" in created_at_raw.lower():
+                                logger.error(
+                                    f"INVALID DATA: User node {user_id} has template placeholder in created_at/first_seen: '{created_at_raw}'. "
+                                    f"Using current time as fallback."
+                                )
+                                created_at = datetime.now()
+                            else:
+                                try:
+                                    # Try to parse as ISO datetime
+                                    created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+                                except (ValueError, AttributeError) as e:
+                                    logger.error(
+                                        f"INVALID DATA: User node {user_id} has unparseable created_at/first_seen: '{created_at_raw}'. "
+                                        f"Error: {e}. Using current time as fallback."
+                                    )
+                                    created_at = datetime.now()
+                        else:
+                            logger.error(
+                                f"INVALID DATA: User node {user_id} has non-string/non-datetime created_at/first_seen: {type(created_at_raw)}. "
+                                f"Using current time as fallback."
+                            )
+                            created_at = datetime.now()
+                    else:
+                        # No created_at/first_seen in node, use current time
+                        created_at = datetime.now()
+
                     user_profile = UserProfile(
                         user_id=user_id,
                         display_name=attrs.get("username", attrs.get("display_name", f"User_{user_id}")),
-                        created_at=datetime.now(),  # Could parse from node if available
+                        created_at=created_at,  # Now properly validated from node data
                         preferred_language=attrs.get("language", "en"),
                         timezone=attrs.get("timezone", "UTC"),
                         communication_style=attrs.get("communication_style", "formal"),
                         trust_level=attrs.get("trust_level", 0.5),
-                        last_interaction=attrs.get("last_seen"),
+                        last_interaction=last_interaction,  # Now properly validated
                         is_wa=attrs.get("is_wa", False),
                         permissions=attrs.get("permissions", []),
                         restrictions=attrs.get("restrictions", []),

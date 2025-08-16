@@ -91,21 +91,26 @@ class ObserveHandler(BaseActionHandler):
         # Force active=True regardless of input
         params.active = True
 
-        # Get channel context from params or dispatch
-        channel_context: Optional[ChannelContext] = params.channel_context or dispatch_context.channel_context
+        # Get channel ID from params first (if LLM provided it)
+        channel_id = params.channel_id
 
-        # Fallback to thought context if needed
-        if not channel_context and thought.context and hasattr(thought.context, "system_snapshot"):
-            channel_context = thought.context.system_snapshot.channel_context
+        # If no channel_id in params, try to get from channel_context
+        if not channel_id:
+            # Get channel context from params or dispatch
+            channel_context: Optional[ChannelContext] = params.channel_context or dispatch_context.channel_context
 
-        # Update params with the resolved channel context
-        if channel_context:
-            params.channel_context = channel_context
+            # Fallback to thought context if needed
+            if not channel_context and thought.context and hasattr(thought.context, "system_snapshot"):
+                channel_context = thought.context.system_snapshot.channel_context
 
-        # Extract channel ID for legacy API usage
-        channel_id = extract_channel_id(channel_context)
-        if channel_id and isinstance(channel_id, str) and channel_id.startswith("@"):
-            channel_id = None
+            # Update params with the resolved channel context
+            if channel_context:
+                params.channel_context = channel_context
+
+            # Extract channel ID for legacy API usage
+            channel_id = extract_channel_id(channel_context)
+            if channel_id and isinstance(channel_id, str) and channel_id.startswith("@"):
+                channel_id = None
 
         # Use bus manager instead of getting services directly
         logger.debug("ObserveHandler: Using bus manager for communication and memory operations")

@@ -60,9 +60,16 @@ class ToolHandler(BaseActionHandler):
                 self.logger.debug(f"Executing tool: name={params.name}, parameters={params.parameters}")
                 self.logger.info(f"[TOOL_HANDLER] Parameters type: {type(params.parameters)}")
 
+                # If channel_id is provided in action params but not in tool parameters, add it
+                # This helps tools that need channel context
+                tool_params = dict(params.parameters)
+                if params.channel_id and "channel_id" not in tool_params:
+                    tool_params["channel_id"] = params.channel_id
+                    self.logger.debug(f"Added channel_id {params.channel_id} to tool parameters")
+
                 # Use the tool bus to execute the tool
                 tool_result = await self.bus_manager.tool.execute_tool(
-                    tool_name=params.name, parameters=params.parameters, handler_name=self.__class__.__name__
+                    tool_name=params.name, parameters=tool_params, handler_name=self.__class__.__name__
                 )
 
                 # tool_result is now ToolExecutionResult per protocol

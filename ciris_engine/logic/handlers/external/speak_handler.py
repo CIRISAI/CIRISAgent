@@ -86,11 +86,16 @@ class SpeakHandler(BaseActionHandler):
                 await self._handle_error(HandlerActionType.SPEAK, dispatch_context, thought_id, fe)
                 raise FollowUpCreationError from fe
 
-        # Get channel ID - first check params, then fall back to thought/task context
+        # Get channel ID - first check params.channel_id, then params.channel_context, then fall back to thought/task context
         channel_id = None
 
-        # First, check if channel is specified in params
-        if params.channel_context:
+        # First, check if channel_id is directly provided in params (from LLM)
+        if params.channel_id:
+            channel_id = params.channel_id
+            logger.info(f"SPEAK: Using channel_id '{channel_id}' from params.channel_id")
+
+        # Second, check if channel is specified in params.channel_context
+        elif params.channel_context:
             channel_id = extract_channel_id(params.channel_context)
             if channel_id:
                 logger.info(f"SPEAK: Using channel_id '{channel_id}' from params.channel_context")

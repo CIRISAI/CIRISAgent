@@ -16,6 +16,7 @@ from ..services.graph_core import GraphNode, GraphScope
 class ObserveParams(BaseModel):
     """Parameters for OBSERVE action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for observation")
     channel_context: Optional[ChannelContext] = None
     active: bool = True  # Always active - agent should always create follow-up thoughts
     context: Optional[Dict[str, str]] = Field(default=None)
@@ -26,6 +27,7 @@ class ObserveParams(BaseModel):
 class SpeakParams(BaseModel):
     """Parameters for SPEAK action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID to send message to")
     channel_context: Optional[ChannelContext] = None
     content: str
 
@@ -35,6 +37,7 @@ class SpeakParams(BaseModel):
 class ToolParams(BaseModel):
     """Parameters for TOOL action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for tool context")
     name: str
     parameters: Dict[str, Union[str, int, float, bool, List[str], Dict[str, str]]] = Field(default_factory=dict)
 
@@ -44,6 +47,7 @@ class ToolParams(BaseModel):
 class PonderParams(BaseModel):
     """Parameters for PONDER action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     questions: List[str]
 
     model_config = ConfigDict(extra="forbid")
@@ -52,6 +56,7 @@ class PonderParams(BaseModel):
 class RejectParams(BaseModel):
     """Parameters for REJECT action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     reason: str
     create_filter: bool = Field(
         default=False, description="Whether to create an adaptive filter to prevent similar requests"
@@ -66,6 +71,7 @@ class RejectParams(BaseModel):
 class DeferParams(BaseModel):
     """Parameters for DEFER action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     reason: str
     context: Optional[Dict[str, str]] = Field(default=None)
     defer_until: Optional[str] = Field(
@@ -78,6 +84,7 @@ class DeferParams(BaseModel):
 class MemorizeParams(BaseModel):
     """Parameters for MEMORIZE action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     node: GraphNode
 
     model_config = ConfigDict(extra="forbid")
@@ -90,6 +97,7 @@ class MemorizeParams(BaseModel):
 class RecallParams(BaseModel):
     """Parameters for RECALL action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     query: Optional[str] = Field(None, description="Search query text")
     node_type: Optional[str] = Field(None, description="Type of nodes to recall")
     node_id: Optional[str] = Field(None, description="Specific node ID to recall")
@@ -102,6 +110,7 @@ class RecallParams(BaseModel):
 class ForgetParams(BaseModel):
     """Parameters for FORGET action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     node: GraphNode
     reason: str
     no_audit: bool = False
@@ -116,6 +125,7 @@ class ForgetParams(BaseModel):
 class TaskCompleteParams(BaseModel):
     """Parameters for TASK_COMPLETE action."""
 
+    channel_id: Optional[str] = Field(None, description="Channel ID for context")
     completion_reason: str = "Task completed successfully"
     context: Optional[Dict[str, str]] = Field(default=None)
     positive_moment: Optional[str] = Field(None, description="Optional note about positive vibes/joy from this task")

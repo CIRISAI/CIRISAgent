@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 173,
-    "files_affected": 78,
+    "occurrences": 174,
+    "files_affected": 79,
     "categories": {
-      "generic_data": 154,
+      "generic_data": 155,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -817,6 +817,14 @@
         "class": "StandardResponse",
         "function": null,
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_queries.py",
+        "line": 121,
+        "class": null,
+        "function": "get_memory_stats",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -3176,7 +3184,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 394,
-    "files_affected": 122
+    "occurrences": 395,
+    "files_affected": 123
   }
 }

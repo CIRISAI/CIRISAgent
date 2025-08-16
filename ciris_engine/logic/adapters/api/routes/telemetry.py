@@ -214,13 +214,19 @@ async def _update_visibility_state(overview: SystemOverview, visibility_service)
 
 async def _get_system_overview(request: Request) -> SystemOverview:
     """Build comprehensive system overview from all services."""
-    # Get core services
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
-    visibility_service = getattr(request.app.state, "visibility_service", None)
-    time_service = getattr(request.app.state, "time_service", None)
-    resource_monitor = getattr(request.app.state, "resource_monitor", None)
-    incident_service = getattr(request.app.state, "incident_management_service", None)
-    wise_authority = getattr(request.app.state, "wise_authority", None)
+    # Get core services - THESE MUST EXIST
+    telemetry_service = request.app.state.telemetry_service
+    visibility_service = request.app.state.visibility_service
+    time_service = request.app.state.time_service
+    resource_monitor = request.app.state.resource_monitor
+    incident_service = request.app.state.incident_management_service
+    wise_authority = request.app.state.wise_authority
+
+    # If any critical service is missing, we have a system failure
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+    if not time_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Time service not initialized")
 
     # Initialize overview with all required fields
     overview = SystemOverview(
@@ -400,6 +406,12 @@ async def get_telemetry_overview(
                 timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
             ),
         )
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -457,11 +469,14 @@ async def get_resource_telemetry(
 
     Returns CPU, memory, disk, and other resource metrics.
     """
-    resource_monitor = getattr(request.app.state, "resource_monitor", None)
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # These services MUST exist - if they don't, we have a critical failure
+    resource_monitor = request.app.state.resource_monitor
+    telemetry_service = request.app.state.telemetry_service
 
     if not resource_monitor:
-        raise HTTPException(status_code=503, detail="Resource monitor not available")
+        raise HTTPException(status_code=503, detail="Critical system failure: Resource monitor service not initialized")
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
 
     try:
         # Get current resource usage
@@ -471,7 +486,7 @@ async def get_resource_telemetry(
         limits = resource_monitor.budget
 
         # Get historical data if available
-        history = []
+        history_points = []
         if telemetry_service and hasattr(telemetry_service, "query_metrics"):
             now = datetime.now(timezone.utc)
             hour_ago = now - timedelta(hours=1)
@@ -486,26 +501,15 @@ async def get_resource_telemetry(
                 metric_name="memory_mb", start_time=hour_ago, end_time=now
             )
 
-            # Combine histories
+            # Build history points
             for i in range(min(len(cpu_history), len(memory_history))):
-                history.append(
-                    {
-                        "timestamp": cpu_history[i].get("timestamp", now),
-                        "cpu_percent": cpu_history[i].get("value", 0.0),
-                        "memory_mb": memory_history[i].get("value", 0.0),
-                    }
+                history_points.append(
+                    ResourceHistoryPoint(
+                        timestamp=cpu_history[i].get("timestamp", now),
+                        cpu_percent=cpu_history[i].get("value", 0.0),
+                        memory_mb=memory_history[i].get("value", 0.0),
+                    )
                 )
-
-        # Build history points
-        history_points = []
-        for i in range(min(len(cpu_history), len(memory_history))):
-            history_points.append(
-                ResourceHistoryPoint(
-                    timestamp=cpu_history[i].get("timestamp", now),
-                    cpu_percent=cpu_history[i].get("value", 0.0),
-                    memory_mb=memory_history[i].get("value", 0.0),
-                )
-            )
 
         response = ResourceTelemetryResponse(
             current=ResourceUsageData(
@@ -518,14 +522,14 @@ async def get_resource_telemetry(
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
             limits=ResourceLimits(
-                max_memory_mb=limits.memory_mb.limit if hasattr(limits.memory_mb, "limit") else 0,
-                max_cpu_percent=100.0,
+                max_memory_mb=getattr(limits, "max_memory_mb", 2048.0),
+                max_cpu_percent=getattr(limits, "max_cpu_percent", 100.0),
                 max_disk_bytes=getattr(limits, "max_disk_bytes", 0),
             ),
             history=history_points[-60:],  # Last hour of data
             health=ResourceHealthStatus(
                 status="healthy" if current_usage.memory_percent < 80 and current_usage.cpu_percent < 80 else "warning",
-                warnings=current_usage.warnings,
+                warnings=getattr(current_usage, "warnings", []),
             ),
         )
 
@@ -536,6 +540,12 @@ async def get_resource_telemetry(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -549,9 +559,10 @@ async def get_detailed_metrics(
 
     Get detailed metrics with trends and breakdowns by service.
     """
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # Telemetry service MUST exist - if it doesn't, we have a critical failure
+    telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
 
     try:
         # Common metrics to query - use actual metric names that exist in TSDB nodes
@@ -668,6 +679,9 @@ async def get_detailed_metrics(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -685,8 +699,14 @@ async def get_reasoning_traces(
 
     Get reasoning traces showing agent thought processes and decision-making.
     """
-    visibility_service = getattr(request.app.state, "visibility_service", None)
-    audit_service = getattr(request.app.state, "audit_service", None)
+    # These services MUST exist
+    visibility_service = request.app.state.visibility_service
+    audit_service = request.app.state.audit_service
+
+    if not visibility_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
+    if not audit_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Audit service not initialized")
 
     traces = []
 
@@ -834,7 +854,11 @@ async def get_system_logs(
 
     Get system logs from all services with filtering capabilities.
     """
-    audit_service = getattr(request.app.state, "audit_service", None)
+    # Audit service MUST exist
+    audit_service = request.app.state.audit_service
+
+    if not audit_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Audit service not initialized")
     logs = []
 
     if audit_service:
@@ -929,11 +953,20 @@ async def query_telemetry(
     start_time = datetime.now(timezone.utc)
     results = []
 
-    # Get services
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
-    visibility_service = getattr(request.app.state, "visibility_service", None)
-    audit_service = getattr(request.app.state, "audit_service", None)
-    incident_service = getattr(request.app.state, "incident_management_service", None)
+    # Get services - ALL MUST EXIST
+    telemetry_service = request.app.state.telemetry_service
+    visibility_service = request.app.state.visibility_service
+    audit_service = request.app.state.audit_service
+    incident_service = request.app.state.incident_management_service
+
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+    if not visibility_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
+    if not audit_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Audit service not initialized")
+    if not incident_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Incident service not initialized")
 
     try:
         if query.query_type == "metrics":
@@ -1113,6 +1146,9 @@ async def query_telemetry(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1129,9 +1165,10 @@ async def get_detailed_metric(
 
     Returns current value, trends, and historical data for the specified metric.
     """
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # Telemetry service MUST exist - if it doesn't, we have a critical failure
+    telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
 
     try:
         now = datetime.now(timezone.utc)
@@ -1202,6 +1239,9 @@ async def get_detailed_metric(
         )
 
     except HTTPException:
+        raise
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1293,6 +1333,9 @@ async def get_unified_telemetry(
 
     except HTTPException:
         raise
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1308,9 +1351,10 @@ async def get_resource_history(
 
     Returns time-series data for resource usage over the specified period.
     """
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # Telemetry service MUST exist - if it doesn't, we have a critical failure
+    telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
 
     try:
         now = datetime.now(timezone.utc)
@@ -1369,5 +1413,8 @@ async def get_resource_history(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

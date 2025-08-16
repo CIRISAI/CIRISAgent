@@ -31,6 +31,7 @@ class PrometheusConverter:
 
     def __init__(self):
         self.lines: List[str] = []
+        self.metrics_seen: set = set()
 
     def convert(self, data: Dict) -> str:
         """Convert data to Prometheus format."""
@@ -65,16 +66,30 @@ class PrometheusConverter:
 
     def _sanitize_metric_name(self, key: str) -> str:
         """Sanitize metric name for Prometheus."""
-        return f"ciris_{key}".replace(".", "_").replace("-", "_")
+        return f"ciris_{key}".replace(".", "_").replace("-", "_").lower()
+
+    def _add_metric_metadata(self, metric_name: str, metric_type: str = "gauge") -> None:
+        """Add HELP and TYPE lines for a metric if not already added."""
+        if metric_name not in self.metrics_seen:
+            self.metrics_seen.add(metric_name)
+            # Add HELP line
+            help_text = metric_name.replace("_", " ").replace("ciris ", "").title()
+            self.lines.append(f"# HELP {metric_name} {help_text}")
+            # Add TYPE line
+            self.lines.append(f"# TYPE {metric_name} {metric_type}")
 
     def _add_boolean_metric(self, key: str, value: bool) -> None:
         """Add a boolean metric as 0 or 1."""
         metric_name = self._sanitize_metric_name(key)
+        self._add_metric_metadata(metric_name, "gauge")
         self.lines.append(f"{metric_name} {1 if value else 0}")
 
     def _add_numeric_metric(self, key: str, value: float) -> None:
         """Add a numeric metric."""
         metric_name = self._sanitize_metric_name(key)
+        # Determine metric type based on name patterns
+        metric_type = "counter" if any(x in key.lower() for x in ["total", "count", "sum"]) else "gauge"
+        self._add_metric_metadata(metric_name, metric_type)
         self.lines.append(f"{metric_name} {value}")
 
 

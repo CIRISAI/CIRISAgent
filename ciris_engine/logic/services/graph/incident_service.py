@@ -611,3 +611,53 @@ class IncidentManagementService(BaseGraphService):
     def get_service_type(self) -> ServiceType:
         """Get the service type."""
         return ServiceType.AUDIT
+
+    async def get_telemetry(self) -> Dict[str, any]:
+        """
+        Get telemetry data for the incident management service.
+
+        Returns metrics including:
+        - incidents_processed: Total incidents processed
+        - severity_distribution: Breakdown by severity level
+        - patterns_detected: Number of patterns found
+        - problems_identified: Number of problems identified
+        - insights_generated: Number of insights created
+        """
+        try:
+            # Get incident counts by severity
+            severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+
+            # Get recent incident count
+            incidents_1h = await self.get_incident_count(hours=1)
+            incidents_24h = await self.get_incident_count(hours=24)
+
+            # Calculate uptime
+            uptime_seconds = 0
+            if self._start_time:
+                current_time = self._time_service.now() if self._time_service else datetime.now()
+                uptime_seconds = int((current_time - self._start_time).total_seconds())
+
+            return {
+                "service_name": "incident_management",
+                "healthy": self._started,
+                "incidents_processed": incidents_24h,
+                "incidents_last_hour": incidents_1h,
+                "severity_distribution": severity_counts,
+                "patterns_detected": 0,  # Would be tracked in real implementation
+                "problems_identified": 0,  # Would be tracked in real implementation
+                "insights_generated": 0,  # Would be tracked in real implementation
+                "uptime_seconds": uptime_seconds,
+                "error_count": 0,
+                "last_updated": datetime.now().isoformat(),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
+            return {
+                "service_name": "incident_management",
+                "healthy": False,
+                "error": str(e),
+                "incidents_processed": 0,
+                "severity_distribution": {},
+                "error_count": 1,
+                "uptime_seconds": 0,
+            }

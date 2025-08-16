@@ -441,6 +441,83 @@ async def test_incident_service_recommendations(
 
 
 @pytest.mark.asyncio
+async def test_get_telemetry(mock_memory_bus: Mock, mock_time_service: Mock) -> None:
+    """Test getting telemetry data from incident management service."""
+    # Create service and start it
+    service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+    service.start()
+
+    # Create some test incidents
+    current_time = mock_time_service.now()
+    test_incidents = [
+        create_test_incident(
+            incident_id="inc1",
+            incident_type="ERROR",
+            severity=IncidentSeverity.HIGH,
+            description="Test error",
+            source_component="test",
+            detected_at=current_time - timedelta(minutes=30),
+            filename="test.py",
+            line_number=10,
+        ).to_graph_node()
+    ]
+
+    # Mock the memory service to return incidents
+    mock_memory_service = mock_memory_bus.service_registry.get_services_by_type("memory")[0]
+    mock_memory_service.search = AsyncMock(return_value=test_incidents)
+
+    # Get telemetry
+    telemetry = await service.get_telemetry()
+
+    # Check required fields
+    assert telemetry["service_name"] == "incident_management"
+    assert telemetry["healthy"] is True
+    assert telemetry["incidents_processed"] == 1  # 24h window
+    assert telemetry["incidents_last_hour"] == 1
+    assert isinstance(telemetry["severity_distribution"], dict)
+    assert telemetry["patterns_detected"] == 0
+    assert telemetry["problems_identified"] == 0
+    assert telemetry["insights_generated"] == 0
+    assert telemetry["uptime_seconds"] >= 0
+    assert telemetry["error_count"] == 0
+    assert "last_updated" in telemetry
+
+
+@pytest.mark.asyncio
+async def test_get_telemetry_no_incidents(mock_memory_bus: Mock, mock_time_service: Mock) -> None:
+    """Test telemetry when no incidents exist."""
+    service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+    service.start()
+
+    # Mock empty incident list
+    mock_memory_service = mock_memory_bus.service_registry.get_services_by_type("memory")[0]
+    mock_memory_service.search = AsyncMock(return_value=[])
+
+    telemetry = await service.get_telemetry()
+
+    assert telemetry["incidents_processed"] == 0
+    assert telemetry["incidents_last_hour"] == 0
+    assert telemetry["healthy"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_telemetry_error_handling(mock_memory_bus: Mock, mock_time_service: Mock) -> None:
+    """Test telemetry handles errors gracefully."""
+    service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+    service.start()
+
+    # Mock get_incident_count to raise an exception
+    service.get_incident_count = AsyncMock(side_effect=Exception("Database error"))
+
+    telemetry = await service.get_telemetry()
+
+    assert telemetry["service_name"] == "incident_management"
+    assert telemetry["healthy"] is False
+    assert telemetry["error"] == "Database error"
+    assert telemetry["error_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_incident_node_serialization() -> None:
     """Test that IncidentNode properly serializes to/from GraphNode."""
     # Create an IncidentNode with all fields

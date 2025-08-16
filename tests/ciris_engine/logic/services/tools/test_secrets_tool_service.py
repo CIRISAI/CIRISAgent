@@ -50,6 +50,53 @@ class TestSecretsToolService:
         assert "self_help" in tools
 
     @pytest.mark.asyncio
+    async def test_get_telemetry(self, tool_service):
+        """Test getting telemetry data from secrets tool service."""
+        # Set up some metrics
+        tool_service._request_count = 10
+        tool_service._error_count = 2
+        tool_service._start_time = tool_service._now()
+
+        telemetry = await tool_service.get_telemetry()
+
+        # Check required fields
+        assert telemetry["service_name"] == "secrets_tool"
+        assert telemetry["healthy"] is True
+        assert telemetry["audit_events_generated"] == 10
+        assert telemetry["error_rate"] == 0.2
+        assert telemetry["success_rate"] == 0.8
+        assert telemetry["tool_executions"] == 10
+        assert telemetry["error_count"] == 2
+        assert telemetry["available_tools"] == 3
+        assert telemetry["uptime_seconds"] >= 0
+        assert "last_updated" in telemetry
+
+    @pytest.mark.asyncio
+    async def test_get_telemetry_no_requests(self, tool_service):
+        """Test telemetry when no requests have been made."""
+        telemetry = await tool_service.get_telemetry()
+
+        assert telemetry["service_name"] == "secrets_tool"
+        assert telemetry["healthy"] is True
+        assert telemetry["error_rate"] == 0.0
+        assert telemetry["success_rate"] == 1.0
+        assert telemetry["tool_executions"] == 0
+        assert telemetry["error_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_get_telemetry_error_handling(self, tool_service):
+        """Test telemetry handles errors gracefully."""
+        # Mock is_healthy to raise an exception
+        tool_service.is_healthy = AsyncMock(side_effect=Exception("Test error"))
+
+        telemetry = await tool_service.get_telemetry()
+
+        assert telemetry["service_name"] == "secrets_tool"
+        assert telemetry["healthy"] is False
+        assert telemetry["error"] == "Test error"
+        assert telemetry["error_count"] == 1
+
+    @pytest.mark.asyncio
     async def test_get_all_tool_info(self, tool_service):
         """Test getting info for all tools."""
         tools = await tool_service.get_all_tool_info()

@@ -2,15 +2,24 @@
 Wise Authority message bus - handles all WA service operations
 """
 
+import asyncio
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
 
 from .base_bus import BaseBus, BusMessage
+from .prohibitions import (
+    COMMUNITY_MODERATION_CAPABILITIES,
+    PROHIBITED_CAPABILITIES,
+    ProhibitionSeverity,
+    get_capability_category,
+    get_prohibition_severity,
+)
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -25,11 +34,97 @@ class WiseBus(BaseBus[WiseAuthorityService]):
     Handles:
     - send_deferral
     - fetch_guidance
+    - Comprehensive capability prohibition with tier-based access
     """
 
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.WISE_AUTHORITY, service_registry=service_registry)
         self._time_service = time_service
+        self._agent_tier: Optional[int] = None  # Cached agent tier
+
+    async def _get_tier_from_config(self) -> Optional[int]:
+        """Try to get agent tier from configuration service."""
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            config_services = self.service_registry.get_services_by_type(ServiceType.CONFIG)
+            if not config_services:
+                return None
+
+            config_service = config_services[0]
+            if not hasattr(config_service, "get_value"):
+                return None
+
+            tier = await config_service.get_value("agent_tier")
+            if tier:
+                return int(tier)
+        except Exception as e:
+            logger.debug(f"Could not get tier from config: {e}")
+        return None
+
+    async def _get_tier_from_memory(self) -> Optional[int]:
+        """Try to get agent tier from memory/identity."""
+        try:
+            from ciris_engine.schemas.runtime.enums import ServiceType
+            from ciris_engine.schemas.services.context import RecallQuery
+
+            memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
+            if not memory_services:
+                return None
+
+            memory_service = memory_services[0]
+            if not hasattr(memory_service, "recall"):
+                return None
+
+            # Look for agent tier in identity
+            query = RecallQuery(query="agent_tier OR echo_agent OR community_moderator", scope="identity", limit=5)
+            results = await memory_service.recall(query)
+
+            if not results or not results.memories:
+                return None
+
+            # Check if this is a Tier 4/5 agent
+            for memory in results.memories:
+                memory_str = str(memory).lower()
+                if any(marker in memory_str for marker in ["stewardship", "tier_4", "tier_5"]):
+                    return 4  # Default stewardship tier
+
+        except Exception as e:
+            logger.debug(f"Could not get tier from memory: {e}")
+        return None
+
+    async def get_agent_tier(self) -> int:
+        """
+        Get the agent's tier level from configuration or identity.
+
+        Tier levels:
+        - 1-3: Standard agents (no community moderation)
+        - 4-5: Stewardship agents (trusted with community moderation)
+
+        Returns:
+            Agent tier level (1-5), defaults to 1 if not found
+        """
+        if self._agent_tier is not None:
+            return self._agent_tier
+
+        # Try to get tier from config service
+        tier = await self._get_tier_from_config()
+        if tier:
+            self._agent_tier = tier
+            logger.info(f"Agent tier detected from config: {self._agent_tier}")
+            return self._agent_tier
+
+        # Try to get tier from memory/identity
+        tier = await self._get_tier_from_memory()
+        if tier:
+            self._agent_tier = tier
+            logger.info(f"Agent identified as Tier {self._agent_tier} (stewardship)")
+            return self._agent_tier
+
+        # Default to tier 1 (standard agent)
+        self._agent_tier = 1
+        logger.info(f"Using default agent tier: {self._agent_tier}")
+        return self._agent_tier
 
     async def send_deferral(self, context: DeferralContext, handler_name: str) -> bool:
         """Send a deferral to ALL wise authority services (broadcast)"""
@@ -146,6 +241,348 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return await self.send_deferral(context, handler_name)
 
+    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
+        """
+        Validate capability against prohibited domains with tier-based access.
+
+        Args:
+            capability: The capability to validate
+            agent_tier: Agent tier level (1-5, with 4-5 having stewardship)
+
+        Raises:
+            ValueError: If capability is prohibited for the agent's tier
+        """
+        if not capability:
+            return
+
+        # Get the category of this capability
+        category = get_capability_category(capability)
+        if not category:
+            # Not a prohibited capability
+            return
+
+        # Check if it's a community moderation capability
+        if category.startswith("COMMUNITY_"):
+            # Community moderation is only for Tier 4-5 agents
+            if agent_tier < 4:
+                raise ValueError(
+                    f"TIER RESTRICTED: Community moderation capability '{capability}' "
+                    f"requires Tier 4-5 agent (current tier: {agent_tier}). "
+                    f"This capability is reserved for agents with stewardship responsibilities."
+                )
+            # Tier 4-5 can use community moderation
+            return
+
+        # Get the severity of this prohibition
+        severity = get_prohibition_severity(category)
+
+        if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
+            # These require separate licensed systems
+            raise ValueError(
+                f"PROHIBITED: {category} capabilities blocked. "
+                f"Capability '{capability}' requires separate licensed system. "
+                f"Implementation must be in isolated repository with proper liability controls."
+            )
+        elif severity == ProhibitionSeverity.NEVER_ALLOWED:
+            # These are absolutely prohibited
+            raise ValueError(
+                f"ABSOLUTELY PROHIBITED: {category} capabilities are never allowed. "
+                f"Capability '{capability}' violates core safety principles. "
+                f"This capability cannot be implemented in any CIRIS system."
+            )
+        # TIER_RESTRICTED already handled above for community moderation
+
+    async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
+        """Get services matching the request capability."""
+        required_caps = []
+        if hasattr(request, "capability") and request.capability:
+            required_caps = [request.capability]
+
+        # Try to get multiple services if capability routing is supported
+        try:
+            services = await self.service_registry.get_services(
+                service_type=ServiceType.WISE_AUTHORITY,
+                required_capabilities=required_caps,
+                limit=5,  # Prevent unbounded fan-out
+            )
+        except Exception as e:
+            logger.debug(f"Multi-provider lookup failed, falling back to single provider: {e}")
+            services = []
+
+        # Fallback to single service if multi-provider not available
+        if not services:
+            service = await self.get_service(handler_name="request_guidance", required_capabilities=["fetch_guidance"])
+            if service:
+                services = [service]
+
+        return services
+
+    def _create_guidance_task(self, svc: Any, request: GuidanceRequest) -> Optional[asyncio.Task]:
+        """Create an appropriate guidance task for the service."""
+        if hasattr(svc, "get_guidance"):
+            return asyncio.create_task(svc.get_guidance(request))
+        elif hasattr(svc, "fetch_guidance"):
+            # Convert to GuidanceContext for backward compatibility
+            context = GuidanceContext(
+                thought_id=f"guidance_{id(request)}",
+                task_id=f"task_{id(request)}",
+                question=request.context,
+                ethical_considerations=[],
+                domain_context={"urgency": request.urgency} if request.urgency else {},
+            )
+            return asyncio.create_task(self._fetch_guidance_compat(svc, context, request.options))
+        return None
+
+    async def _collect_guidance_responses(self, tasks: List[asyncio.Task], timeout: float) -> List[GuidanceResponse]:
+        """Collect responses from guidance tasks with timeout."""
+        if not tasks:
+            return []
+
+        # Wait for responses with timeout
+        done, pending = await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.ALL_COMPLETED)
+
+        # Cancel timed-out tasks
+        for task in pending:
+            task.cancel()
+
+        # Collect successful responses
+        responses = []
+        for task in done:
+            try:
+                resp = task.result()
+                if resp:
+                    responses.append(resp)
+            except Exception as e:
+                logger.warning(f"Provider failed: {e}")
+
+        return responses
+
+    async def request_guidance(
+        self, request: GuidanceRequest, timeout: float = 5.0, agent_tier: Optional[int] = None
+    ) -> GuidanceResponse:
+        """
+        Request guidance from capability-matching providers with comprehensive prohibitions.
+
+        Args:
+            request: Guidance request with optional capability field
+            timeout: Maximum time to wait for responses (default 5 seconds)
+            agent_tier: Agent tier level (1-5), auto-detected if not provided
+
+        Returns:
+            GuidanceResponse with aggregated advice from providers
+
+        Raises:
+            ValueError: If capability is prohibited for the agent's tier
+            RuntimeError: If no WiseAuthority service is available
+        """
+        # Auto-detect agent tier if not provided
+        if agent_tier is None:
+            agent_tier = await self.get_agent_tier()
+
+        # CRITICAL: Validate capability against comprehensive prohibitions
+        if hasattr(request, "capability"):
+            self._validate_capability(request.capability, agent_tier)
+
+        # Get matching services
+        services = await self._get_matching_services(request)
+        if not services:
+            raise RuntimeError("No WiseAuthority service available")
+
+        # Create tasks for all services
+        tasks = []
+        for svc in services:
+            task = self._create_guidance_task(svc, request)
+            if task:
+                tasks.append(task)
+
+        # Handle case where no compatible methods found
+        if not tasks:
+            return GuidanceResponse(
+                reasoning="No compatible guidance methods available",
+                wa_id="wisebus",
+                signature="none",
+                custom_guidance="Service lacks guidance capabilities",
+            )
+
+        # Collect responses
+        responses = await self._collect_guidance_responses(tasks, timeout)
+
+        # Arbitrate responses
+        return self._arbitrate_responses(responses, request)
+
+    async def _fetch_guidance_compat(
+        self, service: WiseAuthorityService, context: GuidanceContext, options: Optional[List[str]] = None
+    ) -> GuidanceResponse:
+        """Convert fetch_guidance response to GuidanceResponse for compatibility."""
+        try:
+            result = await service.fetch_guidance(context)
+            if result:
+                return GuidanceResponse(
+                    selected_option=options[0] if options else None,
+                    custom_guidance=str(result),
+                    reasoning="Legacy guidance response",
+                    wa_id="legacy",
+                    signature="compat",
+                )
+        except Exception as e:
+            logger.debug(f"Compatibility fetch failed: {e}")
+        # Return empty response instead of None to match return type
+        return GuidanceResponse(
+            reasoning="fetch_guidance unavailable",
+            wa_id="error",
+            signature="none",
+            custom_guidance="Service unavailable",
+        )
+
+    def _arbitrate_responses(self, responses: List[GuidanceResponse], request: GuidanceRequest) -> GuidanceResponse:
+        """
+        Confidence-based arbitration for multiple responses.
+        Selects response with highest confidence from WisdomAdvice.
+        """
+        if not responses:
+            return GuidanceResponse(
+                reasoning="No guidance available",
+                wa_id="wisebus",
+                signature="none",
+                custom_guidance="No providers responded",
+            )
+
+        # If only one response, use it
+        if len(responses) == 1:
+            return responses[0]
+
+        # Calculate confidence for each response
+        response_confidences = []
+        for resp in responses:
+            # Get max confidence from advice if available
+            max_confidence = 0.0
+            if resp.advice:
+                for advice in resp.advice:
+                    if advice.confidence is not None:
+                        max_confidence = max(max_confidence, advice.confidence)
+            response_confidences.append((resp, max_confidence))
+
+        # Sort by confidence (highest first)
+        response_confidences.sort(key=lambda x: x[1], reverse=True)
+
+        # Select best response
+        best_response, best_confidence = response_confidences[0]
+
+        # Aggregate all advice from all providers for transparency
+        all_advice = []
+        for resp in responses:
+            if resp.advice:
+                all_advice.extend(resp.advice)
+
+        # Update best response with aggregated advice and note about selection
+        best_response.advice = all_advice
+        best_response.reasoning = (
+            f"{best_response.reasoning} "
+            f"(selected with {best_confidence:.2f} confidence from {len(responses)} providers)"
+        )
+
+        return best_response
+
     async def _process_message(self, message: BusMessage) -> None:
         """Process a wise authority message - currently all WA operations are synchronous"""
         logger.warning(f"Wise authority operations should be synchronous, got queued message: {type(message)}")
+
+    def _count_capability_categories(self) -> tuple[dict, int, dict, int]:
+        """Count prohibited and community capabilities by category."""
+        prohibited_counts = {
+            category.lower(): len(capabilities) for category, capabilities in PROHIBITED_CAPABILITIES.items()
+        }
+        total_prohibited = sum(prohibited_counts.values())
+
+        community_counts = {
+            category.lower(): len(capabilities) for category, capabilities in COMMUNITY_MODERATION_CAPABILITIES.items()
+        }
+        total_community = sum(community_counts.values())
+
+        return prohibited_counts, total_prohibited, community_counts, total_community
+
+    def _create_telemetry_base(
+        self, prohibited_counts: dict, total_prohibited: int, community_counts: dict, total_community: int
+    ) -> dict:
+        """Create base telemetry dictionary."""
+        return {
+            "service_name": "wise_bus",
+            "prohibited_capabilities": prohibited_counts,
+            "total_prohibited": total_prohibited,
+            "community_capabilities": community_counts,
+            "total_community": total_community,
+        }
+
+    async def collect_telemetry(self) -> dict[str, Any]:
+        """
+        Collect telemetry from all wise authority providers in parallel.
+
+        Returns aggregated metrics including:
+        - failed_count: Total deferrals failed across providers
+        - processed_count: Total guidance requests processed
+        - provider_count: Number of active providers
+        - prohibited_capabilities: Count by category
+        - community_capabilities: Count of community moderation capabilities
+        """
+        all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+
+        # Count capabilities by category
+        prohibited_counts, total_prohibited, community_counts, total_community = self._count_capability_categories()
+        base_telemetry = self._create_telemetry_base(
+            prohibited_counts, total_prohibited, community_counts, total_community
+        )
+
+        if not all_wa_services:
+            return {
+                **base_telemetry,
+                "healthy": False,
+                "failed_count": 0,
+                "processed_count": 0,
+                "provider_count": 0,
+                "error": "No wise authority services available",
+            }
+
+        # Create tasks to collect telemetry from all providers
+        tasks = [
+            asyncio.create_task(service.get_telemetry())
+            for service in all_wa_services
+            if hasattr(service, "get_telemetry")
+        ]
+
+        # Initialize aggregated telemetry
+        aggregated = {
+            **base_telemetry,
+            "healthy": True,
+            "failed_count": 0,
+            "processed_count": 0,
+            "provider_count": len(all_wa_services),
+            "providers": [],
+        }
+
+        if not tasks:
+            return aggregated
+
+        # Collect and aggregate provider telemetry
+        done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
+
+        # Cancel timed-out tasks
+        for task in pending:
+            task.cancel()
+
+        # Aggregate results from completed tasks
+        self._aggregate_provider_telemetry(aggregated, done)
+
+        return aggregated
+
+    def _aggregate_provider_telemetry(self, aggregated: dict, completed_tasks: set) -> None:
+        """Aggregate telemetry from completed provider tasks."""
+        for task in completed_tasks:
+            try:
+                telemetry = task.result()
+                if not telemetry:
+                    continue
+                aggregated["providers"].append(telemetry.get("service_name", "unknown"))
+                aggregated["failed_count"] += telemetry.get("failed_count", 0)
+                aggregated["processed_count"] += telemetry.get("processed_count", 0)
+            except Exception as e:
+                logger.warning(f"Failed to collect telemetry from provider: {e}")

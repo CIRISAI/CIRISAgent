@@ -1,0 +1,1402 @@
+[
+  {
+    "module": "LLM_BUS",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "MEMORY_BUS",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "COMMUNICATION_BUS",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "WISE_BUS",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "TOOL_BUS",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "RUNTIME_CONTROL_BUS",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "CONFIG_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "AUDIT_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "TIME_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "SHUTDOWN_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "INITIALIZATION_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "AUTHENTICATION_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "RESOURCE_MONITOR_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "WISE_AUTHORITY_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "LLM_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "API_ADAPTER",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "flags": [
+      {
+        "severity": "CRITICAL",
+        "principle": "beneficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "non_maleficence",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "transparency",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "autonomy",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "justice",
+        "score": 0.0
+      },
+      {
+        "severity": "CRITICAL",
+        "principle": "coherence",
+        "score": 0.0
+      },
+      {
+        "severity": "HIGH",
+        "principle": "overall",
+        "score": 0.0
+      }
+    ]
+  }
+]

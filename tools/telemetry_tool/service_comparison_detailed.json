@@ -1,0 +1,91 @@
+[
+  {
+    "service": "LLM_BUS",
+    "documented_count": 17,
+    "actual_count": 18,
+    "in_both": [
+      "average_latency_ms",
+      "carbon_grams",
+      "circuit_breaker_state",
+      "consecutive_failures",
+      "cost_cents",
+      "energy_kwh",
+      "failed_requests",
+      "failure_count",
+      "last_failure_time",
+      "last_request_time",
+      "round_robin_index",
+      "success_count",
+      "tokens_input",
+      "tokens_output",
+      "tokens_used",
+      "total_latency_ms",
+      "total_requests"
+    ],
+    "only_in_docs": [],
+    "only_in_code": [
+      "latency_ms"
+    ],
+    "match_percentage": 100.0
+  },
+  {
+    "service": "MEMORY_BUS",
+    "documented_count": 2,
+    "actual_count": 1,
+    "in_both": [
+      "service_availability"
+    ],
+    "only_in_docs": [
+      "operation_count"
+    ],
+    "only_in_code": [],
+    "match_percentage": 50.0
+  },
+  {
+    "service": "MEMORY_SERVICE",
+    "documented_count": 18,
+    "actual_count": 10,
+    "in_both": [
+      "error_count",
+      "error_rate",
+      "graph_node_count",
+      "healthy",
+      "request_count",
+      "secrets_enabled",
+      "storage_backend",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "edge_creations",
+      "forget_operations",
+      "log_memorizations",
+      "memorize_operations",
+      "memory_bus_available",
+      "metric_memorizations",
+      "recall_operations",
+      "search_operations",
+      "secrets_processed",
+      "timeseries_queries"
+    ],
+    "only_in_code": [
+      "correlations_count",
+      "nodes_by_type"
+    ],
+    "match_percentage": 44.44444444444444
+  },
+  {
+    "service": "COMMUNICATION_BUS",
+    "documented_count": 5,
+    "actual_count": 5,
+    "in_both": [
+      "failed",
+      "processed",
+      "queue_size",
+      "running",
+      "service_type"
+    ],
+    "only_in_docs": [],
+    "only_in_code": [],
+    "match_percentage": 100.0
+  }
+]

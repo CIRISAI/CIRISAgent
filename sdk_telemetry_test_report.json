@@ -1,0 +1,116 @@
+{
+  "passed": [
+    {
+      "name": "system.health",
+      "has_data": true
+    },
+    {
+      "name": "system.time",
+      "has_data": true
+    },
+    {
+      "name": "system.resources",
+      "has_data": true
+    },
+    {
+      "name": "system.services",
+      "has_data": true
+    },
+    {
+      "name": "telemetry.overview",
+      "has_data": true
+    },
+    {
+      "name": "telemetry.metrics",
+      "has_data": true
+    },
+    {
+      "name": "telemetry.resources",
+      "has_data": true
+    },
+    {
+      "name": "telemetry.resources_history",
+      "has_data": true
+    },
+    {
+      "name": "memory.timeline",
+      "has_data": true
+    },
+    {
+      "name": "audit.entries",
+      "has_data": true
+    }
+  ],
+  "failed": [
+    {
+      "name": "telemetry.traces",
+      "error": "1 validation error for TelemetryTracesResponse\ntotal_count\n  Field required [type=missing, input_value={'traces': [], 'total': 0, 'has_more': False}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/missing"
+    },
+    {
+      "name": "telemetry.logs",
+      "error": "61 validation errors for TelemetryLogsResponse\nlogs.0.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.0.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.0.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.0.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.0.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.0.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.1.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.1.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.1.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.1.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.1.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.1.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.2.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.2.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.2.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.2.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.2.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.2.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.3.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.3.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.3.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.3.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.3.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.3.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.4.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.4.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.4.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.4.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.4.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.4.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.5.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.5.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.5.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.5.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.5.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.5.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.6.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.6.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.6.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.6.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.6.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.6.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.7.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.7.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.7.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.7.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.7.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.7.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.8.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.8.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.8.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.8.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.8.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.8.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.9.context.trace_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.9.context.correlation_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.9.context.user_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.9.context.entity_id\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.9.context.error_details\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nlogs.9.context.metadata\n  Input should be a valid string [type=string_type, input_value={}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\ntotal_count\n  Field required [type=missing, input_value={'logs': [{'timestamp': '...: 10, 'has_more': False}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/missing"
+    },
+    {
+      "name": "telemetry.prometheus",
+      "error": "AsyncClient.request() got an unexpected keyword argument 'raw_response'"
+    }
+  ],
+  "skipped": [
+    {
+      "name": "telemetry.service_registry",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.llm_usage",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.circuit_breakers",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.security_incidents",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.handlers",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.errors",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.rate_limits",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.tsdb_status",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.discord_status",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.aggregates_hourly",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.summary_daily",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.history",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.backups",
+      "reason": "Endpoint not implemented (404)"
+    },
+    {
+      "name": "telemetry.export_json",
+      "reason": "Endpoint not implemented (404)"
+    }
+  ]
+}

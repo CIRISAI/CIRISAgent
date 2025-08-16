@@ -1,0 +1,108 @@
+{
+  "llm_specific": {
+    "llm_service": [
+      "tokens_used",
+      "tokens_output",
+      "carbon_grams",
+      "cost_cents",
+      "energy_kwh",
+      "tokens_input"
+    ],
+    "llm_bus": [
+      "total_requests",
+      "circuit_breaker_state",
+      "failed_requests",
+      "failure_count",
+      "success_count",
+      "total_latency_ms",
+      "consecutive_failures"
+    ],
+    "llm_providers": []
+  },
+  "memory_specific": [
+    "memorize_count",
+    "node_count",
+    "query_latency_ms",
+    "recall_count",
+    "write_latency_ms",
+    "edge_count"
+  ],
+  "communication_specific": [
+    "queue_size",
+    "messages_processed",
+    "processing_latency_ms",
+    "messages_queued"
+  ],
+  "common_to_all": [
+    "uptime_seconds",
+    "error_count",
+    "availability",
+    "health_status",
+    "request_count"
+  ],
+  "adapter_specific": {
+    "discord": [
+      "active_guilds",
+      "messages_received",
+      "messages_sent",
+      "active_channels",
+      "discord_latency_ms"
+    ],
+    "api": [
+      "http_requests",
+      "response_time_ms",
+      "websocket_connections",
+      "active_connections"
+    ],
+    "cli": [
+      "commands_processed",
+      "cli_sessions"
+    ]
+  },
+  "actual_calls_found": {
+    "llm_bus": [
+      ",\n                    value=float(usage.tokens_input),\n                    handler_name=handler_name,\n                    tags={",
+      ",\n                value=float(usage.tokens_used),\n                handler_name=handler_name,\n                tags={",
+      "},\n                )\n\n            # Record latency\n            await self.telemetry_service.record_metric(\n                metric_name=",
+      ",\n                    value=float(usage.tokens_output),\n                    handler_name=handler_name,\n                    tags={",
+      "},\n                )\n\n            # Record environmental impact\n            if usage.carbon_grams > 0:\n                await self.telemetry_service.record_metric(\n                    metric_name="
+    ],
+    "observability_decorators": [
+      ": service_name},\n                path_type=path_type,\n                source_module=module,\n            )\n        except Exception:  # noqa: S110\n            # Silently ignore metrics failures to avoid breaking the decorated method\n            pass\n\n\ndef trace_span(\n    span_name: Optional[str] = None, span_kind: str = ",
+      ": str(success), "
+    ],
+    "llm_service": [
+      ", usage_obj.tokens_used)\n                    await self.telemetry_service.record_metric("
+    ],
+    "telemetry_service": [
+      ",\n                    float(usage.tokens_used),\n                    {",
+      ",\n                float(value),\n                {",
+      "},\n                )\n\n            if usage.carbon_grams:\n                await self.record_metric(\n                    f",
+      ": str(event_value),\n                },\n            )\n\n    async def _store_resource_usage(self, resources: ResourceData, thought_id: str, task_id: Optional[str]) -> None:\n        ",
+      ",\n                    float(usage.tokens_output),\n                    {",
+      ": self._now().isoformat()}\n                ),\n                timeout=1.0,\n            )\n        except (asyncio.TimeoutError, Exception) as e:\n            logger.debug(f",
+      ",\n                    float(usage.tokens_input),\n                    {",
+      "},\n                )\n\n        except Exception as e:\n            logger.error(f"
+    ],
+    "thought_processor": [
+      ",\n                    },\n                )\n\n        # Update correlation with success\n        end_time = self._time_service.now()\n        from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest\n\n        update_req = CorrelationUpdateRequest(\n            correlation_id=correlation.correlation_id,\n            response_data={\n                ",
+      ",\n                    },\n                )\n            # Update correlation with failure\n            end_time = self._time_service.now()\n            from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest\n\n            update_req = CorrelationUpdateRequest(\n                correlation_id=correlation.correlation_id,\n                response_data={\n                    ",
+      ",\n                        },\n                    )\n                # Update correlation with auth failure\n                end_time = self._time_service.now()\n                from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest\n\n                update_req = CorrelationUpdateRequest(\n                    correlation_id=correlation.correlation_id,\n                    response_data={\n                        ",
+      "},\n            )\n            if final_result:\n                action_metric = f",
+      "},\n            )\n\n        # 1. Fetch the full Thought object (or use prefetched)\n        prefetched_thought = context.get(",
+      ": str(dma_err)[:100],\n                        "
+    ],
+    "action_dispatcher": [
+      ",\n                    },\n                )\n                await self.telemetry_service.record_metric(\n                    ",
+      ")\n                await self.telemetry_service.record_metric("
+    ]
+  },
+  "totals": {
+    "llm_services": 26,
+    "memory_service": 6,
+    "communication": 4,
+    "common_per_service": 115,
+    "adapters": 11
+  },
+  "estimated_total": 162
+}

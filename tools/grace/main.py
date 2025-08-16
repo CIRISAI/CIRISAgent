@@ -545,39 +545,45 @@ class Grace:
             message.append("=== Build & Deploy Status ===")
             message.append(self.ci_monitor.check_builds())
 
-        elif subcommand == "hints":
-            # Show hints for common failures
-            message.append("=== CI Failure Hints ===")
-            message.append(self.ci_monitor.get_failure_hints())
+        elif subcommand == "hints" or subcommand == "remind":
+            # Show reminders about schemas and antipatterns
+            message.append(self.ci_monitor.get_reminders())
+
+        elif subcommand == "analyze":
+            # Analyze CI failure
+            message.append("=== CI Failure Analysis ===")
+            message.append(self.ci_monitor.analyze_failure())
 
         else:
-            # Default: current branch CI + PR status
+            # Check throttling first
             can_check, wait_msg = self.ci_monitor.should_check_ci()
 
             if not can_check:
                 message.append(f"⏰ CI Check {wait_msg}")
                 message.append("CI takes 12-15 minutes. Checking won't make it faster.")
-            else:
-                self.ci_monitor.mark_ci_checked()
+                return "\n".join(message)
 
-                # Current branch CI
-                message.append("=== Current Branch CI ===")
-                message.append(self.ci_monitor.check_current_ci())
+            # Record that we're checking
+            self.ci_monitor.record_check()
 
-                # PR status summary
-                message.append("\n=== PR Status ===")
-                pr_status = self.ci_monitor.check_prs()
+            # Current branch CI
+            message.append("=== Current Branch CI ===")
+            message.append(self.ci_monitor.check_current_ci())
 
-                # Only show first 3 PRs in default view
-                lines = pr_status.split("\n")[:3]
-                message.extend(lines)
-                if len(pr_status.split("\n")) > 3:
-                    message.append("... (use 'grace ci prs' for all)")
+            # PR status summary
+            message.append("\n=== PR Status ===")
+            pr_status = self.ci_monitor.check_prs()
 
-                # Check for blocking issues
-                if "🚨 CONFLICT" in pr_status:
-                    message.append("\n⚠️ Merge conflicts detected! Resolve before CI can run.")
-                elif "❌" in pr_status and "failed" in pr_status:
-                    message.append("\n⚠️ CI failures detected. Use 'grace ci hints' for help.")
+            # Only show first 3 PRs in default view
+            lines = pr_status.split("\n")[:3]
+            message.extend(lines)
+            if len(pr_status.split("\n")) > 3:
+                message.append("... (use 'grace ci prs' for all)")
+
+            # Check for blocking issues
+            if "🚨 CONFLICT" in pr_status:
+                message.append("\n⚠️ Merge conflicts detected! Resolve before CI can run.")
+            elif "❌" in pr_status and "failed" in pr_status:
+                message.append("\n⚠️ CI failures detected. Use 'grace ci analyze' for help.")
 
         return "\n".join(message)

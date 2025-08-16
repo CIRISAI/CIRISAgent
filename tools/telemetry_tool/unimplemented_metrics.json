@@ -1,0 +1,1871 @@
+[
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.adapter.started",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.adapter.starting",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.adapter.stopped",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.adapter.stopping",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.message.observed",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.message.sent",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.runtime_control.pause",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.runtime_control.resume",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.tool.executed",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.websocket.connected",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "api.websocket.disconnected",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "paused_state",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "rate_limit_buckets",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "response_times",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "server_health",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "service_correlations",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "API_ADAPTER",
+    "metric": "tools_count",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 22.727272727272727
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "available_tools_count",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "cli.adapter.started",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "cli.adapter.starting",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "cli.adapter.stopped",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "cli.adapter.stopping",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "cli.message.processed",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "cli.tool.executed",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "input_task_status",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "interactive_mode",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "piped_input_lines",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "service_capabilities",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "service_correlations",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "CLI_ADAPTER",
+    "metric": "service_status",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 7.142857142857142
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "audit_events",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.adapter.started",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.adapter.starting",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.adapter.stopped",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.adapter.stopping",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.connection.established",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.connection.failed",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.connection.lost",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.connection.reconnecting",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.message.received",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.message.sent",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "discord.tool.executed",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "error_handler_stats",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "latency_ms",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "rate_limiter_stats",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "service_capabilities",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "service_correlations",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "DISCORD_ADAPTER",
+    "metric": "service_status",
+    "module_category": "Adapter",
+    "implementation_status": "missing",
+    "match_percentage": 5.263157894736842
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "batch_processing_performance",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "cognitive_state_transitions",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "current_state",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "dream_scheduling",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "is_processing",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "processor_metrics",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "queue_status",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "shutdown_negotiation_status",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "state_duration",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "state_history",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "metric": "thought_processing_traces",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 8.333333333333332
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "availability_percentage",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "circuit_breaker_configuration",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "circuit_breaker_state",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "failure_rate",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "mean_time_to_recovery",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "recovery_attempts",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "metric": "state_transition_events",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 30.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "average_latency_ms",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "follow_up_thoughts_created",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "in_memory_queue_size",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "max_active_thoughts",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "max_size",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "oldest_message_age_seconds",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "pending_tasks",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "pending_thoughts",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "processing_rate",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "processing_thoughts",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "queue_populate_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "queue_size",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "seed_thoughts_generated",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "thoughts_marked_processing",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "total_tasks",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "metric": "total_thoughts",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "bootstrap_phase_duration",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "circuit_breaker_initial_state",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "config_migration_metrics",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "dependency_resolution_time",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "failed_services_list",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "mock_service_detection",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "registry_service_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "service_health_status",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "service_initialization_order",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "service_registration_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "service_start_times",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "service_verification_results",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "metric": "total_initialization_time",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "circuit_breaker_failure_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "circuit_breaker_success_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "healthy_services_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "registered_services",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "round_robin_index",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "selection_strategy",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "service_capabilities",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "service_priority",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "services_by_type",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "metric": "unhealthy_services_count",
+    "module_category": "Component",
+    "implementation_status": "missing",
+    "match_percentage": 16.666666666666664
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "metric": "attention_triggers",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "metric": "config_version",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "metric": "llm_filters",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "metric": "priority_distribution",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "metric": "review_triggers",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "metric": "user_profiles_count",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "actions_taken_total",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "active_task_count",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "completed_thought_count",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "decision_success_rate",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "pending_thought_count",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "reasoning_depth",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "VISIBILITY_SERVICE",
+    "metric": "task_processing_time_ms",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 41.66666666666667
+  },
+  {
+    "module": "WISE_AUTHORITY_SERVICE",
+    "metric": "authorization_checks",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 72.72727272727273
+  },
+  {
+    "module": "WISE_AUTHORITY_SERVICE",
+    "metric": "deferral_resolutions",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 72.72727272727273
+  },
+  {
+    "module": "WISE_AUTHORITY_SERVICE",
+    "metric": "guidance_requests",
+    "module_category": "Governance_Service",
+    "implementation_status": "missing",
+    "match_percentage": 72.72727272727273
+  },
+  {
+    "module": "AUDIT_SERVICE",
+    "metric": "audit_entries_stored",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "AUDIT_SERVICE",
+    "metric": "export_batches",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "AUDIT_SERVICE",
+    "metric": "hash_chain_entries",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "AUDIT_SERVICE",
+    "metric": "integrity_checks",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "AUDIT_SERVICE",
+    "metric": "verification_reports",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "CONFIG_SERVICE",
+    "metric": "config_cache_hits",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "CONFIG_SERVICE",
+    "metric": "config_history_depth",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "CONFIG_SERVICE",
+    "metric": "config_listener_notifications",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "CONFIG_SERVICE",
+    "metric": "config_versions_created",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "behavioral_data_stored",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "cached_metrics",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "grace_policies_applied",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "memory_type_distribution",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "metric_nodes_created",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "metric_types",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "resource_usage_tracked",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "summary_cache_hits",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "summary_cache_size",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TELEMETRY_SERVICE",
+    "metric": "telemetry_snapshots",
+    "module_category": "Graph_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INITIALIZATION_SERVICE",
+    "metric": "completed_steps_list",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.75
+  },
+  {
+    "module": "INITIALIZATION_SERVICE",
+    "metric": "error_message",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.75
+  },
+  {
+    "module": "INITIALIZATION_SERVICE",
+    "metric": "phase_status",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.75
+  },
+  {
+    "module": "INITIALIZATION_SERVICE",
+    "metric": "start_time",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.75
+  },
+  {
+    "module": "INITIALIZATION_SERVICE",
+    "metric": "verification_results",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.75
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "adapter_bootstrap_count",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "circuit_breaker_resets",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "config_backup_operations",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "config_changes_count",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "config_restore_operations",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "emergency_shutdown_events",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "healthy_services_count",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "kill_switch_configured",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "processor_latency_ms",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "processor_queue_rate",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "processor_queue_size",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "runtime_events_history",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "service_priority_updates",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "signature_verification_attempts",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "signature_verification_failures",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "unhealthy_services_count",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "metric": "wa_keys_count",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 32.0
+  },
+  {
+    "module": "TIME_SERVICE",
+    "metric": "calls_served",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "TIME_SERVICE",
+    "metric": "service_uptime",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "TIME_SERVICE",
+    "metric": "start_time",
+    "module_category": "Infrastructure_Service",
+    "implementation_status": "missing",
+    "match_percentage": 66.66666666666666
+  },
+  {
+    "module": "LLM_BUS",
+    "metric": "average_latency_ms",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 76.47058823529412
+  },
+  {
+    "module": "LLM_BUS",
+    "metric": "failure_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 76.47058823529412
+  },
+  {
+    "module": "LLM_BUS",
+    "metric": "round_robin_index",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 76.47058823529412
+  },
+  {
+    "module": "LLM_BUS",
+    "metric": "success_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 76.47058823529412
+  },
+  {
+    "module": "MEMORY_BUS",
+    "metric": "operation_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "MEMORY_BUS",
+    "metric": "service_availability",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "TOOL_BUS",
+    "metric": "failed_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "TOOL_BUS",
+    "metric": "processed_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "WISE_BUS",
+    "metric": "failed_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "WISE_BUS",
+    "metric": "processed_count",
+    "module_category": "Message_Bus",
+    "implementation_status": "missing",
+    "match_percentage": 60.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "archived_thoughts_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "error_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "error_rate",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "healthy",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "invalid_thoughts_cleaned",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "orphaned_tasks_cleaned",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "orphaned_thoughts_cleaned",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "request_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "runtime_configs_cleaned",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "stale_wakeup_tasks_cleaned",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "startup_cleanup_completed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "task_error_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "task_error_rate",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "task_interval_seconds",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "task_run_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "task_running",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "time_since_last_task_run",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "metric": "uptime_seconds",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "analysis_cycles_completed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "incident_component_distribution",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "incident_severity_distribution",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "incident_time_distribution",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "incidents_processed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "insights_generated",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "memory_bus_connectivity",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "pattern_detection_effectiveness",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "patterns_detected",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "problem_resolution_tracking",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "problems_identified",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "recent_incidents_cache",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "recommendations_generated",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "INCIDENT_SERVICE",
+    "metric": "service_availability",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "edge_creations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "forget_operations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "log_memorizations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "memorize_operations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "metric_memorizations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "recall_operations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "search_operations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "secrets_processed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "MEMORY_SERVICE",
+    "metric": "timeseries_queries",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 50.0
+  },
+  {
+    "module": "RESOURCE_MONITOR_SERVICE",
+    "metric": "cpu_history",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 85.71428571428571
+  },
+  {
+    "module": "RESOURCE_MONITOR_SERVICE",
+    "metric": "token_history",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 85.71428571428571
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "access_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "active_filters",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "auto_forget_enabled",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "detection_patterns",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "encryption_enabled",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "encryption_operations",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "error_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "error_rate",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "filter_enabled",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "filter_matches_today",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "key_rotation_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "last_accessed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "last_filter_update",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "request_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "secrets_stored",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "sensitivity_levels",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "total_secrets",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_SERVICE",
+    "metric": "uptime_seconds",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "audit_events_generated",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "available_tools",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "average_tool_execution_time",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "error_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "error_rate",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "failed_authorization_attempts",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "healthy",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "request_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "secret_retrieval_success_rate",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "self_help_access_count",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "tool_executions_by_name",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SECRETS_TOOL_SERVICE",
+    "metric": "uptime_seconds",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 0.0
+  },
+  {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "metric": "insights_generated",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 70.58823529411765
+  },
+  {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "metric": "last_task_run",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 70.58823529411765
+  },
+  {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "metric": "patterns_detected",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 70.58823529411765
+  },
+  {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "metric": "variance_reports",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 70.58823529411765
+  },
+  {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "metric": "wa_review_triggers",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 70.58823529411765
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "compression_ratio",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "consolidation_duration_seconds",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "consolidation_periods_processed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "edges_deleted",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "nodes_deleted",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "time_service_available",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "total_records_processed",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "metric": "total_summaries_created",
+    "module_category": "Other_Service",
+    "implementation_status": "missing",
+    "match_percentage": 61.904761904761905
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "metric": "avg_task_execution_time",
+    "module_category": "Runtime_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.42105263157895
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "metric": "cron_trigger_count",
+    "module_category": "Runtime_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.42105263157895
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "metric": "deferral_requests",
+    "module_category": "Runtime_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.42105263157895
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "metric": "scheduled_tasks_completed",
+    "module_category": "Runtime_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.42105263157895
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "metric": "scheduled_tasks_created",
+    "module_category": "Runtime_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.42105263157895
+  },
+  {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "metric": "scheduled_tasks_failed",
+    "module_category": "Runtime_Service",
+    "implementation_status": "missing",
+    "match_percentage": 68.42105263157895
+  }
+]

@@ -297,3 +297,51 @@ class SecretsToolService(BaseService, ToolService):
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""
         return {"available_tools": 3.0}
+
+    async def get_telemetry(self) -> Dict[str, Any]:
+        """
+        Get telemetry data for the secrets tool service.
+
+        Returns metrics including:
+        - audit_events_generated: Number of audit events generated
+        - error_rate: Rate of tool execution errors
+        - tool_executions: Total tool executions
+        - success_rate: Success rate of tool executions
+        """
+        try:
+            # Get base metrics from parent class
+            request_count = self._request_count if hasattr(self, "_request_count") else 0
+            error_count = self._error_count if hasattr(self, "_error_count") else 0
+
+            # Calculate rates
+            error_rate = error_count / request_count if request_count > 0 else 0.0
+            success_rate = 1.0 - error_rate
+
+            # Calculate uptime
+            uptime_seconds = 0
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = int((self._now() - self._start_time).total_seconds())
+
+            return {
+                "service_name": "secrets_tool",
+                "healthy": await self.is_healthy(),
+                "audit_events_generated": request_count,  # Each execution generates audit
+                "error_rate": round(error_rate, 4),
+                "success_rate": round(success_rate, 4),
+                "tool_executions": request_count,
+                "error_count": error_count,
+                "available_tools": 3,
+                "uptime_seconds": uptime_seconds,
+                "last_updated": self._now().isoformat(),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
+            return {
+                "service_name": "secrets_tool",
+                "healthy": False,
+                "error": str(e),
+                "audit_events_generated": 0,
+                "error_rate": 1.0,
+                "error_count": 1,
+                "uptime_seconds": 0,
+            }

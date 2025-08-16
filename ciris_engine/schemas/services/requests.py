@@ -94,6 +94,7 @@ class LLMRequest(ServiceRequest):
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: Optional[int] = Field(None, description="Maximum tokens to generate")
     model: Optional[str] = Field(None, description="Model to use")
+    domain: Optional[str] = Field(None, description="Domain for routing (e.g., 'medical', 'legal', 'financial')")
 
 
 class LLMResponse(ServiceResponse):

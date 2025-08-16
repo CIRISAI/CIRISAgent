@@ -1,0 +1,1210 @@
+{
+  "LLM_BUS": {
+    "module": "LLM_BUS",
+    "documented_count": 17,
+    "actual_count": 21,
+    "in_both_count": 13,
+    "only_docs_count": 4,
+    "only_code_count": 8,
+    "match_percentage": 76.47058823529412,
+    "in_both": [
+      "carbon_grams",
+      "circuit_breaker_state",
+      "consecutive_failures",
+      "cost_cents",
+      "energy_kwh",
+      "failed_requests",
+      "last_failure_time",
+      "last_request_time",
+      "tokens_input",
+      "tokens_output",
+      "tokens_used",
+      "total_latency_ms",
+      "total_requests"
+    ],
+    "only_in_docs": [
+      "average_latency_ms",
+      "failure_count",
+      "round_robin_index",
+      "success_count"
+    ],
+    "only_in_code": [
+      "failed",
+      "healthy",
+      "max_tokens",
+      "processed",
+      "queue_size",
+      "running",
+      "service_type",
+      "temperature"
+    ]
+  },
+  "MEMORY_BUS": {
+    "module": "MEMORY_BUS",
+    "documented_count": 2,
+    "actual_count": 9,
+    "in_both_count": 0,
+    "only_docs_count": 2,
+    "only_code_count": 9,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "operation_count",
+      "service_availability"
+    ],
+    "only_in_code": [
+      "end_time",
+      "failed",
+      "healthy",
+      "hours",
+      "processed",
+      "queue_size",
+      "running",
+      "service_type",
+      "start_time"
+    ]
+  },
+  "COMMUNICATION_BUS": {
+    "module": "COMMUNICATION_BUS",
+    "documented_count": 5,
+    "actual_count": 6,
+    "in_both_count": 5,
+    "only_docs_count": 0,
+    "only_code_count": 1,
+    "match_percentage": 100.0,
+    "in_both": [
+      "failed",
+      "processed",
+      "queue_size",
+      "running",
+      "service_type"
+    ],
+    "only_in_docs": [],
+    "only_in_code": [
+      "limit"
+    ]
+  },
+  "WISE_BUS": {
+    "module": "WISE_BUS",
+    "documented_count": 5,
+    "actual_count": 6,
+    "in_both_count": 3,
+    "only_docs_count": 2,
+    "only_code_count": 3,
+    "match_percentage": 60.0,
+    "in_both": [
+      "queue_size",
+      "running",
+      "service_type"
+    ],
+    "only_in_docs": [
+      "failed_count",
+      "processed_count"
+    ],
+    "only_in_code": [
+      "failed",
+      "pending",
+      "processed"
+    ]
+  },
+  "TOOL_BUS": {
+    "module": "TOOL_BUS",
+    "documented_count": 4,
+    "actual_count": 7,
+    "in_both_count": 2,
+    "only_docs_count": 2,
+    "only_code_count": 5,
+    "match_percentage": 50.0,
+    "in_both": [
+      "queue_size",
+      "running"
+    ],
+    "only_in_docs": [
+      "failed_count",
+      "processed_count"
+    ],
+    "only_in_code": [
+      "failed",
+      "healthy",
+      "processed",
+      "result",
+      "service_type"
+    ]
+  },
+  "RUNTIME_CONTROL_BUS": {
+    "module": "RUNTIME_CONTROL_BUS",
+    "documented_count": 6,
+    "actual_count": 14,
+    "in_both_count": 6,
+    "only_docs_count": 0,
+    "only_code_count": 8,
+    "match_percentage": 100.0,
+    "in_both": [
+      "active_operations",
+      "failed",
+      "processed",
+      "queue_size",
+      "running",
+      "shutting_down"
+    ],
+    "only_in_docs": [],
+    "only_in_code": [
+      "adapter_count",
+      "error_count",
+      "healthy",
+      "message",
+      "processor_count",
+      "service_type",
+      "status",
+      "uptime_seconds"
+    ]
+  },
+  "MEMORY_SERVICE": {
+    "module": "MEMORY_SERVICE",
+    "documented_count": 18,
+    "actual_count": 13,
+    "in_both_count": 9,
+    "only_docs_count": 9,
+    "only_code_count": 4,
+    "match_percentage": 50.0,
+    "in_both": [
+      "error_count",
+      "error_rate",
+      "graph_node_count",
+      "healthy",
+      "memory_bus_available",
+      "request_count",
+      "secrets_enabled",
+      "storage_backend",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "edge_creations",
+      "forget_operations",
+      "log_memorizations",
+      "memorize_operations",
+      "metric_memorizations",
+      "recall_operations",
+      "search_operations",
+      "secrets_processed",
+      "timeseries_queries"
+    ],
+    "only_in_code": [
+      "end_time",
+      "hours",
+      "processed",
+      "start_time"
+    ]
+  },
+  "CONFIG_SERVICE": {
+    "module": "CONFIG_SERVICE",
+    "documented_count": 12,
+    "actual_count": 8,
+    "in_both_count": 8,
+    "only_docs_count": 4,
+    "only_code_count": 0,
+    "match_percentage": 66.66666666666666,
+    "in_both": [
+      "config_listeners",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "memory_bus_available",
+      "request_count",
+      "total_configs",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "config_cache_hits",
+      "config_history_depth",
+      "config_listener_notifications",
+      "config_versions_created"
+    ],
+    "only_in_code": []
+  },
+  "TELEMETRY_SERVICE": {
+    "module": "TELEMETRY_SERVICE",
+    "documented_count": 10,
+    "actual_count": 43,
+    "in_both_count": 0,
+    "only_docs_count": 10,
+    "only_code_count": 43,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "behavioral_data_stored",
+      "cached_metrics",
+      "grace_policies_applied",
+      "memory_type_distribution",
+      "metric_nodes_created",
+      "metric_types",
+      "resource_usage_tracked",
+      "summary_cache_hits",
+      "summary_cache_size",
+      "telemetry_snapshots"
+    ],
+    "only_in_code": [
+      "avg",
+      "avg_thought_depth",
+      "cache_size_mb",
+      "carbon_grams",
+      "carbon_last_hour_grams",
+      "cost_cents",
+      "cost_last_hour_cents",
+      "count",
+      "dt_timestamp",
+      "end_time",
+      "energy_kwh",
+      "energy_last_hour_kwh",
+      "error_count",
+      "error_rate",
+      "error_rate_percent",
+      "errors_24h",
+      "errors_current_hour",
+      "healthy",
+      "max",
+      "max_cached_metrics_per_type",
+      "memory_bus_available",
+      "messages_current_hour",
+      "messages_processed_24h",
+      "metrics_per_minute",
+      "min",
+      "processed",
+      "queue_saturation",
+      "recent_tokens",
+      "request_count",
+      "start_time",
+      "sum",
+      "summary_cache_entries",
+      "tasks_completed_24h",
+      "thoughts_current_hour",
+      "thoughts_processed_24h",
+      "tokens_input",
+      "tokens_last_hour",
+      "tokens_output",
+      "tokens_used",
+      "total_metrics_cached",
+      "unique_metric_types",
+      "uptime_seconds",
+      "value"
+    ]
+  },
+  "AUDIT_SERVICE": {
+    "module": "AUDIT_SERVICE",
+    "documented_count": 15,
+    "actual_count": 24,
+    "in_both_count": 10,
+    "only_docs_count": 5,
+    "only_code_count": 14,
+    "match_percentage": 66.66666666666666,
+    "in_both": [
+      "cache_size_mb",
+      "cached_entries",
+      "error_count",
+      "error_rate",
+      "hash_chain_enabled",
+      "healthy",
+      "memory_bus_available",
+      "pending_exports",
+      "request_count",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "audit_entries_stored",
+      "export_batches",
+      "hash_chain_entries",
+      "integrity_checks",
+      "verification_reports"
+    ],
+    "only_in_code": [
+      "cache_size",
+      "data",
+      "enable_hash_chain",
+      "end_time",
+      "event_id",
+      "event_type",
+      "failed",
+      "limit",
+      "metadata",
+      "outcome",
+      "retention_days",
+      "start_time",
+      "timestamp",
+      "user_id"
+    ]
+  },
+  "INCIDENT_SERVICE": {
+    "module": "INCIDENT_SERVICE",
+    "documented_count": 14,
+    "actual_count": 0,
+    "in_both_count": 0,
+    "only_docs_count": 14,
+    "only_code_count": 0,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "analysis_cycles_completed",
+      "incident_component_distribution",
+      "incident_severity_distribution",
+      "incident_time_distribution",
+      "incidents_processed",
+      "insights_generated",
+      "memory_bus_connectivity",
+      "pattern_detection_effectiveness",
+      "patterns_detected",
+      "problem_resolution_tracking",
+      "problems_identified",
+      "recent_incidents_cache",
+      "recommendations_generated",
+      "service_availability"
+    ],
+    "only_in_code": []
+  },
+  "TSDB_CONSOLIDATION_SERVICE": {
+    "module": "TSDB_CONSOLIDATION_SERVICE",
+    "documented_count": 21,
+    "actual_count": 23,
+    "in_both_count": 13,
+    "only_docs_count": 8,
+    "only_code_count": 10,
+    "match_percentage": 61.904761904761905,
+    "in_both": [
+      "basic_interval_hours",
+      "basic_task_running",
+      "extensive_interval_days",
+      "extensive_task_running",
+      "last_basic_consolidation",
+      "last_consolidation_timestamp",
+      "last_extensive_consolidation",
+      "last_profound_consolidation",
+      "memory_bus_available",
+      "profound_interval_days",
+      "profound_target_mb_per_day",
+      "profound_task_running",
+      "task_running"
+    ],
+    "only_in_docs": [
+      "compression_ratio",
+      "consolidation_duration_seconds",
+      "consolidation_periods_processed",
+      "edges_deleted",
+      "nodes_deleted",
+      "time_service_available",
+      "total_records_processed",
+      "total_summaries_created"
+    ],
+    "only_in_code": [
+      "consolidation_interval_hours",
+      "error_count",
+      "error_rate",
+      "failed",
+      "healthy",
+      "processed",
+      "raw_retention_hours",
+      "request_count",
+      "running",
+      "uptime_seconds"
+    ]
+  },
+  "TIME_SERVICE": {
+    "module": "TIME_SERVICE",
+    "documented_count": 9,
+    "actual_count": 6,
+    "in_both_count": 6,
+    "only_docs_count": 3,
+    "only_code_count": 0,
+    "match_percentage": 66.66666666666666,
+    "in_both": [
+      "availability",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "request_count",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "calls_served",
+      "service_uptime",
+      "start_time"
+    ],
+    "only_in_code": []
+  },
+  "SHUTDOWN_SERVICE": {
+    "module": "SHUTDOWN_SERVICE",
+    "documented_count": 9,
+    "actual_count": 9,
+    "in_both_count": 9,
+    "only_docs_count": 0,
+    "only_code_count": 0,
+    "match_percentage": 100.0,
+    "in_both": [
+      "availability",
+      "emergency_mode",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "registered_handlers",
+      "request_count",
+      "shutdown_requested",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [],
+    "only_in_code": []
+  },
+  "INITIALIZATION_SERVICE": {
+    "module": "INITIALIZATION_SERVICE",
+    "documented_count": 16,
+    "actual_count": 15,
+    "in_both_count": 11,
+    "only_docs_count": 5,
+    "only_code_count": 4,
+    "match_percentage": 68.75,
+    "in_both": [
+      "availability",
+      "completed_steps",
+      "error_count",
+      "error_rate",
+      "has_error",
+      "healthy",
+      "initialization_complete",
+      "initialization_duration",
+      "request_count",
+      "total_steps",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "completed_steps_list",
+      "error_message",
+      "phase_status",
+      "start_time",
+      "verification_results"
+    ],
+    "only_in_code": [
+      "critical",
+      "failed",
+      "running",
+      "timeout"
+    ]
+  },
+  "AUTHENTICATION_SERVICE": {
+    "module": "AUTHENTICATION_SERVICE",
+    "documented_count": 16,
+    "actual_count": 20,
+    "in_both_count": 16,
+    "only_docs_count": 0,
+    "only_code_count": 4,
+    "match_percentage": 100.0,
+    "in_both": [
+      "active_certificates",
+      "admin_certificates",
+      "auth_contexts_cached",
+      "authority_certificates",
+      "availability",
+      "channel_tokens_cached",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "observer_certificates",
+      "request_count",
+      "revoked_certificates",
+      "root_certificates",
+      "total_tokens_cached",
+      "uptime_seconds",
+      "user_certificates"
+    ],
+    "only_in_docs": [],
+    "only_in_code": [
+      "active_sessions",
+      "cached_tokens",
+      "certificate_count",
+      "failed"
+    ]
+  },
+  "RESOURCE_MONITOR_SERVICE": {
+    "module": "RESOURCE_MONITOR_SERVICE",
+    "documented_count": 14,
+    "actual_count": 23,
+    "in_both_count": 12,
+    "only_docs_count": 2,
+    "only_code_count": 11,
+    "match_percentage": 85.71428571428571,
+    "in_both": [
+      "cpu_average_1m",
+      "cpu_percent",
+      "critical",
+      "disk_free_mb",
+      "disk_used_mb",
+      "healthy",
+      "memory_mb",
+      "memory_percent",
+      "thoughts_active",
+      "tokens_used_day",
+      "tokens_used_hour",
+      "warnings"
+    ],
+    "only_in_docs": [
+      "cpu_history",
+      "token_history"
+    ],
+    "only_in_code": [
+      "error_count",
+      "error_rate",
+      "pending",
+      "request_count",
+      "task_error_count",
+      "task_error_rate",
+      "task_interval_seconds",
+      "task_run_count",
+      "task_running",
+      "time_since_last_task_run",
+      "uptime_seconds"
+    ]
+  },
+  "DATABASE_MAINTENANCE_SERVICE": {
+    "module": "DATABASE_MAINTENANCE_SERVICE",
+    "documented_count": 18,
+    "actual_count": 0,
+    "in_both_count": 0,
+    "only_docs_count": 18,
+    "only_code_count": 0,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "archived_thoughts_count",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "invalid_thoughts_cleaned",
+      "orphaned_tasks_cleaned",
+      "orphaned_thoughts_cleaned",
+      "request_count",
+      "runtime_configs_cleaned",
+      "stale_wakeup_tasks_cleaned",
+      "startup_cleanup_completed",
+      "task_error_count",
+      "task_error_rate",
+      "task_interval_seconds",
+      "task_run_count",
+      "task_running",
+      "time_since_last_task_run",
+      "uptime_seconds"
+    ],
+    "only_in_code": []
+  },
+  "SECRETS_SERVICE": {
+    "module": "SECRETS_SERVICE",
+    "documented_count": 18,
+    "actual_count": 0,
+    "in_both_count": 0,
+    "only_docs_count": 18,
+    "only_code_count": 0,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "access_count",
+      "active_filters",
+      "auto_forget_enabled",
+      "detection_patterns",
+      "encryption_enabled",
+      "encryption_operations",
+      "error_count",
+      "error_rate",
+      "filter_enabled",
+      "filter_matches_today",
+      "key_rotation_count",
+      "last_accessed",
+      "last_filter_update",
+      "request_count",
+      "secrets_stored",
+      "sensitivity_levels",
+      "total_secrets",
+      "uptime_seconds"
+    ],
+    "only_in_code": []
+  },
+  "WISE_AUTHORITY_SERVICE": {
+    "module": "WISE_AUTHORITY_SERVICE",
+    "documented_count": 11,
+    "actual_count": 9,
+    "in_both_count": 8,
+    "only_docs_count": 3,
+    "only_code_count": 1,
+    "match_percentage": 72.72727272727273,
+    "in_both": [
+      "error_count",
+      "error_rate",
+      "healthy",
+      "pending_deferrals",
+      "request_count",
+      "resolved_deferrals",
+      "total_deferrals",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "authorization_checks",
+      "deferral_resolutions",
+      "guidance_requests"
+    ],
+    "only_in_code": [
+      "pending"
+    ]
+  },
+  "ADAPTIVE_FILTER_SERVICE": {
+    "module": "ADAPTIVE_FILTER_SERVICE",
+    "documented_count": 15,
+    "actual_count": 10,
+    "in_both_count": 9,
+    "only_docs_count": 6,
+    "only_code_count": 1,
+    "match_percentage": 60.0,
+    "in_both": [
+      "error_count",
+      "error_rate",
+      "false_positive_reports",
+      "filter_count",
+      "healthy",
+      "request_count",
+      "total_filtered",
+      "total_messages_processed",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "attention_triggers",
+      "config_version",
+      "llm_filters",
+      "priority_distribution",
+      "review_triggers",
+      "user_profiles_count"
+    ],
+    "only_in_code": [
+      "failed"
+    ]
+  },
+  "VISIBILITY_SERVICE": {
+    "module": "VISIBILITY_SERVICE",
+    "documented_count": 12,
+    "actual_count": 6,
+    "in_both_count": 5,
+    "only_docs_count": 7,
+    "only_code_count": 1,
+    "match_percentage": 41.66666666666667,
+    "in_both": [
+      "error_count",
+      "error_rate",
+      "healthy",
+      "request_count",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "actions_taken_total",
+      "active_task_count",
+      "completed_thought_count",
+      "decision_success_rate",
+      "pending_thought_count",
+      "reasoning_depth",
+      "task_processing_time_ms"
+    ],
+    "only_in_code": [
+      "pending"
+    ]
+  },
+  "SELF_OBSERVATION_SERVICE": {
+    "module": "SELF_OBSERVATION_SERVICE",
+    "documented_count": 17,
+    "actual_count": 24,
+    "in_both_count": 12,
+    "only_docs_count": 5,
+    "only_code_count": 12,
+    "match_percentage": 70.58823529411765,
+    "in_both": [
+      "adaptation_count",
+      "changes_since_last_adaptation",
+      "consecutive_failures",
+      "current_variance",
+      "emergency_stop",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "request_count",
+      "task_error_count",
+      "task_run_count",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "insights_generated",
+      "last_task_run",
+      "patterns_detected",
+      "variance_reports",
+      "wa_review_triggers"
+    ],
+    "only_in_code": [
+      "average_value",
+      "data_points",
+      "failed",
+      "observation_interval_hours",
+      "peak_value",
+      "pending",
+      "stabilization_period_hours",
+      "task_error_rate",
+      "task_interval_seconds",
+      "task_running",
+      "time_since_last_task_run",
+      "variance_threshold"
+    ]
+  },
+  "LLM_SERVICE": {
+    "module": "LLM_SERVICE",
+    "documented_count": 27,
+    "actual_count": 34,
+    "in_both_count": 27,
+    "only_docs_count": 0,
+    "only_code_count": 7,
+    "match_percentage": 100.0,
+    "in_both": [
+      "avg_response_time_ms",
+      "cache_entries",
+      "cache_size_mb",
+      "call_count",
+      "carbon_grams",
+      "circuit_breaker_state",
+      "consecutive_failures",
+      "cost_cents",
+      "energy_kwh",
+      "error_count",
+      "error_rate",
+      "failure_count",
+      "healthy",
+      "last_failure_age_seconds",
+      "model_cost_per_1k_tokens",
+      "model_max_retries",
+      "model_timeout_seconds",
+      "recovery_attempts",
+      "request_count",
+      "response_cache_hit_rate",
+      "retry_delay_base",
+      "retry_delay_max",
+      "success_rate",
+      "tokens_input",
+      "tokens_output",
+      "tokens_used",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [],
+    "only_in_code": [
+      "failed",
+      "llm_api_call_structured",
+      "llm_tokens_used",
+      "max_retries",
+      "max_tokens",
+      "temperature",
+      "timeout_seconds"
+    ]
+  },
+  "RUNTIME_CONTROL_SERVICE": {
+    "module": "RUNTIME_CONTROL_SERVICE",
+    "documented_count": 25,
+    "actual_count": 17,
+    "in_both_count": 8,
+    "only_docs_count": 17,
+    "only_code_count": 9,
+    "match_percentage": 32.0,
+    "in_both": [
+      "adapters_loaded",
+      "error_count",
+      "error_rate",
+      "events_count",
+      "healthy",
+      "processor_status",
+      "request_count",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "adapter_bootstrap_count",
+      "circuit_breaker_resets",
+      "config_backup_operations",
+      "config_changes_count",
+      "config_restore_operations",
+      "emergency_shutdown_events",
+      "healthy_services_count",
+      "kill_switch_configured",
+      "processor_latency_ms",
+      "processor_queue_rate",
+      "processor_queue_size",
+      "runtime_events_history",
+      "service_priority_updates",
+      "signature_verification_attempts",
+      "signature_verification_failures",
+      "unhealthy_services_count",
+      "wa_keys_count"
+    ],
+    "only_in_code": [
+      "adapter_count",
+      "auto_start",
+      "circuit_breaker_state",
+      "failed",
+      "failure_count",
+      "new_priority_group",
+      "processor_count",
+      "queue_size",
+      "running"
+    ]
+  },
+  "TASK_SCHEDULER_SERVICE": {
+    "module": "TASK_SCHEDULER_SERVICE",
+    "documented_count": 19,
+    "actual_count": 14,
+    "in_both_count": 13,
+    "only_docs_count": 6,
+    "only_code_count": 1,
+    "match_percentage": 68.42105263157895,
+    "in_both": [
+      "active_tasks",
+      "check_interval",
+      "error_count",
+      "error_rate",
+      "healthy",
+      "request_count",
+      "task_error_count",
+      "task_error_rate",
+      "task_interval_seconds",
+      "task_run_count",
+      "task_running",
+      "time_since_last_task_run",
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "avg_task_execution_time",
+      "cron_trigger_count",
+      "deferral_requests",
+      "scheduled_tasks_completed",
+      "scheduled_tasks_created",
+      "scheduled_tasks_failed"
+    ],
+    "only_in_code": [
+      "pending"
+    ]
+  },
+  "SECRETS_TOOL_SERVICE": {
+    "module": "SECRETS_TOOL_SERVICE",
+    "documented_count": 12,
+    "actual_count": 0,
+    "in_both_count": 0,
+    "only_docs_count": 12,
+    "only_code_count": 0,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "audit_events_generated",
+      "available_tools",
+      "average_tool_execution_time",
+      "error_count",
+      "error_rate",
+      "failed_authorization_attempts",
+      "healthy",
+      "request_count",
+      "secret_retrieval_success_rate",
+      "self_help_access_count",
+      "tool_executions_by_name",
+      "uptime_seconds"
+    ],
+    "only_in_code": []
+  },
+  "CIRCUIT_BREAKER_COMPONENT": {
+    "module": "CIRCUIT_BREAKER_COMPONENT",
+    "documented_count": 10,
+    "actual_count": 10,
+    "in_both_count": 3,
+    "only_docs_count": 7,
+    "only_code_count": 7,
+    "match_percentage": 30.0,
+    "in_both": [
+      "failure_count",
+      "last_failure_time",
+      "success_count"
+    ],
+    "only_in_docs": [
+      "availability_percentage",
+      "circuit_breaker_configuration",
+      "circuit_breaker_state",
+      "failure_rate",
+      "mean_time_to_recovery",
+      "recovery_attempts",
+      "state_transition_events"
+    ],
+    "only_in_code": [
+      "failed",
+      "failure_threshold",
+      "name",
+      "recovery_timeout",
+      "state",
+      "success_threshold",
+      "timeout_duration"
+    ]
+  },
+  "PROCESSING_QUEUE_COMPONENT": {
+    "module": "PROCESSING_QUEUE_COMPONENT",
+    "documented_count": 16,
+    "actual_count": 3,
+    "in_both_count": 0,
+    "only_docs_count": 16,
+    "only_code_count": 3,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "average_latency_ms",
+      "follow_up_thoughts_created",
+      "in_memory_queue_size",
+      "max_active_thoughts",
+      "max_size",
+      "oldest_message_age_seconds",
+      "pending_tasks",
+      "pending_thoughts",
+      "processing_rate",
+      "processing_thoughts",
+      "queue_populate_count",
+      "queue_size",
+      "seed_thoughts_generated",
+      "thoughts_marked_processing",
+      "total_tasks",
+      "total_thoughts"
+    ],
+    "only_in_code": [
+      "pending",
+      "processed",
+      "round_number"
+    ]
+  },
+  "SERVICE_REGISTRY_REGISTRY": {
+    "module": "SERVICE_REGISTRY_REGISTRY",
+    "documented_count": 12,
+    "actual_count": 7,
+    "in_both_count": 2,
+    "only_docs_count": 10,
+    "only_code_count": 5,
+    "match_percentage": 16.666666666666664,
+    "in_both": [
+      "circuit_breaker_state",
+      "priority_group"
+    ],
+    "only_in_docs": [
+      "circuit_breaker_failure_count",
+      "circuit_breaker_success_count",
+      "healthy_services_count",
+      "registered_services",
+      "round_robin_index",
+      "selection_strategy",
+      "service_capabilities",
+      "service_priority",
+      "services_by_type",
+      "unhealthy_services_count"
+    ],
+    "only_in_code": [
+      "availability",
+      "failed",
+      "healthy",
+      "limit",
+      "timeout"
+    ]
+  },
+  "SERVICE_INITIALIZER_COMPONENT": {
+    "module": "SERVICE_INITIALIZER_COMPONENT",
+    "documented_count": 13,
+    "actual_count": 3,
+    "in_both_count": 0,
+    "only_docs_count": 13,
+    "only_code_count": 3,
+    "match_percentage": 0.0,
+    "in_both": [],
+    "only_in_docs": [
+      "bootstrap_phase_duration",
+      "circuit_breaker_initial_state",
+      "config_migration_metrics",
+      "dependency_resolution_time",
+      "failed_services_list",
+      "mock_service_detection",
+      "registry_service_count",
+      "service_health_status",
+      "service_initialization_order",
+      "service_registration_count",
+      "service_start_times",
+      "service_verification_results",
+      "total_initialization_time"
+    ],
+    "only_in_code": [
+      "failed",
+      "healthy",
+      "running"
+    ]
+  },
+  "AGENT_PROCESSOR_PROCESSOR": {
+    "module": "AGENT_PROCESSOR_PROCESSOR",
+    "documented_count": 12,
+    "actual_count": 12,
+    "in_both_count": 1,
+    "only_docs_count": 11,
+    "only_code_count": 11,
+    "match_percentage": 8.333333333333332,
+    "in_both": [
+      "round_number"
+    ],
+    "only_in_docs": [
+      "batch_processing_performance",
+      "cognitive_state_transitions",
+      "current_state",
+      "dream_scheduling",
+      "is_processing",
+      "processor_metrics",
+      "queue_status",
+      "shutdown_negotiation_status",
+      "state_duration",
+      "state_history",
+      "thought_processing_traces"
+    ],
+    "only_in_code": [
+      "completed",
+      "error",
+      "failed",
+      "pending",
+      "processed",
+      "processing",
+      "running",
+      "state",
+      "thought_counts",
+      "tokens_used",
+      "total"
+    ]
+  },
+  "DISCORD_ADAPTER": {
+    "module": "DISCORD_ADAPTER",
+    "documented_count": 19,
+    "actual_count": 5,
+    "in_both_count": 1,
+    "only_docs_count": 18,
+    "only_code_count": 4,
+    "match_percentage": 5.263157894736842,
+    "in_both": [
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "audit_events",
+      "discord.adapter.started",
+      "discord.adapter.starting",
+      "discord.adapter.stopped",
+      "discord.adapter.stopping",
+      "discord.connection.established",
+      "discord.connection.failed",
+      "discord.connection.lost",
+      "discord.connection.reconnecting",
+      "discord.message.received",
+      "discord.message.sent",
+      "discord.tool.executed",
+      "error_handler_stats",
+      "latency_ms",
+      "rate_limiter_stats",
+      "service_capabilities",
+      "service_correlations",
+      "service_status"
+    ],
+    "only_in_code": [
+      "failed",
+      "healthy",
+      "latency",
+      "pending"
+    ]
+  },
+  "API_ADAPTER": {
+    "module": "API_ADAPTER",
+    "documented_count": 22,
+    "actual_count": 21,
+    "in_both_count": 5,
+    "only_docs_count": 17,
+    "only_code_count": 16,
+    "match_percentage": 22.727272727272727,
+    "in_both": [
+      "error_count",
+      "pause_duration",
+      "queued_responses",
+      "requests_handled",
+      "websocket_clients"
+    ],
+    "only_in_docs": [
+      "api.adapter.started",
+      "api.adapter.starting",
+      "api.adapter.stopped",
+      "api.adapter.stopping",
+      "api.message.observed",
+      "api.message.sent",
+      "api.runtime_control.pause",
+      "api.runtime_control.resume",
+      "api.tool.executed",
+      "api.websocket.connected",
+      "api.websocket.disconnected",
+      "paused_state",
+      "rate_limit_buckets",
+      "response_times",
+      "server_health",
+      "service_correlations",
+      "tools_count"
+    ],
+    "only_in_code": [
+      "avg_response_time_ms",
+      "before",
+      "command_verified",
+      "data_persisted",
+      "exit_code",
+      "failed",
+      "final_message_sent",
+      "healthy",
+      "limit",
+      "paused",
+      "pending",
+      "running",
+      "services_stopped",
+      "shutdown_completed",
+      "shutdown_initiated",
+      "uptime_seconds"
+    ]
+  },
+  "CLI_ADAPTER": {
+    "module": "CLI_ADAPTER",
+    "documented_count": 14,
+    "actual_count": 14,
+    "in_both_count": 1,
+    "only_docs_count": 13,
+    "only_code_count": 13,
+    "match_percentage": 7.142857142857142,
+    "in_both": [
+      "uptime_seconds"
+    ],
+    "only_in_docs": [
+      "available_tools_count",
+      "cli.adapter.started",
+      "cli.adapter.starting",
+      "cli.adapter.stopped",
+      "cli.adapter.stopping",
+      "cli.message.processed",
+      "cli.tool.executed",
+      "input_task_status",
+      "interactive_mode",
+      "piped_input_lines",
+      "service_capabilities",
+      "service_correlations",
+      "service_status"
+    ],
+    "only_in_code": [
+      "adapter_started",
+      "adapter_starting",
+      "adapter_stopped",
+      "adapter_stopping",
+      "available_tools",
+      "healthy",
+      "interactive",
+      "memory_mb",
+      "message_processed",
+      "processed",
+      "running",
+      "tokens_used",
+      "tool_executed"
+    ]
+  }
+}

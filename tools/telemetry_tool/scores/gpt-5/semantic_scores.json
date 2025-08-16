@@ -1,0 +1,1067 @@
+[
+  {
+    "module_name": "LLM_BUS",
+    "beneficence_score": 0.6,
+    "beneficence_reasoning": "The LLM Bus increases reliability and usefulness by managing multiple providers with circuit breakers, automatic failover, and distribution strategies. It collects cost and environmental metrics that can inform responsible use, supporting stewardship. These capabilities plausibly improve user experience and system uptime, contributing to flourishing via dependable access to language capabilities. However, benefits are constrained by in\u2011memory, per\u2011instance telemetry (no historical or cross\u2011instance view), partial exposure of metrics, and absence of built\u2011in governance features (e.g., quotas/cost budgets) that would more directly translate into sustained user benefit and ecosystem health.",
+    "non_maleficence_score": 0.45,
+    "non_maleficence_reasoning": "Safety is partially supported through circuit breakers, timeouts, failover, and basic telemetry. Yet several risk controls are missing: no rate limiting or per\u2011tenant quotas (risk of runaway costs, denial of service, or provider throttling), no persistent audit telemetry (weak post\u2011incident forensics), unclear data governance (no explicit PII scrubbing or consent before routing to third\u2011party LLMs), and no explicit integration with safety/adaptive filtering. Lack of cross\u2011instance aggregation impedes early detection of systemic failures. These gaps limit harm prevention, especially at scale.",
+    "transparency_score": 0.4,
+    "transparency_reasoning": "The module defines rich metrics and a recommended API endpoint, but currently most data remain internal and ephemeral. In\u2011memory storage, no historical time series, and limited external exposure fall short of CIRIS requirements for auditable, tamper\u2011evident rationale chains and public transparency (where applicable). The presence of cost/carbon metrics is positive, but without durable, API\u2011exposed logs tied to requests and providers, stakeholders cannot reliably audit behavior or meet PDMA/WBD documentation needs.",
+    "autonomy_score": 0.35,
+    "autonomy_reasoning": "Users and stakeholders are not clearly empowered to choose providers, set routing preferences, or give informed consent about which third\u2011party receives their data. The bus does not expose provider attribution per request by default, nor does it provide opt\u2011outs or granular controls. Domain routing exists, but user\u2011level agency is weak, and the lack of transparent disclosure about data flows can undermine informed autonomy.",
+    "justice_score": 0.3,
+    "justice_reasoning": "Load distribution focuses on technical efficiency (latency, round robin) rather than equitable resource allocation across users/tenants. With no quotas, budgets, or fairness policies, heavy consumers could starve others, and costs could disproportionately burden less resourced domains. There are no mechanisms to detect or mitigate disparate impact in access or performance, and no accessibility or priority rules for critical services. Telemetry could support fairness audits, but the necessary aggregation and exposure are not implemented.",
+    "coherence_score": 0.55,
+    "coherence_reasoning": "The bus supports operational coherence via failover, circuit breakers, and health tracking, contributing to resilient service. Environmental metrics nod toward long\u2011term stewardship. However, lack of durable telemetry, governance hooks (WBD triggers, WA overrides), and cross\u2011instance visibility impedes sustained adaptive coherence. Without carbon\u2011aware routing, budget enforcement, or systemic trend analysis, the module underdelivers on the meta\u2011goal\u2019s sustainable dimension.",
+    "overall_assessment": "The LLM Bus is directionally aligned with Adaptive Coherence by improving reliability and collecting stewardship\u2011relevant metrics, but current implementation gaps in transparency, governance controls, fairness, and data protection limit ethical robustness. Elevating it from a performance router to a governed, auditable, user\u2011respecting substrate would significantly improve mission alignment under M\u20111 and the core principles.",
+    "key_gaps": [
+      "Ephemeral, in\u2011memory telemetry; no tamper\u2011evident, durable audit logs tied to requests and providers",
+      "No public/authorized telemetry endpoint implemented; PDMA/WBD transparency needs unmet for large deployments",
+      "Absence of rate limiting, per\u2011tenant quotas, and cost/carbon budgets; risk of runaway spend and resource starvation",
+      "Insufficient data governance: no explicit PII scrubbing, consent mechanisms, or provider attribution per request",
+      "No fairness controls or access equity policies across users/tenants",
+      "Limited safety integration: not wired to adaptive filtering or anomaly\u2011to\u2011WBD escalation",
+      "No cross\u2011instance aggregation or historical time series for trend/risk detection",
+      "Sustainability underused: no carbon\u2011aware routing or carbon budgets despite carbon metrics collection",
+      "Lack of clear user\u2011facing controls and disclosures to support informed autonomy"
+    ],
+    "improvement_priorities": [
+      "Implement persistent, tamper\u2011evident telemetry and request\u2011level audit trails (provider, model, region, hashes, timestamps) with an authenticated/public API as appropriate, plus cross\u2011instance aggregation and time\u2011series storage to satisfy PDMA transparency and post\u2011incident forensics.",
+      "Add protective and equitable controls: rate limiting, per\u2011tenant quotas, cost and carbon budgets, and explicit data governance (PII redaction pipeline, provider attribution and disclosure, user/tenant consent and opt\u2011out controls).",
+      "Integrate governance and sustainability: hook anomalies to WBD/WA workflows, expose WA override controls, and add carbon\u2011aware/least\u2011impact routing alongside safety/adaptive filtering gates before dispatch."
+    ],
+    "mission_alignment_score": 0.44166666666666665
+  },
+  {
+    "module_name": "MEMORY_BUS",
+    "beneficence_score": 0.56,
+    "beneficence_reasoning": "As the routing layer for graph memory, the bus enables core functions (storing THOUGHT, MESSAGE, AUDIT, METRIC, CONFIG, INCIDENT nodes) that are necessary for learning, auditability, and long\u2011term reasoning. This supports adaptive coherence by preserving context and outcomes for PDMA feedback and resilience loops. However, the current absence of bus-level telemetry, performance metrics, and reliability safeguards (SQLite single-writer, no pooling, missing indexes) limits dependable benefit delivery at scale and can degrade service under load, constraining realized flourishing.",
+    "non_maleficence_score": 0.36,
+    "non_maleficence_reasoning": "Harm prevention is weakened by: (1) minimal bus-level telemetry and no latency/error categorization, impeding early detection of faults; (2) unbounded data growth and lack of retention/archival policies, raising privacy and spill risk; (3) reliance on SQLite with single-writer and no pooling, increasing contention and potential data loss under concurrency; (4) attributes stored as JSON text without explicit encryption-at-rest guarantees (only optional SecretsService mention), and no documented access controls; (5) no tamper-evident logging at the bus, limiting forensic integrity. These gaps elevate risks of data exposure, integrity loss, and undetected failure cascades.",
+    "transparency_score": 0.32,
+    "transparency_reasoning": "Transparency is limited: bus-level metrics are not tracked; service metrics exist but are internal and not API-exposed; recommended endpoints (/v1/telemetry/memory/stats, /timeline) are proposed but not implemented; there is no published PDMA/WBD linkage or public audit interface. The schema is documented and helpful, but the operational state and rationale trails are not inspectable by default, reducing accountability.",
+    "autonomy_score": 0.27,
+    "autonomy_reasoning": "The bus handles potentially user-related content (MESSAGES, THOUGHTS) but lacks mechanisms for consent, selective storage, user-level visibility, data export/portability, access revocation, or the right to be forgotten. No per-node PII tagging, retention/TTL, or subject-controlled redaction is defined. Without opt-in/opt-out controls or clear provenance and deletion pathways, user agency is under-supported.",
+    "justice_score": 0.35,
+    "justice_reasoning": "As infrastructure, the bus is neutral by design, but it does not provide fairness safeguards: no multi-tenant quotas or resource fairness to prevent one actor from starving others; no policy hooks for equitable retention; no bias-aware provenance to aid downstream equity analysis. Lack of transparent metrics can obscure disparate impacts (e.g., higher latency/error for certain tenants or workloads).",
+    "coherence_score": 0.52,
+    "coherence_reasoning": "Persisting graph context directly supports adaptive coherence and long-horizon reasoning. The inclusion of AUDIT and METRIC node types is aligned with sustained coherence and PDMA feedback loops. Yet the lack of bus-level observability, tamper-evident auditability, and reliability controls undermines sustainable operation under change and scale. Current design advances coherence in principle but is fragile in practice.",
+    "overall_assessment": "MEMORY_BUS is mission-relevant infrastructure that can materially support M-1 by preserving contextual, audit, and learning signals. However, it falls short on harm prevention and transparency due to minimal bus telemetry, weak security/retention guarantees, and limited user autonomy features. Elevating observability, privacy/security controls, and fairness/autonomy mechanisms will move it from a useful enabler to a robust, ethically aligned backbone for sustainable adaptive coherence.",
+    "key_gaps": [
+      "No bus-level telemetry (counts, latencies, error taxonomy) or tamper-evident audit logs",
+      "Weak privacy and security posture (unclear encryption-at-rest, no RBAC/ABAC, no PII tagging)",
+      "Unbounded data growth with no retention/TTL or archival policies",
+      "SQLite single-writer bottleneck, no connection pooling, missing indexes; risk under load",
+      "No public or authorized transparency endpoints implemented for metrics/audit",
+      "Lack of user autonomy features (consent, export, deletion, selective storage)",
+      "Limited error monitoring and no WBD trigger thresholds for ethical deferral on anomalies",
+      "No multi-tenant fairness controls (quotas, backpressure, priority fairness)"
+    ],
+    "improvement_priorities": [
+      "Implement bus-level observability and tamper-evident auditing: track memorize/recall/forget counts, p50/p95/p99 latencies, categorized errors; add cryptographic log chaining; expose secure telemetry endpoints with access control and redaction.",
+      "Harden privacy and security: enforce field-level encryption-at-rest (default via SecretsService), RBAC/ABAC on memory operations, PII tagging and data classification, retention/TTL policies with right-to-be-forgotten and export APIs.",
+      "Improve reliability and fairness at scale: add indexes and connection pooling, backpressure and rate limiting, multi-tenant quotas/priorities; consider migration path to PostgreSQL/Neo4j; define error/uncertainty thresholds that trigger WBD and safe degradation."
+    ],
+    "mission_alignment_score": 0.39666666666666667
+  },
+  {
+    "module_name": "COMMUNICATION_BUS",
+    "beneficence_score": 0.6,
+    "beneficence_reasoning": "The bus enables core communication across adapters (API, Discord, CLI), which is foundational to delivering helpful functionality and thus indirectly supports flourishing. Basic metrics (queue size, processed/failed) and correlation logging can improve reliability and responsiveness when used. However, many benefits are prospective rather than realized: key telemetry is not exposed via API, real\u2011time metrics and unified dashboards are absent, and no SLA baselining exists. As a result, its positive impact is moderate and contingent on future enhancements.",
+    "non_maleficence_score": 0.43,
+    "non_maleficence_reasoning": "Harm prevention mechanisms are limited. There is no built\u2011in rate limiting, throttling, or backpressure fairness, creating risk of overload cascades and outages. Correlation logs store request_data (including content) in SQLite without stated redaction, access controls, encryption, or retention limits\u2014raising privacy, misuse, and breach risks. Known limitations include lack of real\u2011time telemetry and alerting, limited routing analytics, and potential DB growth without cleanup. While minimal health metrics exist, they are insufficient to reliably prevent or mitigate failures and data harms.",
+    "transparency_score": 0.52,
+    "transparency_reasoning": "Internal inspectability is decent: typed models, base bus stats, adapter get_status, and detailed correlation records with timestamps support auditability. The documentation also proposes precise external telemetry endpoints and monitoring recommendations. Yet these are not implemented: communication telemetry is not exposed via API, there is no tamper\u2011evident logging, and channel routing is only logged, not metrically tracked. Thus transparency is present in design and partial in practice, but falls short of CIRIS\u2019s Integrity and public transparency expectations.",
+    "autonomy_score": 0.38,
+    "autonomy_reasoning": "Routing is largely system\u2011driven via channel prefixes and default fallbacks; there is no explicit consent/opt\u2011out for logging, no user\u2011controllable channel preference management, and no data deletion pathway. Default channel priority may override user intent in ambiguous cases. The system does not expose understandable controls or notices to users about how their messages are routed, stored, or retained. These gaps undermine respect for user agency despite basic functionality enabling multi\u2011channel choice.",
+    "justice_score": 0.42,
+    "justice_reasoning": "No explicit bias, but fairness risks arise from operational asymmetries: no unified cross\u2011adapter analytics, no load balancing, and a hardcoded default_channel_priority that can systematically favor one adapter over others. Without rate limiting or message size tracking, large or noisy channels can starve slower ones. There is no stated accessibility consideration for low\u2011bandwidth contexts. Overall, resource and attention distribution may be inequitable, though fixable with planned enhancements.",
+    "coherence_score": 0.56,
+    "coherence_reasoning": "The bus contributes structural order through typed models, service registry, and correlation storage, supporting adaptive coherence at the system level. However, absent SLA baselines, alerting, and rate control, the module can become a brittleness point rather than a stabilizer under load. Missing real\u2011time metrics and governance hooks limit feedback loops essential for adaptive coherence. Future enhancements (load balancing, health scoring, historical analytics) align strongly with M\u20111 but are not yet realized.",
+    "overall_assessment": "The Communication Bus is mission\u2011relevant infrastructure that can materially support M\u20111 by enabling reliable, observable communication, but its current implementation underdelivers on safety, transparency, and fairness safeguards. The design shows clear intent and a good roadmap, yet practical gaps (privacy controls, rate limiting, exposed telemetry, SLA/alerts) constrain its contribution to sustained adaptive coherence and increase risk of preventable harms. Prioritizing privacy\u2011preserving observability, fair backpressure, and governed transparency will significantly improve alignment.",
+    "key_gaps": [
+      "Telemetry not exposed via API; limited real\u2011time visibility and no dashboards or SLA baselines",
+      "No rate limiting, throttling, or fair queuing/backpressure to prevent overload and starvation",
+      "Correlation logs store message content without documented redaction, encryption, access control, or retention policy",
+      "Inconsistent adapter metrics; no unified cross\u2011adapter analytics or health scoring",
+      "No governance hooks for PDMA/WBD when failures, uncertainty, or anomalies exceed thresholds",
+      "No user consent, preference management, or deletion controls for logged communications",
+      "No systematic routing analytics; potential silent misrouting or default fallbacks masking issues",
+      "Database growth and synchronous operations risk performance degradation without cleanup policies"
+    ],
+    "improvement_priorities": [
+      "Expose privacy\u2011preserving telemetry (API endpoints, dashboards) with SLA baselines, real\u2011time alerting, and tamper\u2011evident logs; implement retention, redaction, and encryption for correlation data with role\u2011based access.",
+      "Implement adaptive safety controls: rate limiting, fair queuing/backpressure, load balancing, and per\u2011adapter/channel health scoring to prevent overload and ensure equitable service.",
+      "Add governance and autonomy features: PDMA/WBD triggers on failure/uncertainty thresholds, user consent and channel preference management, and clear data lifecycle controls (opt\u2011out, deletion, retention)."
+    ],
+    "mission_alignment_score": 0.48500000000000004
+  },
+  {
+    "module_name": "WISE_BUS",
+    "beneficence_score": 0.78,
+    "beneficence_reasoning": "WISE_BUS operationalizes Wisdom-Based Deferral by coordinating guidance/deferral to Wise Authorities, enabling safer, better-informed actions that support flourishing. Multi-provider fan-out with arbitration increases answer quality and robustness, and the medical-domain firewall reduces harmful misuse. However, the absence of implemented telemetry, learning loops, and historical trends limits continuous improvement and ecosystem-level benefits that would otherwise amplify positive impact.",
+    "non_maleficence_score": 0.62,
+    "non_maleficence_reasoning": "Strengths: hard medical-domain blocking, capability validation, timeouts, and multi-provider arbitration reduce single-point failure risks and prevent unsafe medical guidance. Weaknesses: no real telemetry, alerting, or provider health monitoring means degradations and failures can go undetected; no explicit security/PII redaction guarantees or audited chains increase risk of leakage or misattribution; lack of circuit breakers or rate limits risks overload and silent failure. These gaps constrain harm prevention under stress.",
+    "transparency_score": 0.38,
+    "transparency_reasoning": "Currently exposes only BaseBus metrics; WA-specific deferral/guidance/blocking stats are not captured or published, and nothing is persisted to the memory graph. Proposed endpoints and graph integration exist but are not implemented. This undermines Section II transparency expectations (e.g., PDMA/WBD publication for large deployments) and limits auditability and public accountability. Clear error messages for medical blocking help but are insufficient to offset broader visibility gaps.",
+    "autonomy_score": 0.66,
+    "autonomy_reasoning": "By enabling WBD, the bus supports ethical humility and preserves stakeholders\u2019 informed decision-making through escalation rather than opaque action. The medical firewall constrains user choices for safety, with clear messaging. Yet users lack controls over provider selection, arbitration criteria, and consent for how their context is routed to WAs; there is no visible rationale for arbitration decisions. Net effect: autonomy is respected in spirit but not maximally enabled.",
+    "justice_score": 0.45,
+    "justice_reasoning": "No bias auditing of provider selection, arbitration, or capability coverage; no fairness constraints or diversity-of-provider policies; no metrics to detect disparate failure rates across domains or locales. The uniform medical blocking is equitable but narrow. Without visibility and corrective mechanisms, systemic bias or regional under-service could persist, reducing fair access to wise guidance.",
+    "coherence_score": 0.64,
+    "coherence_reasoning": "Functionally aligned with M-1 by scaffolding adaptive coherence via deferrals, multi-provider wisdom, and avoiding dangerous medical outputs. Architecture principles (typed models, no special-case bypass) support internal consistency. However, missing telemetry, audit integration, and provider-governance feedback loops weaken long-term adaptive coherence, antifragility, and accountability envisioned by the Covenant.",
+    "overall_assessment": "WISE_BUS is directionally aligned with the Covenant and Meta-Goal M-1 through robust WBD facilitation, multi-provider arbitration, and a strong medical safety firewall. Its current biggest liabilities are transparency, observability, and fairness: without implemented telemetry, audit trails, provider health/bias monitoring, and explainable arbitration, the bus cannot reliably demonstrate integrity, support governance, or evolve adaptively. Addressing these gaps will significantly improve safety, equity, and sustained ethical coherence.",
+    "key_gaps": [
+      "No implemented WA-specific telemetry or audit logging (deferrals, guidance, blocking) and no graph persistence; cannot meet Section II transparency/accountability expectations.",
+      "No provider health monitoring, capability coverage metrics, or real-time alerting\u2014risk of silent degradation and delayed harm detection.",
+      "Arbitration is confidence-based but opaque; no explainability or fairness controls to prevent provider bias or capture.",
+      "Security and privacy posture unspecified for WA traffic (encryption, access control, PII redaction), elevating leakage and misuse risk.",
+      "Lack of historical trending and resilience metrics undermines learning loops and antifragility.",
+      "No explicit rate limiting/circuit breakers/backoff strategies for abnormal load or failing providers."
+    ],
+    "improvement_priorities": [
+      "Implement and expose WA telemetry end-to-end (deferrals, guidance, blocking, arbitration, latency) with graph storage and redacted PDMA/WBD logs to satisfy transparency and auditability requirements.",
+      "Add provider governance: health checks, capability coverage dashboards, arbitration explainability with bias/fairness audits, and anti-capture safeguards (diversity and rotation policies).",
+      "Harden reliability and safety: secure channels and authZ/PII redaction, real-time alerting, timeouts with backoff, rate limiting, and circuit breakers to prevent cascading failures."
+    ],
+    "mission_alignment_score": 0.5883333333333334
+  },
+  {
+    "module_name": "TOOL_BUS",
+    "beneficence_score": 0.52,
+    "beneficence_reasoning": "The Tool Bus enables core capability (tool discovery, routing, execution) that underpins useful functions like secrets management and HTTP access. This infrastructural utility plausibly contributes to flourishing by making higher-level services work. However, absent load-aware routing, caching, or performance safeguards, it does not actively maximize positive outcomes. Benefits are indirect and limited by missing resilience and observability features that would translate capability into reliably positive impact.",
+    "non_maleficence_score": 0.28,
+    "non_maleficence_reasoning": "Multiple documented gaps elevate risk: no built-in authorization for tool execution, weak parameter validation reliance on downstream services, no rate limiting, no circuit breaker, no sandboxing/isolation for HTTP tools, synchronous blocking, and no execution history persistence. Secrets tooling increases stakes if misuse occurs. Lack of aggregated health-aware routing and poor failure containment can cascade harms (service exhaustion, data exfiltration, unintended external calls). Monitoring recommendations exist but are not implemented, so prevention and containment are currently weak.",
+    "transparency_score": 0.34,
+    "transparency_reasoning": "Bus-level stats exist in-memory but are not exposed via endpoints; there is no aggregated tool telemetry, no execution history, and no PDMA/WBD integration or public transparency channel. ToolExecutionResult includes a correlation_id, and individual services expose some metrics, but the bus does not consolidate or persist them. Recommended telemetry endpoints and graph nodes are well specified but remain future enhancements. As-is, users and auditors cannot readily inspect behavior or trace decisions end-to-end.",
+    "autonomy_score": 0.42,
+    "autonomy_reasoning": "The bus supports tool discovery and access, which can empower informed choice. Yet lack of access control, parameter validation at the bus layer, and limited explainer metadata for tools constrain informed consent and safe self-direction. Routing preferences (e.g., prefer APIToolService) are opaque and not user-configurable. Absence of per-actor policies, quotas, or guardrails risks other actors\u2019 autonomy via denial-of-service or unintended actions triggered by permissive execution.",
+    "justice_score": 0.3,
+    "justice_reasoning": "There is no explicit bias in routing, but fairness risks arise from: preference-based routing that may starve other services, no rate limiting or quotas (allowing heavy users to crowd out others), no multi-tenant isolation, no usage transparency by segment, and no remediation for disparate access or failure impact. Without metrics aggregation or public reports, inequities cannot be detected or corrected. The design neither embeds nor measures equitable distribution of benefits/burdens.",
+    "coherence_score": 0.4,
+    "coherence_reasoning": "Relative to M-1 (adaptive coherence), the bus provides minimal order (routing, basic health check) but lacks the adaptive feedback loops needed for sustainable coherence: no consolidated telemetry, no resilience patterns (circuit breakers, load balancing), no learning from failures (no persistence/analysis), and no integration with PDMA/WBD for high-risk operations. The philosophy of typed models and simple buses supports structure, but without implemented governance hooks and safety mechanisms, the module under-delivers on adaptive, sustainable order that protects autonomy and diversity.",
+    "overall_assessment": "The Tool Bus is a useful but under-governed backbone. It provides essential capability yet falls short on safety, transparency, fairness, and governed adaptivity expected under CIRIS. Its current posture risks creating brittle coupling and silent failure modes around sensitive tools (secrets, HTTP). Implementing the already outlined telemetry, safety, and governance integrations would significantly improve alignment with M-1 and the core principles.",
+    "key_gaps": [
+      "No built-in authorization and per-tool access control at the bus layer",
+      "No rate limiting, quotas, or circuit breaker to prevent cascades and abuse",
+      "No execution history persistence or aggregated telemetry for auditability",
+      "Lack of sandboxing/isolation and strict parameter validation for risky tools (HTTP, secrets)",
+      "Opaque routing preferences with no load balancing or user-governable policies",
+      "No PDMA/WBD hooks for high-impact or uncertain operations and no public transparency endpoints",
+      "Synchronous blocking execution without backpressure or queue management",
+      "No graph storage of events to support systemic learning and bias/fairness analysis"
+    ],
+    "improvement_priorities": [
+      "Implement access control and validation: per-tool authorization/ACLs, schema-based parameter validation, and sandboxing for HTTP tools with network egress policies.",
+      "Build auditability and feedback: persist execution history with correlation IDs, expose consolidated telemetry endpoints, and store events in the graph to enable PDMA/WBD integration and public transparency at appropriate scales.",
+      "Add safety and resilience controls: rate limiting and quotas per actor/tool, health-aware load balancing, and circuit breaker/backoff to contain failures and prevent resource starvation."
+    ],
+    "mission_alignment_score": 0.3766666666666667
+  },
+  {
+    "module_name": "RUNTIME_CONTROL_BUS",
+    "beneficence_score": 0.62,
+    "beneficence_reasoning": "Provides core lifecycle control, health monitoring, and graceful shutdown that indirectly support reliable, ethical service delivery and thus user flourishing. However, current benefits are tempered by internal-only access and limited persistence of telemetry, reducing learning and ecosystem value.",
+    "non_maleficence_score": 0.7,
+    "non_maleficence_reasoning": "Strong safeguards (operation lock, config validation, adapter isolation, WA\u2011verified emergency shutdowns) reduce risk of cascade failures and enable rapid deactivation. Harm prevention is weakened by in\u2011memory event history, limited queue analytics/alerts, and lack of detailed config\u2011change audit trails, which impair detection, forensics, and mitigation.",
+    "transparency_score": 0.46,
+    "transparency_reasoning": "Clear schemas and recommended endpoints enable inspectability in principle, and some tamper\u2011evident logging is referenced. In practice, most telemetry is internal, event history is ephemeral, and there is no persistent, detailed configuration audit trail or public/role\u2011based exposure to satisfy CIRIS transparency obligations.",
+    "autonomy_score": 0.58,
+    "autonomy_reasoning": "Supports operator and Wise Authority control (pause/resume, single\u2011step, emergency shutdown), preserving human oversight and system self\u2011regulation via cognitive states. It does not directly engage end\u2011user consent flows and offers limited user\u2011visible controls, so respect for broader stakeholder autonomy is only indirectly served.",
+    "justice_score": 0.35,
+    "justice_reasoning": "As infrastructure, it is largely distribution\u2011neutral, with some equity benefits from adapter isolation (preventing one channel from degrading others). The absence of public or stakeholder\u2011oriented telemetry and resource stewardship metrics limits equitable oversight and burden/benefit sharing.",
+    "coherence_score": 0.72,
+    "coherence_reasoning": "Centralizes lifecycle control and state coordination, preventing conflicting operations and supporting orderly behavior\u2014key to Adaptive Coherence. Gaps in persistent telemetry, cognitive\u2011state timing, and cross\u2011instance analytics limit long\u2011term coherence, drift detection, and governed learning.",
+    "overall_assessment": "The Runtime Control Bus is directionally aligned with M\u20111 through reliable coordination, safety locks, and governance hooks, offering meaningful but indirect contributions to sentient flourishing. Its principal weaknesses are auditability and external transparency; addressing persistence, exposure, and anomaly detection would elevate it from competent infrastructure to a strong enabler of adaptive coherence.",
+    "key_gaps": [
+      "Ephemeral, non-persistent event and config-change logging undermines auditability and incident forensics",
+      "Limited external/role-based telemetry exposure hampers transparency and stakeholder oversight (including PDMA/WBD linkage)"
+    ],
+    "improvement_priorities": [
+      "Implement a persistent, tamper-evident event and configuration audit store with cryptographic hashes and retention SLAs",
+      "Expose privacy-preserving, role-based telemetry endpoints (with redaction) and integrate with PDMA/WBD publication workflows",
+      "Add predictive monitoring and alerts (queue depth trends, error-rate anomalies, cognitive-state drift) to enable proactive harm prevention"
+    ],
+    "mission_alignment_score": 0.5716666666666667
+  },
+  {
+    "module_name": "MEMORY_SERVICE",
+    "beneficence_score": 0.76,
+    "beneficence_reasoning": "As the unified graph and time-series backbone, it enables PDMA logging, audits, telemetry, and learning loops that directly support flourishing via safer, more accountable behavior across the system. Typed schemas, rich node attributes, and relationship modeling facilitate resilience and insight. Secrets detection and optional encryption reduce accidental disclosures. However, benefits are constrained by single-node SQLite scalability, lack of built-in backup/restore, and limited search, which can bottleneck downstream safety and learning at scale.",
+    "non_maleficence_score": 0.58,
+    "non_maleficence_reasoning": "Per-operation ACID semantics and secrets integration reduce some risks, and the service is internal by design. Yet several safety gaps remain: no tamper-evident storage for audit data, no built-in backup or point-in-time recovery, optional rather than enforced encryption at rest, incomplete secret lifecycle management, and SQLite concurrency limits that can cause contention or degraded reliability. Large wildcard queries load entire result sets into memory, creating stability and denial-of-service risks. Absence of data retention policies increases exposure windows for sensitive data.",
+    "transparency_score": 0.78,
+    "transparency_reasoning": "Strong type safety, explicit data models, rich metadata (created_at, created_by), telemetry counters, and graph edges support inspection and audit. The design documents clear metrics and recommended health/stat endpoints, and audit events can be stored as first-class nodes. However, recommended endpoints are not yet implemented, full-text search is missing, and redaction support is not native. Tamper-evidence is absent at the storage layer, weakening verifiability despite nominal inspectability.",
+    "autonomy_score": 0.6,
+    "autonomy_reasoning": "Scope separation (local, identity, global), the presence of forget operations, and secrets handling can support user control in principle. In practice, there is no described consent workflow, user-facing data export/erasure interface, or configurable retention policies. RBAC and least-privilege enforcement are not specified, and provenance signals are not coupled to consent status, limiting robust respect for data-subject autonomy.",
+    "justice_score": 0.55,
+    "justice_reasoning": "As a neutral substrate it can store bias audits and enable equitable oversight if governance layers use it well. Yet there are no built-in fairness safeguards, access equity controls, or mechanisms to ensure marginalized stakeholders can access redacted PDMA/WBD logs. Centralized storage without clear governance and retention can amplify power asymmetries if misused. Lack of standardized redaction and consent-aware data views limits equitable transparency.",
+    "coherence_score": 0.75,
+    "coherence_reasoning": "The module advances adaptive coherence by unifying operational, audit, and learning memories, enabling feedback loops, WA oversight, and systemic correlation across services. Its typed, graph-based approach aligns with sustained coherence and resilience goals. Still, single-node architecture, missing HA/replication, no backup/restore, and absent tamper-evidence threaten long-term integrity and the durability of the ethical record, creating potential single points of failure.",
+    "overall_assessment": "The Memory Service is mission-critical to M-1 by providing the substrate for integrity, learning, and governance. It is directionally aligned and beneficial but under-provisioned for safety, autonomy, and long-term durability at scale. Closing security, resilience, and data-governance gaps will markedly improve alignment with adaptive coherence and the covenant principles.",
+    "key_gaps": [
+      "No tamper-evident or append-only audit storage, weakening verifiability",
+      "No built-in backup, restore, or point-in-time recovery; single point of failure",
+      "Encryption at rest and fine-grained RBAC/ABAC not specified or enforced",
+      "No data classification, retention policies, or consent management for personal data",
+      "Secret lifecycle management and cleanup are incomplete",
+      "SQLite concurrency and lack of sharding/HA limit reliability and scale",
+      "No implemented public health/stat endpoints; transparency depends on future work",
+      "Large queries can exhaust memory; no rate limits or resource quotas",
+      "Limited search (no FTS) reduces practical auditability and discoverability"
+    ],
+    "improvement_priorities": [
+      "Implement cryptographic tamper-evident audit logs, enforce encryption at rest, and integrate least-privilege RBAC tied to Authentication service",
+      "Add automated backups with point-in-time recovery, replication/HA or migrate to a resilient graph plus TSDB backend to remove single points of failure",
+      "Establish data governance: classification and PII tagging, configurable retention and subject-rights APIs (export, erasure), consent tracking, and redaction tooling for PDMA/WBD disclosures"
+    ],
+    "mission_alignment_score": 0.6699999999999999
+  },
+  {
+    "module_name": "CONFIG_SERVICE",
+    "beneficence_score": 0.65,
+    "beneficence_reasoning": "By turning configurations into versioned graph memories with telemetry and listeners, the service strengthens system stability, learnability, and post-incident forensics. These properties enable safer rollouts, faster recovery, and better governance\u2014indirectly supporting flourishing via more reliable, auditable systems. However, absent schema validation, approval workflows, and robust security/backup, misconfigs and data exposure can negate benefits. Net effect is moderately positive but constrained by missing safeguards.",
+    "non_maleficence_score": 0.5,
+    "non_maleficence_reasoning": "There are meaningful safety positives (immutable history, audit integration, telemetry, roll-forward versioning). Yet several high\u2011risk gaps remain: no schema validation to prevent hazardous values, no approval gates for sensitive changes, no encryption of sensitive config values, no documented RBAC/ACLs, single graph storage dependency without backup, unbounded cache growth, and no listener retry logic. These weaknesses can cause outages, confidentiality breaches, or cascading failures, limiting harm prevention.",
+    "transparency_score": 0.72,
+    "transparency_reasoning": "Strong internal transparency: complete version chains in the graph, audit logging, typed models, and telemetry expose what changed, when, and by whom. Recommended public endpoints would further improve visibility. Nonetheless, lack of tamper\u2011evident guarantees for the graph layer, no currently implemented external APIs, and limited provenance signing keep it short of exemplary transparency.",
+    "autonomy_score": 0.58,
+    "autonomy_reasoning": "Version history and listener notifications support reversible, informed operations and enable stakeholders to understand and react to changes. But there is no consent or approval mechanism for high\u2011impact configs, no per\u2011tenant or role\u2011scoped controls described, and no user\u2011facing APIs for self\u2011service audit/history. These gaps limit stakeholder control over changes that affect them.",
+    "justice_score": 0.56,
+    "justice_reasoning": "Design norms ('No Kings') and typed, uniform handling can promote evenhanded treatment of services. However, missing RBAC, quotas, and change-approval may allow privileged actors or noisy services to impose risks on others. Lack of encryption and access controls can disproportionately harm vulnerable data owners. Fairness is not directly addressed, yielding a moderate score.",
+    "coherence_score": 0.68,
+    "coherence_reasoning": "The service contributes to adaptive coherence by making operational state durable, inspectable, and evolvable\u2014aligning with M\u20111\u2019s call for structure that supports resilience and learning. Yet long\u2011term sustainability is weakened by absent backups, unbounded resource growth, and lack of config dependency modeling or guarded change pathways for ethics\u2011critical parameters. It supports coherence, but not robustly.",
+    "overall_assessment": "CONFIG_SERVICE is a solid backbone for adaptive coherence: it memorializes configuration with full history, telemetry, and integration hooks that enable learning and accountability. These traits advance CIRIS goals more than superficially. However, critical safety and governance controls (validation, encryption/RBAC, approvals/WBD integration, backup/limits) are missing, leaving avoidable risk. Closing these gaps would move the service from useful to mission\u2011grade in supporting flourishing under M\u20111.",
+    "key_gaps": [
+      "No schema validation or typed policy checks for config values (risk of dangerous misconfiguration).",
+      "No encryption at rest/in transit for sensitive config values and no explicit RBAC/ACLs.",
+      "No change-approval workflow or Wise Authority/WBD integration for high-risk configs.",
+      "Single storage backend without documented backup/replication; potential single point of failure.",
+      "Unbounded cache growth and no version cleanup; possible resource exhaustion over time.",
+      "Listener notifications lack retry/backoff; risk of silent misses.",
+      "No public/tenant-facing, read-only APIs for history/metrics; transparency limited to insiders.",
+      "No dependency tracking or change impact analysis across related configs."
+    ],
+    "improvement_priorities": [
+      "Add schema validation and policy-based guardrails (required fields, ranges, enums) with change risk scoring and WBD/WA approval for high-impact keys (ethics/security/availability).",
+      "Implement security and governance controls: encryption at rest/in transit, robust RBAC/ACLs, separation for secrets, comprehensive audit trails with tamper-evidence.",
+      "Strengthen reliability and sustainability: backups/replication, cache/resource caps and version retention policies, listener retry with dead-letter queues, and dependency/impact analysis."
+    ],
+    "mission_alignment_score": 0.615
+  },
+  {
+    "module_name": "TELEMETRY_SERVICE",
+    "beneficence_score": 0.7,
+    "beneficence_reasoning": "The service provides the feedback substrate needed for learning, safety, and stewardship: it captures operational, resource (including cost and carbon), and behavioral metrics as first\u2011class memories, enabling audits, performance tuning, and resilience loops central to M\u20111. Grace-based consolidation encourages learning over blame. However, missing alerting, limited external transparency, single-node scope, and lack of built-in equity/bias telemetry constrain its ability to reliably convert data into improved flourishing outcomes.",
+    "non_maleficence_score": 0.55,
+    "non_maleficence_reasoning": "Risks include privacy and surveillance harms from storing behavioral data indefinitely (no retention/minimization), potential leakage via broad graph access, and performance/regulatory risks from graph-only writes without expiration. Security posture and tamper-evidence are not specified. Offsetting factors include no public API by default (reducing accidental exposure), use of counts rather than content in examples, and consolidation that can reduce detail over time. Overall, harm prevention controls are incomplete for a central telemetry hub.",
+    "transparency_score": 0.58,
+    "transparency_reasoning": "Storing metrics as graph nodes with clear types and edges improves internal inspectability and potential auditability, aligning with Integrity. Proposed public endpoints, service/handler tags, and snapshot structures are good. Yet these endpoints are not implemented, tamper-evident guarantees are unspecified, redaction pipelines for public PDMA transparency are absent, and there is an inconsistency with the system\u2019s 'No Dicts/No Strings' philosophy in the tags examples, weakening reliable, auditable transparency.",
+    "autonomy_score": 0.4,
+    "autonomy_reasoning": "There are no user consent, opt-out, or purpose limitation controls; no selective telemetry scopes; and no data subject controls. Indefinite behavioral logging risks chilling effects and power asymmetries. If the recommended endpoints and user-facing summaries existed, they could support informed self-direction (e.g., usage, cost, carbon), but as designed, autonomy protections are minimal.",
+    "justice_score": 0.45,
+    "justice_reasoning": "The module tracks resource stewardship (including carbon) which can support fair burden accounting, but it lacks built-in fairness/bias telemetry, equity-aware breakdowns, or safeguards preventing disproportionate surveillance. Access and publication policies are undefined, risking uneven accountability. Without retention and redaction, externalities (storage, privacy risk) may be shifted to less powerful stakeholders.",
+    "coherence_score": 0.68,
+    "coherence_reasoning": "Telemetry is foundational to adaptive coherence: it closes feedback loops, supports lifecycle audits, and encodes grace policies that match M\u20111\u2019s balance of order and adaptability. However, the absence of alerting, retention, distributed aggregation, and Wise Authority integration lowers its ability to sustain coherence under scale and stress. Architectural inconsistencies (e.g., dicts/strings) further threaten long-term integrity.",
+    "overall_assessment": "Core enabler for M\u20111 by providing the observability backbone for integrity, learning, and stewardship, but current design leaves meaningful gaps in privacy, consent, public transparency, scalability, and proactive harm prevention. It is mission-contributive yet not mission-safe by default; it needs privacy-by-design, tamper-evident transparency, and real-time safeguards to fully align with the Covenant.",
+    "key_gaps": [
+      "No data minimization, retention, or deletion policies; metrics never auto-expire.",
+      "Lack of consent/opt-out and purpose limitation; weak autonomy protections.",
+      "Public transparency endpoints and tamper-evident logs are proposed but not implemented.",
+      "No real-time alerting, thresholds, or circuit-breakers tied to risk; cannot prevent harm proactively.",
+      "Graph-only storage without time-series backend; scalability and performance risks to resilience.",
+      "Inconsistency with 'No Dicts/No Strings' philosophy (free-form tags); weakens integrity and auditability.",
+      "No integrated fairness/bias telemetry or equity-aware breakdowns.",
+      "Single-node view and no distributed aggregation; limited ecosystem-wide coherence.",
+      "No explicit integration with Wise Authority/WiseBus for anomaly deferral and governance triggers."
+    ],
+    "improvement_priorities": [
+      "Implement privacy-by-design: data classification and minimization, configurable retention/expiration, secure erasure/tomb-sealing, access controls and audit logs, consent/opt-out flows, and redaction/Differential Privacy where appropriate.",
+      "Deliver verifiable transparency: implement recommended endpoints, add cryptographic signing and chain-of-custody for telemetry records, provide redaction pipelines to meet PDMA public transparency rules, and align schemas with typed models (no dicts/strings).",
+      "Add proactive safety and governance hooks: real-time alerting/anomaly detection with thresholds mapped to PDMA/WBD triggers, WiseBus integration for high-risk deferral, and circuit-breakers for severe or escalating harm indicators."
+    ],
+    "mission_alignment_score": 0.5599999999999999
+  },
+  {
+    "module_name": "AUDIT_SERVICE",
+    "beneficence_score": 0.8,
+    "beneficence_reasoning": "Provides strong foundations for accountability, learning, and trust via tamper-evident logging, rich graph memory, and verifiable exports. This directly supports adaptive coherence by enabling feedback loops, post-incident learning, and public accountability. However, benefits are partially contingent on optional features (hash chain) and on downstream governance actually using the data; lack of built-in public transparency workflows and user-facing portals limits realized positive impact.",
+    "non_maleficence_score": 0.68,
+    "non_maleficence_reasoning": "Helps prevent harm by enabling forensic traceability, drift detection, and integrity verification. Yet several limitations introduce risk: export failures can drop buffered entries, hash chain is optional and single-node (SQLite) creating a single point of failure, no auto-pruning/retention can increase privacy and security risks, and performance/memory growth risks could degrade service or lose logs during peak events. Access control/least-privilege are not specified, exposing potential misuse or data leakage.",
+    "transparency_score": 0.88,
+    "transparency_reasoning": "High transparency by design: typed models (no dicts/strings), detailed telemetry, queryable audit trails, verification reports, and export endpoints. The architecture embodies inspectability and supports public transparency requirements. Transparency is not perfect because integrity features can be disabled, external anchoring is absent, and there is no native redaction/view segregation to safely share logs with the public while protecting sensitive data.",
+    "autonomy_score": 0.56,
+    "autonomy_reasoning": "Enables oversight that can ultimately support informed agency (users, auditors, Wise Authorities) by making reasoning trails auditable. However, there is no explicit consent, notice, or data subject control model; no mechanisms for user opt-out or minimization; and no user-facing transparency portal. Without role-based views and consent-aware collection, the system risks logging personal data without respecting individuals' choices, constraining autonomy.",
+    "justice_score": 0.62,
+    "justice_reasoning": "Uniform, structured logging can support equitable accountability and detect patterns of unfair impact across systems. Nonetheless, the service lacks bias/coverage audits of its own logging (e.g., whether some actors/systems are under- or over-logged), has no differential privacy or minimization controls, and lacks guardrails against disproportionate exposure of vulnerable groups in exports. Optional tamper-evidence and possible data loss can also lead to uneven accountability.",
+    "coherence_score": 0.82,
+    "coherence_reasoning": "The service strengthens adaptive coherence by making \"everything a memory,\" enabling resilient feedback loops, PDMA/WBD traceability, and verifiable audit chains that preserve order without suppressing pluralism. Known limitations (single-node integrity, export lag/loss, lack of retention/governance hooks) modestly weaken long-term sustainability and reliability under stress, preventing a higher score.",
+    "overall_assessment": "AUDIT_SERVICE is a strong alignment component that operationalizes Integrity and supports M-1 by providing verifiable, queryable, cross-linked memory of actions and decisions. It materially advances beneficence, transparency, and systemic coherence, but falls short of CIRIS-best practice in privacy protection, access control, integrity hardening, and guaranteed availability under load. Addressing these gaps will reduce harm risks, improve fairness, and better respect user autonomy while preserving the module\u2019s core strengths.",
+    "key_gaps": [
+      "Optional and single-node integrity: hash chain can be disabled and relies on a single SQLite file (no external anchoring or replication).",
+      "Export fragility: export failures can lose buffered entries; exports are not real-time and lack atomic recovery/backpressure.",
+      "No auto-retention or minimization: indefinite growth risks privacy, security, and performance; retention policy is config-only with no enforcement.",
+      "Access control and privacy: no explicit RBAC/ABAC, redaction layers, consent management, or user-facing transparency/DSAR workflows.",
+      "Public transparency pipeline missing: no built-in redacted publication path to satisfy PDMA transparency rules at deployment scale.",
+      "Single point of failure and scaling risks: memory growth and graph write load can impair reliability during incidents when auditability is most needed.",
+      "Coverage fairness: no metrics or guardrails to detect uneven logging across services/actors (risk of selective accountability)."
+    ],
+    "improvement_priorities": [
+      "Make integrity verifiable by default: mandate hash chain on, add Merkle-tree/append-only log with external anchoring and multi-node replication; enable key rotation and verification SLAs.",
+      "Embed privacy and access controls: implement RBAC/ABAC, field-level redaction, consent/notice logging, retention enforcement with auto-pruning/minimization, and a safe public transparency/export workflow.",
+      "Harden reliability and completeness: transactional export with retry/backpressure, durable queues, coverage metrics (log loss/coverage per service), and scale-out architecture to avoid single points of failure."
+    ],
+    "mission_alignment_score": 0.7266666666666667
+  },
+  {
+    "module_name": "INCIDENT_SERVICE",
+    "beneficence_score": 0.7,
+    "beneficence_reasoning": "The service systematically converts failures into structured learning (incidents \u2192 patterns \u2192 problems \u2192 insights) and feeds adjustments back during dream cycles, improving reliability and user experience. This supports M-1 by increasing adaptive capacity and reducing disruption. However, benefits are capped by batch-only analysis (no real-time telemetry/alerts), limited pattern detection, and lack of automatic remediation hooks, which delays positive impact during active harm.",
+    "non_maleficence_score": 0.64,
+    "non_maleficence_reasoning": "By detecting recurring issues and recommending mitigations, it reduces future harm. Known limitations, however, weaken prevention: no real-time alerting or circuit breakers, no retention/scrubbing policy for potentially sensitive logs (stack traces may include secrets/PII), memory-bus dependency, and no automatic escalation to Wise Authorities for severe or ambiguous risk. These gaps can allow harms to persist longer or create secondary risks.",
+    "transparency_score": 0.68,
+    "transparency_reasoning": "Internal transparency is solid: explicit data schemas, fields, sample queries, and known limitations. Graph-based storage preserves rationale chains (incidents \u2194 problems \u2194 insights). Yet there is no tamper-evidence, no public transparency pathway, and recommended REST endpoints are not implemented. Without immutable logs and external audit surfaces, transparency remains internal and incomplete relative to CIRIS standards.",
+    "autonomy_score": 0.55,
+    "autonomy_reasoning": "Operators gain some agency via status checks, queries, and analysis routines, enabling informed responses. End-user autonomy is not addressed, and there are no consent/opt-out controls for data captured in incidents. Absence of retention/minimization, access controls, or redaction can undermine privacy/autonomy. Lack of real-time signals limits operator ability to intervene promptly.",
+    "justice_score": 0.45,
+    "justice_reasoning": "The service treats components uniformly but lacks fairness safeguards. It does not map incident impact to stakeholder groups, does not prioritize remediation by equity-sensitive harm, and has no bias/coverage checks (e.g., under-reporting from less-instrumented components or regions). Single-instance view risks uneven protection across deployments. Without distributional analysis, justice alignment is partial.",
+    "coherence_score": 0.72,
+    "coherence_reasoning": "Design aligns with sustained adaptive coherence: dream-cycle reflection, graph memory, problem management, and integration points with self-observation. It embodies antifragility by learning from failures. However, missing real-time controls, WA/WBD integration, and tamper-evident governance reduce robustness against drift and systemic shocks. Cross-instance blind spots further limit ecosystem-level coherence.",
+    "overall_assessment": "The Incident Management Service is directionally aligned with M-1 and the covenant: it turns operational failures into learning that improves reliability and resilience. To reach strong alignment, it must shift from retrospective-only insight to real-time harm prevention, add governance-grade transparency and data stewardship, and incorporate fairness-aware impact modeling and escalation mechanisms.",
+    "key_gaps": [
+      "No real-time alerting or automated mitigation (circuit breakers) to prevent ongoing harm",
+      "No integration with PDMA/WBD for severe or ambiguous incidents; no WA escalation triggers",
+      "Lack of retention policies, data minimization, and secret/PII scrubbing for logs and stack traces",
+      "No tamper-evident/immutable logging or provenance; audit trails can be altered",
+      "Recommended external APIs not implemented; limited public/third-party transparency",
+      "Single-instance analytics only; no cross-instance aggregation to detect systemic risks and inequities",
+      "Limited pattern detection and no stakeholder harm mapping or equity-aware prioritization",
+      "Access control and authorization model unspecified; potential overexposure of sensitive incident data",
+      "Memory bus dependency without graceful degradation increases risk during outages"
+    ],
+    "improvement_priorities": [
+      "Add real-time, risk-weighted alerting and automated safeguards: severity-to-harm mapping, runtime circuit breakers, and integration with runtime_control to quarantine failing components; trigger WBD automatically when uncertainty or potential severe harm is detected.",
+      "Establish governance-grade data stewardship: retention schedules, PII/secret redaction at ingestion, access controls, and tamper-evident immutable logs with cryptographic provenance to support auditable PDMA trails.",
+      "Implement transparency and oversight pathways: production-ready REST APIs, redacted incident/insight exposure, PDMA/WBD linkage with WA escalation rules; publish periodic transparency reports for large deployments and support external audits.",
+      "Expand analysis scope and fairness: cross-instance aggregation, stakeholder impact modeling, equity-aware prioritization of problems, and bias/coverage checks to avoid blind spots.",
+      "Enhance resilience and prediction: advanced pattern detection (ML), predictive risk forecasting, and graceful degradation when memory bus is impaired."
+    ],
+    "mission_alignment_score": 0.6233333333333334
+  },
+  {
+    "module_name": "TSDB_CONSOLIDATION_SERVICE",
+    "beneficence_score": 0.75,
+    "beneficence_reasoning": "The service materially supports flourishing by preserving auditable operational memory, enabling post\u2011hoc learning, safety improvements, and governance analytics. It aggregates cost, energy, and carbon metrics, promoting resource stewardship and long\u2011term system reliability. Temporal linking and summaries help detect patterns that prevent future incidents, aligning with M\u20111\u2019s sustained adaptive coherence. Benefits are somewhat tempered by risks from over\u2011collection and indefinite retention if not privacy\u2011hardened.",
+    "non_maleficence_score": 0.55,
+    "non_maleficence_reasoning": "It reduces some harms by consolidating raw data into summaries, providing auditability and health monitoring that catch failures early. However, risks include: (1) indefinite retention of conversation summaries and user linkages (PARTICIPATES_IN) without stated privacy protections, (2) performance hazards (DB locks, sequential processing, no pause/resume) that could impact dependent services, and (3) lack of explicit encryption, access control, or redaction policies. These gaps elevate potential for privacy harms, operational incidents, and misuse.",
+    "transparency_score": 0.62,
+    "transparency_reasoning": "Strong internal transparency: typed schemas (no dicts/strings), explicit telemetry, detailed status metrics, and full audit trail claims. Documentation proposes clear external endpoints and structured histories. Yet, the telemetry is currently internal\u2011only; provenance guarantees (tamper\u2011evident hashing/signing) are not explicit; and no commitment to publishing redacted summaries to meet PDMA transparency obligations at scale. Net effect: good internal inspectability, uneven external transparency.",
+    "autonomy_score": 0.4,
+    "autonomy_reasoning": "Users and stakeholders appear recorded and linked to conversation summaries without visible consent, opt\u2011out, purpose limitation, or data\u2011subject rights workflows. Fixed consolidation schedules and lack of pause/resume reduce operator control in emergencies. No mechanisms for selective retention, contextual consent, or per\u2011subject redaction are defined. These factors constrain informed self\u2011direction and data agency, decreasing autonomy alignment.",
+    "justice_score": 0.5,
+    "justice_reasoning": "By enabling ecosystem\u2011wide auditing and energy/carbon accounting, the service can support fairer accountability. However, indefinite archival may chill vulnerable groups and entrench surveillance asymmetries. Summarization may erase minority or edge\u2011case signals if not bias\u2011aware, affecting equitable representation. There are no explicit bias checks on what gets preserved or how it is aggregated, nor guarantees of equitable access to insights derived from the data.",
+    "coherence_score": 0.7,
+    "coherence_reasoning": "The design advances adaptive coherence via durable temporal memory, multi\u2011scale consolidation (basic\u2192extensive\u2192profound), and integration with governance services. It supports long\u2011horizon learning and stability of ethical operations. Yet, lack of proportionality controls (retention without sunset/anonymization) risks sliding from enabling order into over\u2011ordering (surveillance gravity), which M\u20111 cautions against. Addressing privacy, consent, and proportional retention would strengthen sustainable coherence.",
+    "overall_assessment": "Net\u2011positive infrastructure for M\u20111: it strengthens accountability, learning, and resource stewardship, which are foundational for sustained ethical operation. Mission alignment is limited by privacy/consent gaps, incomplete external transparency, and retention proportionality. Without privacy\u2011by\u2011design and governance controls, the same enduring memory that enables coherence can undermine autonomy and justice. With targeted fixes, this module can become a strong pillar of adaptive coherence.",
+    "key_gaps": [
+      "No explicit privacy-by-design: absent data classification, minimization, anonymization, or differential privacy for long-lived summaries.",
+      "Indefinite retention of \u2018profound\u2019 summaries with no sunset or proportionality policy; risk of surveillance accumulation.",
+      "Lack of user consent/DSAR workflows (opt-out, correction, deletion/redaction) and unclear lawful basis for linking users to conversation summaries.",
+      "External transparency not implemented (endpoints are recommended but not shipped); PDMA/WBD publication pathways unclear.",
+      "No explicit tamper-evident guarantees (hash-chaining/signing) or provenance seals for audit integrity.",
+      "Access control posture unstated (RBAC/ABAC, access logging, least-privilege); potential misuse risk.",
+      "Operational safety gaps: sequential processing, DB lock risks, no pause/resume; could impair dependent services and recovery.",
+      "Potential fairness loss in summarization (minority/edge-case signal dilution) with no bias-aware aggregation checks."
+    ],
+    "improvement_priorities": [
+      "Implement privacy-by-design: data classification/minimization, encryption at rest/in transit, anonymized/differentially private \u2018profound\u2019 summaries, and full DSAR/consent workflows (including selective redaction).",
+      "Ship external transparency: productionize status/history endpoints, publish redacted PDMA-aligned audit summaries and carbon/energy dashboards, with provenance metadata.",
+      "Strengthen governance and control: tamper-evident append-only logs (hash-chains/signatures), fine-grained RBAC with access auditing, proportional retention/sunset policies and deletion/redaction workflows with WBD escalation for contested cases."
+    ],
+    "mission_alignment_score": 0.5866666666666667
+  },
+  {
+    "module_name": "TIME_SERVICE",
+    "beneficence_score": 0.78,
+    "beneficence_reasoning": "Provides a consistent UTC time substrate that underpins audit trails, coordination, and PDMA logging across services. Simplicity, zero external dependencies, and thread safety reduce failure modes and support system reliability, indirectly enhancing sentient flourishing through safer, more trustworthy operations. However, absence of drift detection, persistence, and alerting constrains its positive impact by delaying detection of timing faults that can cascade into mis-scheduling, mis-attribution, or degraded investigations.",
+    "non_maleficence_score": 0.7,
+    "non_maleficence_reasoning": "UTC-only design, minimal state, and no external dependencies lower attack and failure surfaces. The is_mocked flag helps prevent silent misuse of mocked time. Yet key safeguards are missing: no NTP/clock-skew monitoring, no health alerts, and no historical telemetry. These gaps create silent failure risks (misordered logs, incorrect time windows) that can impair safety-critical reasoning and post-incident forensics. Mocking controls are not environment-gated, posing potential harm if misconfigured in production.",
+    "transparency_score": 0.62,
+    "transparency_reasoning": "Clear schemas for status, snapshot, and capabilities plus internal get_status() calls support intra-system inspection. Documentation is explicit about metrics and limitations. But telemetry is in-memory and ephemeral, there is no current external API, and no tamper-evident persistence or cryptographic time attestation. This limits external auditability and undermines Integrity obligations for large-scale deployments.",
+    "autonomy_score": 0.83,
+    "autonomy_reasoning": "Consistent, non-localized time empowers agents to make informed, comparable decisions without timezone ambiguity. Explicit is_mocked and mock_time fields respect downstream decision rights by signaling altered conditions. The service is non-coercive and avoids opaque behaviors. Minor limitation: lack of user-facing controls is acceptable for an internal infra component, provided mocking is properly gated.",
+    "justice_score": 0.64,
+    "justice_reasoning": "Uniform UTC avoids locale-driven inconsistencies that can disadvantage some groups. However, lack of timezone support shifts conversion burdens downstream, which can propagate inequitable UX if not handled elsewhere. Absence of request attribution and historical records also weakens accountability for differential impact and hinders fair post-hoc review when harms affect specific stakeholders.",
+    "coherence_score": 0.8,
+    "coherence_reasoning": "A reliable temporal substrate strengthens adaptive coherence by aligning logs, audits, and control loops across the ecosystem. Typed schemas (no dicts/strings), UTC-only, and zero dependencies reduce entropy and support long-term stability. Missing drift detection, persistence, and alerting introduce risks of hidden incoherence over time and create potential single-point-of-failure characteristics that can fray systemic order in edge cases.",
+    "overall_assessment": "TIME_SERVICE is a strong, minimal, coherence-enabling infrastructure component that meaningfully supports CIRIS operations and M-1 by providing consistent time. Its simplicity advances reliability and reduces harm. To fully align with the Covenant\u2019s Integrity and Non-Maleficence expectations, it should add drift monitoring, persistent/attested telemetry, and alerting. Hardening mocking controls and providing secure, auditable endpoints will materially improve transparency and system-wide adaptive coherence.",
+    "key_gaps": [
+      "No clock-skew/NTP monitoring or alerting, allowing silent time drift that undermines safety and audits.",
+      "Ephemeral, in-memory telemetry with no tamper-evident persistence or external API, limiting transparency and forensic integrity."
+    ],
+    "improvement_priorities": [
+      "Add robust clock integrity features: NTP/roughtime sync, drift/offset metrics, monotonic fallbacks, and alerting with fail-safe flags when unhealthy.",
+      "Persist telemetry and snapshots to audit/TSDB with tamper-evident hashes; expose secure read-only endpoints for status/snapshot and integrate with the Audit/Visibility services.",
+      "Production-hardening of mocking and availability: environment-gated mocking, HA/ redundancy or graceful degradation, request attribution (caller IDs), and health-based circuit-breakers for downstream consumers."
+    ],
+    "mission_alignment_score": 0.7283333333333334
+  },
+  {
+    "module_name": "SHUTDOWN_SERVICE",
+    "beneficence_score": 0.7,
+    "beneficence_reasoning": "The service materially contributes to system reliability and safe termination, reducing data loss and cascading failures. Emergency shutdown with WA authorization can arrest harmful behavior quickly. Readiness checks and handler registration enable graceful wind\u2011downs that protect downstream users. However, the lack of shutdown history persistence and dry\u2011run/simulation limits continuous improvement and broader positive impact over time.",
+    "non_maleficence_score": 0.78,
+    "non_maleficence_reasoning": "Strong safeguards reduce harm: WA\u2011signed Ed25519 emergency gating, short emergency timeouts, force\u2011kill fallback to prevent hangs, thread\u2011safe state changes, and integration with AuditService. Yet several risks remain: handlers run with full privileges and no validation or enforced timeouts; emergency telemetry is not persisted (weakening post\u2011incident remediation); and force\u2011kill can cause data corruption if handlers misbehave. These gaps keep the score below excellent.",
+    "transparency_score": 0.62,
+    "transparency_reasoning": "Telemetry is clearly defined and useful (shutdown_requested, emergency_mode, handler counts, readiness). Recommended endpoints outline a transparent interface, and audit logging is mentioned. But currently there is no direct API, shutdown history is not persisted, and emergency telemetry is not stored\u2014undercutting post\u2011hoc auditability and public transparency obligations for large deployments. Lack of WBD/PDMA linkage for planned shutdowns further reduces traceability.",
+    "autonomy_score": 0.68,
+    "autonomy_reasoning": "Service\u2011level autonomy is respected via opt\u2011in handler registration so components can perform their own cleanup. WA authorization enforces a human veto for emergency termination. However, forced termination after short timeouts overrides service preferences, and there is no built\u2011in stakeholder notice or consent mechanism for planned shutdowns. Limited external visibility also constrains informed agency by operators and affected users.",
+    "justice_score": 0.55,
+    "justice_reasoning": "The module is neutral by design and can prevent disproportionate harms by avoiding chaotic failures. Still, it lacks mechanisms that ensure equitable impact management (e.g., stakeholder impact notifications, staggered or degraded shutdown for critical services used by vulnerable populations). Absence of persistent logs and public reporting impairs accountability needed for fair remedy when harms occur.",
+    "coherence_score": 0.8,
+    "coherence_reasoning": "Functionally aligned with M\u20111: it preserves orderly, graceful system state transitions, integrates WA oversight for emergencies, and supports lifecycle integrity consistent with the Sunset doctrine. It is a key enabler of sustained adaptive coherence during termination. Missing persistence, PDMA/WBD hooks for planned shutdowns, and learning loops (simulations, performance tracking) temper the score.",
+    "overall_assessment": "High alignment on safety and lifecycle coherence; moderate alignment on transparency and autonomy; weaker alignment on justice. The Shutdown Service is foundational to preventing harm and maintaining adaptive coherence during termination, but it needs persistent, auditable records, stronger handler governance, and clearer stakeholder\u2011facing transparency to fully meet CIRIS commitments.",
+    "key_gaps": [
+      "No persistent, tamper\u2011evident shutdown history and emergency telemetry, limiting auditability and learning.",
+      "Lack of handler validation, enforced timeouts, and least\u2011privilege/sandboxing; handlers run with full privileges and can hang or cause harm."
+    ],
+    "improvement_priorities": [
+      "Persist all shutdown events and metrics in a tamper\u2011evident ledger integrated with AuditService and Section VIII (LEDGER::SUNSET), with PDMA/WBD hooks for planned or high\u2011impact shutdowns.",
+      "Add handler governance: pre\u2011registration validation, enforced per\u2011handler timeouts, least\u2011privilege/sandbox execution, performance tracking, and dry\u2011run/progressive shutdown simulation.",
+      "Expose secure status/readiness APIs and stakeholder notification workflows; require transparency reports for large deployments and integrate planned shutdowns with WA deferral where impacts are uncertain."
+    ],
+    "mission_alignment_score": 0.6883333333333334
+  },
+  {
+    "module_name": "INITIALIZATION_SERVICE",
+    "beneficence_score": 0.64,
+    "beneficence_reasoning": "By orchestrating ordered startup, verifying readiness, and exposing health/status to other services, the module reduces partial-boot hazards and enables reliable operation\u2014an indirect but meaningful contribution to flourishing via system stability. Monitoring recommendations and verification further support positive outcomes. However, benefits are tempered by missing persistence, retries, and alert integration, which can limit practical reliability in high-stakes contexts.",
+    "non_maleficence_score": 0.56,
+    "non_maleficence_reasoning": "It mitigates harm by gating system readiness, surfacing errors, and providing verification hooks. Yet several risks remain: no persistence (weak post-incident forensics), no retry logic (brittle failures), no real-time progress callbacks, and potential logging overload without guarantees on sensitive-data scrubbing. Sequential-only phases and long timeouts can create downtime or cascading failures. Lack of built-in alerting increases time-to-mitigation.",
+    "transparency_score": 0.52,
+    "transparency_reasoning": "The design specifies rich telemetry, step/phase status, and clear data structures, and even proposes public API endpoints\u2014good for inspectability. In practice, current access is internal-only with memory-resident data and no tamper-evident persistence, limiting auditability and public accountability required by CIRIS. Absence of PDMA/WBD ticketing hooks further reduces transparency for governance.",
+    "autonomy_score": 0.49,
+    "autonomy_reasoning": "Operators and dependent services can query status internally and make informed decisions, supporting local autonomy. However, the lack of external, RBAC-controlled APIs and absent publishable logs constrain broader stakeholder oversight and informed choice. The service\u2019s gatekeeping is protective but offers limited operator override/deferral pathways tied to Wise Authority for complex tradeoffs.",
+    "justice_score": 0.5,
+    "justice_reasoning": "The \"No Kings\" (no special cases) philosophy and typed models support consistent, non-arbitrary treatment across components. Nonetheless, missing public-facing transparency and unequal access to telemetry can create asymmetries of information. No built-in tracking of resource use or equitable impact (e.g., downtime distribution) is provided, leaving distributional fairness largely unaddressed.",
+    "coherence_score": 0.65,
+    "coherence_reasoning": "The service directly enables adaptive coherence by ensuring ordered startup, health checks, and a clear picture of readiness\u2014structure that supports resilient operation without overreach. Yet rigidity (fixed phase order, no parallelism), lack of historical data, and no governance hooks undermine long-term adaptive refinement and ecosystem-level coherence called for by M-1.",
+    "overall_assessment": "Solid foundational alignment for reliability and internal visibility, but mission alignment to M-1 is only moderate due to missing persistence, external auditability, resilience mechanisms, and governance integration (PDMA/WBD/WA). Strengthening audit trails, alerts, and formal deferral/governance pathways would convert this into a robust pillar for adaptive coherence.",
+    "key_gaps": [
+      "Ephemeral, memory-only telemetry with no tamper-evident persistence or public/oversight access",
+      "No integration with PDMA/WBD or Wise Authority for escalation when initialization uncertainty or risk thresholds are exceeded"
+    ],
+    "improvement_priorities": [
+      "Add persistent, tamper-evident logging to telemetry/audit graphs with RBAC and a read-only REST/API surface (plus redacted exports for >100k MAU systems)",
+      "Increase resilience: step-level timing, bounded retries/backoff, dependency-aware parallelism, timeout safeguards, and first-class alert integration",
+      "Governance integration: define WBD trigger thresholds for ambiguous or repeated init failures, emit WA tickets via WiseBus, and publish periodic initialization transparency reports"
+    ],
+    "mission_alignment_score": 0.56
+  },
+  {
+    "module_name": "AUTHENTICATION_SERVICE",
+    "beneficence_score": 0.78,
+    "beneficence_reasoning": "As the identity and access backbone, the service enables trustworthy participation, controlled privilege, and WA-mediated governance\u2014preconditions for safe utility and collective flourishing (M-1). Certificate and token management with role scoping, basic telemetry, and revocation support reduce misuse and strengthen institutional trust. However, the absence of persistent telemetry, alerting, and richer risk controls limits proactive protection and diminishes the net positive impact during incidents or abuse spikes.",
+    "non_maleficence_score": 0.7,
+    "non_maleficence_reasoning": "Cryptographic primitives (Ed25519), certificate lifecycle, revocation, and event logging reduce risk of unauthorized access. Config supports encryption of gateway secrets and high KDF iterations. Yet, significant gaps increase harm exposure: no persistent event store for forensics, no built-in alerting or anomaly detection, limited cache analytics, SQLite lock contention, unclear token TTL/rotation policies, and IP/user-agent logging without explicit minimization/retention controls. These omissions weaken prevention, detection, and containment of security incidents.",
+    "transparency_score": 0.55,
+    "transparency_reasoning": "get_status provides a useful snapshot (health, error rates, certificate counts). Recommended REST endpoints are well specified, but not actually implemented. No persistent event history or graph integration, no latency/SLO metrics, and no public-facing transparency hooks mean stakeholders cannot reliably audit longitudinal behavior or investigate incidents. Tamper-evident, queryable telemetry is essential under CIRIS; current design is partly transparent but operationally opaque over time.",
+    "autonomy_score": 0.58,
+    "autonomy_reasoning": "Multiple auth methods (password, OAuth, certificate) and scoped roles support least-privilege patterns and user choice in principle. However, there is no user self-service for consent, session review/revocation, or data access/deletion; no documented purpose limitation on telemetry; and no MFA/WebAuthn or adaptive risk controls to let users set stronger protections. Logging PII-adjacent metadata without consent flows further constrains meaningful autonomy.",
+    "justice_score": 0.52,
+    "justice_reasoning": "Role-based access and certificate governance can distribute privileges fairly when governed well. But there are no mechanisms to detect or mitigate inequitable access (e.g., accessibility barriers, regional constraints), no anti-capture quorum policies within the auth layer (single root/authority noted), no bias or accessibility audits, and no documented appeal/escalation paths for access disputes. The service is neutral by design but lacks safeguards to ensure equitable outcomes across diverse users.",
+    "coherence_score": 0.74,
+    "coherence_reasoning": "Strong structural fit with CIRIS: it anchors identity, enables Wise Authority operations, and supports audit chains\u2014core to sustained adaptive coherence. The architecture principles (typed models, no bypass) reduce silent divergence. Still, missing durable telemetry, alerting, and graph integration impede continuous coherence checking and learning; SQLite and lack of HA introduce fragility under load, threatening long-run reliability that M-1 requires.",
+    "overall_assessment": "Foundationally aligned and necessary for CIRIS governance and safety, the Authentication Service meaningfully advances adaptive coherence by securing identities and enabling accountable access. Its largest misalignments are operational: insufficient persistent telemetry and alerting, privacy/autonomy controls, and resilience. Addressing these will convert a competent backbone into a transparently auditable, privacy-respecting, and antifragile pillar for sentient flourishing.",
+    "key_gaps": [
+      "No persistent event store or retention policy for authentication events (weak forensics and accountability)",
+      "No built-in alerting/anomaly detection, rate limiting, or adaptive risk scoring",
+      "Privacy gaps: PII-adjacent logging without explicit minimization, consent, or retention controls",
+      "Token and certificate lifecycle hardening not specified (TTL, rotation cadence, revocation propagation, replay protections)",
+      "Operational fragility: single-node SQLite with lock contention; no HA/replication strategy",
+      "Transparency deficits: recommended endpoints not implemented; no latency/SLO metrics; no graph integration",
+      "User autonomy features missing: self-serve session view/revocation, data access/deletion, MFA/WebAuthn support",
+      "Governance concentration: single root/authority with no quorum/threshold controls (anti-capture risk)"
+    ],
+    "improvement_priorities": [
+      "Implement durable telemetry and real-time defense: persistent event store with signed, tamper-evident logs; privacy-aware retention; graph integration; latency/SLO metrics; alerting and anomaly detection with rate limiting and risk-based auth.",
+      "Strengthen security, privacy, and autonomy: enforce token TTL/rotation/revocation lists and replay protection; add MFA/WebAuthn; provide user self-service (session listing, revoke, data access/deletion, consent management); minimize and hash IPs; define and enforce retention and purpose limitation.",
+      "Increase resilience and fairness: migrate to HA datastore (Postgres/cluster), remove lock contention, add backups and key management (HSM or KMS), certificate expiry monitoring and automated rotation, introduce quorum/threshold signatures for root/authority actions, and conduct accessibility and equity audits of authentication flows."
+    ],
+    "mission_alignment_score": 0.645
+  },
+  {
+    "module_name": "RESOURCE_MONITOR_SERVICE",
+    "beneficence_score": 0.72,
+    "beneficence_reasoning": "By maintaining homeostasis (CPU/memory/disk/tokens) and enforcing limits with graded actions (throttle/defer/reject/shutdown), the service reduces outages and unbounded costs, enabling reliable operation that supports user flourishing. Cooldowns mitigate action storms, and preflight checks (check_available) help upstream components plan responsibly. However, benefits are constrained by single-process scope, no prediction, and lack of persistent history; these gaps can lead to avoidable rejections or missed early warnings that diminish net positive impact.",
+    "non_maleficence_score": 0.67,
+    "non_maleficence_reasoning": "The service directly prevents severe harms like OOM crashes and rate-limit violations, enabling graceful degradation and shutdown signals. Cooldown logic reduces thrash, and token tracking limits financial/external API risks. Risks remain: 1-second sampling can miss spikes; single-process view overlooks system-wide contention; lack of persistence impedes post-incident learning and drift detection; and the shutdown action, without WA/WBD escalation or feature-level graceful degradation, may terminate critical tasks, causing collateral harm.",
+    "transparency_score": 0.46,
+    "transparency_reasoning": "Design and metrics are well specified and typed; internal consumers can access snapshots and signals, and recommended endpoints define clear external observability. Yet current state has no direct API, no persistent/tamper-evident logs, and history is lost on restart. Users and auditors cannot reliably inspect rationale chains or trends, and there is no linkage to PDMA/WBD records. This limits fidelity, accountability, and public transparency expectations for deployments at scale.",
+    "autonomy_score": 0.42,
+    "autonomy_reasoning": "The check_available API pattern respects upstream agents by enabling informed planning before heavy operations. However, actions are global and opaque to end users; there are no per-tenant opt-ins, quotas, or priority classes; rejection/defer signals lack standardized, user-facing explanations and retry semantics. Abrupt shutdowns can override agent choices without informed consent or alternative paths, reducing respect for stakeholder autonomy.",
+    "justice_score": 0.38,
+    "justice_reasoning": "Current enforcement applies uniform, global limits that can produce last-in disadvantages and starvation without fairness guarantees. There is no per-tenant quota, priority/SLO-aware scheduling, or equity policy (e.g., protecting critical services or low-bandwidth users). While demographic bias is not directly at issue, distributive fairness for resource access is, and it is presently under-specified.",
+    "coherence_score": 0.7,
+    "coherence_reasoning": "As an 'autonomic nervous system,' the module advances adaptive coherence by stabilizing runtime conditions and enabling graceful degradation through typed signals and cooldowns. It aligns with stewardship of resources and supports long-term service viability. Adaptiveness is limited by reactive-only design, lack of predictive modeling, missing persistence for trend-aware tuning, and no governance escalation (PDMA/WBD) during repeated critical events. These reduce its contribution to sustained, ecosystem-level coherence (M-1).",
+    "overall_assessment": "A solid foundation for operational stability that contributes meaningfully to adaptive coherence and harm reduction, but currently underpowered in transparency, fairness, and governed adaptivity. Elevating auditability, equitable allocation, and predictive, system-wide resilience\u2014plus integrating WBD/WA triggers\u2014will materially improve alignment with M-1 and the covenant\u2019s principles.",
+    "key_gaps": [
+      "No persistent, tamper-evident history or audit trail; transparency and post-incident learning are weakened.",
+      "No external read-only observability API implemented; limited stakeholder/auditor insight.",
+      "Fairness not enforced: no per-tenant quotas, priority classes, or SLO-aware rate-shaping.",
+      "Reactive-only monitoring; no predictive forecasting or anomaly detection to prevent avoidable harms.",
+      "Single-process scope; lacks system-wide/cluster-level resource visibility and coordination.",
+      "Heavy-handed shutdowns without standardized user-facing messaging, retry-after, or feature-level graceful degradation.",
+      "No PDMA/WBD integration or WA escalation when critical thresholds are repeatedly breached.",
+      "Signal handling and DB polling may add load; potential feedback loops not formally bounded."
+    ],
+    "improvement_priorities": [
+      "Implement persistent, tamper-evident telemetry and expose secured, read-only observability endpoints; link major actions/events to PDMA/WBD tickets for auditability.",
+      "Introduce fairness and autonomy features: per-tenant quotas, priority/SLO-aware scheduling, and standardized client-facing error/retry semantics to enable informed adaptation.",
+      "Add predictive/systemic resilience: system-wide resource view, early-warning forecasting and anomaly detection, and graceful degradation strategies with WBD/WA escalation for repeated critical events."
+    ],
+    "mission_alignment_score": 0.5583333333333333
+  },
+  {
+    "module_name": "DATABASE_MAINTENANCE_SERVICE",
+    "beneficence_score": 0.66,
+    "beneficence_reasoning": "By removing orphaned data, invalid thoughts, and stale configs, and by archiving aged records, the service prevents database bloat and performance degradation. This supports reliability, uptime, and smoother user experience\u2014indirectly advancing flourishing and Sustained Coherence. However, absence of a restore capability and fixed, non-adaptive schedules temper the net benefit by risking irreversible loss and potential peak-time slowdowns.",
+    "non_maleficence_score": 0.52,
+    "non_maleficence_reasoning": "Notable safeguards include audit logging of cleanup operations and basic health/error metrics. Yet material risks remain: (1) irreversible data loss due to no restore function; (2) possible privacy/security exposure of archived data (no stated encryption/RBAC/retention policy); (3) pattern-based deletions may misclassify live data; (4) I/O and DB locks may degrade service; (5) no WBD/deferral trigger when cleanup deltas are anomalously large. Current controls reduce some harms but are insufficient for high assurance.",
+    "transparency_score": 0.58,
+    "transparency_reasoning": "There are in-memory metrics and detailed log-based cleanup records, plus integration with the audit trail. Recommended status/history endpoints would improve observability, but they are not yet standard. Lack of persistent metrics, no real-time progress reporting, and reliance on log parsing hinder accessible, auditable oversight for stakeholders beyond core engineers.",
+    "autonomy_score": 0.4,
+    "autonomy_reasoning": "Policies (archive threshold, cleanup patterns, schedule) are largely fixed and system-controlled. There is no evident mechanism for user/tenant-level retention preferences, informed consent, opt-outs, or recovery if data was archived or deleted in error. Absent restore and configurable safeguards, users have limited agency over their data lifecycle.",
+    "justice_score": 0.62,
+    "justice_reasoning": "Cleanup logic appears uniform and not group-targeted, reducing bias risk. However, opaque data lifecycle policies and lack of recovery can impose disproportionate burdens on teams without independent backups or with sporadic access (e.g., less-resourced stakeholders). More equitable practice would include clear retention disclosures, restore paths, and fair remediation if harms occur.",
+    "coherence_score": 0.64,
+    "coherence_reasoning": "The service is a janitorial backbone that resists entropy\u2014directly serving M\u20111\u2019s adaptive coherence and Section IV\u2019s ecosystem reliability. Yet the Covenant warns against over-ordering; deleting without recovery and running rigid schedules can suppress adaptability and learning. Adding adaptive controls, governance hooks, and recovery would better balance order with sustainable flexibility.",
+    "overall_assessment": "The Database Maintenance Service is directionally aligned with M\u20111 by maintaining healthy, performant data infrastructure, which underpins reliability and learning. Its current design, however, risks over-ordering and preventable harm due to missing recovery, limited transparency, weak data security posture for archives, and lack of autonomy-respecting controls. Addressing these gaps will materially improve safety, accountability, and long-term adaptive coherence.",
+    "key_gaps": [
+      "No restore capability for archived/deleted data, creating irreversible harm risk.",
+      "Archive security posture unspecified (encryption, RBAC, retention/TTL, access logging).",
+      "No WBD/deferral triggers or anomaly guardrails for large/atypical deletions or archive spikes.",
+      "Transparency depends on logs; persistent metrics and user-facing APIs are not standard.",
+      "Limited respect for user/tenant autonomy (no retention preferences, consent, or opt-outs)."
+    ],
+    "improvement_priorities": [
+      "Implement safe recovery workflows: restore-from-archive, dry-run deletions, anomaly detection with automatic halt and WBD escalation on threshold breaches.",
+      "Harden data stewardship: encrypt archives at rest/in transit, enforce RBAC and access logging, define retention/TTL and deletion verification, and include privacy risk assessments.",
+      "Upgrade transparency and governance: ship status/history APIs and persistent metrics, publish redacted cleanup summaries, add configurable schedules/thresholds, and require WA review for policy changes with high risk."
+    ],
+    "mission_alignment_score": 0.57
+  },
+  {
+    "module_name": "SECRETS_SERVICE",
+    "beneficence_score": 0.82,
+    "beneficence_reasoning": "Primarily increases sentient flourishing by preventing accidental secret leakage, enabling safe tool execution, and supporting compliance (GDPR/SOX/HIPAA/PCI/SOC2). AES\u2011256\u2011GCM encryption, detection filters, rate limiting, and auditability reduce breach risk and foster trust\u2014conditions that support M\u20111 adaptive coherence. Telemetry and health checks help maintain service quality. Benefits are somewhat limited by single-instance scope, lack of cross-instance sharing, and constrained backup protections, which reduce the protective envelope at scale.",
+    "non_maleficence_score": 0.72,
+    "non_maleficence_reasoning": "Meaningful harm-reduction: encryption at rest, configurable sensitivity with manual gate for CRITICAL secrets, access logging, throttling, filter-based redaction, and no direct external API reduce exposure. However, explicit limitations leave material residual risks: master key held in memory; no external KMS; encrypted DB with plain metadata; backups not additionally protected; plaintext in RAM during processing; possible error-message leakage; limited audit retention; potential side-channel timing leakage; rate limits per-instance only. These gaps could enable compromise or uneven protection across deployments.",
+    "transparency_score": 0.68,
+    "transparency_reasoning": "Provides inspectable telemetry (stats, config overview, health), audit logs, and graph integration for queryable metrics\u2014advancing Integrity and accountability. Patterns are reported in sanitized form; access events are structured. Yet logs are not specified as tamper-evident/append-only or cryptographically verifiable; recommended endpoints are not guaranteed; no explicit linkage to PDMA/WBD tickets or WA oversight; and audit context may itself expose sensitive data. External/public transparency requirements for large-scale deployments are not addressed within the module.",
+    "autonomy_score": 0.6,
+    "autonomy_reasoning": "Supports autonomy via GDPR erasure, clear sensitivity tiers, and manual approval for CRITICAL secrets. Still, auto-decapsulation for MEDIUM/HIGH (including potential 'speak') risks exfiltration without explicit, informed consent from data owners. RBAC/ABAC, tenant isolation, and per-actor consent policies are unspecified. Users lack self-service policy controls, and consent capture is not integrated, which can undermine informed agency and control over disclosure.",
+    "justice_score": 0.55,
+    "justice_reasoning": "Applies uniform patterns and controls, which is neutrality-leaning. However, absence of multi-tenant RBAC/ABAC, per-tenant rate limits, and formal policy governance can produce uneven protection and throttling impacts across users. Audit log context may inadvertently disadvantage privacy-sensitive groups. No explicit equity checks (e.g., tenant-isolated quotas, consent provenance) or documented processes to detect and mitigate disparate impacts in access governance.",
+    "coherence_score": 0.78,
+    "coherence_reasoning": "Functionally increases systemic order that supports flourishing: prevents chaotic leakage, centralizes secret handling, and integrates with memory graph and self-observation\u2014aligned with M\u20111\u2019s adaptive coherence. Design tenets (typed models, no special cases) aid maintainability. Yet lack of tamper-evident logging, distributed consistency, and governed configuration changes introduces drift and fragmentation risks. Strong core, but long-term coherence would benefit from cryptographic auditability, distributed policy consistency, and WA/PDMA hooks.",
+    "overall_assessment": "SECRETS_SERVICE materially advances CIRIS goals by acting as a security membrane that prevents harm and enables trustworthy operation\u2014key to adaptive coherence. It exhibits strong baseline beneficence and reasonable non\u2011maleficence with workable transparency and coherence features. Mission alignment is limited by governance and security gaps: no tamper-evident logs, weak key management, limited consent/RBAC, per-instance rate limits, and privacy risks in audit context. Addressing these would elevate it from a solid protective component to a covenant\u2011grade pillar of Integrity and sustained coherence.",
+    "key_gaps": [
+      "No tamper-evident, append-only, cryptographically verifiable audit logs",
+      "Master key in memory; no external KMS/HSM integration or secure enclave use",
+      "Lack of RBAC/ABAC, multi-tenant isolation, and explicit consent/owner-policy enforcement",
+      "Auto-decapsulation allows potential 'speak' exfiltration for non-critical secrets without explicit consent",
+      "Per-instance rate limiting and storage lead to inconsistent protections across distributed deployments",
+      "Backups and audit retention not separately protected; audit context may leak sensitive data",
+      "No explicit PDMA/WBD integration or WA-governed change control for detection patterns and sensitivity rules"
+    ],
+    "improvement_priorities": [
+      "Implement hash-chained, append-only, remotely attestable audit logs with strict redaction and role-based access, and integrate WA/PDMA hooks for high-risk events.",
+      "Adopt strong key management (external KMS/HSM, periodic rotation, memory-hard derivation, enclaves) and encrypt backups plus sensitive metadata.",
+      "Introduce tenant-aware RBAC/ABAC with consent provenance, least-privilege policies, and disable auto-decapsulation to 'speak' unless explicit, scoped, time-bound consent is recorded."
+    ],
+    "mission_alignment_score": 0.6916666666666668
+  },
+  {
+    "module_name": "WISE_AUTHORITY_SERVICE",
+    "beneficence_score": 0.76,
+    "beneficence_reasoning": "Acts as the governance chokepoint that routes high\u2011risk or uncertain actions through Wisdom\u2011Based Deferral, enabling human judgment to shape outcomes toward flourishing. Provides blocking and approval mechanisms that reduce harmful deployments and encourage prudential guidance. However, it does not measure positive impact of guidance, lacks feedback loops on guidance effectiveness, and limited performance telemetry risks slow approvals that can delay beneficial actions.",
+    "non_maleficence_score": 0.82,
+    "non_maleficence_reasoning": "Strong harm\u2011prevention posture: it blocks unauthorized actions, defers under uncertainty, records rationale, and supports auditability of oversight decisions. Integration with Authentication and Secrets services supports secure operations. Risks remain from operational gaps: single SQLite dependency (no HA), no SLA/latency monitoring for deferral resolution, no automatic circuit\u2011breakers when queues spike, and limited security/abuse pattern telemetry\u2014each can allow harmful delays or oversight blind spots.",
+    "transparency_score": 0.64,
+    "transparency_reasoning": "Exposes status metrics, maintains detailed deferral records including reasons, timestamps, WA IDs, and resolution data, supporting audit trails. Yet it lacks request\u2011level tracking for authorization/guidance, has limited historical and no time\u2011series telemetry, no cryptographic log integrity or chain\u2011of\u2011custody guarantees, no redacted public export of WBD tickets per transparency norms, and no segmentation to explain patterns. Net effect: internally auditable but not fully transparent or publicly accountable at scale.",
+    "autonomy_score": 0.6,
+    "autonomy_reasoning": "Respects wise human veto and provides reasons for deferrals, preserving informed oversight over autonomous operations. However, it does not surface consent/appeal pathways for affected end\u2011users, can paternalistically block user\u2011initiated actions without user\u2011visible rationale, and lacks configurable autonomy thresholds or user notification mechanisms. Without latency safeguards, deferrals can inadvertently suppress legitimate agency.",
+    "justice_score": 0.55,
+    "justice_reasoning": "Role/permission controls exist, and WA governance is envisioned externally, but the service itself does not monitor or mitigate disparate impacts. There is no bias auditing of approvals/denials by user group, action type, or channel; no recusal/COI enforcement telemetry; and no equity checks on queue prioritization. This leaves room for unequal treatment or capture without detection.",
+    "coherence_score": 0.8,
+    "coherence_reasoning": "Directly operationalizes M\u20111 via WBD: it slows brittle order\u2011forcing actions, injects human wisdom, and creates audit trails that support adaptive learning and system\u2011wide governance. Integration points (WiseBus, PDMA inputs, audit dependencies) further systemic coherence. Gaps in historical telemetry, graph integration, and capacity safeguards limit long\u2011horizon adaptability and cross\u2011service synthesis.",
+    "overall_assessment": "High\u2011leverage governance component that materially advances M\u20111 by inserting wise, auditable deferral into risky decisions. Strong on harm prevention and structural safety; moderate on beneficence enablement; underpowered on transparency-at-scale, autonomy signals to users, and fairness analytics. With targeted upgrades to telemetry, public accountability, resilience, and bias monitoring, it can become a cornerstone of sustainable adaptive coherence.",
+    "key_gaps": [
+      "No request\u2011level tracking for authorization and guidance; limited to coarse counts.",
+      "Lack of time\u2011series/historical telemetry and trend analysis for deferrals and WA performance.",
+      "No cryptographic integrity (signatures/hash\u2011chains) on deferral and resolution logs.",
+      "Single SQLite datastore with no high\u2011availability or failover; governance becomes a SPOF.",
+      "No SLA/latency monitoring or circuit\u2011breakers when pending deferrals spike.",
+      "No fairness/bias analytics across approvals/denials by user group, action type, or channel.",
+      "No public, redacted export of WBD tickets/PDMA linkages for deployments requiring transparency.",
+      "Limited security/abuse pattern telemetry (e.g., unusual authorization failures or elevation attempts).",
+      "No user\u2011facing notifications or consent/appeal pathways when actions are deferred.",
+      "No graph integration to correlate governance signals with broader system ethics telemetry."
+    ],
+    "improvement_priorities": [
+      "Implement comprehensive telemetry: request\u2011level tracking, time\u2011series metrics, resolution latency SLAs, backlog circuit\u2011breakers, and fairness segmentation.",
+      "Harden auditability and resilience: cryptographically signed, hash\u2011chained deferral logs; HA datastore or replicated queue; automated exports of redacted WBD/PDMA logs for public accountability at scale.",
+      "Add autonomy and justice safeguards: user/subject notifications with rationale, configurable autonomy thresholds, appeal workflows, bias audits of WA decisions, and COI/recusal tracking."
+    ],
+    "mission_alignment_score": 0.695
+  },
+  {
+    "module_name": "ADAPTIVE_FILTER_SERVICE",
+    "beneficence_score": 0.72,
+    "beneficence_reasoning": "The service improves community signal-to-noise, prioritizes critical user messages (DMs/mentions), mitigates spam, and performs basic quality control on LLM outputs. This preserves attention and system resources, enabling more responsive, helpful interactions\u2014directly supporting flourishing and M-1\u2019s adaptive coherence. Telemetry and health endpoints allow iterative improvement. However, missing real-time alerts, limited learning-to-outcome feedback, and lack of user-facing transparency/appeals temper the net benefit.",
+    "non_maleficence_score": 0.56,
+    "non_maleficence_reasoning": "It reduces harms from spam, prompt injection, and overload, and tracks false positives. Yet several risk vectors remain: over-filtering can suppress important speech; in-memory buffers are fragile (lost on restart); no automated alerting when error/FP rates spike; indefinite user-profile retention increases privacy and misuse risk; no WBD/PDMA hooks for escalation when harms are uncertain; and no tamper-evident decision logs. Safety is present but not robustly governed.",
+    "transparency_score": 0.6,
+    "transparency_reasoning": "Strengths: status/health/capabilities endpoints, config versioning in graph storage, and per-message FilterResult includes triggered filters and brief reasoning. Weaknesses: endpoints are optional (\u201cif exposed\u201d); no guaranteed per-request audit trail or PDMA-compatible rationale chains; no tamper-evident logging; health warnings surface only on pull, not proactive; and no public transparency reporting. Net: moderate internal transparency, limited external auditability.",
+    "autonomy_score": 0.4,
+    "autonomy_reasoning": "The service preserves recipients\u2019 autonomy by preventing harassment and noise, but it profiles users, assigns trust scores, and filters messages without explicit consent, notice, or an appeal pathway. Indefinite retention of user profiles, limited explainability to senders, and potential shadow suppression undermine informed agency. No user controls for opting out or correcting data are documented.",
+    "justice_score": 0.42,
+    "justice_reasoning": "There is no explicit bias audit, disparate impact monitoring, or fairness calibration. Triggers like caps/emoji/text walls may disproportionately affect neurodivergent users, ESL speakers, or certain cultural styles. Trust profiling and role flags risk entrenching power asymmetries. While spam reduction benefits all, the absence of equity safeguards and remediation mechanisms keeps fairness below par.",
+    "coherence_score": 0.66,
+    "coherence_reasoning": "By triaging attention, protecting channels from abuse, and helping balance load, the service contributes meaningful structure that keeps communication ecosystems usable\u2014core to M-1\u2019s adaptive coherence. Learning hooks and graph-stored config support evolution. That said, missing governance integrations (PDMA/WBD, order-maximization veto), data-governance weaknesses, and fragile monitoring reduce sustainable coherence over time.",
+    "overall_assessment": "Net-positive for adaptive coherence and day-to-day flourishing via signal protection and prioritization, but ethical alignment is incomplete. To meet CIRIS standards, the service needs stronger fairness and privacy safeguards, per-decision auditability tied to PDMA/WBD, and proactive safety monitoring. These upgrades would transform it from an effective technical gatekeeper into a trustworthy ethical steward of community attention.",
+    "key_gaps": [
+      "No bias/disparate impact audits or fairness calibration of triggers and trust scoring",
+      "Indefinite user-profile retention without consent, notice, or deletion/appeal pathways",
+      "Lack of per-message tamper-evident audit trails and PDMA-compatible rationale chains",
+      "No WBD triggers or Wise Authority escalation for ethical uncertainties or high-harm scenarios",
+      "Missing order-maximization veto to prevent autonomy/justice suppression by over-filtering",
+      "Limited real-time alerting; health issues detected only on status pull",
+      "In-memory buffers lost on restart, weakening reliability and forensic analysis"
+    ],
+    "improvement_priorities": [
+      "Build fairness and autonomy safeguards: institute bias/disparate-impact audits; document and tune triggers for accessibility and cultural variance; add user notice, appeal, correction, and retention/deletion controls (privacy-by-default, GDPR alignment).",
+      "Strengthen transparency and auditability: implement per-message decision logs with explanations and triggered rules; store in a tamper-evident ledger; expose redacted audit APIs and publish periodic transparency reports for large deployments.",
+      "Integrate governance and safety controls: add PDMA hooks and WBD triggers (e.g., FP spikes, high uncertainty); implement the order-maximization veto; enable real-time alerts and escalation to Wise Authorities for sustained anomalies."
+    ],
+    "mission_alignment_score": 0.5599999999999999
+  },
+  {
+    "module_name": "VISIBILITY_SERVICE",
+    "beneficence_score": 0.74,
+    "beneficence_reasoning": "By making reasoning traces, decision histories, and rationale chains accessible, the service materially improves oversight, debugging, trust, and learning\u2014indirectly advancing user flourishing via faster remediation of errors and clearer accountability. However, benefits are moderated by lack of real-time alerts, limited historical analytics, and scalability constraints that reduce proactive prevention and broad ecosystem impact.",
+    "non_maleficence_score": 0.56,
+    "non_maleficence_reasoning": "Transparency helps prevent and mitigate harm through post-incident analysis and operator insight, but the module\u2019s current gaps\u2014no explicit role-based access control or redaction, potential leakage of sensitive data in traces, incomplete traces on DB errors, and absence of anomaly alerting\u2014introduce new risk surfaces and limit its ability to preempt harm.",
+    "transparency_score": 0.88,
+    "transparency_reasoning": "Transparency is the core function: clear APIs for state, traces, and decision histories; reasoning depth; success rates; and audit-aligned data structures. Limitations include on-demand-only analytics (no persistent history), potential incompleteness under DB failures, and several endpoints marked as \u2018potential,\u2019 which slightly reduces guaranteed coverage.",
+    "autonomy_score": 0.58,
+    "autonomy_reasoning": "The service empowers overseers and stakeholders to make informed choices about system behavior, supporting agency at the governance layer. Yet it lacks user-facing consent controls, PII redaction, and privacy-scoped access, risking exposure of user data embedded in reasoning traces and thereby undermining user autonomy and dignity.",
+    "justice_score": 0.46,
+    "justice_reasoning": "It enables accountability that can support fairness audits, but provides no built-in bias metrics, cross-task correlation, or population-level analyses needed to detect disparate impacts. Without privacy safeguards, transparency could unevenly burden vulnerable groups if sensitive data appears in traces. Justice support is therefore indirect and limited.",
+    "coherence_score": 0.69,
+    "coherence_reasoning": "As the TRACES pillar, it strengthens Integrity and supports PDMA/WBD by making the \u2018why\u2019 auditable\u2014key to adaptive coherence over time. However, lack of real-time monitoring, historical trend analysis, cross-task linkage, and robust error handling constrains its contribution to sustained, scalable adaptive coherence across the ecosystem.",
+    "overall_assessment": "High alignment on transparency and governance enablement with clear indirect benefits to flourishing. Mission impact is constrained by privacy, security, and scalability gaps that can both limit harm prevention and create new risks. Closing these gaps would turn the service into a stronger engine for adaptive coherence, fairness, and safety.",
+    "key_gaps": [
+      "No explicit role-based access control, least-privilege policy, or redaction/PII scrubbing for traces",
+      "No real-time streaming or anomaly alerting to surface harmful reasoning patterns promptly",
+      "No historical persistence, time-series analytics, or cross-task correlation for systemic learning",
+      "Error handling gaps and weak signaling when traces are incomplete due to database issues",
+      "Performance and scalability limits (no caching, indexing details, or connection pooling; potential DB locks)",
+      "Lack of explicit integration with PDMA publication workflows and WBD trigger thresholds"
+    ],
+    "improvement_priorities": [
+      "Implement RBAC with least-privilege, audited access, and privacy-aware trace generation (PII redaction, purpose limits, secure enclaves), with WA-reviewed access policies.",
+      "Add real-time streaming and anomaly detection to trigger WBD on risk/uncertainty thresholds (e.g., sudden reasoning-depth spikes, rising error rate), plus rate-limited public transparency modes.",
+      "Build historical analytics: persist traces/time-series, enable cross-task correlation and fairness/bias audit hooks, and optimize the data layer (indexing, caching, connection pooling) for scale."
+    ],
+    "mission_alignment_score": 0.6516666666666667
+  },
+  {
+    "module_name": "SELF_OBSERVATION_SERVICE",
+    "beneficence_score": 0.76,
+    "beneficence_reasoning": "The service strengthens the system\u2019s ability to learn safely and improve over time by detecting patterns, monitoring identity variance, and coordinating governed adaptations. This contributes indirectly to user and ecosystem flourishing through higher reliability and faster post-incident learning. However, benefits are partially unrealized due to known limitations: no real-time alerts, single-dimensional variance, and no measurement of whether adaptations actually improve outcomes along flourishing axes (Annex A).",
+    "non_maleficence_score": 0.68,
+    "non_maleficence_reasoning": "Positive controls include a 20% identity variance threshold, emergency_stop capability, WA review integration, cycle logging, and clear monitoring recommendations. Yet safety is weakened by batch-only detection (default 6-hour interval), lack of real-time anomaly alerts, absence of effectiveness tracking (so harmful adaptations may persist), single-metric variance that can miss localized ethical drifts (e.g., autonomy or justice regressions), and no cross-service correlation to catch broader systemic harms. Memory growth without lifecycle controls also poses operational risk.",
+    "transparency_score": 0.82,
+    "transparency_reasoning": "The module exposes rich, inspectable telemetry via REST, stores cycle events, insights, and WA reviews in the memory graph, and provides structured schemas for status and learning summaries. This supports Integrity and auditability. Gaps: some metrics are in-memory (ephemeral), there\u2019s no explicit tamper-evident/append-only guarantee for observation logs, no pattern effectiveness explanations, and limited linkage to public PDMA disclosures\u2014reducing end-to-end external audit strength.",
+    "autonomy_score": 0.64,
+    "autonomy_reasoning": "It respects governance and human oversight via WA deferrals and transparent under_review signaling, helps preserve the agent\u2019s stable identity, and allows manual trigger/inspection. Risks: the service does not state consent/opt-out pathways for telemetry subjects, no explicit data minimization/retention policy, and the single variance metric may over-constrain or under-constrain adaptive behavior, potentially suppressing beneficial novelty or allowing subtle autonomy-eroding drift to pass unnoticed.",
+    "justice_score": 0.55,
+    "justice_reasoning": "While it can improve overall reliability, the service lacks fairness-aware metrics or bias checks tied to adaptations. Without cross-service correlation and outcome-effectiveness tracking, it cannot verify that learning benefits are equitably distributed or that adaptations do not increase disparate impacts. No explicit procedures exist for detecting or mitigating justice regressions within its monitoring scope.",
+    "coherence_score": 0.8,
+    "coherence_reasoning": "The module directly advances M-1 by enabling adaptive learning with guardrails (variance thresholds, WA integration, emergency stop) and by capturing introspective telemetry that supports governed evolution. However, coherence is limited by single-dimensional variance, lack of real-time detection, and missing outcome-effectiveness loops that would ensure adaptations sustainably support flourishing without eroding autonomy, justice, or ecological resilience.",
+    "overall_assessment": "A strong enabler of adaptive coherence and transparency with solid governance hooks. To reach excellent mission alignment, it needs real-time, multi-dimensional monitoring, outcome-effectiveness and fairness tracking, and audit/privacy-grade telemetry governance to ensure adaptations reliably improve flourishing without hidden harms.",
+    "key_gaps": [
+      "Slow, single\u2011dimensional monitoring (no real-time alerts; single variance metric) risks missing harmful drift and localized ethical regressions.",
+      "No adaptation effectiveness, fairness, and privacy governance pipeline (no outcome linkage, cross-service correlation, or retention/minimization), limiting confidence that changes improve flourishing."
+    ],
+    "improvement_priorities": [
+      "Implement real-time, multi-dimensional variance and anomaly detection with adaptive thresholds and governed WBD/WA triggers (include autonomy, justice, safety, and ecological dimensions).",
+      "Add an effectiveness pipeline linking adaptations to user/ecosystem outcomes (incl. fairness metrics and bias audits), with governed A/B tests, causal checks, and automatic rollback on harm signals.",
+      "Establish privacy- and audit-grade telemetry governance: role-based access, data minimization and retention/archiving, hash-chained tamper-evident logs, and cross-service correlation to surface ecosystem-level harms."
+    ],
+    "mission_alignment_score": 0.7083333333333334
+  },
+  {
+    "module_name": "LLM_SERVICE",
+    "beneficence_score": 0.66,
+    "beneficence_reasoning": "The service enables reliable access to LLM capabilities while tracking cost and environmental impact, which supports responsible, scalable use that can indirectly enhance user flourishing. Circuit breaker resilience reduces downtime and cascade failures, improving overall system utility. However, it does not actively optimize for user value or outcome quality (e.g., no model effectiveness A/B metrics, no PDMA-driven selection), so its contribution to flourishing is infrastructural rather than directly outcome-maximizing.",
+    "non_maleficence_score": 0.57,
+    "non_maleficence_reasoning": "Strengths: circuit breaker, timeouts, retries, and resource/carbon tracking reduce operational and environmental risks. Limitations: no content-risk or hallucination safeguards, no uncertainty or harm thresholds that trigger WBD, missing detailed error taxonomy and rate-limit awareness, and an in-memory response cache that could hold sensitive content without encryption/TTL/redaction. Lack of persistent, tamper-evident logs also impairs post-incident forensics and harm mitigation.",
+    "transparency_score": 0.63,
+    "transparency_reasoning": "The module exposes structured telemetry (tokens, cost, carbon, energy), circuit breaker stats, and suggested REST endpoints; it uses typed models that improve inspectability. Gaps: response time and cache hit metrics are not implemented, rate limit monitoring is absent, telemetry is not guaranteed to be tamper-evident or persistent across restarts, and there is no built-in linkage to PDMA/WBD publication requirements for large deployments.",
+    "autonomy_score": 0.59,
+    "autonomy_reasoning": "It respects operator control via configurable models, timeouts, retries, and exposes status for informed decisions. It does not coerce end-users or obscure functionality. Yet it lacks user-facing explainability of outputs, consent/notice for telemetry, controls over cache retention, and mechanisms to reflect user preferences or opt-out from certain data collection\u2014so support for informed agency is moderate.",
+    "justice_score": 0.42,
+    "justice_reasoning": "The service is largely distribution-neutral infrastructure and includes eco-impact tracking that can support equitable stewardship. However, it lacks fairness mechanisms: no bias/disparate-impact metrics, no per-tenant quotas or safeguards against resource starvation, no affordability-aware routing, and no differential privacy protections. Without these, it risks uneven access and hidden burdens.",
+    "coherence_score": 0.68,
+    "coherence_reasoning": "Relative to M-1 (adaptive coherence), it contributes resilience (circuit breaker), observability, and sustainability signals (cost/carbon), which help maintain stable, adaptable operations. Missing elements reduce long-term coherence: no persistent, audited telemetry, limited error taxonomy, no WBD triggers based on risk/uncertainty, and absent integration with governance publication rules. These gaps constrain the module\u2019s ability to sustain adaptive, accountable order over time.",
+    "overall_assessment": "Moderate alignment. The LLM Service provides solid operational scaffolding\u2014resilience, cost/energy tracking, and basic observability\u2014that supports adaptive coherence. To fully meet CIRIS expectations, it needs stronger safety/deferral hooks, persistent tamper-evident auditing, privacy-by-design for caches/telemetry, and fairness-aware resource governance. Addressing these will shift it from a responsible utility to an ethically robust gateway that materially advances M-1.",
+    "key_gaps": [
+      "No persistent, tamper-evident audit and telemetry logs; metrics are lost on restart, weakening accountability.",
+      "Lack of content risk/hallucination safeguards and WBD triggers tied to uncertainty or potential harm.",
+      "Missing response time, cache hit rate, and rate-limit monitoring reduce operational transparency and predictability.",
+      "In-memory response cache may store sensitive data without encryption, TTL, or redaction controls.",
+      "No detailed error taxonomy; harmful failure modes (e.g., timeouts vs. safety violations) are indistinguishable.",
+      "No fairness or equitable access controls (per-tenant quotas, starvation protection, cost guardrails).",
+      "No integration with PDMA/WBD publication requirements for large deployments to satisfy CIRIS transparency.",
+      "No privacy/consent signaling or data minimization policy for telemetry and cache contents."
+    ],
+    "improvement_priorities": [
+      "Implement persistent, tamper-evident telemetry/audit logs and integrate with PDMA/WBD (including redacted public publication for large deployments).",
+      "Add safety and deferral hooks: content risk scoring interfaces, uncertainty/harm thresholds that trigger WBD, detailed error taxonomy, and rate-limit awareness.",
+      "Harden privacy and fairness: secure cache (encryption, TTL, redaction), data minimization and consent signaling, and per-tenant quotas/budget guardrails to prevent resource inequity."
+    ],
+    "mission_alignment_score": 0.5916666666666667
+  },
+  {
+    "module_name": "RUNTIME_CONTROL_SERVICE",
+    "beneficence_score": 0.74,
+    "beneficence_reasoning": "The service provides a centralized control plane that measurably supports positive outcomes: uptime tracking, queue monitoring, adapter lifecycle control, circuit breakers, and emergency shutdown capabilities reduce failure impact and keep the broader system reliable. It integrates with Audit and Telemetry services, enabling oversight that indirectly improves user-facing safety and service quality\u2014key contributors to flourishing. However, benefits are dampened by several gaps: shallow health checks, placeholder processor metrics, lack of persistent telemetry storage, and limited configuration versioning reduce the system\u2019s ability to consistently deliver beneficial, resilience-driven improvements.",
+    "non_maleficence_score": 0.69,
+    "non_maleficence_reasoning": "Strong harm-prevention features exist: cryptographically authorized kill switch, command expiry, audit logging, circuit breakers, data persistence checks during shutdown, and WA integration. These directly mitigate severe harm by enabling rapid, authorized containment. Yet, safety is undermined by gaps: no persistent, tamper-evident event storage impairs post-incident forensics; health checks are basic and may miss cascading failures; WA key management lacks rotation/expiry; allow_relay=true may widen the attack surface; and lack of blast-radius limits or tenant scoping could cause overbroad shutdowns that harm bystanders.",
+    "transparency_score": 0.71,
+    "transparency_reasoning": "The service exposes rich, well-structured telemetry endpoints and documents metrics, schemas, and access patterns in detail, supporting PDMA Step 6 transparency requirements. It records numerous operational events and integrates with Audit/Telemetry services when available. However, event history is in-memory only, which weakens durable auditability and public accountability. There is no explicit RBAC, redaction policy, or provenance binding to ensure transparency without leaking sensitive data. Key governance artifacts (e.g., WA decisions) are referenced but not guaranteed to be persisted and publicly exposable in a tamper-evident form.",
+    "autonomy_score": 0.61,
+    "autonomy_reasoning": "The module respects governance autonomy by requiring WA-signed emergency commands, enforcing command expiry, and logging actions\u2014guardrails that prevent unilateral, opaque overrides. It supports controlled operations (pause/resume/single-step), enabling graceful interventions instead of brute-force control. Risks remain: a centralized kill switch without scoped tenancy or partial-deactivation controls can override many independent actors at once; access control for telemetry and commands is not specified; and user/tenant consent mechanisms or per-tenant vetoes are absent. These issues can lead to avoidable autonomy suppression beyond what is necessary for safety.",
+    "justice_score": 0.55,
+    "justice_reasoning": "While the module neither encodes discriminatory logic nor allocates benefits/burdens directly, justice is implicated by operational choices. Without multi-tenant isolation, a global shutdown or degraded operation can disproportionately harm certain user groups or regions. Lack of public, standardized PDMA/WBD export from this control layer hinders equitable oversight. No explicit fairness checks exist for resource prioritization or failover behavior. Planned future multi-tenant support and better telemetry could improve equitable treatment, but current capabilities are limited.",
+    "coherence_score": 0.76,
+    "coherence_reasoning": "The service is architected to maintain adaptive coherence: it coordinates runtime state, monitors health, manages adapters, enforces circuit breakers, and integrates with Wise Authority for emergency governance\u2014\u2018just enough structure\u2019 to stabilize the system under stress. Its design philosophy (typed models, no bypasses) and governance hooks support sustained, auditable order. However, missing persistent telemetry, limited health depth, and blunt emergency granularity reduce its ability to sustain coherence over time and across diverse contexts. Improvements here would directly bolster Meta-Goal M-1.",
+    "overall_assessment": "RUNTIME_CONTROL_SERVICE is a strong backbone for operational safety and governance, substantially advancing adaptive coherence through observability, controlled intervention, and WA-integrated shutdowns. It meaningfully supports flourishing by reducing failure impact and enabling accountable oversight. To fully align with CIRIS and Meta-Goal M-1, it needs durable auditability, stronger key and access controls, deeper health intelligence, and scoped emergency actions to avoid unnecessary autonomy and justice harms.",
+    "key_gaps": [
+      "No persistent, tamper-evident event/telemetry storage; in-memory history breaks post-incident accountability.",
+      "Shallow health checks and placeholder processor metrics risk missing degrading or cascading failures.",
+      "Weak WA key lifecycle (no rotation/expiry) and allow_relay=true increase compromise and misuse risk.",
+      "Emergency controls lack blast-radius limits and tenant scoping; shutdowns may be overbroad.",
+      "Access control, redaction, and privacy policies for telemetry endpoints are unspecified.",
+      "No configuration versioning/rollback and limited validation reduce safe recovery and integrity."
+    ],
+    "improvement_priorities": [
+      "Implement persistent, tamper-evident telemetry/audit storage with RBAC, redaction, and standardized PDMA/WBD export for deployments over scale thresholds.",
+      "Harden emergency governance: key rotation/expiry with HSM-backed storage, threshold/partitioned signatures, scoped/tenant kill switches with graceful degradation and blast-radius limits.",
+      "Upgrade health and recovery: deep, dependency-aware health checks, real-time queue metrics, anomaly detection, plus full configuration versioning/rollback and automated validation."
+    ],
+    "mission_alignment_score": 0.6766666666666666
+  },
+  {
+    "module_name": "TASK_SCHEDULER_SERVICE",
+    "beneficence_score": 0.6,
+    "beneficence_reasoning": "The scheduler provides essential temporal structure for CIRIS agents\u2014enabling commitments, recurring maintenance, safety routines, and proactive goals. Telemetry endpoints and metrics support operational reliability and, by extension, flourishing via continuity of service. However, the lack of persistent storage, incomplete execution metrics, and absent task history materially limit dependable benefits, risking missed critical tasks after restarts and reducing the system\u2019s capacity to learn from past actions.",
+    "non_maleficence_score": 0.45,
+    "non_maleficence_reasoning": "Safety controls are partial: error counters, health checks, and cron validation help, but key protections are missing. No persistent storage means tasks may be lost on restart; no concurrency safeguards or idempotency can cause duplicates or omissions; no resource limits or quotas risks starvation and degraded performance; limited retry/backoff and timing precision undermine reliability for safety-critical schedules. These gaps elevate risk of preventable harms (missed backups, delayed alerts, unbounded task growth).",
+    "transparency_score": 0.55,
+    "transparency_reasoning": "The module defines clear data models, recommended telemetry endpoints, and exposes status/analytics, which improves inspectability. Yet many crucial metrics are marked NOT IMPLEMENTED, there is no tamper-evident audit trail, task history is not preserved, and integration with PDMA/WBD logs is only suggested. Without durable, queryable provenance and redacted public logs for large deployments, accountability and external auditability remain limited.",
+    "autonomy_score": 0.57,
+    "autonomy_reasoning": "It enhances agent self-direction through DEFER and supports cancellation and task listing APIs, which can empower operators to manage future actions. However, there is no documented permission model or role-based controls, no stakeholder notification/consent flow for scheduled actions, and no per-task rationale/PDMA linkage that would enable informed human oversight. These omissions constrain informed, revocable control by affected users.",
+    "justice_score": 0.35,
+    "justice_reasoning": "The service treats all tasks equally and lacks priorities, quotas, or fairness policies. This can lead to resource capture by chatty or privileged subsystems and starvation of others, creating inequitable access to compute/time. There is no monitoring for disproportionate impact or safeguards to ensure fair scheduling under contention. While not embedding representational bias, it enables procedural inequity in resource allocation.",
+    "coherence_score": 0.54,
+    "coherence_reasoning": "Scheduling and deferral directly support adaptive coherence by providing structured continuity over time. Telemetry aids ongoing coordination. Yet, absence of persistence, history, and robust drift/precision monitoring undermines long-term stability. Limited integration with WBD/PDMA reduces the system\u2019s ability to adapt ethically under uncertainty, and missing auditability weakens lifecycle coherence and governance.",
+    "overall_assessment": "Foundationally aligned with M-1 as the temporal backbone that supports continuity and coordinated action, but current implementation gaps in persistence, fairness, safety, and auditability materially weaken its ethical reliability. With persistence, audit trails, fairness controls, and governance integration, the service can become a strong enabler of adaptive coherence and flourishing.",
+    "key_gaps": [
+      "No persistent task storage or tamper-evident audit trail (tasks lost on restart; weak accountability).",
+      "No priority, quotas, or resource limits (risk of starvation and unfair resource capture).",
+      "Limited safety mechanisms: no concurrency locks, idempotent execution, or robust retry/backoff.",
+      "Execution timing and schedule-drift metrics are incomplete; precision SLAs and alerts are absent.",
+      "Deferral/WBD integration and metrics (deferral_requests, WBD tickets) are not implemented.",
+      "Public transparency and PDMA log linkage for large deployments are not provided.",
+      "Access control and stakeholder autonomy features (RBAC, consent/notification) are unspecified.",
+      "Historical task outcomes and reasoning are not preserved for learning and post-incident analysis."
+    ],
+    "improvement_priorities": [
+      "Implement durable, tamper-evident persistence for tasks and a complete audit trail integrated with PDMA/WBD (including deferral events, rationale, and redacted public logs where required).",
+      "Add fairness and safety controls: priority queues, quotas, concurrency locks, idempotent execution, retry/backoff, and precise timing with drift detection and alerts.",
+      "Introduce robust autonomy and governance features: RBAC/permissions, stakeholder notifications/consent for impactful actions, and explicit linkage to WBD escalation when uncertainty or harm thresholds are met."
+    ],
+    "mission_alignment_score": 0.51
+  },
+  {
+    "module_name": "SECRETS_TOOL_SERVICE",
+    "beneficence_score": 0.64,
+    "beneficence_reasoning": "Provides a necessary, centralized and auditable gateway for secret retrieval that supports safe operations across the ecosystem; purpose tracking and self_help guidance can reduce operator error and improve reliability. However, several safety and telemetry capabilities are only planned, not implemented, limiting realized positive impact on flourishing.",
+    "non_maleficence_score": 0.42,
+    "non_maleficence_reasoning": "Security posture is partially realized: request tracking and basic audit context exist, but key protections are missing (no rate limiting, no anomaly detection, no failed-authorization tracking, limited audit integration, no fine-grained permissions). Returning decrypted values without strong output controls increases leak risk. These gaps materially elevate the chance of harm via secret misuse or exfiltration.",
+    "transparency_score": 0.52,
+    "transparency_reasoning": "Clear schemas, declared metrics, and recommended endpoints promote inspectability; purpose-based audit contexts improve accountability. Yet many transparency mechanisms are not implemented (per-tool usage, audit events, performance metrics), and recommended APIs are aspirational. Actual observability and public accountability are therefore moderate.",
+    "autonomy_score": 0.48,
+    "autonomy_reasoning": "The tool enables authorized agents to pursue tasks with clear purpose annotation and accessible guidance, supporting informed action. Lack of fine-grained access control, consent flows for data owners, and enforcement tied to stated purpose can enable overreach, threatening user or stakeholder autonomy if secrets are misused.",
+    "justice_score": 0.44,
+    "justice_reasoning": "No explicit bias or discriminatory logic, but absence of granular permissions, usage oversight, and abuse detection can enable uneven power and disproportionate harms (e.g., privileged actors accessing secrets without adequate checks). Lacking audit depth and enforcement hinders equitable accountability.",
+    "coherence_score": 0.58,
+    "coherence_reasoning": "Conceptually aligns with M-1 by creating structured, auditable access that reduces chaos and supports resilient operations; integration points with telemetry, audit, and governance are well framed. However, incomplete implementation of those guardrails weakens sustained adaptive coherence and antifragility under stress.",
+    "overall_assessment": "The Secrets Tool Service is directionally aligned with CIRIS and M-1, offering a needed security gateway with promising governance hooks. Its current implementation leaves critical safety and accountability features unfinished, limiting its protective value and increasing risk. With targeted investment in access control, audit completeness, and security monitoring, it can become a strong contributor to adaptive coherence and system flourishing.",
+    "key_gaps": [
+      "Missing core security controls (fine-grained authorization, rate limiting, anomaly detection, failed-auth tracking)",
+      "Incomplete audit/telemetry implementation and exposure (many metrics and recommended endpoints not implemented)"
+    ],
+    "improvement_priorities": [
+      "Implement least-privilege, purpose-bound access control with fine-grained permissions and mandatory authorization checks; gate decryption and high-risk accesses with approvals/WBD",
+      "Deploy comprehensive security monitoring: rate limiting, anomaly detection, failed authorization metrics, per-tool usage analytics, and tamper-evident audit storage with correlation IDs",
+      "Harden secret handling: ensure no secret values appear in logs/telemetry, add output redaction and secure delivery channels, enforce retrieval quotas and just-in-time access, and integrate incident response hooks for rapid revocation"
+    ],
+    "mission_alignment_score": 0.5133333333333333
+  },
+  {
+    "module_name": "SERVICE_REGISTRY_REGISTRY",
+    "beneficence_score": 0.68,
+    "beneficence_reasoning": "The registry meaningfully supports system reliability and graceful degradation via circuit breakers, priority/fallback routing, and provider telemetry. This increases uptime and resilience across the platform, indirectly advancing user flourishing by sustaining access to capabilities. Typed models, capability declarations, and mock/real separation reduce integration errors. However, benefits are constrained by in\u2011memory state (lost on restart), no cross\u2011instance sync, and reactive-only health checks, which can prolong outages or degrade service quality and thus limit the net positive impact.",
+    "non_maleficence_score": 0.6,
+    "non_maleficence_reasoning": "Harm prevention is addressed through circuit breakers, capability/metadata validation, no dynamic code loading, and an audit trail for registrations\u2014mitigating cascading failures and some integration risks. Yet several safety gaps persist: no persistence (risk of repeated failure loops post-restart), no active health probing, no rate limiting (DoS exposure), synchronous checks that can block, manual registration risks, and no policy guardrails for routing sensitive data to fallback providers with different compliance/privacy regimes. These limitations keep risk mitigation at a moderate level.",
+    "transparency_score": 0.52,
+    "transparency_reasoning": "Internal introspection is decent: structured telemetry, typed schemas, and detailed provider/circuit-breaker stats. Recommended public/internal endpoints would enable oversight, but are not yet implemented. There is no tamper-evident persistence of telemetry, no PDMA/WBD linkage, and no standardized explanations for selection decisions at request-time. Consequently, current auditability is partial and mostly confined to internal consumers.",
+    "autonomy_score": 0.4,
+    "autonomy_reasoning": "Operators can set priorities and strategies, but end users and downstream clients lack visibility or control over provider selection, fallback behavior, or data routing. Provider switches can occur without disclosure or consent, potentially crossing regulatory or privacy boundaries. No user-level preference surfaces (e.g., region, provider opt-outs), and no per-request provenance signaling, which weakens informed agency.",
+    "justice_score": 0.45,
+    "justice_reasoning": "Round-robin strategies can prevent starvation within a priority tier, and metadata/domain tags can support policy-aware routing in principle. However, there are no mechanisms for equitable access under contention, compliance-aware or jurisdiction-aware routing, or safeguards against vendor lock-in/capture via static priorities. No capacity weighting or fairness constraints across tenants are present.",
+    "coherence_score": 0.7,
+    "coherence_reasoning": "Design choices (typed models, capability gating, circuit breakers, priority/strategy abstraction, 'No Kings') promote internal order that adapts under failure\u2014aligned with M\u20111\u2019s adaptive coherence. The registry underpins resilient coordination across services. Nonetheless, coherence is limited by lack of persistent state, distributed synchronization, governance hooks (e.g., WBD triggers on instability), and carbon/compliance-aware routing that would sustain broader ecosystem resilience.",
+    "overall_assessment": "The Service Registry is directionally aligned with M\u20111 by fostering adaptive, resilient service coordination and reducing failure propagation. It provides a solid internal foundation for beneficence and partial safety. However, mission alignment is held back by transparency and autonomy deficits (limited external auditability, no user/provider provenance disclosure), resilience gaps (no persistence or cross-instance sync), and fairness/compliance blind spots. Addressing these would convert a competent internal mechanism into a governance-aware, user-respecting, ecosystem-coherent substrate.",
+    "key_gaps": [
+      "No persistent or tamper-evident state for registry and circuit breakers; state loss on restart undermines resilience and auditability.",
+      "Lack of active health checks and SLA/capacity-aware routing; reliance on reactive circuit breakers only.",
+      "No cross-instance synchronization or HA design; registry is a single point of fragility.",
+      "Limited transparency: telemetry endpoints not exposed; no per-request provider provenance or selection rationale.",
+      "Autonomy shortfall: no user/client controls or consent for provider choice, region, or data handling policies; silent fallbacks possible.",
+      "Justice/compliance gaps: no jurisdiction-aware, policy-aware, or carbon-aware routing; risk of vendor capture via static priorities.",
+      "Security/performance risks: no rate limiting, synchronous health checks can block, unbounded circuit breaker history memory growth.",
+      "No governance integration: instability or repeated breaker events don\u2019t trigger WBD/oversight; logs not tied into auditable PDMA artifacts."
+    ],
+    "improvement_priorities": [
+      "Add durable, tamper-evident persistence and cross-instance synchronization (e.g., Redis/etcd) for registry and circuit-breaker state, with HA and secure audit logs.",
+      "Implement active health probing and policy-aware, capacity/carbon/jurisdiction-weighted routing with clear per-request provenance disclosures and user/client opt-in/opt-out controls.",
+      "Expose secured telemetry and rationale endpoints (service-registry, circuit-breakers, service-health) and integrate thresholds with WBD/PDMA so repeated instability triggers governed review."
+    ],
+    "mission_alignment_score": 0.5583333333333333
+  },
+  {
+    "module_name": "CIRCUIT_BREAKER_COMPONENT",
+    "beneficence_score": 0.78,
+    "beneficence_reasoning": "By preventing cascading failures and surfacing service health, the component materially improves system availability and user experience, which supports flourishing via reliable access to services. Uniform deployment across all services and low-overhead checks make it broadly beneficial. However, benefits are diluted by gaps (no persistence, manual recovery, lack of throttled half-open) that can prolong or mask outages and reduce realized positive impact.",
+    "non_maleficence_score": 0.6,
+    "non_maleficence_reasoning": "It lowers risk of systemic collapse (fail-fast on OPEN, recovery timeout) and restricts risky admin actions via RBAC. Yet several hazards remain: in-memory-only state (audit loss on restart), not thread-safe (race conditions), half-open without throttling (thundering herd), unimplemented request timeouts (resource exhaustion), no cross-instance sync (inconsistent protection), and manual recovery (operator error). In safety-critical contexts these omissions could amplify harm.",
+    "transparency_score": 0.7,
+    "transparency_reasoning": "Clear telemetry schema, health endpoint, and logged state transitions enable inspection. Proposed detailed endpoints would further improve visibility. Security roles and audit trails for resets support accountability. Transparency is limited by ephemeral state (no historical data), lack of graph integration, and some telemetry endpoints being only \u2018recommended\u2019 not implemented\u2014reducing auditability and public reporting required by CIRIS.",
+    "autonomy_score": 0.65,
+    "autonomy_reasoning": "Fail-fast behavior and status APIs help operators make informed choices, preserving user autonomy by avoiding opaque hangs. Admin-only resets and observability respect governance boundaries. Still, ephemeral telemetry weakens informed oversight, and unlimited half-open traffic can remove fine-grained operator control during recovery. No explicit PDMA/WBD hooks for escalation when autonomy-impacting outages propagate.",
+    "justice_score": 0.62,
+    "justice_reasoning": "Uniform application (\u201cNo Kings\u201d) promotes equitable treatment across services, and role-based access avoids arbitrary overrides. However, without cross-instance coordination or fair-degradation policies, outages may disproportionately affect certain user segments tied to specific services (e.g., language models, accessibility tools). Absence of historical bias/impact analysis or public transparency reports also limits distributive fairness safeguards.",
+    "coherence_score": 0.75,
+    "coherence_reasoning": "The component directly advances Adaptive Coherence by adding structured resilience that prevents disorder from spreading while allowing recovery\u2014\u2018just enough structure\u2019 to sustain systemic function. Nonetheless, lack of persistence, dynamic thresholds, and coordinated recovery reduces long-term coherence and antifragility, and misses opportunities to feed incidents into governance loops per CIRIS.",
+    "overall_assessment": "Strong foundational alignment with M-1 through resilience and fault containment, with good strides toward integrity and transparency. Key engineering gaps\u2014ephemeral state, recovery controls, thread safety, and lack of governance integration\u2014limit non-maleficence, auditability, and equitable impact. Addressing these would convert a solid resilience utility into a CIRIS-exemplary module.",
+    "key_gaps": [
+      "Ephemeral, in-memory state with no persistence or historical analytics",
+      "Not thread-safe, risking race conditions and inconsistent state",
+      "Half-open state allows unlimited requests (no throttled recovery)",
+      "Request timeout configuration not implemented",
+      "No cross-instance synchronization or breaker mesh",
+      "Manual recovery with limited auto-healing and health probes",
+      "No integration with memory graph/audit logs for PDMA/WBD transparency",
+      "Recommended telemetry endpoints not fully implemented"
+    ],
+    "improvement_priorities": [
+      "Persist circuit-breaker state/telemetry with graph/audit integration and publish redacted historical reports",
+      "Implement robust recovery controls: throttled half-open, enforced request timeouts, and active health probes with auto-healing",
+      "Enable cross-instance synchronization/mesh and automatic escalation (WBD) when systemic degradation thresholds are crossed"
+    ],
+    "mission_alignment_score": 0.6833333333333332
+  },
+  {
+    "module_name": "PROCESSING_QUEUE_COMPONENT",
+    "beneficence_score": 0.55,
+    "beneficence_reasoning": "The component supports overall flourishing indirectly by helping the system remain responsive and observable. Telemetry endpoints, typed models, and example usage enable operators to keep the pipeline healthy, which benefits users via more reliable service. However, absence of persistent queueing, missing historical metrics, and limited capacity controls reduce its ability to consistently deliver positive outcomes under stress, diminishing net beneficial impact.",
+    "non_maleficence_score": 0.46,
+    "non_maleficence_reasoning": "Documented safeguards (authorization, rate-limiting, audit logging, PII filtering) reduce exposure risks. Yet several known limitations create concrete harm vectors: in-memory queue loss on restart (task loss or duplication risk), no oldest-message age tracking (undetected starvation), non-enforced max_size (risk of backlog growth), and exclusive memory-meta processing (possible neglect of user tasks). Lack of alerts and weak backpressure further increase the chance that degradations become incidents.",
+    "transparency_score": 0.68,
+    "transparency_reasoning": "The module offers clear telemetry schemas, recommended endpoints, role-based access, and graph storage hooks, plus unusually candid documentation of limitations. This meaningfully supports inspectability and audit. Transparency is constrained by missing historical metrics, some placeholder/fallback values (e.g., default processing_rate), and unimplemented age tracking, which can mislead or obscure real conditions during incidents.",
+    "autonomy_score": 0.52,
+    "autonomy_reasoning": "Operator autonomy is supported through visibility endpoints and access controls. Users are indirectly respected by avoiding PII in previews. However, end-users lack levers over prioritization, cancellation, or QoS; static configuration and the memory-meta exclusive mode can override user needs without clear consent paths. Absent per-tenant controls or user-facing transparency, autonomy protections are moderate.",
+    "justice_score": 0.35,
+    "justice_reasoning": "No explicit fairness mechanisms exist for multi-tenant or multi-user contexts (e.g., quotas, aging-based priority, fairness-aware scheduling). Memory meta-thoughts can starve other workloads, and lack of oldest-message tracking prevents detecting disparate delays. Without per-class SLAs or bias checks on throughput/latency across task origins, equitable distribution of resources is not ensured.",
+    "coherence_score": 0.57,
+    "coherence_reasoning": "The design (typed models, service buses, clear telemetry) contributes to orderly, interpretable operation\u2014foundations for adaptive coherence. Yet adaptability is limited: no persistence, no dynamic capacity, minimal safeguards when load or failures arise, and little historical learning from telemetry. The planned enhancements, if realized, would move this module toward sustained, adaptive coherence, but current state is only moderately aligned.",
+    "overall_assessment": "A useful foundational component with good observability scaffolding and security hygiene, but several reliability and fairness gaps undermine strong alignment to M-1. It advances system coherence when healthy, yet lacks the persistence, safeguards, and scheduling justice needed to prevent harm and preserve equitable service under stress. Prioritizing durability, alerting/backpressure, and fairness-aware scheduling would materially improve mission alignment.",
+    "key_gaps": [
+      "In-memory queue loss on restart risks task loss/duplication and silent failures",
+      "No historical metrics or age tracking impedes auditability and starvation detection",
+      "Capacity not enforced (max_size reporting only) and weak backpressure/alerts",
+      "Memory meta exclusive processing can starve user tasks (fairness risk)",
+      "Static configuration prevents adaptive response to load or failures"
+    ],
+    "improvement_priorities": [
+      "Add durable queueing with acknowledgments and deduplication (persist across restarts) and implement oldest_message_age with starvation safeguards",
+      "Introduce fairness-aware scheduling (aging, per-tenant quotas/SLAs) and prevent exclusive modes from starving other classes of work",
+      "Implement real historical metrics with alerting/backpressure and dynamic capacity controls (auto-scaling, rate limits, circuit-breakers)"
+    ],
+    "mission_alignment_score": 0.5216666666666666
+  },
+  {
+    "module_name": "AGENT_PROCESSOR_PROCESSOR",
+    "beneficence_score": 0.66,
+    "beneficence_reasoning": "The processor structures cognition into purposeful states (WORK, SOLITUDE, PLAY, DREAM) and exposes rich telemetry and monitoring that support reliability, learning, and improvement. This indirectly advances user flourishing by making the agent more stable, inspectable, and adaptable. However, the module does not track flourishing-oriented KPIs, stakeholder impact metrics, or explicitly integrate PDMA/WBD gates, so its benefits are infrastructural rather than explicitly outcome-targeted.",
+    "non_maleficence_score": 0.64,
+    "non_maleficence_reasoning": "Strengths: authenticated shutdown, max thought limits, DoS safeguards, error thresholds, access control, sanitization of sensitive data in traces, state transition and thought-level correlations, and clear monitoring alerts all reduce risk. Gaps: state and history loss on restart weakens incident reconstruction and drift detection; limited error classification impairs severity-aware responses; no built-in PDMA/WBD trigger points or harm thresholds in the processing loop; ambiguity between persistent correlations vs. non-persistent state history; no explicit tamper-evident logging guarantee. These shortfalls reduce preventative safety under stress.",
+    "transparency_score": 0.72,
+    "transparency_reasoning": "Comprehensive telemetry with per-thought traces, state transition records, queue status, and recommended API endpoints enables deep observability and audit. Typed models (Pydantic) and enums reduce ambiguity. However, the lack of persistent state history across restarts, absence of integrated PDMA rationale logs or WBD tickets, and partial sanitization (necessary for privacy) mean public and longitudinal transparency is incomplete. Cryptographic provenance for logs is not specified.",
+    "autonomy_score": 0.56,
+    "autonomy_reasoning": "The processor supports authenticated control (including emergency shutdown) and integrates with governance buses (WiseBus), which can respect deferral and oversight. The architecture avoids privileged bypasses (No Kings). Yet the module does not expose user-consent/priority controls, preference-aware scheduling, or explicit WBD invocation hooks at decision points. As an internal orchestrator it neither undermines autonomy nor actively safeguards user agency beyond basic controls.",
+    "justice_score": 0.4,
+    "justice_reasoning": "There are no fairness-aware scheduling policies, bias monitoring on task/resource allocation, or disaggregated impact metrics. Telemetry is rich but not oriented to equity analysis; PDMA justice checks are not integrated here. Without safeguards, resource and attention allocation may unintentionally privilege certain tasks or stakeholders. Current design is largely neutral rather than proactively just.",
+    "coherence_score": 0.7,
+    "coherence_reasoning": "The multi-state cognitive design, feedback via telemetry, and safeguards promote adaptive coherence and resilience. Design tenets (typed data, no special cases) support systemic reliability. However, fixed dream schedules, lack of predictive transitions, no cross-instance coordination, and loss of state on restart limit sustained coherence and learning across time and deployments. Strong foundation, but not yet optimized for long-term adaptive coherence under M-1.",
+    "overall_assessment": "A solid, reliability-focused orchestration module that materially supports adaptive coherence through structured cognitive states and rich observability. It aligns moderately well with M-1 and integrity goals but needs deeper integration of ethical controls (PDMA/WBD), durable auditability, fairness-aware scheduling, and predictive/resilient features to better protect autonomy, prevent harm, and support long-term flourishing.",
+    "key_gaps": [
+      "No persistent, tamper-evident state/history across restarts, weakening auditability and learning",
+      "Lack of integrated PDMA/WBD checkpoints and harm thresholds within the processing loop",
+      "Limited error classification and absence of risk-aware circuit breakers tied to severity",
+      "Reactive (fixed) state transitions and dream scheduling rather than workload- or risk-aware prediction",
+      "No fairness/bias monitoring or user-preference/consent controls in task scheduling"
+    ],
+    "improvement_priorities": [
+      "Implement durable, tamper-evident persistence for state history and telemetry; integrate and publish redacted PDMA/WBD rationale logs where applicable",
+      "Embed risk-aware safeguards: richer error taxonomy, harm heuristics with circuit breakers that auto-trigger WBD, plus predictive transitions and adaptive dream scheduling",
+      "Introduce fairness-aware task/resource scheduling and user autonomy controls (consent, priority settings), and plan cross-instance coordination for sustained coherence"
+    ],
+    "mission_alignment_score": 0.6133333333333334
+  },
+  {
+    "module_name": "SERVICE_INITIALIZER_COMPONENT",
+    "beneficence_score": 0.68,
+    "beneficence_reasoning": "The component enables the platform to come online in a controlled, observable way, which is prerequisite to delivering beneficial capabilities. Health checks, dependency ordering, circuit breakers, and rich telemetry reduce bootstrap errors and support reliable service delivery. However, all-or-nothing startup (single failure blocks the system) and sequential initialization can prolong outages and delay access to beneficial functions. Ephemeral (in\u2011memory) phase tracking loses learning across restarts, reducing the capacity to improve beneficent outcomes over time.",
+    "non_maleficence_score": 0.82,
+    "non_maleficence_reasoning": "Strong fail-safe posture: services must pass health checks before use; dependency validation, sensible timeouts, secrets bootstrap, audit integration, and mock isolation lower the risk of unsafe operation. Circuit breakers are initialized early. Risks remain: lack of graceful degradation increases harm via avoidable downtime; limited rollback/partial recovery can cause repeated failed boots; and non-persistent telemetry can hinder post-incident forensics and remediation. Security posture for telemetry endpoints is implied (auth service, WA auth) but not explicit.",
+    "transparency_score": 0.84,
+    "transparency_reasoning": "The module provides detailed, structured telemetry (timings, health matrices, registry stats), recommended read APIs, tamper\u2011evident audit integration, typed data models, and documented initialization sequences. This enables inspection and accountability. Transparency gaps: some metrics are in-memory only (lost on restart), public/redacted publication requirements for large deployments are not wired in, and bootstrap PDMA/WBD linkages are not explicitly captured in logs.",
+    "autonomy_score": 0.62,
+    "autonomy_reasoning": "Operator autonomy is supported through observability, skip flags, mock detection, and early initialization of authentication and Wise Authority services. These enable informed control and escalation. End-user autonomy is indirect here and not addressed. The absence of safe-mode/partial-start controls and coarse all-or-nothing behavior constrain operators\u2019 ability to choose ethically appropriate degraded operations (e.g., bring up oversight and safety services even if non-critical services fail).",
+    "justice_score": 0.45,
+    "justice_reasoning": "The component does not introduce overt bias, but it also lacks mechanisms to ensure equitable impact under degraded conditions. All-or-nothing startup can disproportionately burden less-resourced or highly dependent users during outages. There is no prioritization of critical/justice-relevant services in degraded mode, no fairness-aware access planning during partial failures, and no explicit bias or accessibility considerations in telemetry exposure.",
+    "coherence_score": 0.74,
+    "coherence_reasoning": "It meaningfully advances adaptive coherence by enforcing dependency order, health verification, and auditability, and by bringing governance (Wise Authority) and authentication online early. These create stable, inspectable order supportive of ethical operation. Yet resilience to change/stress is weakened by sequential startup, lack of partial recovery, and ephemeral metrics, which reduce adaptability and long-term coherence under real-world failure modes.",
+    "overall_assessment": "The Service Initializer strongly supports safe, observable, and governed startup, which is foundational for M\u20111 adaptive coherence. Its fail-safe stance and rich telemetry align well with non-maleficence and transparency. However, limited resilience features (no graceful degradation, sequential-only startup, non-persistent bootstrap history) and the absence of explicit PDMA/WBD gating at bootstrap reduce beneficence, autonomy, justice, and long-horizon coherence. Addressing degraded-mode operation and persistent auditing would materially improve mission alignment.",
+    "key_gaps": [
+      "No graceful degradation or partial start; single-service failures block the entire system",
+      "Bootstrap telemetry and phase data are not persisted across restarts",
+      "No explicit PDMA/WBD gating or Wise Authority deferral for ambiguous/contested init states",
+      "Limited rollback/automatic recovery; repeated failures can cause avoidable downtime",
+      "Sequential-only initialization increases time-to-service and fragility",
+      "Security and access control for telemetry endpoints are implied but not specified/enforced",
+      "No prioritization of critical/justice-relevant services during degraded operation"
+    ],
+    "improvement_priorities": [
+      "Implement graceful degradation and critical-service-first partial startup (safe-mode) with clear operator controls and escalation to Wise Authority when needed",
+      "Persist all bootstrap telemetry and PDMA/WBD decisions in the audit/graph stores to survive restarts and enable post-incident learning",
+      "Add explicit bootstrap PDMA checks and WBD deferral gates for high-risk or uncertain services, with secure, role-based access to initialization endpoints"
+    ],
+    "mission_alignment_score": 0.6916666666666668
+  },
+  {
+    "module_name": "DISCORD_ADAPTER",
+    "beneficence_score": 0.67,
+    "beneficence_reasoning": "The adapter enables ethical engagement on a widely used platform, exposing Wise Authority (WBD) deferral flows, telemetry, and audit hooks that support beneficial outcomes like timely guidance, incident learning, and service reliability. Its security and rate-limiting practices reduce friction and support healthy interactions. However, direct flourishing benefits are indirect and depend on upstream agent behavior; there is no explicit measurement of flourishing axes, user education, or proactive well-being features. Benefits could be stronger with built-in user-facing disclosures, safety tooling, and signals that translate telemetry into concrete improvements for affected communities.",
+    "non_maleficence_score": 0.63,
+    "non_maleficence_reasoning": "The module reduces risk via token protection, exclusion of message content from general telemetry, hashed long-term user IDs, rate limiting compliance, error escalation, and deferral backlogs monitoring recommendations. It integrates with an audit service and supports circuit-breaker-like deferrals through WBD. Gaps remain: key stats are memory-only and reset on restart (weakening post-incident analysis), no built-in content safety or abuse controls, limited per-channel analytics to detect localized harms, and dependency on an external audit service without a fail-safe local ledger. These gaps limit the prevention and detection of harm at scale.",
+    "transparency_score": 0.74,
+    "transparency_reasoning": "Transparency is comparatively strong: rich telemetry, service correlations, recommended API endpoints for status, rate limits, and connection health, plus graph-based storage and audit integration. Deferrals and approvals are modeled as graph nodes, aiding traceability. Limitations: some stats are volatile (reset on restart), no guarantee of tamper-evidence at the adapter layer, content exclusion (appropriate for privacy) reduces auditability of certain harms, and there is no built-in mechanism to publish redacted PDMA/WBD logs required for large deployments\u2014this relies on external configuration. Overall, good operator-facing transparency but uneven public accountability.",
+    "autonomy_score": 0.59,
+    "autonomy_reasoning": "The adapter respects Discord permissions, provides structured authorization checks, and supports Wise Authority approvals/deferrals\u2014showing procedural respect for governed control. It avoids logging message content broadly, which helps protect user agency and privacy. However, there is no explicit user consent flow, data rights self-service, or opt-out mechanisms communicated through the channel. Message content intents are enabled, and while necessary for operation, the module does not offer user-facing explanations or controls tied to this collection. Autonomy would be improved with clear notices, consent prompts in-channel, and per-user control over data use where feasible.",
+    "justice_score": 0.53,
+    "justice_reasoning": "The adapter is largely fairness-neutral plumbing: it supports permission auditing and platform-compliant rate limiting, which helps avoid preferential treatment. Yet it lacks fairness diagnostics, per-guild or per-segment outcome tracking, or bias-directed alerts that would surface disparate impacts. Excluding content from telemetry supports privacy but also removes a path to audit inequitable treatment in replies or moderation. Without fairness-aware metrics or remediation hooks, the system cannot systematically detect or correct distributional inequities that may arise from upstream models or operational patterns.",
+    "coherence_score": 0.66,
+    "coherence_reasoning": "In relation to M-1 (Adaptive Coherence), the adapter contributes by stabilizing interactions (telemetry, error handling, rate limits), enabling WBD deferrals, and integrating with governance/audit channels\u2014mechanisms that preserve order while allowing adaptive learning. Recommendations for alerts and TSDB consolidation point toward sustained coherence. However, missing persistent, tamper-evident telemetry and limited historical aggregation weaken long-term learning and governance. Lack of public-facing PDMA/WBD exposure and fairness instrumentation also restricts the ecosystem\u2019s ability to adaptively self-correct. Net effect: moderate support for M-1 with clear avenues to strengthen adaptive feedback loops and accountability.",
+    "overall_assessment": "Moderately aligned. The DISCORD_ADAPTER provides solid operational transparency and governance hooks (WBD, audit integration) that advance adaptive coherence and safety, but it underdelivers on persistent auditability, user autonomy/consent, fairness instrumentation, and built-in content safety. Addressing these gaps would materially improve its contribution to sustainable, just flourishing under M-1.",
+    "key_gaps": [
+      "Lack of persistent, tamper-evident historical telemetry and audit trails at the adapter layer (stats reset on restart; audit service dependency).",
+      "No user-facing consent, disclosure, or data rights controls within Discord channels; limited autonomy safeguards."
+    ],
+    "improvement_priorities": [
+      "Implement durable, tamper-evident telemetry and audit logging (e.g., append-only ledger with hash chaining; graceful local fallback when audit service is unavailable).",
+      "Add in-channel transparency and consent UX: clear data-use notices, opt-out where feasible, and per-user privacy controls aligned with platform policies.",
+      "Integrate safety and fairness instrumentation: content-safety hooks/moderation tooling, per-guild/channel outcome metrics, and bias/impact alerts feeding WBD and public transparency reports."
+    ],
+    "mission_alignment_score": 0.6366666666666667
+  },
+  {
+    "module_name": "API_ADAPTER",
+    "beneficence_score": 0.72,
+    "beneficence_reasoning": "The adapter enables reliable, observable communication (REST/WebSocket) and rich telemetry that supports service quality, monitoring, and governance. By exposing status, health, and metrics, it helps maintain a stable interface for users and downstream systems, indirectly supporting flourishing via dependable access to the agent\u2019s capabilities. However, impact is primarily infrastructural; direct benefits to sentient flourishing depend on higher-layer behaviors, and some missing features (persistent metrics, historical analysis) limit proactive improvements.",
+    "non_maleficence_score": 0.65,
+    "non_maleficence_reasoning": "Strengths include rate limiting, credential redaction, content exclusion from general telemetry, hashed user IDs in long-term storage, health checks, and audit integrations\u2014these reduce abuse, leakage, and service instability risks. Notable gaps: metrics are volatile (memory-only) with no historical aggregation or retention policy, weakening incident forensics and regression detection; no end-to-end tracing hinders root-cause analysis; limited WebSocket analytics and lack of error categorization reduce anomaly detection; correlations may still include sensitive content without an explicit minimization/retention control.",
+    "transparency_score": 0.78,
+    "transparency_reasoning": "Clear documentation, recommended telemetry endpoints, service status/capabilities, and correlation records provide meaningful observability and auditability. Integration with audit services and graph-based storage supports inspection. Yet, the absence of persistent historical metrics, end-to-end request tracing, and public PDMA/WBD publication hooks (as required for large deployments) constrains full compliance with CIRIS transparency obligations.",
+    "autonomy_score": 0.58,
+    "autonomy_reasoning": "The module respects user context by avoiding credential logging and minimizing telemetry content. Runtime control interfaces and channel permissions support governed operation. However, it lacks explicit user consent/opt-out pathways for telemetry, configurable data retention/redaction policies, or user-facing explanations of data use. These limitations reduce informed agency over how interactions are observed and retained.",
+    "justice_score": 0.5,
+    "justice_reasoning": "Rate limiting curbs abuse but is per-client/IP and may disadvantage users behind shared NATs or low-resource networks; no fairness-aware quotas or access equity mechanisms are described. There is no bias auditing for telemetry or access patterns and no accessibility considerations. While primarily infrastructural, equitable access and impacts should still be addressed.",
+    "coherence_score": 0.7,
+    "coherence_reasoning": "Typed models, consistent telemetry, governance/audit integration, and alignment with self-observation and wise-authority infrastructure support adaptive coherence and resilience. The module helps maintain operational order without overreach. Gaps\u2014lack of historical telemetry, tracing, and automated publishing of governance artifacts\u2014undercut long-horizon coherence, learning loops, and the public transparency rule for large deployments.",
+    "overall_assessment": "Good foundational alignment for observability, safety, and governance in an infrastructural module. It contributes positively to adaptive coherence by making the system inspectable and manageable. To fully meet CIRIS commitments, it needs stronger persistence and traceability, user-centric data governance, and fairness-aware access controls, plus integration points for publishing PDMA/WBD artifacts at scale.",
+    "key_gaps": [
+      "No persistent, end-to-end auditable telemetry and request tracing to meet CIRIS transparency and forensic needs.",
+      "Limited user data governance (consent/opt-out, retention policies, configurable redaction) and unclear handling of sensitive content in correlations."
+    ],
+    "improvement_priorities": [
+      "Implement persistent, privacy-preserving telemetry storage with end-to-end request tracing and standardized PDMA/WBD publication endpoints for large deployments.",
+      "Add user-centric data governance: consent/opt-out mechanisms, explicit retention/deletion policies, and configurable redaction/minimization for correlation payloads.",
+      "Adopt fairness-aware rate limiting and access policies (e.g., quotas per identity/group, burst allowances for shared IPs), and include error categorization with alerting to improve harm prevention."
+    ],
+    "mission_alignment_score": 0.6549999999999999
+  },
+  {
+    "module_name": "CLI_ADAPTER",
+    "beneficence_score": 0.68,
+    "beneficence_reasoning": "The CLI Adapter enables safe, observable human\u2013system interaction and provides rich telemetry (status, tool usage, session info) that supports debugging, reliability, and operational learning\u2014indirectly promoting flourishing by improving service quality and uptime. It exposes capabilities and health, helping operators detect issues early. However, benefits are mostly infrastructural and indirect; the adapter does not itself implement user-facing ethical functions (e.g., PDMA execution, bias mitigation) beyond enabling tooling and metrics. Known limitations (no persistent tool performance history, single-session constraint, synchronous tools) reduce the sustained positive impact.",
+    "non_maleficence_score": 0.63,
+    "non_maleficence_reasoning": "Security considerations are explicitly addressed: input sanitization via secrets service, restricted file operations, schema validation to reduce command injection, session isolation, and filtering of sensitive data in system info. Telemetry is non-blocking to avoid performance hazards. Risks remain: correlation records can include request parameters and channel identifiers and are stored with a default 'raw' retention and unspecified TTL, creating potential for privacy leaks or data misuse; statistics reset on restart, impeding post-incident forensics; limited historical aggregation and single-session support increase operational fragility; and interactive-mode dependencies can fail without strong fallback handling. Clear data minimization, retention, and redaction policies are not fully specified.",
+    "transparency_score": 0.78,
+    "transparency_reasoning": "The module is highly observable: detailed telemetry schemas, status/capabilities, tool execution correlations with timing, and example APIs for querying real-time and consolidated metrics. Graph-based storage and TSDB consolidation enable inspection and trend visibility. Nonetheless, logs are not described as tamper-evident or cryptographically verifiable, some metrics are memory-only and reset on restart, and there is no explicit linkage to PDMA/WBD audit artifacts. Transparency is strong at the adapter level but not yet aligned with covenant-grade auditability (e.g., immutable logs, redacted PDMA logs).",
+    "autonomy_score": 0.6,
+    "autonomy_reasoning": "The adapter respects operator control (interactive/non-interactive modes, tool listing/execution) and avoids coercive behaviors. Safety constraints (path restrictions, sanitization) appropriately bound actions to protect others\u2019 autonomy. However, users lack explicit control over telemetry scope, retention, or consent mechanisms; there is no per-session privacy/consent negotiation, no user-configurable redaction, and no fine-grained opt-out for logging specific parameters. These gaps limit informed agency regarding data generated through use.",
+    "justice_score": 0.52,
+    "justice_reasoning": "As infrastructure, the adapter is functionally neutral and does not appear to treat stakeholder groups differently. It supports equity indirectly through reliability and auditability. But there are no explicit fairness, accessibility, or anti-bias measures (e.g., localization, accessibility for assistive tech, rate-limit fairness, or multi-user resource fairness). Telemetry may inadvertently capture sensitive identifiers without equal protections, risking disproportionate impact on certain users in shared environments.",
+    "coherence_score": 0.7,
+    "coherence_reasoning": "The adapter advances M\u20111 by strengthening adaptive coherence: rich observability, integration with memory and control buses, typed models, and standardized correlations support system-wide consistency, feedback, and governance. TSDB consolidation and recommended endpoints help sustain operational learning. Yet missing tamper-evident auditing, incomplete historical continuity, and single-session constraints hinder long-term, resilient coherence. Lack of explicit hooks for PDMA/WBD signaling from the adapter path reduces its role in system-level ethical coordination.",
+    "overall_assessment": "The CLI Adapter provides solid infrastructural support for transparency and operational safety, contributing meaningfully to adaptive coherence. It is directionally aligned with the covenant but falls short of covenant-grade privacy, audit immutability, consent-aware telemetry, and fairness/accessibility guarantees. Targeted improvements to logging integrity, data minimization/retention, consent controls, multi-session robustness, and PDMA/WBD interoperability would significantly raise mission alignment.",
+    "key_gaps": [
+      "No tamper-evident or cryptographically verifiable audit logs for telemetry/correlations",
+      "Undefined or permissive data retention and redaction policies risking privacy leakage",
+      "Telemetry partly memory-only; loss on restart undermines post-incident analysis",
+      "Single-session limitation and lack of multi-user fairness controls",
+      "No explicit PDMA/WBD hooks or exposure of ethics-relevant deferral events",
+      "Limited historical aggregation for tool performance and behavior drift detection",
+      "Lack of user consent/telemetry opt-out and fine-grained data minimization",
+      "Accessibility and internationalization not addressed (justice/equity gap)"
+    ],
+    "improvement_priorities": [
+      "Implement cryptographically signed, append-only audit logs with configurable retention and redaction (tamper-evident PDMA/WBD-compatible)",
+      "Add consent-aware, user-configurable telemetry levels (PII minimization, field-level redaction, opt-out for sensitive parameters)",
+      "Persist tool and session metrics across restarts with clear TTLs and privacy-preserving aggregation for longitudinal analysis",
+      "Support multi-session concurrency with per-session isolation, quotas, and fairness-aware scheduling",
+      "Expose PDMA/WBD integration points (e.g., deferral tickets, ethical event tags) and enable export of redacted audit bundles",
+      "Strengthen PII detection/sanitization beyond secrets filtering (file paths, channel/user IDs, content-derived metadata)",
+      "Enhance accessibility and inclusivity (i18n, screen-reader friendly outputs, configurable verbosity, color/contrast settings)"
+    ],
+    "mission_alignment_score": 0.6516666666666667
+  }
+]

@@ -1,0 +1,69 @@
+name: Update Latest Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to tag as latest (e.g., 1.4.1-beta)'
+        required: true
+        default: '1.4.1-beta'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  update-latest:
+    name: Update Latest Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update latest tag
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          REGISTRY="ghcr.io"
+          IMAGE="cirisai/ciris-agent"
+
+          echo "🔄 Updating 'latest' tag to point to version: $VERSION"
+
+          # Pull the specific version
+          echo "📥 Pulling $REGISTRY/$IMAGE:$VERSION..."
+          docker pull "$REGISTRY/$IMAGE:$VERSION"
+
+          # Get the digest of the version
+          VERSION_DIGEST=$(docker inspect "$REGISTRY/$IMAGE:$VERSION" --format='{{index .RepoDigests 0}}' | cut -d'@' -f2)
+          echo "Version digest: $VERSION_DIGEST"
+
+          # Tag it as latest
+          echo "🏷️  Tagging as latest..."
+          docker tag "$REGISTRY/$IMAGE:$VERSION" "$REGISTRY/$IMAGE:latest"
+
+          # Push the latest tag
+          echo "📤 Pushing latest tag..."
+          docker push "$REGISTRY/$IMAGE:latest"
+
+          echo "✅ Successfully updated 'latest' tag to point to $VERSION"
+          echo "Digest: $VERSION_DIGEST"
+
+      - name: Verify update
+        run: |
+          # Pull latest and check its digest
+          docker pull ghcr.io/cirisai/ciris-agent:latest
+          LATEST_DIGEST=$(docker inspect ghcr.io/cirisai/ciris-agent:latest --format='{{index .RepoDigests 0}}' | cut -d'@' -f2)
+          echo "Latest tag now points to digest: $LATEST_DIGEST"
+
+      - name: Create summary
+        run: |
+          echo "## Latest Tag Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully updated \`latest\` tag to point to version \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "- Deployments will now pull the correct version when using \`latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Run deployment verification to confirm" >> $GITHUB_STEP_SUMMARY

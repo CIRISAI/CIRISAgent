@@ -1,0 +1,98 @@
+{
+  "collected": {
+    "telemetry_service": [
+      "tokens_input",
+      "tokens_used",
+      "cost_cents",
+      "energy_kwh",
+      "tokens_output",
+      "carbon_grams",
+      "telemetry_service.shutdown"
+    ],
+    "memory_service": [],
+    "api_routes": [],
+    "processors": [
+      "thoughts_processed",
+      "errors"
+    ],
+    "services": [
+      "failed_requests",
+      "total_requests",
+      "total_latency_ms",
+      "consecutive_failures"
+    ]
+  },
+  "exposed": {
+    "overview_fields": [
+      "uptime_seconds",
+      "cognitive_state",
+      "messages_processed_24h",
+      "thoughts_processed_24h",
+      "tasks_completed_24h",
+      "errors_24h",
+      "tokens_last_hour",
+      "cost_last_hour_cents",
+      "carbon_last_hour_grams",
+      "energy_last_hour_kwh",
+      "tokens_24h",
+      "cost_24h_cents",
+      "carbon_24h_grams",
+      "energy_24h_kwh",
+      "memory_mb",
+      "cpu_percent",
+      "healthy_services",
+      "degraded_services",
+      "error_rate_percent",
+      "current_task",
+      "reasoning_depth",
+      "active_deferrals"
+    ],
+    "queryable_metrics": [
+      "cpu_percent",
+      "memory_mb",
+      "cpu_percent",
+      "memory_mb",
+      "disk_usage_bytes"
+    ],
+    "resource_metrics": [
+      "memory_mb"
+    ],
+    "detailed_metrics": [
+      "messages_processed",
+      "thoughts_processed",
+      "tasks_completed",
+      "errors",
+      "tokens_consumed",
+      "api_requests",
+      "memory_operations"
+    ]
+  },
+  "summary_metrics": [
+    "tokens_last_hour",
+    "energy_kwh",
+    "window_start_24h",
+    "energy_24h",
+    "cost_24h",
+    "energy_last_hour_kwh",
+    "cost_1h_cents",
+    "tasks_24h",
+    "carbon_grams",
+    "carbon_24h",
+    "thoughts_24h",
+    "thoughts_processed_24h",
+    "error_rate_percent",
+    "tokens_1h",
+    "tokens_24h",
+    "tasks_completed_24h",
+    "messages_processed_24h",
+    "carbon_last_hour_grams",
+    "cost_last_hour_cents",
+    "errors_24h",
+    "energy_1h_kwh",
+    "carbon_1h_grams",
+    "messages_24h"
+  ],
+  "total_collected": 13,
+  "total_exposed": 53,
+  "documented": 485
+}

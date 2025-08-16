@@ -77,7 +77,8 @@ async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency in
                 )
                 import asyncio
 
-                asyncio.create_task(audit_service.log_event("service_token_auth_failed", audit_event))
+                # Save task reference to prevent premature garbage collection
+                _ = asyncio.create_task(audit_service.log_event("service_token_auth_failed", audit_event))
 
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 

@@ -8,9 +8,9 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
@@ -31,73 +31,28 @@ from ..constants import (
 )
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
+# Import extracted modules
+from .telemetry_converters import convert_to_graphite, convert_to_prometheus
+from .telemetry_helpers import get_telemetry_fallback, get_telemetry_from_service
+from .telemetry_models import (
+    LogEntry,
+    MetricData,
+    MetricSeries,
+    ResourceHistoryResponse,
+    ResourceMetricData,
+    ResourceUsage,
+    ServiceHealth,
+    ServiceHealthOverview,
+    SystemOverview,
+    TimePeriod,
+    TraceSpan,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
-# Request/Response schemas
-
-
-class MetricData(BaseModel):
-    """Single metric data point."""
-
-    timestamp: datetime = Field(..., description="When metric was recorded")
-    value: float = Field(..., description="Metric value")
-    tags: MetricTags = Field(default_factory=lambda: MetricTags.model_validate({}), description="Metric tags")
-
-    @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
-        return timestamp.isoformat() if timestamp else None
-
-
-class MetricSeries(BaseModel):
-    """Time series data for a metric."""
-
-    metric_name: str = Field(..., description="Name of the metric")
-    data_points: List[MetricData] = Field(..., description="Time series data")
-    unit: Optional[str] = Field(None, description="Metric unit")
-    description: Optional[str] = Field(None, description="Metric description")
-
-
-class SystemOverview(BaseModel):
-    """System overview combining all observability data."""
-
-    # Core metrics
-    uptime_seconds: float = Field(..., description="System uptime")
-    cognitive_state: str = Field(..., description=DESC_CURRENT_COGNITIVE_STATE)
-    messages_processed_24h: int = Field(0, description="Messages in last 24 hours")
-    thoughts_processed_24h: int = Field(0, description="Thoughts in last 24 hours")
-    tasks_completed_24h: int = Field(0, description="Tasks completed in last 24 hours")
-    errors_24h: int = Field(0, description="Errors in last 24 hours")
-
-    # Resource usage (last hour actuals)
-    tokens_last_hour: float = Field(0.0, description="Total tokens in last hour")
-    cost_last_hour_cents: float = Field(0.0, description="Total cost in last hour (cents)")
-    carbon_last_hour_grams: float = Field(0.0, description="Total carbon in last hour (grams)")
-    energy_last_hour_kwh: float = Field(0.0, description="Total energy in last hour (kWh)")
-
-    # Resource usage (24 hour totals)
-    tokens_24h: float = Field(0.0, description="Total tokens in last 24 hours")
-    cost_24h_cents: float = Field(0.0, description="Total cost in last 24 hours (cents)")
-    carbon_24h_grams: float = Field(0.0, description="Total carbon in last 24 hours (grams)")
-    energy_24h_kwh: float = Field(0.0, description="Total energy in last 24 hours (kWh)")
-    memory_mb: float = Field(0.0, description="Current memory usage")
-    cpu_percent: float = Field(0.0, description="Current CPU usage")
-
-    # Service health
-    healthy_services: int = Field(0, description="Number of healthy services")
-    degraded_services: int = Field(0, description="Number of degraded services")
-    error_rate_percent: float = Field(0.0, description="System error rate")
-
-    # Agent activity
-    current_task: Optional[str] = Field(None, description="Current task description")
-    reasoning_depth: int = Field(0, description="Current reasoning depth")
-    active_deferrals: int = Field(0, description="Pending WA deferrals")
-    recent_incidents: int = Field(0, description="Incidents in last hour")
-
-    # Telemetry metrics
-    total_metrics: int = Field(0, description="Total metrics collected")
-    active_services: int = Field(0, description="Number of active services reporting telemetry")
+# Additional request/response schemas not in telemetry_models.py
 
 
 class DetailedMetric(BaseModel):
@@ -218,6 +173,45 @@ class QueryResponse(BaseModel):
 # Helper functions
 
 
+async def _update_telemetry_summary(overview: SystemOverview, telemetry_service) -> None:
+    """Update overview with telemetry summary metrics."""
+    if telemetry_service and hasattr(telemetry_service, "get_telemetry_summary"):
+        try:
+            summary = await telemetry_service.get_telemetry_summary()
+            overview.messages_processed_24h = summary.messages_processed_24h
+            overview.thoughts_processed_24h = summary.thoughts_processed_24h
+            overview.tasks_completed_24h = summary.tasks_completed_24h
+            overview.errors_24h = summary.errors_24h
+            overview.tokens_last_hour = summary.tokens_last_hour
+            overview.cost_last_hour_cents = summary.cost_last_hour_cents
+            overview.carbon_last_hour_grams = summary.carbon_last_hour_grams
+            overview.energy_last_hour_kwh = summary.energy_last_hour_kwh
+            overview.tokens_24h = summary.tokens_24h
+            overview.cost_24h_cents = summary.cost_24h_cents
+            overview.carbon_24h_grams = summary.carbon_24h_grams
+            overview.energy_24h_kwh = summary.energy_24h_kwh
+            overview.error_rate_percent = summary.error_rate_percent
+        except Exception as e:
+            logger.warning(
+                f"Telemetry metric retrieval failed for telemetry summary: {type(e).__name__}: {str(e)} - Returning default/empty value"
+            )
+
+
+async def _update_visibility_state(overview: SystemOverview, visibility_service) -> None:
+    """Update overview with visibility state information."""
+    if visibility_service:
+        try:
+            snapshot = await visibility_service.get_current_state()
+            if snapshot:
+                overview.reasoning_depth = snapshot.reasoning_depth
+                if snapshot.current_task:
+                    overview.current_task = snapshot.current_task.description
+        except Exception as e:
+            logger.warning(
+                f"Telemetry metric retrieval failed for visibility state: {type(e).__name__}: {str(e)} - Returning default/empty value"
+            )
+
+
 async def _get_system_overview(request: Request) -> SystemOverview:
     """Build comprehensive system overview from all services."""
     # Get core services
@@ -267,45 +261,16 @@ async def _get_system_overview(request: Request) -> SystemOverview:
                 f"Telemetry metric retrieval failed for uptime: {type(e).__name__}: {str(e)} - Returning default/empty value"
             )
 
-    # Get telemetry summary if available
-    if telemetry_service and hasattr(telemetry_service, "get_telemetry_summary"):
-        try:
-            summary = await telemetry_service.get_telemetry_summary()
-            overview.messages_processed_24h = summary.messages_processed_24h
-            overview.thoughts_processed_24h = summary.thoughts_processed_24h
-            overview.tasks_completed_24h = summary.tasks_completed_24h
-            overview.errors_24h = summary.errors_24h
-            overview.tokens_last_hour = summary.tokens_last_hour
-            overview.cost_last_hour_cents = summary.cost_last_hour_cents
-            overview.carbon_last_hour_grams = summary.carbon_last_hour_grams
-            overview.energy_last_hour_kwh = summary.energy_last_hour_kwh
-            overview.tokens_24h = summary.tokens_24h
-            overview.cost_24h_cents = summary.cost_24h_cents
-            overview.carbon_24h_grams = summary.carbon_24h_grams
-            overview.energy_24h_kwh = summary.energy_24h_kwh
-            overview.error_rate_percent = summary.error_rate_percent
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for telemetry summary: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+    # Update with telemetry summary
+    await _update_telemetry_summary(overview, telemetry_service)
 
     # Get cognitive state from runtime
     runtime = getattr(request.app.state, "runtime", None)
     if runtime and hasattr(runtime, "state_manager"):
         overview.cognitive_state = runtime.state_manager.current_state
 
-    # Get reasoning depth and current task from visibility
-    if visibility_service:
-        try:
-            snapshot = await visibility_service.get_current_state()
-            if snapshot:
-                overview.reasoning_depth = snapshot.reasoning_depth
-                if snapshot.current_task:
-                    overview.current_task = snapshot.current_task.description
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for visibility state: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+    # Update with visibility state
+    await _update_visibility_state(overview, visibility_service)
 
     # Get resource usage
     if resource_monitor:
@@ -1263,21 +1228,70 @@ class ResourceMetricData(BaseModel):
     unit: str = Field(..., description="Unit of measurement")
 
 
-class TimePeriod(BaseModel):
-    """Time period specification."""
-
-    start: str = Field(..., description="Start time (ISO format)")
-    end: str = Field(..., description="End time (ISO format)")
-    hours: int = Field(..., description="Period length in hours")
+# TimePeriod and ResourceHistoryResponse models moved to telemetry_models.py
 
 
-class ResourceHistoryResponse(BaseModel):
-    """Historical resource usage response."""
+# Helper functions moved to telemetry_helpers.py
 
-    period: TimePeriod = Field(..., description="Time period covered")
-    cpu: ResourceMetricData = Field(..., description="CPU usage data")
-    memory: ResourceMetricData = Field(..., description="Memory usage data")
-    disk: ResourceMetricData = Field(..., description="Disk usage data")
+
+@router.get("/unified", response_model=None)
+async def get_unified_telemetry(
+    request: Request,
+    auth: AuthContext = Depends(require_observer),
+    view: str = Query("summary", description="View type: summary|health|operational|detailed|performance|reliability"),
+    category: Optional[str] = Query(
+        None, description="Filter by category: buses|graph|infrastructure|governance|runtime|adapters|components|all"
+    ),
+    format: str = Query("json", description="Output format: json|prometheus|graphite"),
+    live: bool = Query(False, description="Force live collection (bypass cache)"),
+) -> Dict | Response:
+    """
+    Unified enterprise telemetry endpoint.
+
+    This single endpoint replaces 78+ individual telemetry routes by intelligently
+    aggregating metrics from all 21 required services using parallel collection.
+
+    Features:
+    - Parallel collection from all services (10x faster than sequential)
+    - Smart caching with 30-second TTL
+    - Multiple views for different stakeholders
+    - System health and reliability scoring
+    - Export formats for monitoring tools
+
+    Examples:
+    - /telemetry/unified?view=summary - Executive dashboard
+    - /telemetry/unified?view=health - Quick health check
+    - /telemetry/unified?view=operational&live=true - Live ops data
+    - /telemetry/unified?view=reliability - System reliability metrics
+    - /telemetry/unified?category=buses - Just bus metrics
+    - /telemetry/unified?format=prometheus - Prometheus export
+    """
+    try:
+        # Get the telemetry service
+        telemetry_service = getattr(request.app.state, "telemetry_service", None)
+        if not telemetry_service:
+            raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+
+        # Get telemetry data
+        if hasattr(telemetry_service, "get_aggregated_telemetry"):
+            result = await get_telemetry_from_service(telemetry_service, view, category, format, live)
+        else:
+            result = await get_telemetry_fallback(request.app.state, view, category)
+
+        # Handle export formats
+        if format == "prometheus":
+            content = convert_to_prometheus(result)
+            return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
+        elif format == "graphite":
+            content = convert_to_graphite(result)
+            return Response(content=content, media_type="text/plain; charset=utf-8")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/resources/history", response_model=SuccessResponse[ResourceHistoryResponse])

@@ -50,6 +50,58 @@ class MemorizeHandler(BaseActionHandler):
         node = params.node
         scope = node.scope
 
+        # Define managed user attributes that should not be modified by memorize operations
+        MANAGED_USER_ATTRIBUTES = {
+            "last_seen": "System-managed timestamp updated automatically when user activity is detected. Use OBSERVE action instead.",
+            "last_interaction": "System-managed timestamp updated automatically when user interacts. Use OBSERVE action instead.",
+            "created_at": "System-managed timestamp set once when user is first encountered. Cannot be modified.",
+            "first_seen": "System-managed timestamp set once when user is first encountered. Cannot be modified.",
+            "trust_level": "Managed by the Adaptive Filter service based on user behavior patterns. Cannot be directly modified.",
+            "is_wa": "Managed by the Authentication service. Wise Authority status requires proper authorization flow.",
+            "permissions": "Managed by the Authorization service. Permission changes require administrative access.",
+            "restrictions": "Managed by the Authorization service. Restriction changes require administrative access.",
+        }
+
+        # Check if this is a user node and validate attributes
+        if node.type == NodeType.USER or node.id.startswith("user/"):
+            if hasattr(node, "attributes") and node.attributes:
+                # Handle both dict and GraphNodeAttributes types
+                attrs_to_check = (
+                    node.attributes
+                    if isinstance(node.attributes, dict)
+                    else (node.attributes.__dict__ if hasattr(node.attributes, "__dict__") else {})
+                )
+
+                # Check for any managed attributes
+                for attr_name, rationale in MANAGED_USER_ATTRIBUTES.items():
+                    if attr_name in attrs_to_check:
+                        error_msg = (
+                            f"MEMORIZE BLOCKED: Attempt to modify managed user attribute '{attr_name}'. "
+                            f"\n\nRationale: {rationale}"
+                            f"\n\nAttempted operation: Set '{attr_name}' to '{attrs_to_check[attr_name]}' for user node '{node.id}'."
+                            f"\n\nGuidance: If this information needs correction, please use DEFER action to request "
+                            f"Wise Authority assistance. They can help determine the proper way to update this information "
+                            f"through the appropriate system channels."
+                        )
+
+                        logger.warning(
+                            f"Blocked memorize attempt on managed attribute '{attr_name}' for node '{node.id}'"
+                        )
+
+                        await self._audit_log(
+                            HandlerActionType.MEMORIZE,
+                            dispatch_context,
+                            outcome="blocked_managed_attribute",
+                            additional_info={"attribute": attr_name, "node_id": node.id},
+                        )
+
+                        return self.complete_thought_and_create_followup(
+                            thought=thought,
+                            follow_up_content=error_msg,
+                            action_result=result,
+                            status=ThoughtStatus.FAILED,
+                        )
+
         # Check if this is an identity node that requires WA authorization
         is_identity_node = (
             scope == GraphScope.IDENTITY or node.id.startswith("agent/identity") or node.type == NodeType.AGENT

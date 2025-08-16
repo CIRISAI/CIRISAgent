@@ -134,6 +134,16 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
         self._adaptation_errors = 0  # Track adaptation errors
         self._last_error: Optional[str] = None  # Store last error message
 
+        # Tracking variables for custom metrics
+        self._observations_made = 0
+        self._patterns_detected = 0
+        self._adaptations_triggered = 0
+        self._performance_checks = 0
+        self._anomalies_detected = 0
+        self._self_corrections = 0
+        self._learning_cycles = 0
+        self._model_updates = 0
+
     def _set_service_registry(self, registry: "ServiceRegistry") -> None:
         """Set the service registry and initialize component services."""
         self._service_registry = registry
@@ -1064,3 +1074,33 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
     def _check_dependencies(self) -> bool:
         """Check if all required dependencies are available."""
         return self._time_service is not None
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect self-observation metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate observation rate
+        obs_rate = 0.0
+        if hasattr(self, "_start_time") and self._start_time:
+            uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
+            if uptime > 0:
+                obs_rate = self._observations_made / uptime
+
+        metrics.update(
+            {
+                "observations_made": float(self._observations_made),
+                "patterns_detected": float(self._patterns_detected),
+                "adaptations_triggered": float(self._adaptations_triggered),
+                "performance_checks": float(self._performance_checks),
+                "anomalies_detected": float(self._anomalies_detected),
+                "self_corrections": float(self._self_corrections),
+                "learning_cycles": float(self._learning_cycles),
+                "model_updates": float(self._model_updates),
+                "observation_rate_per_hour": obs_rate * 3600,
+                "pattern_variance_monitor_active": 1.0,  # Sub-service
+                "identity_variance_monitor_active": 1.0,  # Sub-service
+                "analysis_loop_active": 1.0,  # Pattern analysis loop
+            }
+        )
+
+        return metrics

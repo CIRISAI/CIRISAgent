@@ -231,6 +231,15 @@ class BaseService(ABC, ServiceProtocol):
 
         return base_metrics
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Public async method to get all service metrics.
+
+        Returns combined base metrics and custom metrics.
+        This is the standard interface for metric collection.
+        """
+        return self._collect_metrics()
+
     # Request tracking helpers (for services that handle requests)
 
     def _track_request(self) -> None:

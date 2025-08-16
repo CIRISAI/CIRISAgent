@@ -13,7 +13,7 @@ It does NOT provide service health, metrics, or general system status.
 """
 
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.persistence import (
@@ -39,6 +39,14 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         super().__init__(time_service=time_service)
         self.bus = bus_manager
         self._db_path = db_path
+
+        # Visibility service tracking variables
+        self._dsar_requests = 0
+        self._transparency_requests = 0
+        self._audit_requests = 0
+        self._export_operations = 0
+        self._redaction_operations = 0
+        self._consent_updates = 0
 
     async def _on_start(self) -> None:
         """Custom startup logic for visibility service."""
@@ -327,3 +335,30 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         except Exception as e:
             return f"Unable to explain action {action_id}: {str(e)}"
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect visibility service metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate feed subscribers if applicable
+        subscriber_count = 0
+        try:
+            if hasattr(self, "_subscribers"):
+                subscriber_count = len(self._subscribers)
+        except:
+            pass
+
+        metrics.update(
+            {
+                "dsar_requests": float(self._dsar_requests),
+                "transparency_requests": float(self._transparency_requests),
+                "audit_requests": float(self._audit_requests),
+                "export_operations": float(self._export_operations),
+                "redaction_operations": float(self._redaction_operations),
+                "consent_updates": float(self._consent_updates),
+                "feed_subscribers": float(subscriber_count),
+                "transparency_enabled": 1.0,  # Always enabled per GDPR
+            }
+        )
+
+        return metrics

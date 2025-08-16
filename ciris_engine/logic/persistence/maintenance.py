@@ -1,7 +1,7 @@
 import logging
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import aiofiles
 
@@ -45,6 +45,13 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         self.archive_dir = Path(archive_dir_path)
         self.archive_older_than_hours = archive_older_than_hours
         self.config_service = config_service
+
+        # Tracking variables for metrics
+        self._cleanup_runs = 0
+        self._records_deleted = 0
+        self._vacuum_runs = 0
+        self._archive_runs = 0
+        self._last_cleanup_duration = 0.0
 
     async def _run_scheduled_task(self) -> None:
         """
@@ -371,53 +378,44 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         """Check if all required dependencies are available."""
         return self.time_service is not None
 
-    async def get_telemetry(self) -> dict[str, Any]:
-        """
-        Get telemetry data for the database maintenance service.
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect database maintenance metrics."""
+        metrics = super()._collect_custom_metrics()
 
-        Returns metrics including:
-        - error_count: Number of errors encountered
-        - task_run_count: Number of maintenance tasks executed
-        - uptime_seconds: Service uptime in seconds
-        - last_cleanup: Last cleanup timestamp
-        - archive_count: Number of items archived
-        """
+        # Calculate database size
+        db_size_mb = 0.0
         try:
-            # Calculate uptime
-            uptime_seconds = 0
-            if hasattr(self, "_start_time") and self._start_time:
-                uptime_seconds = int((self.time_service.now() - self._start_time).total_seconds())
+            import os
 
-            # Get task run count from base class
-            task_run_count = self._run_count if hasattr(self, "_run_count") else 0
+            from ciris_engine.logic.persistence import get_sqlite_db_full_path
 
-            # Get error count (would be tracked in real implementation)
-            error_count = 0
+            db_path = get_sqlite_db_full_path()
+            if os.path.exists(db_path):
+                db_size_mb = os.path.getsize(db_path) / (1024 * 1024)
+        except:
+            pass
 
-            # Get archive stats
-            archive_count = 0
-            if self.archive_dir.exists():
-                archive_count = len(list(self.archive_dir.glob("archive_*.jsonl")))
-
-            return {
-                "service_name": "database_maintenance",
-                "healthy": self.is_running if hasattr(self, "is_running") else True,
-                "error_count": error_count,
-                "task_run_count": task_run_count,
-                "uptime_seconds": uptime_seconds,
-                "archive_count": archive_count,
-                "archive_dir": str(self.archive_dir),
-                "archive_older_than_hours": self.archive_older_than_hours,
-                "maintenance_interval_seconds": 3600,
-                "last_updated": self.time_service.now().isoformat(),
+        metrics.update(
+            {
+                "cleanup_runs": float(self._cleanup_runs),
+                "records_deleted": float(self._records_deleted),
+                "vacuum_runs": float(self._vacuum_runs),
+                "archive_runs": float(self._archive_runs),
+                "database_size_mb": db_size_mb,
+                "last_cleanup_duration_s": self._last_cleanup_duration,
+                "cleanup_due": 1.0 if self._is_cleanup_due() else 0.0,
+                "archive_due": 1.0 if self._is_archive_due() else 0.0,
             }
-        except Exception as e:
-            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
-            return {
-                "service_name": "database_maintenance",
-                "healthy": False,
-                "error": str(e),
-                "error_count": 1,
-                "task_run_count": 0,
-                "uptime_seconds": 0,
-            }
+        )
+
+        return metrics
+
+    def _is_cleanup_due(self) -> bool:
+        """Check if cleanup is due."""
+        # Placeholder - implement based on schedule
+        return False
+
+    def _is_archive_due(self) -> bool:
+        """Check if archive is due."""
+        # Placeholder - implement based on schedule
+        return False

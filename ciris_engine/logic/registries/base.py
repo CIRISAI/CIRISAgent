@@ -78,6 +78,13 @@ class ServiceRegistry:
             ServiceType.LLM,
         ]
 
+        # Metrics tracking
+        self._service_lookups = 0
+        self._service_hits = 0
+        self._service_misses = 0
+        self._health_check_failures = 0
+        self._circuit_breaker_opens = 0
+
     def register_service(
         self,
         service_type: ServiceType,
@@ -168,6 +175,8 @@ class ServiceRegistry:
         Returns:
             Service instance or None if no suitable service available
         """
+        self._service_lookups += 1
+
         logger.debug(
             f"ServiceRegistry.get_service: service_type='{service_type}' "
             f"({service_type.value if hasattr(service_type, 'value') else service_type}), "
@@ -189,9 +198,11 @@ class ServiceRegistry:
         service = await self._get_service_from_providers(providers, required_capabilities)
 
         if service is not None:
+            self._service_hits += 1
             logger.debug(f"Using {service_type} service: {type(service).__name__}")
             return service
 
+        self._service_misses += 1
         logger.warning(f"No available {service_type.value} service found " f"with capabilities {required_capabilities}")
         return None
 
@@ -258,6 +269,7 @@ class ServiceRegistry:
                 try:
                     is_healthy_result = await provider.instance.is_healthy()
                     if not is_healthy_result:
+                        self._health_check_failures += 1
                         logger.debug(f"Provider '{provider.name}' failed health check (returned {is_healthy_result})")
                         if provider.circuit_breaker:
                             provider.circuit_breaker.record_failure()
@@ -476,6 +488,38 @@ class ServiceRegistry:
     def _has_service_type(self, service_type: ServiceType) -> bool:
         """Check if any provider exists for the given service type."""
         return bool(self._services.get(service_type))
+
+    def get_metrics(self) -> Dict[str, float]:
+        """Get service registry metrics."""
+        from .circuit_breaker import CircuitState
+
+        total_services = sum(len(providers) for providers in self._services.values())
+        total_circuit_breakers = len(self._circuit_breakers)
+
+        # Count open circuit breakers
+        open_breakers = 0
+        for cb in self._circuit_breakers.values():
+            if cb.state == CircuitState.OPEN:
+                open_breakers += 1
+                self._circuit_breaker_opens = max(self._circuit_breaker_opens, open_breakers)
+
+        # Calculate hit rate
+        hit_rate = 0.0
+        if self._service_lookups > 0:
+            hit_rate = self._service_hits / self._service_lookups
+
+        return {
+            "registry_total_services": float(total_services),
+            "registry_service_types": float(len(self._services)),
+            "registry_circuit_breakers": float(total_circuit_breakers),
+            "registry_open_breakers": float(open_breakers),
+            "registry_service_lookups": float(self._service_lookups),
+            "registry_service_hits": float(self._service_hits),
+            "registry_service_misses": float(self._service_misses),
+            "registry_hit_rate": hit_rate,
+            "registry_health_check_failures": float(self._health_check_failures),
+            "registry_max_open_breakers": float(self._circuit_breaker_opens),
+        }
 
 
 _global_registry: Optional[ServiceRegistry] = None

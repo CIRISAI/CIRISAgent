@@ -1,0 +1,650 @@
+{
+  "timestamp": "2025-08-16T13:30:38.699438",
+  "results": {
+    "get_telemetry() and get_metrics() methods": {},
+    "Pull metrics (_collect_metrics/_collect_custom_metrics)": {
+      "telemetry": {
+        "metrics": [
+          "error_count",
+          "total_metrics_cached",
+          "max",
+          "user_count",
+          "uptime_seconds",
+          "count",
+          "event_value",
+          "summary_cache_entries",
+          "request_count",
+          "has_purpose",
+          "healthy",
+          "sum",
+          "error_rate",
+          "min",
+          "avg",
+          "unique_metric_types",
+          "max_cached_metrics_per_type"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "audit": {
+        "metrics": [
+          "hash_chain_enabled",
+          "error_count",
+          "metadata",
+          "uptime_seconds",
+          "cached_entries",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "pending_exports"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "memory": {
+        "metrics": [
+          "error_count",
+          "uptime_seconds",
+          "total_nodes",
+          "attributes",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "total_edges",
+          "graph_node_count"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "config": {
+        "metrics": [
+          "error_count",
+          "uptime_seconds",
+          "configs_total",
+          "configs_cached",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "config_listeners"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "incident_management": {
+        "metrics": [
+          "error_count",
+          "uptime_seconds",
+          "incidents_last_hour",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "incidents_last_24h"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "tsdb_consolidation": {
+        "metrics": [
+          "error_count",
+          "basic_consolidations",
+          "max",
+          "uptime_seconds",
+          "success_rate",
+          "request_count",
+          "last_consolidation_timestamp",
+          "extensive_consolidations",
+          "healthy",
+          "basic_task_running",
+          "profound_consolidations",
+          "records_consolidated",
+          "error_rate",
+          "min",
+          "last_extensive_consolidation",
+          "records_deleted",
+          "last_profound_consolidation"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "resource_monitor": {
+        "metrics": [
+          "error_count",
+          "task_run_count",
+          "uptime_seconds",
+          "request_count",
+          "task_error_rate",
+          "healthy",
+          "task_error_count",
+          "error_rate"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "authentication": {
+        "metrics": [
+          "created",
+          "uptime_seconds",
+          "observer_certificates",
+          "healthy",
+          "auto_minted",
+          "user_certificates",
+          "admin_certificates",
+          "certificate_count",
+          "token_validations",
+          "authority_certificates",
+          "error_count",
+          "active_tokens",
+          "expired_sessions",
+          "root_certificates",
+          "cached_tokens",
+          "total_tokens_cached",
+          "revoked_certificates",
+          "permission_checks",
+          "auth_successes",
+          "active_sessions",
+          "auth_contexts_cached",
+          "active_certificates",
+          "channel_tokens_cached",
+          "auth_attempts",
+          "role_assignments",
+          "iat",
+          "request_count",
+          "error_rate",
+          "auth_failures",
+          "last_login"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "shutdown": {
+        "metrics": [
+          "error_count",
+          "emergency_mode",
+          "uptime_seconds",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "shutdown_requested",
+          "registered_handlers"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "task_scheduler": {
+        "metrics": [
+          "tasks_scheduled",
+          "error_count",
+          "task_run_count",
+          "check_interval",
+          "uptime_seconds",
+          "recurring_tasks",
+          "deferred_at",
+          "request_count",
+          "tasks_completed",
+          "task_error_rate",
+          "active_tasks",
+          "task_error_count",
+          "healthy",
+          "error_rate",
+          "tasks_failed",
+          "tasks_triggered"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "initialization": {
+        "metrics": [
+          "error_count",
+          "uptime_seconds",
+          "initialization_complete",
+          "request_count",
+          "has_error",
+          "healthy",
+          "completed_steps",
+          "error_rate",
+          "total_steps"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "time": {
+        "metrics": [
+          "timestamp_requests",
+          "error_count",
+          "iso_requests",
+          "ntp_failures",
+          "uptime_seconds",
+          "ntp_check_count",
+          "uptime_requests",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "time_requests",
+          "total_requests"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "visibility": {
+        "metrics": [
+          "error_count",
+          "uptime_seconds",
+          "feed_subscribers",
+          "dsar_requests",
+          "transparency_requests",
+          "consent_updates",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "redaction_operations",
+          "export_operations",
+          "audit_requests"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "adaptive_filter": {
+        "metrics": [
+          "error_count",
+          "false_positive_reports",
+          "uptime_seconds",
+          "review_triggers",
+          "request_count",
+          "healthy",
+          "attention_triggers",
+          "error_rate",
+          "filter_count",
+          "llm_filters",
+          "total_messages_processed",
+          "total_filtered"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "wise_authority": {
+        "metrics": [
+          "error_count",
+          "total_deferrals",
+          "uptime_seconds",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "pending_deferrals",
+          "resolved_deferrals"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "llm": {
+        "metrics": [
+          "model_timeout_seconds",
+          "error_count",
+          "uptime_seconds",
+          "model_max_retries",
+          "consecutive_failures",
+          "request_count",
+          "failure_count",
+          "call_count",
+          "last_failure_age_seconds",
+          "healthy",
+          "successful_api_calls",
+          "error_rate",
+          "recovery_attempts",
+          "circuit_breaker_state",
+          "total_api_calls"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "runtime_control": {
+        "metrics": [
+          "error_count",
+          "adapters_loaded",
+          "uptime_seconds",
+          "runtime_errors",
+          "service_type",
+          "request_count",
+          "healthy",
+          "service_overrides_active",
+          "error",
+          "error_rate",
+          "events_count",
+          "thoughts_pending",
+          "thoughts_processed",
+          "queue_depth",
+          "messages_processed"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "secrets_tool": {
+        "metrics": [
+          "error_count",
+          "tool_errors",
+          "uptime_seconds",
+          "audit_events_generated",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "tool_executions"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "self_observation": {
+        "metrics": [
+          "uptime_seconds",
+          "data_points",
+          "healthy",
+          "emergency_stop",
+          "timestamp",
+          "patterns_detected",
+          "task_run_count",
+          "adaptation_count",
+          "task_error_rate",
+          "anomalies_detected",
+          "adaptations_triggered",
+          "task_error_count",
+          "changes_since_last_adaptation",
+          "error_count",
+          "observations_made",
+          "performance_checks",
+          "consecutive_failures",
+          "self_corrections",
+          "duration_seconds",
+          "model_updates",
+          "request_count",
+          "error_rate",
+          "learning_cycles"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "database_maintenance": {
+        "metrics": [
+          "error_count",
+          "task_run_count",
+          "vacuum_runs",
+          "uptime_seconds",
+          "cleanup_runs",
+          "request_count",
+          "task_error_rate",
+          "healthy",
+          "task_error_count",
+          "error_rate",
+          "records_deleted",
+          "archive_runs"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      },
+      "secrets": {
+        "metrics": [
+          "error_count",
+          "secrets_retrieved",
+          "filter_detections",
+          "decryption_operations",
+          "uptime_seconds",
+          "vault_size",
+          "failed_decryptions",
+          "request_count",
+          "healthy",
+          "error_rate",
+          "auto_encryptions",
+          "encryption_operations",
+          "secrets_stored",
+          "secrets_deleted"
+        ],
+        "mechanism": "PULL",
+        "storage": "NONE",
+        "availability": "on_request",
+        "version": "1.4.3"
+      }
+    },
+    "memorize_metric() calls": {
+      "all": [
+        "error.occurred"
+      ]
+    },
+    "Push metrics (record_metric -> TSDB)": {
+      "llm_bus": [
+        {
+          "name": "llm.latency.ms",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm.tokens.output",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm.tokens.input",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm.tokens.total",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm.environmental.energy_kwh",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm.environmental.carbon_grams",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm.cost.cents",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/buses/llm_bus.py",
+          "version": "1.4.2+"
+        }
+      ],
+      "unknown": [
+        {
+          "name": "llm_api_call_structured",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/services/runtime/llm_service.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "llm_tokens_used",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/services/runtime/llm_service.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "dma_failure",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/processors/core/thought_processor.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "thought_unauthorized",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/processors/core/thought_processor.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "thought_processing_started",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/processors/core/thought_processor.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "thought_not_found",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/processors/core/thought_processor.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "thought_processing_completed",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/processors/core/thought_processor.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "handler_error_total",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/infrastructure/handlers/action_dispatcher.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "handler_completed_total",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/infrastructure/handlers/action_dispatcher.py",
+          "version": "1.4.2+"
+        },
+        {
+          "name": "handler_invoked_total",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/infrastructure/handlers/action_dispatcher.py",
+          "version": "1.4.2+"
+        }
+      ],
+      "telemetry_service": [
+        {
+          "name": "telemetry_service.shutdown",
+          "mechanism": "PUSH",
+          "storage": "TSDB",
+          "availability": "historical",
+          "location": "logic/services/graph/telemetry_service.py",
+          "version": "1.4.2+"
+        }
+      ]
+    },
+    "Handler action metrics": {
+      "all": [
+        "handler_invoked_forget",
+        "handler_invoked_memorize",
+        "handler_invoked_ponder",
+        "action_selected_tool",
+        "handler_invoked_recall",
+        "handler_completed_defer",
+        "handler_error_recall",
+        "handler_completed_observe",
+        "handler_completed_speak",
+        "action_selected_speak",
+        "handler_error_defer",
+        "action_selected_memorize",
+        "handler_error_tool",
+        "handler_invoked_speak",
+        "action_selected_forget",
+        "handler_error_reject",
+        "action_selected_recall",
+        "handler_invoked_defer",
+        "handler_error_total",
+        "handler_invoked_total",
+        "handler_error_ponder",
+        "handler_completed_memorize",
+        "action_selected_ponder",
+        "handler_completed_forget",
+        "action_selected_defer",
+        "action_selected_task_complete",
+        "handler_invoked_observe",
+        "handler_invoked_task_complete",
+        "handler_error_observe",
+        "handler_completed_task_complete",
+        "handler_invoked_tool",
+        "handler_completed_reject",
+        "action_selected_reject",
+        "handler_error_forget",
+        "handler_error_memorize",
+        "handler_invoked_reject",
+        "handler_completed_recall",
+        "handler_completed_total",
+        "handler_error_speak",
+        "action_selected_observe",
+        "handler_completed_tool",
+        "handler_failed_total",
+        "handler_completed_ponder",
+        "handler_error_task_complete"
+      ]
+    }
+  }
+}

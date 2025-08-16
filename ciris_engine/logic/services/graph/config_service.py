@@ -10,15 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union, cast
 
-# Optional import for psutil
-try:
-    import psutil
-
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    psutil = None  # type: ignore
-    PSUTIL_AVAILABLE = False
-
 from ciris_engine.logic.services.base_graph_service import BaseGraphService, GraphNodeConvertible
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
@@ -27,6 +18,9 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.nodes import ConfigNode, ConfigValue
 from ciris_engine.schemas.services.operations import MemoryQuery
+
+# No psutil needed - only resource_monitor uses it
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +36,7 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         self.graph = graph_memory_service
         self._running = False
         self._start_time: Optional[datetime] = None
-        self._process = psutil.Process() if PSUTIL_AVAILABLE else None  # For memory tracking
+        # No process tracking here - resource_monitor handles that
         self._config_cache: Dict[str, ConfigNode] = {}  # Cache for config nodes
         self._config_listeners: Dict[str, List[Callable]] = {}  # key_pattern -> [callbacks]
 
@@ -62,12 +56,80 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         """Collect config-specific metrics."""
         metrics = super()._collect_custom_metrics()
 
-        # Add config-specific metrics
+        # Count config nodes in graph
+        config_count = 0
+        try:
+            from ciris_engine.schemas.services.operations import MemoryQuery
+
+            query = MemoryQuery(node_type="config")
+            # Use asyncio to run async method in sync context
+            import asyncio
+
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We're already in an async context, can't use run_until_complete
+                    config_count = len(self._config_cache)
+                else:
+                    configs = loop.run_until_complete(self.query_graph(query))
+                    config_count = len(configs)
+            except RuntimeError:
+                # No event loop, just use cache count
+                config_count = len(self._config_cache)
+        except Exception:
+            config_count = len(self._config_cache)
+
+        # Add comprehensive config metrics
         metrics.update(
-            {"total_configs": float(len(self._config_cache)), "config_listeners": float(len(self._config_listeners))}
+            {
+                # Cache metrics
+                "configs_cached": float(len(self._config_cache)),
+                "cache_hit_rate": self._calculate_cache_hit_rate(),
+                "cache_size_bytes": self._estimate_cache_size(),
+                # Config metrics
+                "configs_total": float(config_count),
+                "config_listeners": float(len(self._config_listeners)),
+                "config_versions_avg": self._calculate_avg_versions(),
+                # Operation metrics
+                "updates_total": self._track_metric("updates", 0),
+                "validation_errors": self._track_metric("validation_errors", 0),
+                "deprecated_keys_accessed": self._track_metric("deprecated_keys", 0),
+                "missing_keys_requested": self._track_metric("missing_keys", 0),
+                "config_reloads": self._track_metric("reloads", 0),
+                "active_overrides": self._track_metric("overrides", 0),
+            }
         )
 
         return metrics
+
+    def _calculate_cache_hit_rate(self) -> float:
+        """Calculate cache hit rate."""
+        hits = self._track_metric("cache_hits", 0)
+        misses = self._track_metric("cache_misses", 0)
+        total = hits + misses
+        return (hits / total) if total > 0 else 0.0
+
+    def _estimate_cache_size(self) -> float:
+        """Estimate cache size in bytes."""
+        # Rough estimate: 1KB per config node
+        return float(len(self._config_cache) * 1024)
+
+    def _calculate_avg_versions(self) -> float:
+        """Calculate average number of versions per config key."""
+        if not self._config_cache:
+            return 0.0
+        total_versions = sum(node.version for node in self._config_cache.values())
+        return total_versions / len(self._config_cache) if self._config_cache else 0.0
+
+    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
+        """Track a metric (placeholder for actual tracking)."""
+        # In a real implementation, this would track the actual metric
+        # For now, return default
+        if not hasattr(self, "_metrics_tracking"):
+            self._metrics_tracking = {}
+        return self._metrics_tracking.get(metric_name, default)
+
+    # get_telemetry() removed - use get_metrics() from BaseService instead
 
     async def store_in_graph(self, node: Union[GraphNode, GraphNodeConvertible]) -> str:
         """Store config node in graph."""

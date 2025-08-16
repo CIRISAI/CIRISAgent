@@ -112,6 +112,17 @@ class TSDBConsolidationService(BaseGraphService):
         self._last_profound_consolidation: Optional[datetime] = None
         self._start_time: Optional[datetime] = None
 
+        # Telemetry tracking variables
+        self._basic_consolidations = 0
+        self._extensive_consolidations = 0
+        self._profound_consolidations = 0
+        self._records_consolidated = 0
+        self._records_deleted = 0
+        self._compression_ratio = 1.0
+        self._last_consolidation_duration = 0.0
+        self._consolidation_errors = 0
+        self._start_time = None  # Will be set when service starts
+
     def _load_consolidation_config(self) -> None:
         """Load consolidation configuration from essential config."""
         # Fixed intervals for calendar alignment
@@ -1650,6 +1661,63 @@ class TSDBConsolidationService(BaseGraphService):
 
         except Exception as e:
             logger.error(f"Failed to create daily summary edges: {e}", exc_info=True)
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """Get TSDB consolidation service metrics.
+
+        Since TSDBConsolidationService doesn't inherit from BaseService,
+        we need to provide our own get_metrics implementation.
+        """
+        return self._collect_custom_metrics()
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect TSDB consolidation metrics."""
+        # BaseGraphService doesn't inherit from BaseService, so no super() call needed
+        # We provide all metrics directly here
+
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_start_time") and self._start_time:
+            from datetime import datetime, timezone
+
+            uptime_seconds = (datetime.now(timezone.utc) - self._start_time).total_seconds()
+
+        # Calculate next consolidation time
+        hours_until_next = 0.0
+        try:
+            from datetime import datetime, timezone
+
+            now = datetime.now(timezone.utc)
+            hours_until_next = 6 - (now.hour % 6)  # Every 6 hours
+        except:
+            pass
+
+        metrics = {
+            # Base-like metrics (since we don't inherit from BaseService)
+            "uptime_seconds": uptime_seconds,
+            "request_count": 0.0,  # TSDB doesn't handle requests
+            "error_count": float(self._consolidation_errors),
+            "error_rate": (
+                0.0
+                if self._basic_consolidations == 0
+                else float(self._consolidation_errors)
+                / float(self._basic_consolidations + self._extensive_consolidations + self._profound_consolidations)
+            ),
+            "healthy": 1.0 if self._started else 0.0,
+            # TSDB-specific metrics
+            "basic_consolidations": float(self._basic_consolidations),
+            "extensive_consolidations": float(self._extensive_consolidations),
+            "profound_consolidations": float(self._profound_consolidations),
+            "records_consolidated": float(self._records_consolidated),
+            "records_deleted": float(self._records_deleted),
+            "compression_ratio": self._compression_ratio,
+            "last_consolidation_duration_s": self._last_consolidation_duration,
+            "hours_until_next_consolidation": hours_until_next,
+            "consolidation_due": 1.0 if hours_until_next < 0.5 else 0.0,
+            "storage_target_mb_per_day": 20.0,  # Default target
+        }
+
+        return metrics
 
     def _run_profound_consolidation(self) -> None:
         """

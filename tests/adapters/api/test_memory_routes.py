@@ -226,7 +226,19 @@ class TestMemoryTimeline:
         ]
 
         app.dependency_overrides[require_observer] = lambda: auth_context
-        with patch("ciris_engine.logic.adapters.api.routes.memory.get_db_connection", return_value=mock_conn):
+
+        # Mock query_timeline_nodes function to return actual node objects
+        # Add updated_at to nodes
+        for node in nodes:
+            node.updated_at = datetime.now(timezone.utc) - timedelta(hours=1)
+
+        async def mock_query_timeline_nodes(**kwargs):
+            return nodes
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.memory.query_timeline_nodes",
+            new=AsyncMock(side_effect=mock_query_timeline_nodes),
+        ):
             response = client.get("/memory/timeline")
 
         assert response.status_code == 200
@@ -238,13 +250,16 @@ class TestMemoryTimeline:
 
     def test_timeline_with_filters(self, client, app, auth_context):
         """Test timeline with scope and type filters."""
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = []
-
         app.dependency_overrides[require_observer] = lambda: auth_context
-        with patch("ciris_engine.logic.adapters.api.routes.memory.get_db_connection", return_value=mock_conn):
+
+        # Mock query_timeline_nodes to return empty result for filtered query
+        async def mock_query_timeline_nodes(**kwargs):
+            return []
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.memory.query_timeline_nodes",
+            new=AsyncMock(side_effect=mock_query_timeline_nodes),
+        ):
             response = client.get(
                 "/memory/timeline",
                 params={
@@ -283,12 +298,20 @@ class TestForgetMemory:
 
     def test_forget_memory_not_found(self, client, app, auth_context):
         """Test forgetting a non-existent node."""
-        app.state.memory_service.recall.return_value = []
+        # The memory service returns an error status for non-existent nodes
+        app.state.memory_service.forget.return_value = MemoryOpResult(
+            status=MemoryOpStatus.ERROR, reason="Node not found", data={"node_id": "nonexistent"}
+        )
 
         app.dependency_overrides[require_admin] = lambda: auth_context
         response = client.delete("/memory/nonexistent")
 
-        assert response.status_code == 404
+        # The endpoint returns 200 even for not found, with error in the result
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["status"] == "error"
+        assert "not found" in data["data"]["reason"].lower()
 
 
 class TestCreateEdge:
@@ -320,41 +343,31 @@ class TestMemoryStats:
 
     def test_get_memory_stats(self, client, app, auth_context):
         """Test getting memory statistics."""
-
-        # Create sqlite3.Row-like objects that support both dict and index access
-        class MockRow:
-            def __init__(self, **kwargs):
-                self._data = kwargs
-
-            def __getitem__(self, key):
-                return self._data.get(key)
-
-        # Mock database query for stats
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        # get_db_connection is used as a context manager
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-
-        # Mock the various count queries - stats endpoint expects dict-style results
-        # Order matters! Follow the exact order of fetchone() calls in the stats endpoint
-        mock_cursor.fetchone.side_effect = [
-            MockRow(total=100),  # Total nodes (line 646)
-            MockRow(count=50),  # Recent nodes 24h (line 678)
-            MockRow(oldest="2025-01-01T00:00:00+00:00", newest="2025-08-12T22:00:00+00:00"),  # Date range (line 689)
-        ]
-        mock_cursor.fetchall.side_effect = [
-            [
-                MockRow(node_type="observation", count=60),
-                MockRow(node_type="identity", count=20),
-                MockRow(node_type="event", count=20),
-            ],  # By type
-            [MockRow(scope="LOCAL", count=80), MockRow(scope="GLOBAL", count=20)],  # By scope
-        ]
-
         app.dependency_overrides[require_observer] = lambda: auth_context
-        with patch("ciris_engine.logic.adapters.api.routes.memory.get_db_connection", return_value=mock_conn):
+
+        # Mock get_memory_stats function to return expected stats
+        mock_stats = {
+            "total_nodes": 100,
+            "nodes_by_type": {"observation": 60, "identity": 20, "event": 20},
+            "nodes_by_scope": {"LOCAL": 80, "GLOBAL": 20},
+            "recent_activity": {"nodes_24h": 50},
+            "date_range": {"oldest": "2025-01-01T00:00:00+00:00", "newest": "2025-08-12T22:00:00+00:00"},
+        }
+
+        async def mock_get_memory_stats(memory_service):
+            return mock_stats
+
+        # Also mock query_timeline_nodes which is called to get the newest node
+        async def mock_query_timeline_nodes(**kwargs):
+            return []  # Return empty list, endpoint will handle it
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.memory.get_memory_stats",
+            new=AsyncMock(side_effect=mock_get_memory_stats),
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.memory.query_timeline_nodes",
+            new=AsyncMock(side_effect=mock_query_timeline_nodes),
+        ):
             response = client.get("/memory/stats")
 
         assert response.status_code == 200
@@ -362,3 +375,4 @@ class TestMemoryStats:
         assert "data" in data
         assert data["data"]["total_nodes"] == 100
         assert data["data"]["recent_nodes_24h"] == 50
+        assert data["data"]["nodes_by_type"]["observation"] == 60

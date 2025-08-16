@@ -427,11 +427,8 @@ async def create_edge(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Store edge via memory service
-        result = await memory_service.store_edge(
-            edge=body.edge,
-            handler_name=f"api_user_{auth.user_id}",
-        )
+        # Create edge via memory service
+        result = await memory_service.create_edge(edge=body.edge)
 
         return SuccessResponse(
             data=result,

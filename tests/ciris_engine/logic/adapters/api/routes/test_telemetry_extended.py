@@ -75,13 +75,15 @@ def full_app():
     # Mock query_metrics to return data with trends
     async def mock_query_metrics(metric_name=None, start_time=None, end_time=None, **kwargs):
         """Mock query_metrics with realistic data for trend calculation."""
+        # Return data showing upward trend (values increasing over time)
+        # Most recent values are HIGHER to show "up" trend
         values = [
-            {"timestamp": datetime.now(timezone.utc).isoformat(), "value": 45.0, "tags": {}},
-            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(), "value": 42.0, "tags": {}},
-            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat(), "value": 40.0, "tags": {}},
-            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat(), "value": 38.0, "tags": {}},
-            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(), "value": 35.0, "tags": {}},
             {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(), "value": 30.0, "tags": {}},
+            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(), "value": 35.0, "tags": {}},
+            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat(), "value": 38.0, "tags": {}},
+            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat(), "value": 40.0, "tags": {}},
+            {"timestamp": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(), "value": 42.0, "tags": {}},
+            {"timestamp": datetime.now(timezone.utc).isoformat(), "value": 45.0, "tags": {}},  # Most recent is highest
         ]
         return values
 
@@ -175,32 +177,102 @@ def full_app():
             "processing_rate": 100.5,
         }
     )
-    visibility_service.get_task_history = AsyncMock(
-        return_value=[
-            {
-                "task_id": "task-001",
-                "name": "Process message",
-                "status": "completed",
-                "duration_ms": 150,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "result": "success",
-            },
-            {
-                "task_id": "task-002",
-                "name": "Generate response",
-                "status": "completed",
-                "duration_ms": 200,
-                "timestamp": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
-                "result": "success",
-            },
-        ]
-    )
+
+    # Create REAL task objects for proper tracing
+    class MockTask:
+        def __init__(self, task_id, description, minutes_ago=5):
+            self.task_id = task_id
+            self.description = description
+            self.created_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+            self.completed_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago - 3)
+            self.status = "completed"
+            self.duration_ms = 3000  # 3 seconds
+
+    task_history = [
+        MockTask("task-001", "Process telemetry metrics request", 10),
+        MockTask("task-002", "Analyze system performance data", 7),
+        MockTask("task-003", "Generate comprehensive report", 4),
+    ]
+    visibility_service.get_task_history = AsyncMock(return_value=task_history)
+
+    # Create REAL reasoning traces with rich thought data
+    class MockThoughtStep:
+        def __init__(self, content, depth, action, confidence):
+            self.content = content
+            self.timestamp = datetime.now(timezone.utc)
+            self.depth = depth
+            self.action = action
+            self.confidence = confidence
+
+    class MockReasoningTrace:
+        def __init__(self, task_id):
+            self.thought_steps = [
+                MockThoughtStep(f"Initializing analysis for {task_id}", 1, "initialize", 0.98),
+                MockThoughtStep(f"Gathering context for {task_id}", 1, "gather", 0.95),
+                MockThoughtStep(f"Identifying requirements for {task_id}", 2, "analyze", 0.93),
+                MockThoughtStep(f"Planning solution for {task_id}", 2, "plan", 0.90),
+                MockThoughtStep(f"Executing implementation for {task_id}", 3, "execute", 0.88),
+                MockThoughtStep(f"Validating results for {task_id}", 3, "validate", 0.85),
+            ]
+            self.max_depth = 3
+            self.decisions = [
+                {"action": "proceed", "confidence": 0.9},
+                {"action": "optimize", "confidence": 0.85},
+                {"action": "complete", "confidence": 0.95},
+            ]
+            self.outcome = "success"
+
+    async def mock_get_reasoning_trace(task_id):
+        return MockReasoningTrace(task_id)
+
+    visibility_service.get_reasoning_trace = AsyncMock(side_effect=mock_get_reasoning_trace)
     visibility_service.get_current_reasoning = AsyncMock(
         return_value={
-            "reasoning": "Analyzing request patterns",
-            "confidence": 0.95,
-            "alternatives": ["Alternative 1", "Alternative 2"],
-            "context": {"key": "value"},
+            "task_id": "current-active-task",
+            "task_description": "Real-time telemetry processing",
+            "depth": 3,
+            "thoughts": [
+                {
+                    "step": 0,
+                    "content": "Receiving telemetry request",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "depth": 1,
+                    "action": "receive",
+                    "confidence": 0.99,
+                },
+                {
+                    "step": 1,
+                    "content": "Parsing request parameters",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "depth": 1,
+                    "action": "parse",
+                    "confidence": 0.95,
+                },
+                {
+                    "step": 2,
+                    "content": "Validating authorization",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "depth": 2,
+                    "action": "validate",
+                    "confidence": 0.93,
+                },
+                {
+                    "step": 3,
+                    "content": "Querying telemetry services",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "depth": 2,
+                    "action": "query",
+                    "confidence": 0.90,
+                },
+                {
+                    "step": 4,
+                    "content": "Aggregating metrics data",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "depth": 3,
+                    "action": "aggregate",
+                    "confidence": 0.88,
+                },
+            ],
         }
     )
     visibility_service.get_metrics = Mock(
@@ -437,9 +509,24 @@ class TestMetricsEndpointExtended:
 
         data = response.json()["data"]
 
-        # With our mock data showing increasing values, trend should be "up"
+        # Check we have metrics
+        assert "metrics" in data
+        assert len(data["metrics"]) > 0, "Should have at least one metric"
+
+        # Each metric should have required fields
+        for metric in data["metrics"]:
+            assert "name" in metric
+            assert "current_value" in metric
+            assert "trend" in metric
+            assert metric["trend"] in ["up", "down", "stable"]
+            assert "hourly_average" in metric
+            assert "daily_average" in metric
+
+        # With our mock data showing increasing values, at least one should have "up" trend
         metrics_with_trends = [m for m in data["metrics"] if m["trend"] == "up"]
-        assert len(metrics_with_trends) > 0
+        assert (
+            len(metrics_with_trends) > 0
+        ), f"Expected at least one metric with 'up' trend, got {[m['trend'] for m in data['metrics']]}"
 
     def test_metrics_aggregation_all_types(self, client):
         """Test all aggregation types."""
@@ -489,41 +576,81 @@ class TestTracesEndpointExtended:
     """Extended tests for traces endpoint."""
 
     def test_traces_with_full_data(self, client):
-        """Test traces with complete task history."""
+        """Test traces with complete task history - VERIFY ROBUST TRACING."""
         response = client.get("/telemetry/traces")
         assert response.status_code == 200
 
         data = response.json()["data"]
-        assert "traces" in data
-        assert len(data.get("traces", [])) >= 0
 
-        # Verify trace structure
-        trace = data["traces"][0]
-        assert "trace_id" in trace
-        assert "operation" in trace
-        assert "duration_ms" in trace
-        assert "status" in trace
+        # CRITICAL: Traces must work for system observability
+        assert "traces" in data
+        assert isinstance(data["traces"], list)
+        assert len(data["traces"]) > 0, "Must have traces from mock task history"
+
+        # Verify TracesResponse schema compliance
+        assert "total" in data
+        assert data["total"] > 0
+        assert "has_more" in data
+
+        # VERIFY each ReasoningTraceData matches schema exactly
+        for trace in data["traces"]:
+            # All required ReasoningTraceData fields
+            assert "trace_id" in trace
+            assert trace["trace_id"].startswith("trace_")
+            assert "task_id" in trace
+            assert "task_description" in trace
+            assert "start_time" in trace
+            assert "duration_ms" in trace
+            assert trace["duration_ms"] >= 0
+            assert "thought_count" in trace
+            assert trace["thought_count"] > 0
+            assert "decision_count" in trace
+            assert trace["decision_count"] >= 0
+            assert "reasoning_depth" in trace
+            assert trace["reasoning_depth"] > 0
+            assert "thoughts" in trace
+            assert len(trace["thoughts"]) == trace["thought_count"]
+            assert "outcome" in trace
+
+            # VERIFY each ThoughtStep
+            for thought in trace["thoughts"]:
+                assert "step" in thought
+                assert "content" in thought
+                assert "timestamp" in thought
+                assert "depth" in thought
+                assert thought["depth"] > 0
+                assert "action" in thought
+                assert "confidence" in thought
 
     def test_traces_with_filters(self, client):
         """Test traces with various filters."""
-        # Test with status filter
-        response = client.get("/telemetry/traces?status=success")
+        # Test with limit filter (supported parameter)
+        response = client.get("/telemetry/traces?limit=5")
         assert response.status_code == 200
+        data = response.json()["data"]
+        assert len(data["traces"]) <= 5
 
-        # Test with time range
-        start = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-        end = datetime.now(timezone.utc).isoformat()
+        # Test with time range (supported parameters)
+        # Use Z format for UTC timezone which FastAPI accepts
+        start = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+        end = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         response = client.get(f"/telemetry/traces?start_time={start}&end_time={end}")
         assert response.status_code == 200
+        data = response.json()["data"]
+        assert "traces" in data
 
     def test_traces_with_reasoning(self, client):
         """Test traces includes reasoning data."""
-        response = client.get("/telemetry/traces?include_reasoning=true")
+        # The traces endpoint always includes reasoning data
+        response = client.get("/telemetry/traces")
         assert response.status_code == 200
 
         data = response.json()["data"]
-        # Should have reasoning in metadata or traces
+        # Verify traces have reasoning (thoughts)
         assert "traces" in data
+        for trace in data["traces"]:
+            assert "thoughts" in trace
+            assert len(trace["thoughts"]) > 0
 
 
 class TestLogsEndpointExtended:

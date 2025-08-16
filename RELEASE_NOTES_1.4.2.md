@@ -103,14 +103,22 @@ Intelligent routing system for specialized language models based on domain exper
 - **Service Registry**: Reverted get_services to async to maintain compatibility
 - **Model Selection**: Fixed test_get_available_models to match actual implementation
 - **FastAPI Compatibility**: Added response_model=None for mixed response types
+- **Managed User Attributes Protection**: Prevented LLM from corrupting system-managed user node attributes
+  - Added validation to block memorize operations on managed attributes (last_seen, created_at, trust_level, etc.)
+  - Implemented robust parsing with loud error logging for corrupted data
+  - Protects against template placeholders like '[insert current time]' in datetime fields
+  - Comprehensive test coverage for all 8 managed attributes
 
 ## 🔧 Code Quality Improvements
 
-### SonarCloud Issues Resolved (8 Critical/Major)
+### SonarCloud Issues Resolved (12 Critical/Major)
 - Reduced cognitive complexity in telemetry.py (68→15)
 - Reduced cognitive complexity in memory_bus.py (21→15)
 - Reduced cognitive complexity in tool_bus.py (26→15)
 - Reduced cognitive complexity in telemetry_service.py (16→15)
+- Reduced cognitive complexity in wise_bus.py (26→10, 17→10)
+- Eliminated code duplication in telemetry_models.py
+- Extracted nested conditional in memorize_handler.py for clarity
 - Fixed return type hints for Response objects
 - Removed unnecessary async keywords
 - Resolved constant expression issues
@@ -179,6 +187,12 @@ Special thanks to:
 ## 📝 Key Commits
 
 ```
+37c73e6c fix: Extract nested conditional expression for better readability
+e381ac65 fix: Add robust validation for managed user attributes in system_snapshot
+0d376317 fix: Prevent LLM from setting managed user attributes via memorize
+a82e9016 fix: Resolve SonarCloud issues in telemetry.py
+1d2006c4 fix: Move test_sdk_telemetry.py to tests directory
+ba32cbed docs: Add release notes for v1.4.2 and link from README
 e46e72f1 refactor: Critical refinement of prohibition categories
 37822626 fix: Correct terminology from Echo agents to Tier 4-5 stewardship agents
 5ab87f6a feat: Implement comprehensive prohibition system for WiseBus

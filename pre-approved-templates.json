@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "created_at": "2025-08-10T17:53:12.668204Z",
+  "created_at": "2025-08-17T04:01:00.155137Z",
   "templates": {
     "default": {
       "checksum": "sha256:cb7adf02f99e357c66e49f3d39a901fd9828b2d9e8803d291578fc04de4e4ecc",
@@ -15,11 +15,11 @@
       "description": "Scout - direct action demonstrator"
     },
     "echo-core": {
-      "checksum": "sha256:b298716bb805d83c37c03afa2e3ef74418e4944aa891281fd260590d1918009c",
+      "checksum": "sha256:8084992d909af97906103c186f180f43f4db3e01472db6422f34a8d65596d3a7",
       "description": "Echo-Core - general community moderation"
     },
     "echo-speculative": {
-      "checksum": "sha256:6b08513df5f2c27b852cf9446461e745246c5581d51be17701f2dc8a5a105f0a",
+      "checksum": "sha256:a75f4c8c0b67a48737f03d2b6a340e7ad40d8de8e5217dedb1f8d358f54ac531",
       "description": "Echo-Speculative - speculative discussion moderation"
     },
     "echo": {
@@ -27,6 +27,6 @@
       "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "CZUGZkCkkyYeT2plsOa/ItLKXHyhVDCcqg3+erGkIuOC8itmy7EOVWzh0Oy5IU6dgwdW3Iqit1VoHXOAxBovDA==",
+  "root_signature": "SVZ/jJFkXCOhchsqgSJehVSRNGeb16+KHFl4kBro7xBj2nQDrWaSL3pcxj8hfS94L26n25wCi50R0KB/M1kNAw==",
   "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
 }

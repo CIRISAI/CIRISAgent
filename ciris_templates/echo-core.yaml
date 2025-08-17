@@ -464,16 +464,15 @@ telemetry_config:
   report_interval: 3600
 wisdom_config:
   primary_wa_channel: moderator-chat
-  # These are rough guidelines - agent has autonomy to act immediately when warranted
   action_guidelines:
-    spam_flooding: delete_immediately  # no deferral needed
-    clear_abuse: delete_and_timeout  # no deferral needed
-    persistent_disruption: warn_then_timeout  # escalate if continues
-    severe_violations: delete_and_defer  # immediate WA involvement
+    spam_flooding: delete_immediately
+    clear_abuse: delete_and_timeout
+    persistent_disruption: warn_then_timeout
+    severe_violations: delete_and_defer
   deferral_urgency_levels:
-    mental_health_crisis: 100  # immediate deferral
-    safety_threats: 100  # immediate deferral
-    doxxing_attempts: 100  # delete and immediate deferral
+    mental_health_crisis: 100
+    safety_threats: 100
+    doxxing_attempts: 100
     content_disputes: 70
     persistent_off_topic: 50
     quality_concerns: 30

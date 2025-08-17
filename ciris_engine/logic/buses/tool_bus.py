@@ -308,7 +308,8 @@ class ToolBus(BaseBus[ToolService]):
             aggregated["processed_count"] += telemetry.get("tool_executions", 0)
 
             if "available_tools" in telemetry:
-                aggregated["unique_tools"].add(telemetry["available_tools"])
+                # Use update() to add each tool from the list, not add() which would add the list itself
+                aggregated["unique_tools"].update(telemetry["available_tools"])
 
     def _collect_metrics(self) -> dict[str, float]:
         """Collect base metrics for the tool bus."""

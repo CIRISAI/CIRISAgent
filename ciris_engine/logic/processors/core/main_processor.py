@@ -1276,15 +1276,11 @@ class AgentProcessor:
         return persistence.get_queue_status()
 
     def get_metrics(self) -> dict:
-        """
-        Get exactly the 4 specified metrics from the v1.4.3 set (362 metrics total).
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
-        Returns EXACTLY these metrics with real values from processor state:
-        - processor_thoughts_total: Total thoughts processed
-        - processor_actions_total: Total actions taken
-        - processor_state_transitions: State transitions count
-        - processor_current_state: Current cognitive state (as int)
-        """
+        # Add v1.4.3 specific metrics
         # Calculate total thoughts processed by aggregating from all state processors
         total_thoughts = 0
         total_actions = 0
@@ -1305,9 +1301,13 @@ class AgentProcessor:
         state_mapping = {"wakeup": 0, "work": 1, "play": 2, "solitude": 3, "dream": 4, "shutdown": 5}
         current_state_value = state_mapping.get(current_state_int.lower(), 0)
 
-        return {
-            "processor_thoughts_total": total_thoughts,
-            "processor_actions_total": total_actions,
-            "processor_state_transitions": state_transitions,
-            "processor_current_state": current_state_value,
-        }
+        metrics.update(
+            {
+                "processor_thoughts_total": total_thoughts,
+                "processor_actions_total": total_actions,
+                "processor_state_transitions": state_transitions,
+                "processor_current_state": current_state_value,
+            }
+        )
+
+        return metrics

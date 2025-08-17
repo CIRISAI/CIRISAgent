@@ -384,17 +384,11 @@ class ApiPlatform(Service):
         return not self._server_task.done()
 
     def get_metrics(self) -> dict[str, float]:
-        """Get API adapter metrics for v1.4.3 telemetry.
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
-        Returns exactly the four metrics requested from the 362 v1.4.3 set:
-        - api_requests_total: Total API requests handled
-        - api_errors_total: Total API errors
-        - api_response_time_ms: Average response time
-        - api_active_connections: Active connections
-
-        Returns:
-            Dict containing the four API metrics with real values from adapter state
-        """
+        # Add v1.4.3 specific metrics
         try:
             # Get metrics from communication service
             comm_status = self.communication.get_status()
@@ -408,22 +402,28 @@ class ApiPlatform(Service):
             errors_total = float(comm_metrics.get("error_count", 0))
             avg_response_time = float(comm_metrics.get("avg_response_time_ms", 0.0))
 
-            return {
-                "api_requests_total": requests_total,
-                "api_errors_total": errors_total,
-                "api_response_time_ms": avg_response_time,
-                "api_active_connections": float(active_connections),
-            }
+            metrics.update(
+                {
+                    "api_requests_total": requests_total,
+                    "api_errors_total": errors_total,
+                    "api_response_time_ms": avg_response_time,
+                    "api_active_connections": float(active_connections),
+                }
+            )
 
         except Exception as e:
             logger.warning(f"Failed to get API adapter metrics: {e}")
             # Return zeros on error rather than failing
-            return {
-                "api_requests_total": 0.0,
-                "api_errors_total": 0.0,
-                "api_response_time_ms": 0.0,
-                "api_active_connections": 0.0,
-            }
+            metrics.update(
+                {
+                    "api_requests_total": 0.0,
+                    "api_errors_total": 0.0,
+                    "api_response_time_ms": 0.0,
+                    "api_active_connections": 0.0,
+                }
+            )
+
+        return metrics
 
     async def run_lifecycle(self, agent_run_task: asyncio.Task[Any]) -> None:
         """Run the adapter lifecycle - API runs until agent stops."""

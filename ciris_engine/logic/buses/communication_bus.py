@@ -288,13 +288,21 @@ class CommunicationBus(BaseBus[CommunicationService]):
             logger.warning(f"Failed to send message to {resolved_channel_id} " f"via {type(service).__name__}")
 
     def get_metrics(self) -> dict:
-        """Return CommunicationBus metrics for v1.4.3 telemetry."""
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
         # Get active connections count from service registry
         active_connections = len(self.service_registry.get_services_by_type(ServiceType.COMMUNICATION))
 
-        return {
-            "communication_bus_messages_sent": float(self._messages_sent),
-            "communication_bus_messages_received": float(self._messages_received),
-            "communication_bus_broadcasts": float(self._broadcasts),
-            "communication_bus_connections": float(active_connections),
-        }
+        metrics.update(
+            {
+                "communication_bus_messages_sent": float(self._messages_sent),
+                "communication_bus_messages_received": float(self._messages_received),
+                "communication_bus_broadcasts": float(self._broadcasts),
+                "communication_bus_connections": float(active_connections),
+            }
+        )
+
+        return metrics

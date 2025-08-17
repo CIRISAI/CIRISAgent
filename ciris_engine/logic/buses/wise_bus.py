@@ -497,22 +497,25 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return best_response
 
-    def get_metrics(self) -> dict[str, int]:
-        """
-        Return EXACTLY the 4 v1.4.3 wise_bus metrics.
+    def get_metrics(self) -> dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
-        Returns:
-            Dictionary with wise_bus metrics using real values from bus state
-        """
+        # Add v1.4.3 specific metrics
         # Count active authorities (WiseAuthority services)
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
 
-        return {
-            "wise_bus_requests": self._requests_count,
-            "wise_bus_deferrals": self._deferrals_count,
-            "wise_bus_guidance": self._guidance_count,
-            "wise_bus_authorities": len(all_wa_services),
-        }
+        metrics.update(
+            {
+                "wise_bus_requests": float(self._requests_count),
+                "wise_bus_deferrals": float(self._deferrals_count),
+                "wise_bus_guidance": float(self._guidance_count),
+                "wise_bus_authorities": float(len(all_wa_services)),
+            }
+        )
+
+        return metrics
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process a wise authority message - currently all WA operations are synchronous"""

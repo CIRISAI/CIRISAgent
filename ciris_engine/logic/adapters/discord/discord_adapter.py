@@ -1168,17 +1168,11 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         )
 
     def get_metrics(self) -> Dict[str, float]:
-        """
-        Get Discord adapter metrics from the v1.4.3 set of 362 metrics.
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
-        Returns EXACTLY these 4 metrics:
-        - discord_messages_processed: Messages processed count
-        - discord_commands_handled: Commands handled
-        - discord_errors_total: Total Discord errors
-        - discord_guilds_active: Active guild count
-
-        All values are real from adapter state, not zeros.
-        """
+        # Add v1.4.3 specific metrics
         # Get active guild count from client if available
         guilds_active = 0.0
         if self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready():
@@ -1187,12 +1181,16 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             except Exception:
                 guilds_active = 0.0
 
-        return {
-            "discord_messages_processed": float(self._messages_processed),
-            "discord_commands_handled": float(self._commands_handled),
-            "discord_errors_total": float(self._errors_total),
-            "discord_guilds_active": guilds_active,
-        }
+        metrics.update(
+            {
+                "discord_messages_processed": float(self._messages_processed),
+                "discord_commands_handled": float(self._commands_handled),
+                "discord_errors_total": float(self._errors_total),
+                "discord_guilds_active": guilds_active,
+            }
+        )
+
+        return metrics
 
     async def _send_output(self, channel_id: str, content: str) -> None:
         """Send output to a Discord channel with retry logic"""

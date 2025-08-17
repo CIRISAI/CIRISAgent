@@ -472,12 +472,20 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             return []
 
     def get_metrics(self) -> Dict[str, float]:
-        """Get runtime control bus metrics for v1.4.3"""
-        return {
-            "runtime_bus_commands": float(self._commands_sent),
-            "runtime_bus_state_broadcasts": float(self._state_broadcasts),
-            "runtime_bus_emergency_stops": float(self._emergency_stops),
-        }
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "runtime_bus_commands": float(self._commands_sent),
+                "runtime_bus_state_broadcasts": float(self._state_broadcasts),
+                "runtime_bus_emergency_stops": float(self._emergency_stops),
+            }
+        )
+
+        return metrics
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process runtime control messages - most should be synchronous"""

@@ -310,15 +310,11 @@ class ToolBus(BaseBus[ToolService]):
                 aggregated["unique_tools"].add(telemetry["available_tools"])
 
     def get_metrics(self) -> dict[str, float]:
-        """Get tool bus metrics for v1.4.3 telemetry set.
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
-        Returns exactly these 3 metrics from the 362 v1.4.3 set:
-        - tool_bus_executions: Tool executions count
-        - tool_bus_errors: Tool errors count
-        - tool_bus_registered_tools: Number of registered tools
-
-        Uses real values from bus state, not zeros.
-        """
+        # Add v1.4.3 specific metrics
         # Use cached tools count if available (updated by collect_telemetry)
         # Otherwise fallback to service count estimation
         if self._cached_tools_count > 0:
@@ -329,11 +325,15 @@ class ToolBus(BaseBus[ToolService]):
             # Each service typically provides 3-10 tools
             registered_tools_count = len(tool_services) * 5  # Conservative estimate
 
-        return {
-            "tool_bus_executions": float(self._executions_count),
-            "tool_bus_errors": float(self._errors_count),
-            "tool_bus_registered_tools": float(registered_tools_count),
-        }
+        metrics.update(
+            {
+                "tool_bus_executions": float(self._executions_count),
+                "tool_bus_errors": float(self._errors_count),
+                "tool_bus_registered_tools": float(registered_tools_count),
+            }
+        )
+
+        return metrics
 
     async def collect_telemetry(self) -> dict[str, Any]:
         """

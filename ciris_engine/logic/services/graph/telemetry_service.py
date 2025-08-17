@@ -86,7 +86,7 @@ class TelemetryAggregator:
     provides aggregated views for different stakeholders.
     """
 
-    # Static service mappings - these NEVER change
+    # Service mappings - v1.4.3 validated (36 real source types)
     CATEGORIES = {
         "buses": ["llm_bus", "memory_bus", "communication_bus", "wise_bus", "tool_bus", "runtime_control_bus"],
         "graph": ["memory", "config", "telemetry", "audit", "incident_management", "tsdb_consolidation"],
@@ -96,19 +96,22 @@ class TelemetryAggregator:
             "initialization",
             "authentication",
             "resource_monitor",
-            "database_maintenance",
-            "secrets",
+            "database_maintenance",  # Has get_metrics() now
+            "secrets",  # SecretsService (not SecretsToolService)
         ],
         "governance": ["wise_authority", "adaptive_filter", "visibility", "self_observation"],
-        "runtime": ["llm", "runtime_control", "task_scheduler", "secrets_tool"],
-        "adapters": ["api", "discord", "cli"],  # API always present
+        "runtime": ["llm", "runtime_control", "task_scheduler"],
+        "tools": ["secrets_tool"],  # Separated from runtime for clarity
+        "adapters": ["api", "discord", "cli"],  # Each can spawn multiple instances
         "components": [
             "circuit_breaker",
             "processing_queue",
             "service_registry",
             "service_initializer",
-            "agent_processor",
+            "agent_processor",  # Has get_metrics() now
         ],
+        # New v1.4.3: Covenant/Ethics metrics (computed, not from services)
+        "covenant": [],  # Will be computed from governance services
     }
 
     def __init__(self, service_registry: Any, time_service: Any):
@@ -159,6 +162,9 @@ class TelemetryAggregator:
                     # Task timed out
                     telemetry[category][service_name] = self.get_fallback_metrics(service_name)
 
+        # Compute covenant metrics from governance services
+        telemetry["covenant"] = self.compute_covenant_metrics(telemetry)
+
         return telemetry
 
     async def collect_service(self, service_name: str) -> Dict[str, Any]:
@@ -167,6 +173,10 @@ class TelemetryAggregator:
             # Special handling for buses
             if service_name.endswith("_bus"):
                 return await self.collect_from_bus(service_name)
+
+            # Special handling for adapters - collect from ALL instances
+            if service_name in ["api", "discord", "cli"]:
+                return await self.collect_from_adapter_instances(service_name)
 
             # Get service from registry
             service = self._get_service_from_registry(service_name)
@@ -239,6 +249,59 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {bus_name}: {e}")
             return self.get_fallback_metrics(bus_name, healthy=False)
 
+    async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, Any]:
+        """
+        Collect telemetry from all instances of an adapter type.
+
+        Returns aggregated metrics with instance breakdowns.
+        Example: discord adapter might have discord_0567, discord_759F instances
+        """
+        aggregated = {
+            "type": adapter_type,
+            "total_instances": 0,
+            "instances": {},  # instance_id -> metrics
+            "aggregate": {
+                "total_requests": 0,
+                "total_errors": 0,
+                "total_connections": 0,
+            },
+        }
+
+        try:
+            # Get all adapter instances from registry
+            # Adapters register with instance IDs like "discord_0567"
+            if hasattr(self.service_registry, "get_adapter_instances"):
+                instances = self.service_registry.get_adapter_instances(adapter_type)
+
+                for instance_id, adapter in instances.items():
+                    if hasattr(adapter, "get_metrics"):
+                        instance_metrics = await adapter.get_metrics()
+                        aggregated["instances"][instance_id] = instance_metrics
+                        aggregated["total_instances"] += 1
+
+                        # Aggregate key metrics
+                        aggregated["aggregate"]["total_requests"] += instance_metrics.get("request_count", 0)
+                        aggregated["aggregate"]["total_errors"] += instance_metrics.get("error_count", 0)
+                        aggregated["aggregate"]["total_connections"] += instance_metrics.get("active_connections", 0)
+
+            # If no instance tracking available, fall back to single adapter
+            if aggregated["total_instances"] == 0:
+                # Try to get single adapter from registry
+                adapter = self._get_service_from_registry(adapter_type)
+                if adapter and hasattr(adapter, "get_metrics"):
+                    metrics = await adapter.get_metrics()
+                    aggregated["instances"]["default"] = metrics
+                    aggregated["total_instances"] = 1
+                    aggregated["aggregate"]["total_requests"] = metrics.get("request_count", 0)
+                    aggregated["aggregate"]["total_errors"] = metrics.get("error_count", 0)
+                    aggregated["aggregate"]["total_connections"] = metrics.get("active_connections", 0)
+
+            return aggregated
+
+        except Exception as e:
+            logger.error(f"Failed to collect from {adapter_type} instances: {e}")
+            return aggregated
+
     def get_fallback_metrics(self, *args, **kwargs) -> Dict[str, Any]:
         """NO FALLBACKS. Real metrics or nothing.
 
@@ -293,6 +356,54 @@ class TelemetryAggregator:
                     min_uptime = uptime
 
         return total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates
+
+    def compute_covenant_metrics(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute covenant/ethics metrics from governance services.
+
+        These metrics track ethical decision-making and covenant compliance.
+        """
+        covenant_metrics = {
+            "wise_authority_deferrals": 0,
+            "filter_interventions": 0,
+            "ethical_decisions": 0,
+            "covenant_compliance_rate": 1.0,
+            "transparency_score": 0.0,
+            "self_observation_insights": 0,
+        }
+
+        try:
+            # Extract from WiseAuthority metrics
+            if "governance" in telemetry and "wise_authority" in telemetry["governance"]:
+                wa_metrics = telemetry["governance"]["wise_authority"]
+                covenant_metrics["wise_authority_deferrals"] = wa_metrics.get("deferral_count", 0)
+                covenant_metrics["ethical_decisions"] = wa_metrics.get("guidance_requests", 0)
+
+            # Extract from AdaptiveFilter metrics
+            if "governance" in telemetry and "adaptive_filter" in telemetry["governance"]:
+                filter_metrics = telemetry["governance"]["adaptive_filter"]
+                covenant_metrics["filter_interventions"] = filter_metrics.get("filter_actions", 0)
+
+            # Extract from Visibility metrics
+            if "governance" in telemetry and "visibility" in telemetry["governance"]:
+                vis_metrics = telemetry["governance"]["visibility"]
+                covenant_metrics["transparency_score"] = vis_metrics.get("transparency_index", 0.0)
+
+            # Extract from SelfObservation metrics
+            if "governance" in telemetry and "self_observation" in telemetry["governance"]:
+                so_metrics = telemetry["governance"]["self_observation"]
+                covenant_metrics["self_observation_insights"] = so_metrics.get("insights_generated", 0)
+
+            # Calculate compliance rate (simplified - ratio of deferrals to decisions)
+            if covenant_metrics["ethical_decisions"] > 0:
+                covenant_metrics["covenant_compliance_rate"] = min(
+                    1.0, 1.0 - (covenant_metrics["filter_interventions"] / covenant_metrics["ethical_decisions"])
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to compute covenant metrics: {e}")
+
+        return covenant_metrics
 
     def calculate_aggregates(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate system-wide aggregate metrics."""

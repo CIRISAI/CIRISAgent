@@ -73,6 +73,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         self._auto_encryptions = 0
         self._failed_decryptions = 0
         self._rotation_count = 0
+        self._start_time = time_service.now()
 
     async def process_incoming_text(self, text: str, source_message_id: str) -> Tuple[str, List[SecretReference]]:
         """

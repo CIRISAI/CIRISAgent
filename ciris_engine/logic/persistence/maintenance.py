@@ -52,6 +52,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         self._vacuum_runs = 0
         self._archive_runs = 0
         self._last_cleanup_duration = 0.0
+        self._start_time = time_service.now()
 
     async def _run_scheduled_task(self) -> None:
         """
@@ -76,6 +77,37 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _final_cleanup(self) -> None:
         """Final cleanup before shutdown."""
         logger.info("Final maintenance cleanup executed.")
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get service metrics for telemetry."""
+        uptime = (self.time_service.now() - self._start_time).total_seconds() if hasattr(self, "_start_time") else 0
+
+        return {
+            "service_name": "database_maintenance",
+            "healthy": self.is_healthy,
+            "uptime_seconds": uptime,
+            "cleanup_runs": self._cleanup_runs,
+            "records_deleted": self._records_deleted,
+            "vacuum_runs": self._vacuum_runs,
+            "archive_runs": self._archive_runs,
+            "last_cleanup_duration_ms": self._last_cleanup_duration * 1000,
+            "archive_dir_size_mb": self._get_archive_size_mb(),
+            "next_run_seconds": self._time_until_next_run(),
+        }
+
+    def _get_archive_size_mb(self) -> float:
+        """Calculate archive directory size in MB."""
+        if not self.archive_dir.exists():
+            return 0.0
+        total_size = sum(f.stat().st_size for f in self.archive_dir.rglob("*") if f.is_file())
+        return total_size / (1024 * 1024)
+
+    def _time_until_next_run(self) -> int:
+        """Calculate seconds until next scheduled run."""
+        if hasattr(self, "_next_run_time") and self._next_run_time:
+            delta = (self._next_run_time - self.time_service.now()).total_seconds()
+            return max(0, int(delta))
+        return 0
 
     async def perform_startup_cleanup(self, time_service: Optional[TimeServiceProtocol] = None) -> None:
         """

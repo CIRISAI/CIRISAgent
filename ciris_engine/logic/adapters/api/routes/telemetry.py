@@ -1385,7 +1385,7 @@ async def get_unified_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/resources/history", response_model=ResourceHistoryResponse)
+@router.get("/resources/history", response_model=SuccessResponse)
 async def get_resource_history(
     request: Request,
     auth: AuthContext = Depends(require_observer),
@@ -1445,37 +1445,74 @@ async def get_resource_history(
                 return "decreasing"
             return "stable"
 
-        # Convert time series data to the ResourceMetricData format expected by ResourceHistoryResponse
+        # Convert time series data to ResourceTimeSeriesData format
         cpu_values = [d.get("value", 0) for d in cpu_data] if cpu_data else [0]
         memory_values = [d.get("value", 0) for d in memory_data] if memory_data else [0]
         disk_values = [d.get("value", 0) for d in disk_data] if disk_data else [0]
 
-        response = ResourceHistoryResponse(
-            period=TimePeriod(start=start_time.isoformat(), end=now.isoformat(), hours=hours),
-            cpu=ResourceMetricData(
-                current=cpu_values[-1] if cpu_values else 0,
-                average=sum(cpu_values) / len(cpu_values) if cpu_values else 0,
-                peak=max(cpu_values) if cpu_values else 0,
-                percentile_95=percentile_95(cpu_values),
-                trend=calc_trend(cpu_values),
-            ),
-            memory=ResourceMetricData(
-                current=memory_values[-1] if memory_values else 0,
-                average=sum(memory_values) / len(memory_values) if memory_values else 0,
-                peak=max(memory_values) if memory_values else 0,
-                percentile_95=percentile_95(memory_values),
-                trend=calc_trend(memory_values),
-            ),
-            disk=ResourceMetricData(
-                current=disk_values[-1] if disk_values else 0,
-                average=sum(disk_values) / len(disk_values) if disk_values else 0,
-                peak=max(disk_values) if disk_values else 0,
-                percentile_95=percentile_95(disk_values),
-                trend=calc_trend(disk_values),
+        # Create time series data points
+        cpu_points = [
+            ResourceDataPoint(
+                timestamp=datetime.fromisoformat(d.get("timestamp", now.isoformat())), value=d.get("value", 0)
+            )
+            for d in (cpu_data if cpu_data else [])
+        ]
+
+        memory_points = [
+            ResourceDataPoint(
+                timestamp=datetime.fromisoformat(d.get("timestamp", now.isoformat())), value=d.get("value", 0)
+            )
+            for d in (memory_data if memory_data else [])
+        ]
+
+        disk_points = [
+            ResourceDataPoint(
+                timestamp=datetime.fromisoformat(d.get("timestamp", now.isoformat())), value=d.get("value", 0)
+            )
+            for d in (disk_data if disk_data else [])
+        ]
+
+        # Create a different response format that matches the test expectations
+        response = {
+            "period": {"start": start_time.isoformat(), "end": now.isoformat(), "hours": hours},
+            "cpu": {
+                "data": cpu_points,
+                "stats": {
+                    "min": min(cpu_values) if cpu_values else 0,
+                    "max": max(cpu_values) if cpu_values else 0,
+                    "avg": sum(cpu_values) / len(cpu_values) if cpu_values else 0,
+                    "current": cpu_values[-1] if cpu_values else 0,
+                },
+                "unit": "percent",
+            },
+            "memory": {
+                "data": memory_points,
+                "stats": {
+                    "min": min(memory_values) if memory_values else 0,
+                    "max": max(memory_values) if memory_values else 0,
+                    "avg": sum(memory_values) / len(memory_values) if memory_values else 0,
+                    "current": memory_values[-1] if memory_values else 0,
+                },
+                "unit": "MB",
+            },
+            "disk": {
+                "data": disk_points,
+                "stats": {
+                    "min": min(disk_values) if disk_values else 0,
+                    "max": max(disk_values) if disk_values else 0,
+                    "avg": sum(disk_values) / len(disk_values) if disk_values else 0,
+                    "current": disk_values[-1] if disk_values else 0,
+                },
+                "unit": "GB",
+            },
+        }
+
+        return SuccessResponse(
+            data=response,
+            metadata=ResponseMetadata(
+                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
             ),
         )
-
-        return response
 
     except HTTPException:
         # Re-raise HTTPException as-is to preserve status code

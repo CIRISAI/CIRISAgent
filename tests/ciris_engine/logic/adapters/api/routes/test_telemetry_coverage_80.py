@@ -103,6 +103,22 @@ def app_with_detailed_services():
 
     telemetry_service.query_metrics = AsyncMock(side_effect=mock_query_metrics_detailed)
     telemetry_service.collect_all = AsyncMock(return_value={})
+
+    # Add get_aggregated_telemetry for unified endpoint
+    async def mock_get_aggregated_telemetry(view=None, category=None, format=None, live=False):
+        """Mock aggregated telemetry for unified endpoint."""
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "view": view or "summary",
+            "category": category,
+            "services": {"healthy": 19, "degraded": 2, "total": 21},
+            "metrics": {"total": 275, "per_second": 15.5},
+            "reliability": {"uptime": 99.9, "mtbf_hours": 720, "error_rate": 0.01},
+            "_metadata": {"cached": not live, "collection_time_ms": 50},
+        }
+
+    telemetry_service.get_aggregated_telemetry = AsyncMock(side_effect=mock_get_aggregated_telemetry)
+
     app.state.telemetry_service = telemetry_service
 
     # Time service

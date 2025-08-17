@@ -893,6 +893,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             "memory_operations_total": float(self._request_count),
             "memory_db_size_mb": storage_size_mb,
             "memory_uptime_seconds": uptime_seconds,
+            # Add secrets_enabled metric for test compatibility
+            "secrets_enabled": 1.0 if self.secrets_service else 0.0,
         }
 
         # Update with the exact v1.4.3 memory metrics

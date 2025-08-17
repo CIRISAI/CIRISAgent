@@ -224,18 +224,22 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
                 return
 
         # Create new config node with all required fields
+        now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         new_config = ConfigNode(
             # GraphNode required fields
             id=f"config_{key.replace('.', '_')}_{uuid.uuid4().hex[:8]}",
             # type will use default from ConfigNode
             scope=GraphScope.LOCAL,  # Config is always local scope
-            attributes={},  # Empty dict for base GraphNode
+            attributes={
+                "created_at": now.isoformat(),
+                "created_by": updated_by,
+            },  # Include created_at/created_by for compliance
             # ConfigNode specific fields
             key=key,
             value=config_value,
             version=(current.version + 1) if current else 1,
             updated_by=updated_by,
-            updated_at=self._time_service.now() if self._time_service else datetime.now(timezone.utc),
+            updated_at=now,
             previous_version=current.id if current else None,
         )
 

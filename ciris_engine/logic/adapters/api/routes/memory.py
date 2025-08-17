@@ -7,6 +7,7 @@ All operations work through the graph memory system.
 This is a refactored version with better modularity and testability.
 """
 
+import html
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -345,7 +346,13 @@ async def visualize_graph(
             height=height,
         )
 
-        # Wrap in HTML
+        # Safely escape user-controlled values to prevent XSS
+        safe_hours = html.escape(str(hours))
+        safe_layout = html.escape(str(layout))
+        safe_node_count = html.escape(str(len(nodes)))
+        safe_width = int(width) + 40  # Already validated as int by Query
+
+        # Wrap in HTML with escaped values
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -359,7 +366,7 @@ async def visualize_graph(
                     background: #f3f4f6;
                 }}
                 .container {{
-                    max-width: {width + 40}px;
+                    max-width: {safe_width}px;
                     margin: 0 auto;
                     background: white;
                     padding: 20px;
@@ -387,9 +394,9 @@ async def visualize_graph(
             <div class="container">
                 <h1>Memory Graph Visualization</h1>
                 <div class="stats">
-                    <strong>Time Range:</strong> Last {hours} hours<br>
-                    <strong>Nodes:</strong> {len(nodes)}<br>
-                    <strong>Layout:</strong> {layout}
+                    <strong>Time Range:</strong> Last {safe_hours} hours<br>
+                    <strong>Nodes:</strong> {safe_node_count}<br>
+                    <strong>Layout:</strong> {safe_layout}
                 </div>
                 <div class="svg-container">
                     {svg}

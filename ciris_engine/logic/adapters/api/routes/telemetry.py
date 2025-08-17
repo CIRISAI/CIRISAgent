@@ -411,9 +411,6 @@ async def get_telemetry_overview(
     except HTTPException:
         # Re-raise HTTPException as-is to preserve status code
         raise
-    except HTTPException:
-        # Re-raise HTTPException as-is to preserve status code
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -548,9 +545,6 @@ async def get_resource_telemetry(
             ),
         )
 
-    except HTTPException:
-        # Re-raise HTTPException as-is to preserve status code
-        raise
     except HTTPException:
         # Re-raise HTTPException as-is to preserve status code
         raise
@@ -1286,8 +1280,6 @@ async def get_detailed_metric(
         )
 
     except HTTPException:
-        raise
-    except HTTPException:
         # Re-raise HTTPException as-is to preserve status code
         raise
     except Exception as e:
@@ -1354,8 +1346,6 @@ async def get_unified_telemetry(
 
         return result
 
-    except HTTPException:
-        raise
     except HTTPException:
         # Re-raise HTTPException as-is to preserve status code
         raise

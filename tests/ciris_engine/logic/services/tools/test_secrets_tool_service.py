@@ -50,51 +50,49 @@ class TestSecretsToolService:
         assert "self_help" in tools
 
     @pytest.mark.asyncio
-    async def test_get_telemetry(self, tool_service):
+    async def test_get_metrics(self, tool_service):
         """Test getting telemetry data from secrets tool service."""
-        # Set up some metrics
+        # Set up some metrics (v1.4.3 uses different counters)
         tool_service._request_count = 10
-        tool_service._error_count = 2
+        tool_service._secrets_retrieved = 7  # Successful retrievals
         tool_service._start_time = tool_service._now()
 
-        telemetry = await tool_service.get_telemetry()
+        metrics = await tool_service.get_metrics()
 
-        # Check required fields
-        assert telemetry["service_name"] == "secrets_tool"
-        assert telemetry["healthy"] is True
-        assert telemetry["audit_events_generated"] == 10
-        assert telemetry["error_rate"] == 0.2
-        assert telemetry["success_rate"] == 0.8
-        assert telemetry["tool_executions"] == 10
-        assert telemetry["error_count"] == 2
-        assert telemetry["available_tools"] == 3
-        assert telemetry["uptime_seconds"] >= 0
-        assert "last_updated" in telemetry
+        # Check v1.4.3 metrics
+        assert "secrets_tool_invocations" in metrics
+        assert "secrets_tool_retrieved" in metrics
+        assert "secrets_tool_stored" in metrics
+        assert "secrets_tool_uptime_seconds" in metrics
+
+        # Check expected values
+        assert metrics["secrets_tool_invocations"] == 10.0
+        assert metrics["secrets_tool_retrieved"] == 7.0
+        assert metrics["secrets_tool_stored"] == 0.0  # This service only retrieves
+        assert metrics["secrets_tool_uptime_seconds"] >= 0
 
     @pytest.mark.asyncio
-    async def test_get_telemetry_no_requests(self, tool_service):
+    async def test_get_metrics_no_requests(self, tool_service):
         """Test telemetry when no requests have been made."""
-        telemetry = await tool_service.get_telemetry()
+        metrics = await tool_service.get_metrics()
 
-        assert telemetry["service_name"] == "secrets_tool"
-        assert telemetry["healthy"] is True
-        assert telemetry["error_rate"] == 0.0
-        assert telemetry["success_rate"] == 1.0
-        assert telemetry["tool_executions"] == 0
-        assert telemetry["error_count"] == 0
+        # v1.4.3 metrics - no generic metrics anymore
+        assert metrics["secrets_tool_invocations"] == 0.0
+        assert metrics["secrets_tool_retrieved"] == 0.0
+        assert metrics["secrets_tool_stored"] == 0.0
+        assert metrics["secrets_tool_uptime_seconds"] >= 0.0
 
     @pytest.mark.asyncio
-    async def test_get_telemetry_error_handling(self, tool_service):
+    async def test_get_metrics_error_handling(self, tool_service):
         """Test telemetry handles errors gracefully."""
         # Mock is_healthy to raise an exception
         tool_service.is_healthy = AsyncMock(side_effect=Exception("Test error"))
 
-        telemetry = await tool_service.get_telemetry()
+        metrics = await tool_service.get_metrics()
 
-        assert telemetry["service_name"] == "secrets_tool"
-        assert telemetry["healthy"] is False
-        assert telemetry["error"] == "Test error"
-        assert telemetry["error_count"] == 1
+        # v1.4.3: Should still return metrics even with health check errors
+        assert "secrets_tool_invocations" in metrics
+        assert "secrets_tool_uptime_seconds" in metrics
 
     @pytest.mark.asyncio
     async def test_get_all_tool_info(self, tool_service):

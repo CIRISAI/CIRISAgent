@@ -37,6 +37,11 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         self._emergency_mode = False
         self._force_kill_task: Optional[asyncio.Task] = None
 
+        # v1.4.3 metric tracking
+        self._shutdown_requests_total = 0
+        self._shutdown_graceful_total = 0
+        self._shutdown_emergency_total = 0
+
     async def start(self) -> None:
         """Start the service."""
         await super().start()
@@ -114,6 +119,33 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
         return metrics
 
+    def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all shutdown service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        with self._lock:
+            shutdown_requests_total = float(self._shutdown_requests_total)
+            shutdown_graceful_total = float(self._shutdown_graceful_total)
+            shutdown_emergency_total = float(self._shutdown_emergency_total)
+
+        # Calculate uptime from base service
+        shutdown_uptime_seconds = self._calculate_uptime()
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "shutdown_requests_total": shutdown_requests_total,
+                "shutdown_graceful_total": shutdown_graceful_total,
+                "shutdown_emergency_total": shutdown_emergency_total,
+                "shutdown_uptime_seconds": shutdown_uptime_seconds,
+            }
+        )
+
+        return metrics
+
     async def request_shutdown(self, reason: str) -> None:
         """
         Request system shutdown (async version).
@@ -139,6 +171,8 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
             self._shutdown_requested = True
             self._shutdown_reason = reason
+            self._shutdown_requests_total += 1
+            self._shutdown_graceful_total += 1
 
         logger.critical(f"SYSTEM SHUTDOWN REQUESTED: {reason}")
 
@@ -243,9 +277,12 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         logger.critical(f"EMERGENCY SHUTDOWN: {reason}")
 
         # Set emergency flags
-        self._shutdown_requested = True
-        self._shutdown_reason = f"EMERGENCY: {reason}"
-        self._emergency_mode = True
+        with self._lock:
+            self._shutdown_requested = True
+            self._shutdown_reason = f"EMERGENCY: {reason}"
+            self._emergency_mode = True
+            self._shutdown_requests_total += 1
+            self._shutdown_emergency_total += 1
 
         # Set shutdown event immediately
         if self._shutdown_event:

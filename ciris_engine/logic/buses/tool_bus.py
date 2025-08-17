@@ -35,6 +35,12 @@ class ToolBus(BaseBus[ToolService]):
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.TOOL, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
+
+        # Metrics tracking
+        self._executions_count = 0
+        self._errors_count = 0
+        self._cached_tools_count = 0  # Updated by collect_telemetry when available
 
     async def execute_tool(
         self, tool_name: str, parameters: dict, handler_name: str = "default"
@@ -80,6 +86,11 @@ class ToolBus(BaseBus[ToolService]):
         # Step 3: If no service supports this tool, return NOT_FOUND
         if not supporting_services:
             logger.error(f"No service supports tool: {tool_name}")
+
+            # Track error metrics
+            self._executions_count += 1
+            self._errors_count += 1
+
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.NOT_FOUND,
@@ -114,9 +125,20 @@ class ToolBus(BaseBus[ToolService]):
         try:
             logger.debug(f"Executing tool '{tool_name}' with {type(selected_service).__name__}")
             result: ToolExecutionResult = await selected_service.execute_tool(tool_name, parameters)
+
+            # Track metrics
+            self._executions_count += 1
+            if not result.success:
+                self._errors_count += 1
+
             return result
         except Exception as e:
             logger.error(f"Failed to execute tool {tool_name}: {e}", exc_info=True)
+
+            # Track error metrics
+            self._executions_count += 1
+            self._errors_count += 1
+
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.FAILED,
@@ -286,7 +308,49 @@ class ToolBus(BaseBus[ToolService]):
             aggregated["processed_count"] += telemetry.get("tool_executions", 0)
 
             if "available_tools" in telemetry:
-                aggregated["unique_tools"].add(telemetry["available_tools"])
+                # Use update() to add each tool from the list, not add() which would add the list itself
+                aggregated["unique_tools"].update(telemetry["available_tools"])
+
+    def _collect_metrics(self) -> dict[str, float]:
+        """Collect base metrics for the tool bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "tool_executions_total": float(self._executions_count),
+            "tool_execution_errors": float(self._errors_count),
+            "tools_available": float(self._cached_tools_count),
+            "tool_uptime_seconds": uptime_seconds,
+        }
+
+    def get_metrics(self) -> dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        # Use cached tools count if available (updated by collect_telemetry)
+        # Otherwise fallback to service count estimation
+        if self._cached_tools_count > 0:
+            registered_tools_count = self._cached_tools_count
+        else:
+            # Fallback: estimate based on number of tool services
+            tool_services = self._get_all_tool_services()
+            # Each service typically provides 3-10 tools
+            registered_tools_count = len(tool_services) * 5  # Conservative estimate
+
+        metrics.update(
+            {
+                "tool_bus_executions": float(self._executions_count),
+                "tool_bus_errors": float(self._errors_count),
+                "tool_bus_registered_tools": float(registered_tools_count),
+            }
+        )
+
+        return metrics
 
     async def collect_telemetry(self) -> dict[str, Any]:
         """
@@ -342,6 +406,10 @@ class ToolBus(BaseBus[ToolService]):
 
         # Count unique tools
         aggregated["total_tools"] = len(aggregated["unique_tools"])
+
+        # Cache the tools count for get_metrics()
+        self._cached_tools_count = aggregated["total_tools"]
+
         del aggregated["unique_tools"]  # Remove set from final result
 
         return aggregated

@@ -614,6 +614,44 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         if self.llm:
             self._dependencies.add("LLMService")
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all adaptive filter service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Calculate blocked messages (messages that didn't pass)
+        blocked_count = 0
+        passed_count = self._stats.total_messages_processed
+
+        if self._stats.by_priority:
+            # Messages with IGNORE priority are blocked
+            from ciris_engine.schemas.services.filters_core import FilterPriority
+
+            blocked_count = self._stats.by_priority.get(FilterPriority.IGNORE, 0)
+            passed_count = self._stats.total_messages_processed - blocked_count
+
+        # Count adaptations (filter config changes)
+        adaptations_count = 0
+        if self._config:
+            # Count triggers that have been modified (have non-zero true_positive_count)
+            all_triggers = self._config.attention_triggers + self._config.review_triggers + self._config.llm_filters
+            adaptations_count = sum(1 for trigger in all_triggers if trigger.true_positive_count > 0)
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "filter_messages_total": float(self._stats.total_messages_processed),
+                "filter_passed_total": float(passed_count),
+                "filter_blocked_total": float(blocked_count),
+                "filter_adaptations_total": float(adaptations_count),
+                "filter_uptime_seconds": float(self._calculate_uptime()),
+            }
+        )
+
+        return metrics
+
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""
         metrics = {

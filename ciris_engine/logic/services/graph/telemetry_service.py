@@ -86,7 +86,7 @@ class TelemetryAggregator:
     provides aggregated views for different stakeholders.
     """
 
-    # Static service mappings - these NEVER change
+    # Service mappings - v1.4.3 validated (36 real source types)
     CATEGORIES = {
         "buses": ["llm_bus", "memory_bus", "communication_bus", "wise_bus", "tool_bus", "runtime_control_bus"],
         "graph": ["memory", "config", "telemetry", "audit", "incident_management", "tsdb_consolidation"],
@@ -96,19 +96,22 @@ class TelemetryAggregator:
             "initialization",
             "authentication",
             "resource_monitor",
-            "database_maintenance",
-            "secrets",
+            "database_maintenance",  # Has get_metrics() now
+            "secrets",  # SecretsService (not SecretsToolService)
         ],
         "governance": ["wise_authority", "adaptive_filter", "visibility", "self_observation"],
-        "runtime": ["llm", "runtime_control", "task_scheduler", "secrets_tool"],
-        "adapters": ["api", "discord", "cli"],  # API always present
+        "runtime": ["llm", "runtime_control", "task_scheduler"],
+        "tools": ["secrets_tool"],  # Separated from runtime for clarity
+        "adapters": ["api", "discord", "cli"],  # Each can spawn multiple instances
         "components": [
             "circuit_breaker",
             "processing_queue",
             "service_registry",
             "service_initializer",
-            "agent_processor",
+            "agent_processor",  # Has get_metrics() now
         ],
+        # New v1.4.3: Covenant/Ethics metrics (computed, not from services)
+        "covenant": [],  # Will be computed from governance services
     }
 
     def __init__(self, service_registry: Any, time_service: Any):
@@ -154,10 +157,13 @@ class TelemetryAggregator:
                         telemetry[category][service_name] = result
                     except Exception as e:
                         logger.warning(f"Failed to collect from {service_name}: {e}")
-                        telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+                        telemetry[category][service_name] = {}  # NO FALLBACKS
                 else:
                     # Task timed out
                     telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+
+        # Compute covenant metrics from governance services
+        telemetry["covenant"] = self.compute_covenant_metrics(telemetry)
 
         return telemetry
 
@@ -168,38 +174,62 @@ class TelemetryAggregator:
             if service_name.endswith("_bus"):
                 return await self.collect_from_bus(service_name)
 
-            # Try to get service from registry
-            service = None
-            service_type_map = {
-                "memory": ServiceType.MEMORY,
-                "config": ServiceType.CONFIG,
-                "telemetry": ServiceType.TELEMETRY,
-                "audit": ServiceType.AUDIT,
-                "llm": ServiceType.LLM,
-                "wise_authority": ServiceType.WISE_AUTHORITY,
-                # Add more mappings as needed
-            }
+            # Special handling for adapters - collect from ALL instances
+            if service_name in ["api", "discord", "cli"]:
+                return await self.collect_from_adapter_instances(service_name)
 
-            if service_name in service_type_map:
-                service_type = service_type_map[service_name]
-                services = self.service_registry.get_services_by_type(service_type)
-                if services:
-                    service = services[0]
+            # Get service from registry
+            service = self._get_service_from_registry(service_name)
 
-            if service and hasattr(service, "get_telemetry"):
-                telemetry = await service.get_telemetry()
-                return telemetry if isinstance(telemetry, dict) else {}
-            elif service and hasattr(service, "get_status"):
-                status = service.get_status()
-                if asyncio.iscoroutine(status):
-                    status = await status
-                return self.status_to_telemetry(status)
-            else:
-                return self.get_fallback_metrics(service_name)
+            # Try different collection methods
+            metrics = await self._try_collect_metrics(service)
+            return metrics if metrics is not None else {}  # NO FALLBACKS
 
         except Exception as e:
             logger.error(f"Failed to collect from {service_name}: {e}")
-            return self.get_fallback_metrics(service_name, healthy=False)
+            return {}  # NO FALLBACKS - service failed
+
+    def _get_service_from_registry(self, service_name: str):
+        """Get service from registry by name."""
+        service_type_map = {
+            "memory": ServiceType.MEMORY,
+            "config": ServiceType.CONFIG,
+            "telemetry": ServiceType.TELEMETRY,
+            "audit": ServiceType.AUDIT,
+            "llm": ServiceType.LLM,
+            "wise_authority": ServiceType.WISE_AUTHORITY,
+        }
+
+        if service_name not in service_type_map:
+            return None
+
+        service_type = service_type_map[service_name]
+        services = self.service_registry.get_services_by_type(service_type)
+        return services[0] if services else None
+
+    async def _try_collect_metrics(self, service) -> Optional[Dict[str, Any]]:
+        """Try different methods to collect metrics from service."""
+        if not service:
+            return None
+
+        # Try get_metrics first
+        if hasattr(service, "get_metrics"):
+            metrics = await service.get_metrics()
+            return metrics if isinstance(metrics, dict) else {}
+
+        # Try _collect_metrics
+        if hasattr(service, "_collect_metrics"):
+            metrics = service._collect_metrics()
+            return metrics if isinstance(metrics, dict) else {}
+
+        # Try get_status
+        if hasattr(service, "get_status"):
+            status = service.get_status()
+            if asyncio.iscoroutine(status):
+                status = await status
+            return self.status_to_telemetry(status)
+
+        return None
 
     async def collect_from_bus(self, bus_name: str) -> Dict[str, Any]:
         """Collect telemetry from a message bus."""
@@ -219,18 +249,66 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {bus_name}: {e}")
             return self.get_fallback_metrics(bus_name, healthy=False)
 
-    def get_fallback_metrics(self, service_name: str, healthy: bool = True) -> Dict[str, Any]:
-        """Return fallback metrics when collection fails."""
-        return {
-            "service_name": service_name,
-            "healthy": healthy,
-            "available": healthy,
-            "uptime_seconds": 0,
-            "error_count": 0 if healthy else 1,
-            "error_rate": 0.0 if healthy else 1.0,
-            "request_count": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+    async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, Any]:
+        """
+        Collect telemetry from all instances of an adapter type.
+
+        Returns aggregated metrics with instance breakdowns.
+        Example: discord adapter might have discord_0567, discord_759F instances
+        """
+        aggregated = {
+            "type": adapter_type,
+            "total_instances": 0,
+            "instances": {},  # instance_id -> metrics
+            "aggregate": {
+                "total_requests": 0,
+                "total_errors": 0,
+                "total_connections": 0,
+            },
         }
+
+        try:
+            # Get all adapter instances from registry
+            # Adapters register with instance IDs like "discord_0567"
+            if hasattr(self.service_registry, "get_adapter_instances"):
+                instances = self.service_registry.get_adapter_instances(adapter_type)
+
+                for instance_id, adapter in instances.items():
+                    if hasattr(adapter, "get_metrics"):
+                        instance_metrics = await adapter.get_metrics()
+                        aggregated["instances"][instance_id] = instance_metrics
+                        aggregated["total_instances"] += 1
+
+                        # Aggregate key metrics
+                        aggregated["aggregate"]["total_requests"] += instance_metrics.get("request_count", 0)
+                        aggregated["aggregate"]["total_errors"] += instance_metrics.get("error_count", 0)
+                        aggregated["aggregate"]["total_connections"] += instance_metrics.get("active_connections", 0)
+
+            # If no instance tracking available, fall back to single adapter
+            if aggregated["total_instances"] == 0:
+                # Try to get single adapter from registry
+                adapter = self._get_service_from_registry(adapter_type)
+                if adapter and hasattr(adapter, "get_metrics"):
+                    metrics = await adapter.get_metrics()
+                    aggregated["instances"]["default"] = metrics
+                    aggregated["total_instances"] = 1
+                    aggregated["aggregate"]["total_requests"] = metrics.get("request_count", 0)
+                    aggregated["aggregate"]["total_errors"] = metrics.get("error_count", 0)
+                    aggregated["aggregate"]["total_connections"] = metrics.get("active_connections", 0)
+
+            return aggregated
+
+        except Exception as e:
+            logger.error(f"Failed to collect from {adapter_type} instances: {e}")
+            return aggregated
+
+    def get_fallback_metrics(self, *args, **kwargs) -> Dict[str, Any]:
+        """NO FALLBACKS. Real metrics or nothing.
+
+        Args are accepted for compatibility but ignored - no fake metrics.
+        """
+        # NO FAKE METRICS. Services must implement get_metrics() or they get nothing.
+        return {}
 
     def status_to_telemetry(self, status: Any) -> Dict[str, Any]:
         """Convert ServiceStatus to telemetry dict."""
@@ -260,7 +338,11 @@ class TelemetryAggregator:
         min_uptime = float("inf")
         error_rates = []
 
-        for category_data in telemetry.values():
+        for category_name, category_data in telemetry.items():
+            # Skip covenant category as it contains computed metrics, not service data
+            if category_name == "covenant":
+                continue
+
             for service_data in category_data.values():
                 total_services += 1
                 is_healthy, errors, requests, error_rate, uptime = self._process_service_metrics(service_data)
@@ -278,6 +360,54 @@ class TelemetryAggregator:
                     min_uptime = uptime
 
         return total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates
+
+    def compute_covenant_metrics(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute covenant/ethics metrics from governance services.
+
+        These metrics track ethical decision-making and covenant compliance.
+        """
+        covenant_metrics = {
+            "wise_authority_deferrals": 0,
+            "filter_interventions": 0,
+            "ethical_decisions": 0,
+            "covenant_compliance_rate": 1.0,
+            "transparency_score": 0.0,
+            "self_observation_insights": 0,
+        }
+
+        try:
+            # Extract from WiseAuthority metrics
+            if "governance" in telemetry and "wise_authority" in telemetry["governance"]:
+                wa_metrics = telemetry["governance"]["wise_authority"]
+                covenant_metrics["wise_authority_deferrals"] = wa_metrics.get("deferral_count", 0)
+                covenant_metrics["ethical_decisions"] = wa_metrics.get("guidance_requests", 0)
+
+            # Extract from AdaptiveFilter metrics
+            if "governance" in telemetry and "adaptive_filter" in telemetry["governance"]:
+                filter_metrics = telemetry["governance"]["adaptive_filter"]
+                covenant_metrics["filter_interventions"] = filter_metrics.get("filter_actions", 0)
+
+            # Extract from Visibility metrics
+            if "governance" in telemetry and "visibility" in telemetry["governance"]:
+                vis_metrics = telemetry["governance"]["visibility"]
+                covenant_metrics["transparency_score"] = vis_metrics.get("transparency_index", 0.0)
+
+            # Extract from SelfObservation metrics
+            if "governance" in telemetry and "self_observation" in telemetry["governance"]:
+                so_metrics = telemetry["governance"]["self_observation"]
+                covenant_metrics["self_observation_insights"] = so_metrics.get("insights_generated", 0)
+
+            # Calculate compliance rate (simplified - ratio of deferrals to decisions)
+            if covenant_metrics["ethical_decisions"] > 0:
+                covenant_metrics["covenant_compliance_rate"] = min(
+                    1.0, 1.0 - (covenant_metrics["filter_interventions"] / covenant_metrics["ethical_decisions"])
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to compute covenant metrics: {e}")
+
+        return covenant_metrics
 
     def calculate_aggregates(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate system-wide aggregate metrics."""
@@ -975,6 +1105,55 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         return metrics
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all telemetry service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Calculate telemetry-specific metrics using real service state
+
+        # Total metrics collected from cached metrics
+        total_metrics_collected = sum(len(metrics_list) for metrics_list in self._recent_metrics.values())
+
+        # Number of services monitored (from telemetry aggregator if available)
+        services_monitored = 0
+        if self._telemetry_aggregator:
+            # Count total services across all categories
+            for category, services_list in self._telemetry_aggregator.CATEGORIES.items():
+                services_monitored += len(services_list)
+        else:
+            # Fallback: count unique services from cached metrics
+            unique_services = set()
+            for metric_list in self._recent_metrics.values():
+                for metric in metric_list:
+                    if hasattr(metric, "tags") and metric.tags and "service" in metric.tags:
+                        unique_services.add(metric.tags["service"])
+            services_monitored = len(unique_services)
+
+        # Cache hits from summary cache
+        cache_hits = len(self._summary_cache)
+
+        # Collection errors from error count
+        collection_errors = metrics.get("error_count", 0.0)
+
+        # Service uptime in seconds
+        uptime_seconds = metrics.get("uptime_seconds", 0.0)
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "telemetry_metrics_collected": float(total_metrics_collected),
+                "telemetry_services_monitored": float(services_monitored),
+                "telemetry_cache_hits": float(cache_hits),
+                "telemetry_collection_errors": float(collection_errors),
+                "telemetry_uptime_seconds": float(uptime_seconds),
+            }
+        )
+
+        return metrics
+
     def get_node_type(self) -> str:
         """Get the type of nodes this service manages."""
         return "TELEMETRY"
@@ -1087,17 +1266,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         service_latency: Dict[str, List[float]] = {}
 
         try:
-            # Query different metric types
+            # Query different metric types - use actual metric names that exist
             metric_types = [
                 ("llm.tokens.total", "tokens"),
+                ("llm_tokens_used", "tokens"),  # Legacy metric name
+                ("llm.tokens.input", "tokens"),
+                ("llm.tokens.output", "tokens"),
                 ("llm.cost.cents", "cost"),
                 ("llm.environmental.carbon_grams", "carbon"),
                 ("llm.environmental.energy_kwh", "energy"),
                 ("llm.latency.ms", "latency"),
-                ("message.processed", "messages"),
-                ("thought.processed", "thoughts"),
-                ("task.completed", "tasks"),
-                ("error.occurred", "errors"),
+                ("thought_processing_completed", "thoughts"),
+                ("thought_processing_started", "thoughts"),
+                ("action_selected_task_complete", "tasks"),
+                ("handler_invoked_total", "messages"),  # Use handler invocations as proxy for messages
+                ("error.occurred", "errors"),  # This might not exist yet
             ]
 
             for metric_name, metric_type in metric_types:

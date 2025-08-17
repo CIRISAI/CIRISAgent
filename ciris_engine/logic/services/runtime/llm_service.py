@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import time
 from typing import Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 
 import instructor
@@ -118,12 +119,18 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         except Exception as e:
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
-        # Memory tracking (process is inherited from BaseService)
-        # Use proper types for response cache instead of Dict[str, Any]
-        from ciris_engine.schemas.services.llm import CachedLLMResponse
+        # Metrics tracking (no caching - we never cache LLM responses)
+        self._response_times = []  # List of response times in ms
+        self._max_response_history = 100  # Keep last 100 response times
+        self._total_api_calls = 0
+        self._successful_api_calls = 0
 
-        self._response_cache: Dict[str, CachedLLMResponse] = {}  # Typed response cache
-        self._max_cache_size = 100  # Maximum cache entries
+        # LLM-specific metrics tracking for v1.4.3 telemetry
+        self._total_requests = 0
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cost_cents = 0.0
+        self._total_errors = 0
 
     # Required BaseService abstract methods
 
@@ -192,17 +199,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""
-        import sys
-
         cb_stats = self.circuit_breaker.get_stats()
 
-        # Calculate cache size
-        cache_size_mb = 0.0
-        try:
-            cache_size = sys.getsizeof(self._response_cache)
-            cache_size_mb = cache_size / 1024 / 1024
-        except Exception:
-            pass
+        # Calculate average response time
+        avg_response_time_ms = 0.0
+        if self._response_times:
+            avg_response_time_ms = sum(self._response_times) / len(self._response_times)
+
+        # Calculate API success rate
+        api_success_rate = 0.0
+        if self._total_api_calls > 0:
+            api_success_rate = self._successful_api_calls / self._total_api_calls
 
         # Build custom metrics
         metrics = {
@@ -216,12 +223,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             "success_rate": cb_stats.get("success_rate", 1.0),
             "call_count": float(cb_stats.get("call_count", 0)),
             "failure_count": float(cb_stats.get("failure_count", 0)),
-            # Cache metrics
-            "cache_size_mb": cache_size_mb,
-            "cache_entries": float(len(self._response_cache)),
-            "response_cache_hit_rate": 0.0,  # TODO: Track cache hits
-            # Performance metrics
-            "avg_response_time_ms": 0.0,  # TODO: Track response times
+            # Performance metrics (no caching)
+            "avg_response_time_ms": avg_response_time_ms,
+            "max_response_time_ms": max(self._response_times) if self._response_times else 0.0,
+            "min_response_time_ms": min(self._response_times) if self._response_times else 0.0,
+            "total_api_calls": float(self._total_api_calls),
+            "successful_api_calls": float(self._successful_api_calls),
+            "api_success_rate": api_success_rate,
             # Model pricing info
             "model_cost_per_1k_tokens": 0.15 if "gpt-4o-mini" in self.model_name else 2.5,  # Cents
             "retry_delay_base": self.base_delay,
@@ -230,6 +238,28 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             "model_timeout_seconds": float(getattr(self.openai_config, "timeout_seconds", 30)),
             "model_max_retries": float(self.max_retries),
         }
+
+        return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all LLM metrics including base, custom, and v1.4.3 specific metrics.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific LLM metrics
+        metrics.update(
+            {
+                "llm_requests_total": float(self._total_requests),
+                "llm_tokens_input": float(self._total_input_tokens),
+                "llm_tokens_output": float(self._total_output_tokens),
+                "llm_tokens_total": float(self._total_input_tokens + self._total_output_tokens),
+                "llm_cost_cents": self._total_cost_cents,
+                "llm_errors_total": float(self._total_errors),
+                "llm_uptime_seconds": self._calculate_uptime(),
+            }
+        )
 
         return metrics
 
@@ -269,6 +299,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Make a structured LLM call with circuit breaker protection."""
         # Track the request
         self._track_request()
+        # Track LLM-specific request
+        self._total_requests += 1
 
         # No mock service integration - LLMService and MockLLMService are separate
         logger.debug(f"Structured LLM call for {response_model.__name__}")
@@ -337,6 +369,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                 total_cost_cents = input_cost_cents + output_cost_cents
 
+                # Track metrics for get_metrics() method
+                self._total_input_tokens += prompt_tokens
+                self._total_output_tokens += completion_tokens
+                self._total_cost_cents += total_cost_cents
+
                 # Estimate carbon footprint
                 # Energy usage varies by model size and hosting
                 if "llama" in self.model_name.lower() and "17B" in self.model_name:
@@ -373,6 +410,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self.circuit_breaker.record_failure()
                 # Track error in base service
                 self._track_error(e)
+                # Track LLM-specific error
+                self._total_errors += 1
                 logger.warning(f"LLM structured API error recorded by circuit breaker: {e}")
                 raise
             except Exception as e:
@@ -382,6 +421,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         logger.error(f"LLM structured timeout detected, circuit breaker recorded failure: {e}")
                         self.circuit_breaker.record_failure()
                         self._track_error(e)
+                        # Track LLM-specific error
+                        self._total_errors += 1
                         raise TimeoutError("LLM API timeout in structured call - circuit breaker activated") from e
                 # Re-raise other exceptions
                 raise

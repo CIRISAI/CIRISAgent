@@ -273,7 +273,7 @@ async def request_permissions(
     # Store the updated user
     auth_service._users[user.wa_id] = user
 
-    logger.info(f"Permission request submitted by user {user.oauth_email or user.name} (ID: {user.wa_id})")
+    logger.info(f"Permission request submitted by user ID: {user.wa_id}")
 
     return PermissionRequestResponse(
         success=True,

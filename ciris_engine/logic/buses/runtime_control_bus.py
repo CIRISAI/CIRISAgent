@@ -50,10 +50,16 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.RUNTIME_CONTROL, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         # Track ongoing operations to prevent conflicts
         self._active_operations: Dict[str, asyncio.Task] = {}
         self._operation_lock = asyncio.Lock()
         self._shutting_down = False
+
+        # Metrics tracking for v1.4.3
+        self._commands_sent = 0
+        self._state_broadcasts = 0
+        self._emergency_stops = 0
 
     async def get_processor_queue_status(self, handler_name: str = "default") -> ProcessorQueueStatus:
         """Get processor queue status"""
@@ -74,6 +80,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             )
 
         try:
+            self._commands_sent += 1
             return await service.get_processor_queue_status()
         except Exception as e:
             logger.error(f"Failed to get queue status: {e}", exc_info=True)
@@ -115,6 +122,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             try:
                 logger.warning(f"RUNTIME SHUTDOWN triggered by {handler_name}: reason='{reason}'")
                 self._shutting_down = True
+                self._emergency_stops += 1
 
                 # Cancel all active operations
                 for op_name, task in self._active_operations.items():
@@ -149,6 +157,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             )
 
         try:
+            self._commands_sent += 1
             return await service.get_config(path, include_sensitive)
         except Exception as e:
             logger.error(f"Failed to get config: {e}", exc_info=True)
@@ -163,7 +172,9 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             return {"status": "error", "message": "Runtime control service unavailable"}
 
         try:
+            self._commands_sent += 1
             response = await service.get_runtime_status()
+            self._state_broadcasts += 1
 
             # Convert RuntimeStatusResponse to dict and add bus-level status
             status_dict = {
@@ -218,6 +229,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
 
         try:
             logger.info(f"Loading adapter {adapter_id} of type {adapter_type}")
+            self._commands_sent += 1
             operation_response = await service.load_adapter(adapter_type, adapter_id, config, auto_start)
             # Convert AdapterOperationResponse to AdapterInfo
             return AdapterInfo(
@@ -317,6 +329,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
 
             try:
                 logger.info(f"Pausing processor requested by {handler_name}")
+                self._commands_sent += 1
                 response = await service.pause_processing()
                 result = response.success
 
@@ -346,6 +359,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
 
             try:
                 logger.info(f"Resuming processor requested by {handler_name}")
+                self._commands_sent += 1
                 response = await service.resume_processing()
                 result = response.success
 
@@ -375,6 +389,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
 
             try:
                 logger.debug(f"Single step requested by {handler_name}")
+                self._commands_sent += 1
                 response = await service.single_step()
 
                 if response.success:
@@ -456,6 +471,37 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
         except Exception as e:
             logger.error(f"Failed to get capabilities: {e}")
             return []
+
+    def _collect_metrics(self) -> Dict[str, float]:
+        """Collect base metrics for the runtime control bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "runtime_control_commands": float(self._commands_sent),
+            "runtime_control_state_queries": float(self._state_broadcasts),
+            "runtime_control_emergency_stops": float(self._emergency_stops),
+            "runtime_control_uptime_seconds": uptime_seconds,
+        }
+
+    def get_metrics(self) -> Dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "runtime_bus_commands": float(self._commands_sent),
+                "runtime_bus_state_broadcasts": float(self._state_broadcasts),
+                "runtime_bus_emergency_stops": float(self._emergency_stops),
+            }
+        )
+
+        return metrics
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process runtime control messages - most should be synchronous"""

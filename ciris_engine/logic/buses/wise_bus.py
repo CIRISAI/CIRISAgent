@@ -37,10 +37,19 @@ class WiseBus(BaseBus[WiseAuthorityService]):
     - Comprehensive capability prohibition with tier-based access
     """
 
+    # Import prohibited capabilities from the prohibitions module
+    PROHIBITED_CAPABILITIES = PROHIBITED_CAPABILITIES
+
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.WISE_AUTHORITY, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         self._agent_tier: Optional[int] = None  # Cached agent tier
+
+        # Metrics tracking
+        self._requests_count = 0
+        self._deferrals_count = 0
+        self._guidance_count = 0
 
     async def _get_tier_from_config(self) -> Optional[int]:
         """Try to get agent tier from configuration service."""
@@ -207,6 +216,10 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     logger.warning(f"Failed to send deferral to WA service {service.__class__.__name__}: {e}")
                     continue
 
+            # Track deferral count if any service received it
+            if any_success:
+                self._deferrals_count += 1
+
             return any_success
         except Exception as e:
             logger.error(f"Failed to prepare deferral request: {e}", exc_info=True)
@@ -222,6 +235,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         try:
             result = await service.fetch_guidance(context)
+            if result is not None:
+                self._guidance_count += 1
             return str(result) if result is not None else None
         except Exception as e:
             logger.error(f"Failed to fetch guidance: {e}", exc_info=True)
@@ -375,6 +390,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             ValueError: If capability is prohibited for the agent's tier
             RuntimeError: If no WiseAuthority service is available
         """
+        # Track request count
+        self._requests_count += 1
+
         # Auto-detect agent tier if not provided
         if agent_tier is None:
             agent_tier = await self.get_agent_tier()
@@ -482,6 +500,52 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         )
 
         return best_response
+
+    def _is_capability_allowed(self, capability: str) -> bool:
+        """Check if a capability is allowed (not prohibited)."""
+        capability_lower = capability.lower()
+
+        # PROHIBITED_CAPABILITIES is a dict of categories, each containing a set of capabilities
+        for category, capabilities_set in PROHIBITED_CAPABILITIES.items():
+            for prohibited_cap in capabilities_set:
+                if capability_lower == prohibited_cap.lower() or prohibited_cap.lower() in capability_lower:
+                    return False
+        return True
+
+    def _collect_metrics(self) -> dict[str, float]:
+        """Collect base metrics for the wise bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "wise_guidance_requests": float(self._requests_count),
+            "wise_guidance_deferrals": float(self._deferrals_count),
+            "wise_guidance_responses": float(self._guidance_count),
+            "wise_uptime_seconds": uptime_seconds,
+        }
+
+    def get_metrics(self) -> dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        # Count active authorities (WiseAuthority services)
+        all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+
+        metrics.update(
+            {
+                "wise_bus_requests": float(self._requests_count),
+                "wise_bus_deferrals": float(self._deferrals_count),
+                "wise_bus_guidance": float(self._guidance_count),
+                "wise_bus_authorities": float(len(all_wa_services)),
+            }
+        )
+
+        return metrics
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process a wise authority message - currently all WA operations are synchronous"""

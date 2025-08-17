@@ -31,6 +31,10 @@ from ..constants import (
 )
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
+# Error message constants to avoid duplication
+ERROR_TELEMETRY_NOT_INITIALIZED = "Critical system failure: Telemetry service not initialized"
+ERROR_AUDIT_NOT_INITIALIZED = "Critical system failure: Audit service not initialized"
+
 # Import extracted modules
 from .telemetry_converters import convert_to_graphite, convert_to_prometheus
 from .telemetry_helpers import get_telemetry_fallback, get_telemetry_from_service
@@ -38,14 +42,22 @@ from .telemetry_models import (
     LogEntry,
     MetricData,
     MetricSeries,
+    ResourceDataPoint,
     ResourceHistoryResponse,
     ResourceMetricData,
+    ResourceMetricStats,
     ResourceUsage,
     ServiceHealth,
     ServiceHealthOverview,
     SystemOverview,
     TimePeriod,
     TraceSpan,
+)
+from .telemetry_resource_helpers import (
+    MetricValueExtractor,
+    ResourceDataPointBuilder,
+    ResourceMetricBuilder,
+    ResourceMetricsCollector,
 )
 
 logger = logging.getLogger(__name__)
@@ -214,13 +226,19 @@ async def _update_visibility_state(overview: SystemOverview, visibility_service)
 
 async def _get_system_overview(request: Request) -> SystemOverview:
     """Build comprehensive system overview from all services."""
-    # Get core services
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
-    visibility_service = getattr(request.app.state, "visibility_service", None)
-    time_service = getattr(request.app.state, "time_service", None)
-    resource_monitor = getattr(request.app.state, "resource_monitor", None)
-    incident_service = getattr(request.app.state, "incident_management_service", None)
-    wise_authority = getattr(request.app.state, "wise_authority", None)
+    # Get core services - THESE MUST EXIST
+    telemetry_service = request.app.state.telemetry_service
+    visibility_service = request.app.state.visibility_service
+    time_service = request.app.state.time_service
+    resource_monitor = request.app.state.resource_monitor
+    incident_service = request.app.state.incident_management_service
+    wise_authority = request.app.state.wise_authority
+
+    # If any critical service is missing, we have a system failure
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
+    if not time_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Time service not initialized")
 
     # Initialize overview with all required fields
     overview = SystemOverview(
@@ -347,13 +365,12 @@ async def _get_system_overview(request: Request) -> SystemOverview:
             elif hasattr(telemetry_service, "query_metrics"):
                 # Estimate from common metrics
                 metric_names = [
-                    "messages_processed",
-                    "thoughts_processed",
-                    "tasks_completed",
-                    "errors",
-                    "tokens_consumed",
-                    "api_requests",
-                    "memory_operations",
+                    "llm.tokens.total",  # Total tokens used
+                    "llm_tokens_used",  # Legacy token metric
+                    "thought_processing_completed",  # Thoughts completed
+                    "action_selected_task_complete",  # Tasks completed
+                    "handler_invoked_total",  # Total handler invocations
+                    "action_selected_memorize",  # Memory operations
                 ]
                 total = 0
                 for metric in metric_names:
@@ -401,6 +418,9 @@ async def get_telemetry_overview(
                 timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
             ),
         )
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -412,6 +432,7 @@ class ResourceUsageData(BaseModel):
     memory_mb: float = Field(..., description="Memory usage in MB")
     memory_percent: float = Field(..., description="Memory usage percentage")
     disk_usage_bytes: int = Field(0, description="Disk usage in bytes")
+    disk_usage_gb: float = Field(0.0, description="Disk usage in GB")
     active_threads: int = Field(0, description="Number of active threads")
     open_files: int = Field(0, description="Number of open files")
     timestamp: str = Field(..., description="Timestamp of measurement")
@@ -458,11 +479,14 @@ async def get_resource_telemetry(
 
     Returns CPU, memory, disk, and other resource metrics.
     """
-    resource_monitor = getattr(request.app.state, "resource_monitor", None)
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # These services MUST exist - if they don't, we have a critical failure
+    resource_monitor = request.app.state.resource_monitor
+    telemetry_service = request.app.state.telemetry_service
 
     if not resource_monitor:
-        raise HTTPException(status_code=503, detail="Resource monitor not available")
+        raise HTTPException(status_code=503, detail="Critical system failure: Resource monitor service not initialized")
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         # Get current resource usage
@@ -472,7 +496,7 @@ async def get_resource_telemetry(
         limits = resource_monitor.budget
 
         # Get historical data if available
-        history = []
+        history_points = []
         if telemetry_service and hasattr(telemetry_service, "query_metrics"):
             now = datetime.now(timezone.utc)
             hour_ago = now - timedelta(hours=1)
@@ -487,46 +511,40 @@ async def get_resource_telemetry(
                 metric_name="memory_mb", start_time=hour_ago, end_time=now
             )
 
-            # Combine histories
+            # Build history points
             for i in range(min(len(cpu_history), len(memory_history))):
-                history.append(
-                    {
-                        "timestamp": cpu_history[i].get("timestamp", now),
-                        "cpu_percent": cpu_history[i].get("value", 0.0),
-                        "memory_mb": memory_history[i].get("value", 0.0),
-                    }
+                history_points.append(
+                    ResourceHistoryPoint(
+                        timestamp=cpu_history[i].get("timestamp", now),
+                        cpu_percent=cpu_history[i].get("value", 0.0),
+                        memory_mb=memory_history[i].get("value", 0.0),
+                    )
                 )
 
-        # Build history points
-        history_points = []
-        for i in range(min(len(cpu_history), len(memory_history))):
-            history_points.append(
-                ResourceHistoryPoint(
-                    timestamp=cpu_history[i].get("timestamp", now),
-                    cpu_percent=cpu_history[i].get("value", 0.0),
-                    memory_mb=memory_history[i].get("value", 0.0),
-                )
-            )
+        # Convert disk bytes to GB for the response
+        disk_bytes = getattr(current_usage, "disk_usage_bytes", 0)
+        disk_gb = disk_bytes / (1024 * 1024 * 1024) if disk_bytes > 0 else 0.0
 
         response = ResourceTelemetryResponse(
             current=ResourceUsageData(
                 cpu_percent=current_usage.cpu_percent,
                 memory_mb=current_usage.memory_mb,
                 memory_percent=current_usage.memory_percent,
-                disk_usage_bytes=getattr(current_usage, "disk_usage_bytes", 0),
+                disk_usage_bytes=disk_bytes,
+                disk_usage_gb=disk_gb,
                 active_threads=getattr(current_usage, "active_threads", 0),
                 open_files=getattr(current_usage, "open_files", 0),
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
             limits=ResourceLimits(
-                max_memory_mb=limits.memory_mb.limit if hasattr(limits.memory_mb, "limit") else 0,
-                max_cpu_percent=100.0,
+                max_memory_mb=getattr(limits, "max_memory_mb", 2048.0),
+                max_cpu_percent=getattr(limits, "max_cpu_percent", 100.0),
                 max_disk_bytes=getattr(limits, "max_disk_bytes", 0),
             ),
             history=history_points[-60:],  # Last hour of data
             health=ResourceHealthStatus(
                 status="healthy" if current_usage.memory_percent < 80 and current_usage.cpu_percent < 80 else "warning",
-                warnings=current_usage.warnings,
+                warnings=getattr(current_usage, "warnings", []),
             ),
         )
 
@@ -537,6 +555,9 @@ async def get_resource_telemetry(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -550,23 +571,28 @@ async def get_detailed_metrics(
 
     Get detailed metrics with trends and breakdowns by service.
     """
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # Telemetry service MUST exist - if it doesn't, we have a critical failure
+    telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
-        # Common metrics to query
+        # Common metrics to query - use actual metric names that exist in TSDB nodes
         metric_names = [
-            "messages_processed",
-            "thoughts_processed",
-            "tasks_completed",
-            "errors",
-            "tokens_consumed",
-            "api_requests",
-            "memory_operations",
-            "llm_calls",
-            "deferrals_created",
-            "incidents_detected",
+            "llm_tokens_used",  # Legacy LLM token usage
+            "llm_api_call_structured",  # Legacy LLM API calls
+            "llm.tokens.total",  # New format: total tokens
+            "llm.tokens.input",  # New format: input tokens
+            "llm.tokens.output",  # New format: output tokens
+            "llm.cost.cents",  # Cost tracking
+            "llm.environmental.carbon_grams",  # Carbon footprint
+            "llm.environmental.energy_kwh",  # Energy usage
+            "handler_completed_total",  # Handler completions
+            "handler_invoked_total",  # Handler invocations
+            "thought_processing_completed",  # Thought completion
+            "thought_processing_started",  # Thought starts
+            "action_selected_task_complete",  # Task completions
+            "action_selected_memorize",  # Memory operations
         ]
 
         metrics = []
@@ -639,6 +665,41 @@ async def get_detailed_metrics(
                     )
                     metrics.append(metric)
 
+        # If query_metrics is not available, fall back to get_metrics
+        if not hasattr(telemetry_service, "query_metrics") and hasattr(telemetry_service, "get_metrics"):
+            # Get metrics from the legacy get_metrics method
+            legacy_metrics = telemetry_service.get_metrics()
+            if legacy_metrics:
+                for metric_name, value in legacy_metrics.items():
+                    # Determine unit from metric name
+                    unit = "count"
+                    if "time" in metric_name or "ms" in metric_name:
+                        unit = "ms"
+                    elif "mb" in metric_name or "memory" in metric_name:
+                        unit = "MB"
+                    elif "percent" in metric_name or "cpu" in metric_name:
+                        unit = "%"
+                    elif "bytes" in metric_name:
+                        unit = "bytes"
+                    elif "tokens" in metric_name:
+                        unit = "tokens"
+                    elif "cents" in metric_name or "cost" in metric_name:
+                        unit = "cents"
+
+                    # Create a simple metric with current value only
+                    metrics.append(
+                        DetailedMetric(
+                            name=metric_name,
+                            current_value=float(value),
+                            unit=unit,
+                            trend="stable",  # Default trend when no history
+                            hourly_average=float(value),
+                            daily_average=float(value),
+                            by_service=[],
+                            recent_data=[],
+                        )
+                    )
+
         # Calculate summary statistics across all metrics
         all_values = []
         for metric in metrics:
@@ -665,6 +726,9 @@ async def get_detailed_metrics(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -682,8 +746,14 @@ async def get_reasoning_traces(
 
     Get reasoning traces showing agent thought processes and decision-making.
     """
-    visibility_service = getattr(request.app.state, "visibility_service", None)
-    audit_service = getattr(request.app.state, "audit_service", None)
+    # These services MUST exist
+    visibility_service = request.app.state.visibility_service
+    audit_service = request.app.state.audit_service
+
+    if not visibility_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
+    if not audit_service:
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
 
     traces = []
 
@@ -831,7 +901,11 @@ async def get_system_logs(
 
     Get system logs from all services with filtering capabilities.
     """
-    audit_service = getattr(request.app.state, "audit_service", None)
+    # Audit service MUST exist
+    audit_service = request.app.state.audit_service
+
+    if not audit_service:
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
     logs = []
 
     if audit_service:
@@ -843,15 +917,16 @@ async def get_system_logs(
 
             for entry in entries:
                 # Determine log level from action
+                # Check CRITICAL first (before ERROR) since "critical_failure" contains "fail"
                 log_level = "INFO"
-                if "error" in entry.action.lower() or "fail" in entry.action.lower():
+                if "critical" in entry.action.lower() or "fatal" in entry.action.lower():
+                    log_level = "CRITICAL"
+                elif "error" in entry.action.lower() or "fail" in entry.action.lower():
                     log_level = "ERROR"
                 elif "warning" in entry.action.lower() or "warn" in entry.action.lower():
                     log_level = "WARNING"
                 elif "debug" in entry.action.lower():
                     log_level = "DEBUG"
-                elif "critical" in entry.action.lower() or "fatal" in entry.action.lower():
-                    log_level = "CRITICAL"
 
                 # Filter by level if specified
                 if level and log_level != level.upper():
@@ -901,9 +976,12 @@ async def get_system_logs(
                 include_incidents=True,
             )
             logs.extend(file_logs)
+        except ImportError:
+            # Log reader module not available, use audit entries only
+            logger.debug("Log reader not available, using audit entries only")
         except Exception as e:
             # Log reading failed, but don't fail the endpoint
-            print(f"Failed to read log files: {e}")
+            logger.warning(f"Failed to read log files: {e}, using audit entries only")
 
     response = LogsResponse(logs=logs[:limit], total=len(logs), has_more=len(logs) > limit)
 
@@ -926,11 +1004,20 @@ async def query_telemetry(
     start_time = datetime.now(timezone.utc)
     results = []
 
-    # Get services
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
-    visibility_service = getattr(request.app.state, "visibility_service", None)
-    audit_service = getattr(request.app.state, "audit_service", None)
-    incident_service = getattr(request.app.state, "incident_management_service", None)
+    # Get services - ALL MUST EXIST
+    telemetry_service = request.app.state.telemetry_service
+    visibility_service = request.app.state.visibility_service
+    audit_service = request.app.state.audit_service
+    incident_service = request.app.state.incident_management_service
+
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
+    if not visibility_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
+    if not audit_service:
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
+    if not incident_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Incident service not initialized")
 
     try:
         if query.query_type == "metrics":
@@ -1110,6 +1197,9 @@ async def query_telemetry(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1126,9 +1216,10 @@ async def get_detailed_metric(
 
     Returns current value, trends, and historical data for the specified metric.
     """
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # Telemetry service MUST exist - if it doesn't, we have a critical failure
+    telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         now = datetime.now(timezone.utc)
@@ -1199,36 +1290,13 @@ async def get_detailed_metric(
         )
 
     except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class ResourceDataPoint(BaseModel):
-    """Resource usage data point."""
-
-    timestamp: datetime = Field(..., description="Timestamp of measurement")
-    value: float = Field(..., description="Measured value")
-
-
-class ResourceStats(BaseModel):
-    """Resource usage statistics."""
-
-    min: float = Field(..., description="Minimum value")
-    max: float = Field(..., description="Maximum value")
-    avg: float = Field(..., description="Average value")
-    current: float = Field(..., description="Current value")
-
-
-class ResourceMetricData(BaseModel):
-    """Resource metric with data and statistics."""
-
-    data: List[ResourceDataPoint] = Field(default_factory=list, description="Time series data")
-    stats: ResourceStats = Field(..., description="Statistical summary")
-    unit: str = Field(..., description="Unit of measurement")
-
-
-# TimePeriod and ResourceHistoryResponse models moved to telemetry_models.py
+# All resource metric models are now in telemetry_models.py with proper type safety
 
 
 # Helper functions moved to telemetry_helpers.py
@@ -1289,12 +1357,13 @@ async def get_unified_telemetry(
         return result
 
     except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/resources/history", response_model=SuccessResponse[ResourceHistoryResponse])
+@router.get("/resources/history", response_model=SuccessResponse)
 async def get_resource_history(
     request: Request,
     auth: AuthContext = Depends(require_observer),
@@ -1305,58 +1374,46 @@ async def get_resource_history(
 
     Returns time-series data for resource usage over the specified period.
     """
-    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    # Telemetry service MUST exist - if it doesn't, we have a critical failure
+    telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours)
 
-        # Query different resource metrics
-        cpu_data = []
-        memory_data = []
-        disk_data = []
+        # Use helper classes for clean separation of concerns
+        collector = ResourceMetricsCollector()
+        extractor = MetricValueExtractor()
+        builder = ResourceMetricBuilder()
 
-        if hasattr(telemetry_service, "query_metrics"):
-            cpu_data = await telemetry_service.query_metrics(
-                metric_name="cpu_percent", start_time=start_time, end_time=now
-            )
+        # Fetch all metrics concurrently
+        cpu_data, memory_data, disk_data = await collector.fetch_all_resource_metrics(
+            telemetry_service, start_time, now
+        )
 
-            memory_data = await telemetry_service.query_metrics(
-                metric_name="memory_mb", start_time=start_time, end_time=now
-            )
+        # Extract values for statistics
+        cpu_values, memory_values, disk_values = extractor.extract_all_values(cpu_data, memory_data, disk_data)
 
-            disk_data = await telemetry_service.query_metrics(
-                metric_name="disk_usage_bytes", start_time=start_time, end_time=now
-            )
+        # Build data points
+        default_timestamp = now.isoformat()
+        point_builder = ResourceDataPointBuilder()
+        cpu_points, memory_points, disk_points = point_builder.build_all_data_points(
+            cpu_data, memory_data, disk_data, default_timestamp
+        )
 
-        # Calculate aggregations
-        def calculate_stats(data: List[dict]) -> ResourceStats:
-            if not data:
-                return ResourceStats(min=0, max=0, avg=0, current=0)
-            values = [d.get("value", 0) for d in data]
-            return ResourceStats(
-                min=min(values), max=max(values), avg=sum(values) / len(values), current=values[-1] if values else 0
-            )
+        # Build complete metrics with stats
+        cpu_metric, memory_metric, disk_metric = builder.build_all_metrics(
+            cpu_points, cpu_values, memory_points, memory_values, disk_points, disk_values
+        )
 
+        # Create properly typed response using Pydantic models
         response = ResourceHistoryResponse(
             period=TimePeriod(start=start_time.isoformat(), end=now.isoformat(), hours=hours),
-            cpu=ResourceMetricData(
-                data=[ResourceDataPoint(timestamp=d.get("timestamp"), value=d.get("value", 0)) for d in cpu_data],
-                stats=calculate_stats(cpu_data),
-                unit="percent",
-            ),
-            memory=ResourceMetricData(
-                data=[ResourceDataPoint(timestamp=d.get("timestamp"), value=d.get("value", 0)) for d in memory_data],
-                stats=calculate_stats(memory_data),
-                unit="MB",
-            ),
-            disk=ResourceMetricData(
-                data=[ResourceDataPoint(timestamp=d.get("timestamp"), value=d.get("value", 0)) for d in disk_data],
-                stats=calculate_stats(disk_data),
-                unit="bytes",
-            ),
+            cpu=cpu_metric,
+            memory=memory_metric,
+            disk=disk_metric,
         )
 
         return SuccessResponse(
@@ -1366,5 +1423,8 @@ async def get_resource_history(
             ),
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

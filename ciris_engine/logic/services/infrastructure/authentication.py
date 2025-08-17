@@ -80,6 +80,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._started = False
         self._start_time: Optional[datetime] = None
 
+        # Authentication metrics tracking
+        self._auth_attempts = 0
+        self._auth_successes = 0
+        self._auth_failures = 0
+        self._token_validations = 0
+        self._permission_checks = 0
+        self._role_assignments = 0
+        self._session_count = 0
+        self._expired_sessions = 0
+        self._active_tokens = 0
+        self._revoked_tokens = 0
+
     def get_service_type(self) -> ServiceType:
         """Get service type - authentication is part of wise authority infrastructure."""
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -869,9 +881,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def authenticate(self, token: str) -> Optional[AuthenticationResult]:
         """Authenticate a WA token and return identity info."""
+        self._auth_attempts += 1
         try:
             claims = await self.verify_token(token)
             if not claims:
+                self._auth_failures += 1
                 return None
 
             if hasattr(claims, "get"):
@@ -879,6 +893,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             else:
                 wa_id = getattr(claims, "wa_id", None)
             if not wa_id:
+                self._auth_failures += 1
                 return None
 
             # Update last login
@@ -887,8 +902,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Get WA details
             wa = await self.get_wa(wa_id)
             if not wa:
+                self._auth_failures += 1
                 return None
 
+            self._auth_successes += 1
+            self._session_count += 1  # Track active session
             return AuthenticationResult(
                 authenticated=True,
                 wa_id=wa_id,
@@ -904,6 +922,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
         except Exception as e:
             logger.error(f"Authentication failed: {e}")
+            self._auth_failures += 1
             return None
 
     async def create_token(self, wa_id: str, token_type: TokenType, ttl: int = 3600) -> str:
@@ -1540,6 +1559,59 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._token_cache.clear()
         self._channel_token_cache.clear()
         logger.info("AuthenticationService stopped")
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect authentication-specific metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate auth success rate
+        auth_rate = 0.0
+        if self._auth_attempts > 0:
+            auth_rate = self._auth_successes / self._auth_attempts
+
+        metrics.update(
+            {
+                "auth_attempts": float(self._auth_attempts),
+                "auth_successes": float(self._auth_successes),
+                "auth_failures": float(self._auth_failures),
+                "auth_success_rate": auth_rate,
+                "token_validations": float(self._token_validations),
+                "permission_checks": float(self._permission_checks),
+                "role_assignments": float(self._role_assignments),
+                "active_sessions": float(self._session_count),
+                "expired_sessions": float(self._expired_sessions),
+                "active_tokens": float(self._active_tokens),
+            }
+        )
+
+        return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """Get all authentication service metrics including base, custom, and v1.4.3 specific.
+
+        Returns:
+            Dict with all metrics including base, custom, and v1.4.3 metrics
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        uptime_seconds = 0.0
+        if self._start_time:
+            uptime_seconds = (current_time - self._start_time).total_seconds()
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "auth_attempts_total": float(self._auth_attempts),
+                "auth_successes_total": float(self._auth_successes),
+                "auth_failures_total": float(self._auth_failures),
+                "auth_active_sessions": float(self._session_count),
+                "auth_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

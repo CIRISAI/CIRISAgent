@@ -5,6 +5,7 @@ Implements ToolService protocol to expose RECALL_SECRET and UPDATE_SECRETS_FILTE
 """
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,15 @@ class SecretsToolService(BaseService, ToolService):
         super().__init__(time_service=time_service)
         self.secrets_service = secrets_service
         self.adapter_name = "secrets"
+
+        # v1.4.3 metrics tracking
+        self._secrets_retrieved = 0
+        self._secrets_stored = 0
+        self._metrics_tracking = {}  # For custom metric tracking
+
+    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
+        """Track a metric with default value."""
+        return self._metrics_tracking.get(metric_name, default)
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
@@ -106,6 +116,7 @@ class SecretsToolService(BaseService, ToolService):
                 value = await self.secrets_service.retrieve_secret(secret_uuid)
                 if value is None:
                     return ToolResult(success=False, error=f"Secret {secret_uuid} not found")
+                self._secrets_retrieved += 1  # Track successful retrieval
                 result_data = {"value": value, "decrypted": True}
             else:
                 # Just verify it exists
@@ -113,6 +124,7 @@ class SecretsToolService(BaseService, ToolService):
                 value = await self.secrets_service.retrieve_secret(secret_uuid)
                 if value is None:
                     return ToolResult(success=False, error=f"Secret {secret_uuid} not found")
+                self._secrets_retrieved += 1  # Track successful retrieval
                 result_data = {"exists": True, "decrypted": False}
 
             return ToolResult(success=True, data=result_data)
@@ -295,53 +307,53 @@ class SecretsToolService(BaseService, ToolService):
         return capabilities
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect service-specific metrics."""
-        return {"available_tools": 3.0}
+        """Collect tool service specific metrics."""
+        metrics = super()._collect_custom_metrics()
 
-    async def get_telemetry(self) -> Dict[str, Any]:
-        """
-        Get telemetry data for the secrets tool service.
+        # Calculate success rate
+        success_rate = 0.0
+        if self._request_count > 0:
+            success_rate = (self._request_count - self._error_count) / self._request_count
 
-        Returns metrics including:
-        - audit_events_generated: Number of audit events generated
-        - error_rate: Rate of tool execution errors
-        - tool_executions: Total tool executions
-        - success_rate: Success rate of tool executions
-        """
-        try:
-            # Get base metrics from parent class
-            request_count = self._request_count if hasattr(self, "_request_count") else 0
-            error_count = self._error_count if hasattr(self, "_error_count") else 0
-
-            # Calculate rates
-            error_rate = error_count / request_count if request_count > 0 else 0.0
-            success_rate = 1.0 - error_rate
-
-            # Calculate uptime
-            uptime_seconds = 0
-            if hasattr(self, "_start_time") and self._start_time:
-                uptime_seconds = int((self._now() - self._start_time).total_seconds())
-
-            return {
-                "service_name": "secrets_tool",
-                "healthy": await self.is_healthy(),
-                "audit_events_generated": request_count,  # Each execution generates audit
-                "error_rate": round(error_rate, 4),
-                "success_rate": round(success_rate, 4),
-                "tool_executions": request_count,
-                "error_count": error_count,
-                "available_tools": 3,
-                "uptime_seconds": uptime_seconds,
-                "last_updated": self._now().isoformat(),
+        # Add tool-specific metrics
+        metrics.update(
+            {
+                "tool_executions": float(self._request_count),
+                "tool_errors": float(self._error_count),
+                "success_rate": success_rate,
+                "secrets_retrieved": float(self._secrets_retrieved),
+                "audit_events_generated": float(self._request_count),  # Each execution generates an audit event
+                "available_tools": 3.0,  # recall_secret, update_secrets_filter, self_help
             }
-        except Exception as e:
-            logger.error(f"Failed to get telemetry: {e}", exc_info=True)
-            return {
-                "service_name": "secrets_tool",
-                "healthy": False,
-                "error": str(e),
-                "audit_events_generated": 0,
-                "error_rate": 1.0,
-                "error_count": 1,
-                "uptime_seconds": 0,
+        )
+
+        return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific.
+
+        Returns:
+            Dict with all metrics including tool-specific and v1.4.3 metrics
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        uptime_seconds = 0.0
+        if self._start_time:
+            uptime_seconds = max(0.0, (current_time - self._start_time).total_seconds())
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "secrets_tool_invocations": float(self._request_count),
+                "secrets_tool_retrieved": float(self._secrets_retrieved),
+                "secrets_tool_stored": 0.0,  # This service only retrieves, never stores
+                "secrets_tool_uptime_seconds": uptime_seconds,
+                "tools_enabled": 3.0,  # recall_secret, update_secrets_filter, self_help
             }
+        )
+
+        return metrics
+
+    # get_telemetry() removed - use get_metrics() from BaseService instead

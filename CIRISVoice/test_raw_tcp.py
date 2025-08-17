@@ -7,7 +7,7 @@ import socket
 def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("0.0.0.0", 10302))
+    sock.bind(("0.0.0.0", 10302))  # noqa: S104 - Test server needs to accept connections
     sock.listen(1)
 
     print("Listening on port 10302...")

@@ -383,6 +383,48 @@ class ApiPlatform(Service):
         # Check if the server task is still running
         return not self._server_task.done()
 
+    def get_metrics(self) -> dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        try:
+            # Get metrics from communication service
+            comm_status = self.communication.get_status()
+            comm_metrics = comm_status.metrics if hasattr(comm_status, "metrics") else {}
+
+            # Get active WebSocket connections count
+            active_connections = len(self.communication._websocket_clients)
+
+            # Extract values with defaults
+            requests_total = float(comm_metrics.get("requests_handled", 0))
+            errors_total = float(comm_metrics.get("error_count", 0))
+            avg_response_time = float(comm_metrics.get("avg_response_time_ms", 0.0))
+
+            metrics.update(
+                {
+                    "api_requests_total": requests_total,
+                    "api_errors_total": errors_total,
+                    "api_response_time_ms": avg_response_time,
+                    "api_active_connections": float(active_connections),
+                }
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to get API adapter metrics: {e}")
+            # Return zeros on error rather than failing
+            metrics.update(
+                {
+                    "api_requests_total": 0.0,
+                    "api_errors_total": 0.0,
+                    "api_response_time_ms": 0.0,
+                    "api_active_connections": 0.0,
+                }
+            )
+
+        return metrics
+
     async def run_lifecycle(self, agent_run_task: asyncio.Task[Any]) -> None:
         """Run the adapter lifecycle - API runs until agent stops."""
         logger.info("API adapter running lifecycle")

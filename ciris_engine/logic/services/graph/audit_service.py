@@ -731,6 +731,55 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         return metrics
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all audit service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+        # Count total events from cache and estimate from graph
+        total_events = len(self._recent_entries)
+
+        # Count events by severity from cached entries
+        severity_counts = {"info": 0, "low": 0, "medium": 0, "high": 0, "critical": 0}
+        compliance_checks = 0
+
+        # Analyze cached entries for severity and compliance
+        for entry in self._recent_entries:
+            # Extract severity from details or determine from event type
+            details = entry.details or {}
+            severity = details.get("severity", "info")
+
+            # Count by severity
+            if severity in severity_counts:
+                severity_counts[severity] += 1
+            else:
+                severity_counts["info"] += 1
+
+            # Count compliance-related events
+            event_type = entry.event_type.lower()
+            if any(keyword in event_type for keyword in ["compliance", "audit", "verify", "check", "integrity"]):
+                compliance_checks += 1
+
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if self._start_time:
+            current_time = self._time_service.now() if self._time_service else datetime.now()
+            uptime_seconds = (current_time - self._start_time).total_seconds()
+
+        # Return exact metrics from v1.4.3 set
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "audit_events_total": float(total_events),
+                "audit_events_by_severity": float(sum(severity_counts.values())),  # Flattened count
+                "audit_compliance_checks": float(compliance_checks),
+                "audit_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
+
     # ========== Private Helper Methods ==========
 
     async def _store_entry_in_graph(self, entry: AuditRequest, action_type: HandlerActionType) -> None:

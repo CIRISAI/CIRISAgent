@@ -116,7 +116,7 @@ class TestOpenAICompatibleClient:
                         assert service.max_retries == 3
                         assert service.base_delay == 1.0
                         assert service.max_delay == 30.0
-                        assert service._max_cache_size == 100
+                        # Cache has been removed per policy
 
     def test_initialization_mock_llm_error(self, llm_config, mock_time_service):
         """Test that initialization fails when mock LLM is enabled."""
@@ -224,9 +224,8 @@ class TestOpenAICompatibleClient:
             }
         )
 
-        # Add some cache entries
-        llm_service._response_cache["key1"] = MagicMock()
-        llm_service._response_cache["key2"] = MagicMock()
+        # Set response times for metrics
+        llm_service._response_times = [100, 200, 150]
 
         metrics = llm_service._collect_custom_metrics()
 
@@ -239,9 +238,9 @@ class TestOpenAICompatibleClient:
         assert metrics["call_count"] == 100.0
         assert metrics["failure_count"] == 5.0
 
-        # Check cache metrics
-        assert metrics["cache_entries"] == 2.0
-        assert "cache_size_mb" in metrics
+        # Check response time metrics
+        assert "avg_response_time_ms" in metrics
+        assert metrics["avg_response_time_ms"] == 150.0  # average of [100, 200, 150]
 
         # Check model pricing
         assert metrics["model_cost_per_1k_tokens"] == 0.15  # gpt-4o-mini

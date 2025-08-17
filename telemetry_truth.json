@@ -1,0 +1,84 @@
+{
+  "timestamp": "2025-08-17T10:28:03.595743",
+  "version": "1.4.3",
+  "results": {
+    "services_with_get_telemetry": [],
+    "services_with_collect_metrics": [
+      {
+        "file": "logic/services/base_scheduled_service.py",
+        "service": "base_scheduled_service"
+      },
+      {
+        "file": "logic/services/base_graph_service.py",
+        "service": "base_graph_service"
+      },
+      {
+        "file": "logic/services/base_service.py",
+        "service": "base_service"
+      },
+      {
+        "file": "logic/services/base_infrastructure_service.py",
+        "service": "base_infrastructure_service"
+      },
+      {
+        "file": "logic/persistence/maintenance.py",
+        "service": "maintenance"
+      },
+      {
+        "file": "logic/secrets/service.py",
+        "service": "service"
+      },
+      {
+        "file": "logic/services/tools/secrets_tool_service.py",
+        "service": "secrets_tool_service"
+      },
+      {
+        "file": "logic/services/lifecycle/shutdown.py",
+        "service": "shutdown"
+      },
+      {
+        "file": "logic/services/lifecycle/scheduler.py",
+        "service": "scheduler"
+      },
+      {
+        "file": "logic/services/lifecycle/initialization.py",
+        "service": "initialization"
+      }
+    ],
+    "metrics_pushed_to_tsdb": {
+      "llm": [
+        "llm.tokens.total",
+        "llm.tokens.input",
+        "llm.tokens.output",
+        "llm.cost.cents",
+        "llm.environmental.carbon_grams",
+        "llm.environmental.energy_kwh",
+        "llm.latency.ms"
+      ],
+      "handlers": [
+        "handler_invoked_total",
+        "handler_completed_total",
+        "handler_invoked_memorize",
+        "handler_completed_memorize",
+        "handler_invoked_task_complete",
+        "handler_completed_task_complete",
+        "action_selected_memorize",
+        "action_selected_task_complete"
+      ],
+      "other": [
+        "error.occurred",
+        "thought_processing_started",
+        "thought_processing_completed"
+      ],
+      "total_count": 18
+    },
+    "base_service_metrics": [
+      "uptime_seconds",
+      "request_count",
+      "error_count",
+      "error_rate",
+      "healthy"
+    ],
+    "actual_metric_counts": {}
+  }
+}

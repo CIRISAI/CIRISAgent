@@ -112,6 +112,17 @@ class TSDBConsolidationService(BaseGraphService):
         self._last_profound_consolidation: Optional[datetime] = None
         self._start_time: Optional[datetime] = None
 
+        # Telemetry tracking variables
+        self._basic_consolidations = 0
+        self._extensive_consolidations = 0
+        self._profound_consolidations = 0
+        self._records_consolidated = 0
+        self._records_deleted = 0
+        self._compression_ratio = 1.0
+        self._last_consolidation_duration = 0.0
+        self._consolidation_errors = 0
+        self._start_time = None  # Will be set when service starts
+
     def _load_consolidation_config(self) -> None:
         """Load consolidation configuration from essential config."""
         # Fixed intervals for calendar alignment
@@ -1650,6 +1661,37 @@ class TSDBConsolidationService(BaseGraphService):
 
         except Exception as e:
             logger.error(f"Failed to create daily summary edges: {e}", exc_info=True)
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """Get TSDB consolidation service metrics.
+
+        Returns exactly the 4 metrics from v1.4.3 API specification:
+        - tsdb_consolidations_total: Total consolidations performed
+        - tsdb_datapoints_processed: Total data points processed
+        - tsdb_storage_saved_mb: Storage saved by consolidation (MB)
+        - tsdb_uptime_seconds: Service uptime in seconds
+        """
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_start_time") and self._start_time:
+            uptime_seconds = (self._now() - self._start_time).total_seconds()
+
+        # Calculate total consolidations performed
+        total_consolidations = (
+            self._basic_consolidations + self._extensive_consolidations + self._profound_consolidations
+        )
+
+        # Calculate storage saved (estimate based on compression ratio and records processed)
+        # Each record averages ~2KB, storage saved = records_deleted * avg_size_kb / 1024
+        avg_record_size_kb = 2.0
+        storage_saved_mb = (self._records_deleted * avg_record_size_kb) / 1024.0
+
+        return {
+            "tsdb_consolidations_total": float(total_consolidations),
+            "tsdb_datapoints_processed": float(self._records_consolidated),
+            "tsdb_storage_saved_mb": storage_saved_mb,
+            "tsdb_uptime_seconds": uptime_seconds,
+        }
 
     def _run_profound_consolidation(self) -> None:
         """

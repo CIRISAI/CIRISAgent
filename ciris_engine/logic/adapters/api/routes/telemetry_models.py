@@ -137,14 +137,28 @@ class TraceSpan(BaseModel):
         return start_time.isoformat() if start_time else None
 
 
-class ResourceMetricData(BaseModel):
-    """Resource usage metric data."""
+class ResourceMetricStats(BaseModel):
+    """Resource usage statistics."""
 
+    min: float = Field(..., description="Minimum value")
+    max: float = Field(..., description="Maximum value")
+    avg: float = Field(..., description="Average value")
     current: float = Field(..., description="Current value")
-    average: float = Field(..., description="Average over period")
-    peak: float = Field(..., description="Peak value in period")
-    percentile_95: float = Field(..., description="95th percentile")
-    trend: str = Field(..., description="Trend: increasing, stable, or decreasing")
+
+
+class ResourceDataPoint(BaseModel):
+    """Resource data point."""
+
+    timestamp: str = Field(..., description="ISO timestamp")
+    value: float = Field(..., description="Measured value")
+
+
+class ResourceMetricData(BaseModel):
+    """Resource usage metric data with time series and stats."""
+
+    data: List[ResourceDataPoint] = Field(..., description="Time series data points")
+    stats: ResourceMetricStats = Field(..., description="Statistical summary")
+    unit: str = Field(..., description="Unit of measurement")
 
 
 class ResourceUsage(BaseModel):

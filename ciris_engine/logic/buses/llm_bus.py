@@ -100,6 +100,7 @@ class LLMBus(BaseBus[LLMService]):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
 
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         self.distribution_strategy = distribution_strategy
         self.circuit_breaker_config = circuit_breaker_config or {}
         self.telemetry_service = telemetry_service
@@ -554,6 +555,85 @@ class LLMBus(BaseBus[LLMService]):
         base_stats["service_stats"] = self.get_service_stats()
         base_stats["distribution_strategy"] = self.distribution_strategy.value
         return base_stats
+
+    def _collect_metrics(self) -> dict[str, float]:
+        """Collect base metrics for the LLM bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        # Calculate aggregate metrics from service metrics
+        total_requests = sum(m.total_requests for m in self.service_metrics.values())
+        failed_requests = sum(m.failed_requests for m in self.service_metrics.values())
+        total_latency = sum(m.total_latency_ms for m in self.service_metrics.values())
+        avg_latency = total_latency / total_requests if total_requests > 0 else 0.0
+
+        # Count circuit breakers open
+        circuit_breakers_open = sum(1 for cb in self.circuit_breakers.values() if cb.is_open)
+
+        return {
+            "llm_requests_total": float(total_requests),
+            "llm_failed_requests": float(failed_requests),
+            "llm_average_latency_ms": avg_latency,
+            "llm_circuit_breakers_open": float(circuit_breakers_open),
+            "llm_providers_available": float(len(self.service_metrics)),
+            "llm_uptime_seconds": uptime_seconds,
+        }
+
+    def get_metrics(self) -> dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        # Calculate messages routed from all service metrics
+        total_messages_routed = sum(metrics_obj.total_requests for metrics_obj in self.service_metrics.values())
+
+        # Provider selections = total requests across all services
+        # (each request requires a provider selection)
+        provider_selections = total_messages_routed
+
+        # Calculate routing errors from all service metrics
+        routing_errors = sum(metrics_obj.failed_requests for metrics_obj in self.service_metrics.values())
+
+        # Count active providers (services that are available and healthy)
+        active_providers = len(
+            [
+                service
+                for service in self.service_registry.get_services_by_type(ServiceType.LLM)
+                if self._is_service_available_sync(service)
+            ]
+        )
+
+        metrics.update(
+            {
+                "llm_bus_messages_routed": float(total_messages_routed),
+                "llm_bus_provider_selections": float(provider_selections),
+                "llm_bus_routing_errors": float(routing_errors),
+                "llm_bus_active_providers": float(active_providers),
+            }
+        )
+
+        return metrics
+
+    def _is_service_available_sync(self, service: object) -> bool:
+        """Synchronous check if a service is available (for metrics collection)."""
+        try:
+            # Check if service has basic capabilities
+            if not self._check_service_capabilities(service):
+                return False
+
+            # Check circuit breaker state
+            service_name = f"{type(service).__name__}_{id(service)}"
+            if not self._check_circuit_breaker(service_name):
+                return False
+
+            # Service is considered active if it passes basic checks
+            return True
+        except Exception:
+            return False
 
     def clear_circuit_breakers(self) -> None:
         """Clear all circuit breakers - useful for testing.

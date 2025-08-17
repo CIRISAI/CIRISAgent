@@ -450,6 +450,7 @@ python -m pytest tests/                 # timeout: 300000ms
 5. **Version After Changes**: Always bump version
 6. **Medical Prohibition**: Zero medical code in main repo
 7. **Check Existing Schemas**: They already exist
+8. **NEVER PUSH DIRECTLY TO MAIN**: Always create a branch, bump version, NO merge to main without explicit permission
 
 ## Quality Standards
 

@@ -13,7 +13,7 @@ It does NOT provide service health, metrics, or general system status.
 """
 
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.persistence import (
@@ -39,6 +39,14 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         super().__init__(time_service=time_service)
         self.bus = bus_manager
         self._db_path = db_path
+
+        # Visibility service tracking variables
+        self._dsar_requests = 0
+        self._transparency_requests = 0
+        self._audit_requests = 0
+        self._export_operations = 0
+        self._redaction_operations = 0
+        self._consent_updates = 0
 
     async def _on_start(self) -> None:
         """Custom startup logic for visibility service."""
@@ -127,6 +135,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
     async def get_reasoning_trace(self, task_id: str) -> ReasoningTrace:
         """Get reasoning trace for a task."""
+        self._transparency_requests += 1
         from ciris_engine.schemas.services.visibility import ThoughtStep
 
         # Get the task from persistence
@@ -226,6 +235,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
     async def get_decision_history(self, task_id: str) -> TaskDecisionHistory:
         """Get decision history for a task."""
+        self._transparency_requests += 1
         from ciris_engine.schemas.services.visibility import DecisionRecord
 
         # Get the task from persistence
@@ -305,6 +315,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
     async def explain_action(self, action_id: str) -> str:
         """Explain why an action was taken."""
+        self._transparency_requests += 1
         # Action ID is typically the thought_id that decided on the action
         try:
             # Get the thought from persistence
@@ -327,3 +338,26 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         except Exception as e:
             return f"Unable to explain action {action_id}: {str(e)}"
+
+    def apply_redaction(self, content: str, redacted_content: str) -> str:
+        """Apply redaction to content and track the operation."""
+        self._redaction_operations += 1
+        return redacted_content
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect visibility service metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # v1.4.3 API visibility metrics - using real values from service state
+        metrics.update(
+            {
+                "visibility_requests_total": float(self._transparency_requests),
+                "visibility_explanations_total": float(
+                    self._transparency_requests
+                ),  # Each transparency request generates explanations
+                "visibility_redactions_total": float(self._redaction_operations),
+                "visibility_uptime_seconds": self._calculate_uptime(),
+            }
+        )
+
+        return metrics

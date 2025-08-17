@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Protocol, Union, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,15 @@ class ServiceRegistry:
             ServiceType.AUDIT,
             ServiceType.LLM,
         ]
+
+        # Metrics tracking
+        self._service_lookups = 0
+        self._service_hits = 0
+        self._service_misses = 0
+        self._health_check_failures = 0
+        self._circuit_breaker_opens = 0
+        self._registrations_total = 0
+        self._deregistrations_total = 0
 
     def register_service(
         self,
@@ -145,6 +154,9 @@ class ServiceRegistry:
         self._services[service_type].append(sp)
         self._services[service_type].sort(key=lambda x: x.priority.value)
 
+        # Track registration metric
+        self._registrations_total += 1
+
         logger.info(
             f"Registered {service_type} service '{provider_name}' "
             f"with priority {priority.name} and capabilities {capabilities}"
@@ -168,6 +180,8 @@ class ServiceRegistry:
         Returns:
             Service instance or None if no suitable service available
         """
+        self._service_lookups += 1
+
         logger.debug(
             f"ServiceRegistry.get_service: service_type='{service_type}' "
             f"({service_type.value if hasattr(service_type, 'value') else service_type}), "
@@ -189,9 +203,11 @@ class ServiceRegistry:
         service = await self._get_service_from_providers(providers, required_capabilities)
 
         if service is not None:
+            self._service_hits += 1
             logger.debug(f"Using {service_type} service: {type(service).__name__}")
             return service
 
+        self._service_misses += 1
         logger.warning(f"No available {service_type.value} service found " f"with capabilities {required_capabilities}")
         return None
 
@@ -258,6 +274,7 @@ class ServiceRegistry:
                 try:
                     is_healthy_result = await provider.instance.is_healthy()
                     if not is_healthy_result:
+                        self._health_check_failures += 1
                         logger.debug(f"Provider '{provider.name}' failed health check (returned {is_healthy_result})")
                         if provider.circuit_breaker:
                             provider.circuit_breaker.record_failure()
@@ -330,6 +347,10 @@ class ServiceRegistry:
             for i, provider in enumerate(providers):
                 if provider.name == provider_name:
                     providers.pop(i)
+
+                    # Track deregistration metric
+                    self._deregistrations_total += 1
+
                     logger.info(f"Unregistered {service_type} provider '{provider_name}'")
 
                     # Remove circuit breaker
@@ -476,6 +497,52 @@ class ServiceRegistry:
     def _has_service_type(self, service_type: ServiceType) -> bool:
         """Check if any provider exists for the given service type."""
         return bool(self._services.get(service_type))
+
+    def get_metrics(self) -> Dict[str, float]:
+        """Get all service registry metrics including detailed stats."""
+        # Calculate total services registered
+        total_services = sum(len(providers) for providers in self._services.values())
+
+        # Calculate service types count
+        service_types = len(self._services)
+
+        # Count circuit breakers
+        circuit_breakers = 0
+        open_breakers = 0
+        for service_type, providers in self._services.items():
+            for provider in providers:
+                if provider.circuit_breaker:
+                    circuit_breakers += 1
+                    if provider.circuit_breaker.state == CircuitState.OPEN:
+                        open_breakers += 1
+
+        # Track max open breakers
+        if open_breakers > self._circuit_breaker_opens:
+            self._circuit_breaker_opens = open_breakers
+
+        # Calculate hit rate
+        hit_rate = 0.0
+        if self._service_lookups > 0:
+            hit_rate = self._service_hits / self._service_lookups
+
+        return {
+            # Test-expected metric names
+            "registry_total_services": float(total_services),
+            "registry_service_types": float(service_types),
+            "registry_circuit_breakers": float(circuit_breakers),
+            "registry_open_breakers": float(open_breakers),
+            "registry_service_lookups": float(self._service_lookups),
+            "registry_service_hits": float(self._service_hits),
+            "registry_service_misses": float(self._service_misses),
+            "registry_hit_rate": hit_rate,
+            "registry_health_check_failures": float(self._health_check_failures),
+            "registry_max_open_breakers": float(self._circuit_breaker_opens),  # Track max opens as proxy
+            # Also include v1.4.3 metrics
+            "registry_services_registered": float(total_services),
+            "registry_lookups_total": float(self._service_lookups),
+            "registry_registrations_total": float(self._registrations_total),
+            "registry_deregistrations_total": float(self._deregistrations_total),
+        }
 
 
 _global_registry: Optional[ServiceRegistry] = None

@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 173,
-    "files_affected": 79,
+    "occurrences": 179,
+    "files_affected": 81,
     "categories": {
-      "generic_data": 154,
+      "generic_data": 160,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -556,16 +556,8 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/logic/services/tools/secrets_tool_service.py",
-        "line": 301,
-        "class": "SecretsToolService",
-        "function": "get_telemetry",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 121,
+        "line": 124,
         "class": "TelemetryAggregator",
         "function": "collect_all_parallel",
         "context": "return_type",
@@ -573,7 +565,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 164,
+        "line": 170,
         "class": "TelemetryAggregator",
         "function": "collect_service",
         "context": "return_type",
@@ -581,7 +573,15 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 204,
+        "line": 210,
+        "class": "TelemetryAggregator",
+        "function": "_try_collect_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
+        "line": 234,
         "class": "TelemetryAggregator",
         "function": "collect_from_bus",
         "context": "return_type",
@@ -589,7 +589,15 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 222,
+        "line": 252,
+        "class": "TelemetryAggregator",
+        "function": "collect_from_adapter_instances",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
+        "line": 305,
         "class": "TelemetryAggregator",
         "function": "get_fallback_metrics",
         "context": "return_type",
@@ -597,7 +605,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 235,
+        "line": 313,
         "class": "TelemetryAggregator",
         "function": "status_to_telemetry",
         "context": "return_type",
@@ -605,7 +613,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 254,
+        "line": 332,
         "class": "TelemetryAggregator",
         "function": "_aggregate_service_metrics",
         "context": "function_parameter",
@@ -613,7 +621,23 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 282,
+        "line": 364,
+        "class": "TelemetryAggregator",
+        "function": "compute_covenant_metrics",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
+        "line": 364,
+        "class": "TelemetryAggregator",
+        "function": "compute_covenant_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
+        "line": 412,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "function_parameter",
@@ -621,7 +645,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 282,
+        "line": 412,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "return_type",
@@ -629,7 +653,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1273,
+        "line": 1456,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",
@@ -820,6 +844,14 @@
         "usage_hint": "generic_data"
       },
       {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_queries.py",
+        "line": 77,
+        "class": null,
+        "function": "get_memory_stats",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
         "file": "ciris_engine/logic/adapters/api/routes/system.py",
         "line": 161,
         "class": "AdapterActionRequest",
@@ -860,6 +892,14 @@
         "usage_hint": "generic_data"
       },
       {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_query_helpers.py",
+        "line": 114,
+        "class": "AttributeParser",
+        "function": "parse_attributes",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
         "file": "ciris_engine/logic/buses/bus_manager.py",
         "line": 101,
         "class": "BusManager",
@@ -869,7 +909,7 @@
       },
       {
         "file": "ciris_engine/logic/buses/runtime_control_bus.py",
-        "line": 157,
+        "line": 166,
         "class": "RuntimeControlBus",
         "function": "get_runtime_status",
         "context": "return_type",
@@ -1004,6 +1044,14 @@
         "usage_hint": "generic_data"
       },
       {
+        "file": "ciris_engine/logic/persistence/maintenance.py",
+        "line": 81,
+        "class": "DatabaseMaintenanceService",
+        "function": "get_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
         "line": 17,
         "class": null,
@@ -1029,7 +1077,7 @@
       },
       {
         "file": "ciris_engine/logic/registries/base.py",
-        "line": 88,
+        "line": 97,
         "class": "ServiceRegistry",
         "function": "register_service",
         "context": "other",
@@ -1707,7 +1755,7 @@
     ]
   },
   "tools": {
-    "occurrences": 173,
+    "occurrences": 124,
     "findings": [
       {
         "file": "tools/validate_prod_routes.py",
@@ -1923,398 +1971,6 @@
         "class": "DBStatusTool",
         "function": "get_nodes_without_edges",
         "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 55,
-        "class": "ServiceTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 75,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 76,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 77,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 78,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 79,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 80,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 81,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/enterprise_telemetry_design.py",
-        "line": 84,
-        "class": "AggregatedTelemetry",
-        "function": null,
-        "context": "variable_annotation",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/mission_analysis.py",
-        "line": 52,
-        "class": "MissionAlignmentAnalyzer",
-        "function": "analyze_module_gaps",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/mission_analysis.py",
-        "line": 115,
-        "class": "MissionAlignmentAnalyzer",
-        "function": "generate_improvement_proposal",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 89,
-        "class": "CIRISTelemetryTool",
-        "function": "_parse_documentation",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 191,
-        "class": "CIRISTelemetryTool",
-        "function": "_score_mission_alignment",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 230,
-        "class": "CIRISTelemetryTool",
-        "function": "_identify_critical_metrics",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 230,
-        "class": "CIRISTelemetryTool",
-        "function": "_identify_critical_metrics",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 258,
-        "class": "CIRISTelemetryTool",
-        "function": "_generate_api_recommendations",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 258,
-        "class": "CIRISTelemetryTool",
-        "function": "_generate_api_recommendations",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 259,
-        "class": "CIRISTelemetryTool",
-        "function": "_generate_api_recommendations",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 355,
-        "class": "CIRISTelemetryTool",
-        "function": "_create_validation_tests",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 355,
-        "class": "CIRISTelemetryTool",
-        "function": "_create_validation_tests",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 356,
-        "class": "CIRISTelemetryTool",
-        "function": "_create_validation_tests",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 396,
-        "class": "CIRISTelemetryTool",
-        "function": "_generate_summary_report",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 396,
-        "class": "CIRISTelemetryTool",
-        "function": "_generate_summary_report",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/telemetry_tool.py",
-        "line": 396,
-        "class": "CIRISTelemetryTool",
-        "function": "_generate_summary_report",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/database.py",
-        "line": 187,
-        "class": "TelemetryDatabase",
-        "function": "add_module",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/database.py",
-        "line": 227,
-        "class": "TelemetryDatabase",
-        "function": "add_metric",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/implementation_tracker.py",
-        "line": 361,
-        "class": "ImplementationTracker",
-        "function": "get_implementation_report",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/semantic_evaluator.py",
-        "line": 140,
-        "class": "SemanticMissionEvaluator",
-        "function": "evaluate_module",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/semantic_evaluator.py",
-        "line": 264,
-        "class": "SemanticMissionEvaluator",
-        "function": "evaluate_all_modules",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/semantic_evaluator.py",
-        "line": 265,
-        "class": "SemanticMissionEvaluator",
-        "function": "evaluate_all_modules",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/semantic_evaluator.py",
-        "line": 303,
-        "class": "SemanticMissionEvaluator",
-        "function": "generate_improvement_plan",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/semantic_evaluator.py",
-        "line": 303,
-        "class": "SemanticMissionEvaluator",
-        "function": "generate_improvement_plan",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/doc_parser.py",
-        "line": 32,
-        "class": "TelemetryDocParser",
-        "function": "parse_all_docs",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/doc_parser.py",
-        "line": 95,
-        "class": "TelemetryDocParser",
-        "function": "parse_doc",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/doc_parser.py",
-        "line": 140,
-        "class": "TelemetryDocParser",
-        "function": "_parse_metrics_table",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/doc_parser.py",
-        "line": 221,
-        "class": "TelemetryDocParser",
-        "function": "_extract_api_patterns",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/doc_parser.py",
-        "line": 243,
-        "class": "TelemetryDocParser",
-        "function": "_extract_storage_info",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 40,
-        "class": "MissionScorer",
-        "function": "score_module",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 57,
-        "class": "MissionScorer",
-        "function": "score_metric",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 57,
-        "class": "MissionScorer",
-        "function": "score_metric",
-        "context": "function_parameter",
-        "usage_hint": "context_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 93,
-        "class": "MissionScorer",
-        "function": "_score_beneficence",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 121,
-        "class": "MissionScorer",
-        "function": "_score_non_maleficence",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 150,
-        "class": "MissionScorer",
-        "function": "_score_transparency",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 183,
-        "class": "MissionScorer",
-        "function": "_score_autonomy",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 212,
-        "class": "MissionScorer",
-        "function": "_score_justice",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 241,
-        "class": "MissionScorer",
-        "function": "_score_coherence",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 366,
-        "class": "MissionScorer",
-        "function": "get_mission_critical_metrics",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 367,
-        "class": "MissionScorer",
-        "function": "get_mission_critical_metrics",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "tools/telemetry_tool/core/mission_scorer.py",
-        "line": 406,
-        "class": "MissionScorer",
-        "function": "_explain_criticality",
-        "context": "function_parameter",
         "usage_hint": "generic_data"
       },
       {
@@ -3096,7 +2752,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 384,
-    "files_affected": 120
+    "occurrences": 341,
+    "files_affected": 114
   }
 }

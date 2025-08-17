@@ -49,6 +49,7 @@ def app():
     app.state.initialization_service = Mock()
     app.state.shutdown_service = Mock()
     app.state.runtime_control = Mock()
+    app.state.service_registry = Mock()  # Add for fallback path
 
     return app
 

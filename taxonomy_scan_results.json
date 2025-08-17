@@ -1,0 +1,4372 @@
+{
+  "timestamp": "2025-08-17T10:28:15.074267",
+  "version": "1.4.3",
+  "results": {
+    "core_services": {
+      "graph/config": {
+        "pull": [
+          {
+            "name": "audit_log",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "security_check",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "auth_verification",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "error_handler",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "circuit_breaker",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "thought_processing",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "action_selection",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "handler_invocation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "dma_execution",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "conscience_check",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "context_building",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "service_lookup",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "message_processing",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "memory_operation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "persistence_fetch",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "context_fetch",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "telemetry_aggregation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.processor.thought_processor",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.action_handlers",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.services",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.dma",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "enabled",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "path_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "retention_policy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "sampling_rate",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "alert_threshold_ms",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "audit_log",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "security_check",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "auth_verification",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "error_handler",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "circuit_breaker",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "thought_processing",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "action_selection",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "handler_invocation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "dma_execution",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "conscience_check",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "context_building",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "service_lookup",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "message_processing",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "memory_operation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "persistence_fetch",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "context_fetch",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "telemetry_aggregation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.processor.thought_processor",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.action_handlers",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.services",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "ciris_engine.dma",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "enabled",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "path_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "retention_policy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "sampling_rate",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "alert_threshold_ms",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/telemetry/hot_cold_config.py"
+          },
+          {
+            "name": "circuit_breaker_state",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "consecutive_failures",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "recovery_attempts",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "last_failure_age_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "call_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "failure_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "total_api_calls",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "successful_api_calls",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "model_timeout_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "model_max_retries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_requests_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_input",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_output",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_errors_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          }
+        ],
+        "push": [
+          {
+            "name": "llm_tokens_used",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_api_call_structured",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/runtime/llm_service.py"
+          }
+        ]
+      },
+      "runtime/llm": {
+        "pull": [],
+        "push": [
+          {
+            "name": "llm.tokens.total",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.tokens.input",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.tokens.output",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.cost.cents",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.environmental.carbon_grams",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.environmental.energy_kwh",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.latency.ms",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.tokens.total",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.tokens.input",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.tokens.output",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.cost.cents",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.environmental.carbon_grams",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.environmental.energy_kwh",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          },
+          {
+            "name": "llm.latency.ms",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/buses/llm_bus.py"
+          }
+        ]
+      },
+      "infrastructure/secrets": {
+        "pull": [
+          {
+            "name": "secrets_stored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_retrieved",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_deleted",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "vault_size",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "encryption_operations",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "decryption_operations",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "filter_detections",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "auto_encryptions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "failed_decryptions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_accessed_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_rotated_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_active",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_stored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "tool_executions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "tool_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "secrets_retrieved",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "audit_events_generated",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "secrets_tool_invocations",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "secrets_tool_retrieved",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          }
+        ],
+        "push": []
+      },
+      "infrastructure/shutdown": {
+        "pull": [
+          {
+            "name": "shutdown_requested",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/shutdown.py"
+          },
+          {
+            "name": "registered_handlers",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/shutdown.py"
+          },
+          {
+            "name": "emergency_mode",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/shutdown.py"
+          }
+        ],
+        "push": []
+      },
+      "infrastructure/initialization": {
+        "pull": [
+          {
+            "name": "initialization_complete",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "has_error",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "completed_steps",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "total_steps",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_services_started",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_errors_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "initialization_complete",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "has_error",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "completed_steps",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "total_steps",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_services_started",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_errors_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          }
+        ],
+        "push": []
+      },
+      "infrastructure/time": {
+        "pull": [
+          {
+            "name": "time_requests",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "iso_requests",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "timestamp_requests",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "uptime_requests",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "total_requests",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "ntp_check_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "ntp_failures",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "time_queries_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "time_sync_operations",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "events_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "adapters_loaded",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "queue_depth",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "thoughts_processed",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "thoughts_pending",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "service_overrides_active",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "messages_processed",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_state_transitions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_commands_processed",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_current_state",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_queue_size",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "events_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "adapters_loaded",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "attributes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "attributes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "attributes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_nodes_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_edges_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_operations_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          }
+        ],
+        "push": []
+      },
+      "governance/visibility": {
+        "pull": [
+          {
+            "name": "visibility_requests_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/governance/visibility.py"
+          },
+          {
+            "name": "visibility_explanations_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/governance/visibility.py"
+          },
+          {
+            "name": "visibility_redactions_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/governance/visibility.py"
+          }
+        ],
+        "push": []
+      },
+      "infrastructure/authentication": {
+        "pull": [
+          {
+            "name": "auto_minted",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "created",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "last_login",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "iat",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "active_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "revoked_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "observer_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "user_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "admin_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "authority_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "root_certificates",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_contexts_cached",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "channel_tokens_cached",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "total_tokens_cached",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "certificate_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "cached_tokens",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_attempts",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_successes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_failures",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "token_validations",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "permission_checks",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "role_assignments",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "active_sessions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "expired_sessions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "active_tokens",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_attempts_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_successes_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_failures_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_active_sessions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          }
+        ],
+        "push": []
+      },
+      "graph/memory": {
+        "pull": [
+          {
+            "name": "buses",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "graph",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "infrastructure",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "governance",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "runtime",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "adapters",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "components",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "config",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "audit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "llm",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "wise_authority",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "status",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "system_healthy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services_online",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services_total",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_error_rate",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_requests",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "source",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metric_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "direction",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "direction",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metric_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "recent_tokens",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages_processed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts_processed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tasks_completed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tokens_last_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cost_last_hour_cents",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "carbon_last_hour_grams",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "energy_last_hour_kwh",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "error_rate_percent",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg_thought_depth",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "queue_saturation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "event_value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "data_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "content",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metadata",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "data_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "behavioral",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "user_profiles",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "channel_context",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "user_count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "social",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "agent_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_purpose",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_capabilities",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_restrictions",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "has_purpose",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "event",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_metrics_cached",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unique_metric_types",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "summary_cache_entries",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metrics_per_minute",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cache_size_mb",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max_cached_metrics_per_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tokens",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cost",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "carbon",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "energy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tasks",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "latency",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "collection_method",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cache_ttl_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_metrics_cached",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unique_metric_types",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "summary_cache_entries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max_cached_metrics_per_type",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "attributes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "attributes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "attributes",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_nodes_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_edges_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_operations_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          }
+        ],
+        "push": [
+          {
+            "name": "telemetry_service.shutdown",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/graph/telemetry_service.py"
+          }
+        ]
+      },
+      "graph/telemetry": {
+        "pull": [
+          {
+            "name": "buses",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "graph",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "infrastructure",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "governance",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "runtime",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "adapters",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "components",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "config",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "audit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "llm",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "wise_authority",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "status",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "system_healthy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services_online",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services_total",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_error_rate",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_requests",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "source",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metric_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "direction",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "direction",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metric_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "recent_tokens",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages_processed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts_processed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tasks_completed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tokens_last_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cost_last_hour_cents",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "carbon_last_hour_grams",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "energy_last_hour_kwh",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "error_rate_percent",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg_thought_depth",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "queue_saturation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "event_value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "data_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "content",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metadata",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "data_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "behavioral",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "user_profiles",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "channel_context",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "user_count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "social",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "agent_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_purpose",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_capabilities",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_restrictions",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "has_purpose",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "event",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_metrics_cached",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unique_metric_types",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "summary_cache_entries",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metrics_per_minute",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cache_size_mb",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max_cached_metrics_per_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tokens",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cost",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "carbon",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "energy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tasks",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "latency",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "collection_method",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cache_ttl_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_metrics_cached",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unique_metric_types",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "summary_cache_entries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max_cached_metrics_per_type",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "buses",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "graph",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "infrastructure",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "governance",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "runtime",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "adapters",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "components",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "config",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "audit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "llm",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "wise_authority",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "status",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "system_healthy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services_online",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services_total",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_error_rate",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_requests",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "source",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metric_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "direction",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "direction",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "resource_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unit",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metric_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "recent_tokens",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages_processed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts_processed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tasks_completed_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors_24h",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors_current_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tokens_last_hour",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cost_last_hour_cents",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "carbon_last_hour_grams",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "energy_last_hour_kwh",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "error_rate_percent",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg_thought_depth",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "queue_saturation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "event_value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "data_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "content",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metadata",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "data_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "behavioral",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "user_profiles",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "channel_context",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "user_count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "social",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "agent_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_purpose",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_capabilities",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity_restrictions",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "memory_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tags",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "has_purpose",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "identity",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "event",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_metrics_cached",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unique_metric_types",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "summary_cache_entries",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metrics_per_minute",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cache_size_mb",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max_cached_metrics_per_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tokens",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cost",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "carbon",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "energy",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "messages",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "thoughts",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "tasks",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "latency",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "services",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "collection_method",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "cache_ttl_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "overall_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "sum",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "min",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "avg",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "total_metrics_cached",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "unique_metric_types",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "summary_cache_entries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "max_cached_metrics_per_type",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "metrics",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "metric_name",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "data_points",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "traces",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "trace_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "task_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "duration_ms",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "thought_count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "logs",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "ERROR",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "timestamp",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "action",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "context",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "incidents",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "incident_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "severity",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "status",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "description",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "created_at",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "insights",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "insight_id",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "insight_type",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "summary",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "details",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "created_at",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "aggregation",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "value",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "logs",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "service",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "count",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "prometheus",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "graphite",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          }
+        ],
+        "push": [
+          {
+            "name": "telemetry_service.shutdown",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_service.shutdown",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/graph/telemetry_service.py"
+          }
+        ]
+      },
+      "graph/audit": {
+        "pull": [
+          {
+            "name": "cached_entries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "pending_exports",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "hash_chain_enabled",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "audit_events_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "audit_events_by_severity",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "audit_compliance_checks",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "thought_id",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "task_id",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          }
+        ],
+        "push": []
+      }
+    },
+    "handlers": {
+      "module_level": {
+        "pull": [],
+        "push": [
+          {
+            "name": "action_selected_task_complete",
+            "type": "PUSH",
+            "category": "handler",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "action_selected_memorize",
+            "type": "PUSH",
+            "category": "handler",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          },
+          {
+            "name": "action_selected_task_complete",
+            "type": "PUSH",
+            "category": "handler",
+            "location": "logic/adapters/api/routes/telemetry.py"
+          }
+        ]
+      }
+    },
+    "runtime_objects": {},
+    "buses": {},
+    "base_classes": {
+      "BaseService": {
+        "pull": [
+          {
+            "name": "request_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/base_service.py"
+          },
+          {
+            "name": "error_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/base_service.py"
+          },
+          {
+            "name": "error_rate",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/base_service.py"
+          }
+        ],
+        "push": []
+      }
+    },
+    "adapters": {
+      "cli": {
+        "pull": [
+          {
+            "name": "circuit_breaker_state",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "consecutive_failures",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "recovery_attempts",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "last_failure_age_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "call_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "failure_count",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "total_api_calls",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "successful_api_calls",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "model_timeout_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "model_max_retries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_requests_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_input",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_output",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_errors_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          }
+        ],
+        "push": [
+          {
+            "name": "llm_tokens_used",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_api_call_structured",
+            "method": "record_metric",
+            "type": "PUSH",
+            "storage": "TSDB",
+            "location": "logic/services/runtime/llm_service.py"
+          }
+        ]
+      }
+    },
+    "dynamic_adapters": {}
+  }
+}

@@ -50,6 +50,14 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         self._active_tasks: Dict[str, ScheduledTask] = {}
         self._shutdown_event = asyncio.Event()
 
+        # Task tracking metrics
+        self._tasks_scheduled = 0
+        self._tasks_triggered = 0
+        self._tasks_completed = 0
+        self._tasks_failed = 0
+        self._recurring_tasks = 0
+        self._oneshot_tasks = 0
+
     def get_service_type(self) -> ServiceType:
         """Get service type."""
         return ServiceType.MAINTENANCE
@@ -181,6 +189,9 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         try:
             logger.info(f"Triggering scheduled task: {task.name} ({task.task_id})")
 
+            # Increment triggered counter
+            self._tasks_triggered += 1
+
             # Check if this is a deferred task reactivation
             if hasattr(task, "metadata") and task.metadata and "deferred_task_id" in task.metadata:
                 # Reactivate the deferred task
@@ -236,6 +247,8 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 await self._complete_task(task)
 
         except Exception as e:
+            # Increment failed counter
+            self._tasks_failed += 1
             logger.error(f"Failed to trigger task {task.task_id}: {e}")
 
     async def _update_task_triggered(self, task: ScheduledTask) -> None:
@@ -259,6 +272,10 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
     async def _complete_task(self, task: ScheduledTask) -> None:
         """Mark a task as complete."""
         task.status = "COMPLETE"
+
+        # Increment completed counter
+        self._tasks_completed += 1
+
         # Remove from active tasks
         if task.task_id in self._active_tasks:
             del self._active_tasks[task.task_id]
@@ -305,6 +322,13 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
 
         # Add to active tasks
         self._active_tasks[task_id] = task
+
+        # Increment task counters
+        self._tasks_scheduled += 1
+        if schedule_cron:
+            self._recurring_tasks += 1
+        else:
+            self._oneshot_tasks += 1
 
         # Log scheduling details
         if defer_until:
@@ -479,8 +503,39 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         return capabilities
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect service-specific metrics."""
-        return {"active_tasks": float(len(self._active_tasks)), "check_interval": float(self.check_interval)}
+        """Collect enhanced task scheduler metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate task success rate
+        success_rate = 0.0
+        total_finished = self._tasks_completed + self._tasks_failed
+        if total_finished > 0:
+            success_rate = self._tasks_completed / total_finished
+
+        # Count recurring vs one-shot
+        recurring = 0
+        oneshot = 0
+        for task in self._active_tasks.values():
+            if task.schedule_cron:
+                recurring += 1
+            else:
+                oneshot += 1
+
+        metrics.update(
+            {
+                "active_tasks": float(len(self._active_tasks)),
+                "check_interval": float(self.check_interval),
+                "tasks_scheduled": float(self._tasks_scheduled),
+                "tasks_triggered": float(self._tasks_triggered),
+                "tasks_completed": float(self._tasks_completed),
+                "tasks_failed": float(self._tasks_failed),
+                "task_success_rate": success_rate,
+                "recurring_tasks": float(recurring),
+                "oneshot_tasks": float(oneshot),
+            }
+        )
+
+        return metrics
 
     def _validate_cron_expression(self, cron_expr: str) -> bool:
         """
@@ -525,6 +580,26 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to calculate next cron time: {e}")
             return "unknown"
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all task scheduler service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific scheduler metrics
+        metrics.update(
+            {
+                "tasks_scheduled_total": float(self._tasks_scheduled),
+                "tasks_completed_total": float(self._tasks_completed),
+                "tasks_failed_total": float(self._tasks_failed),
+                "tasks_pending": float(len(self._active_tasks)),
+                "scheduler_uptime_seconds": self._calculate_uptime(),
+            }
+        )
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if the service is healthy."""

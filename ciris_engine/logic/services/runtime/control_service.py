@@ -82,6 +82,25 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         self._last_config_change: Optional[datetime] = None
         self._events_history: List[RuntimeEvent] = []
 
+        # Enhanced metrics tracking variables
+        self._queue_depth = 0
+        self._thoughts_processed = 0
+        self._thoughts_pending = 0
+        self._average_thought_time_ms = 0.0
+        self._thought_times = []  # Track last N thought processing times
+        self._max_thought_history = 100
+        self._messages_processed = 0
+        self._message_times = []  # Track message processing times
+        self._max_message_history = 100
+        self._service_overrides = 0
+        self._runtime_errors = 0
+        self._single_steps = 0
+        self._pause_resume_cycles = 0
+
+        # State transition tracking for v1.4.3 metrics
+        self._state_transitions = 0
+        self._commands_processed = 0
+
         # Kill switch configuration
         self._kill_switch_config = KillSwitchConfig(
             enabled=True,
@@ -128,6 +147,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 )
 
             result = await self.runtime.agent_processor.single_step()
+            self._single_steps += 1
+            self._commands_processed += 1
             await self._record_event("processor_control", "single_step", success=True, result=result)
 
             return ProcessorControlResponse(
@@ -166,7 +187,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             success = await self.runtime.agent_processor.pause_processing()
             if success:
+                old_status = self._processor_status
                 self._processor_status = ProcessorStatus.PAUSED
+                if old_status != ProcessorStatus.PAUSED:
+                    self._state_transitions += 1
+                    self._pause_resume_cycles += 1
+                self._commands_processed += 1
             await self._record_event("processor_control", "pause", success=success)
 
             return ProcessorControlResponse(
@@ -201,7 +227,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             success = await self.runtime.agent_processor.resume_processing()
             if success:
+                old_status = self._processor_status
                 self._processor_status = ProcessorStatus.RUNNING
+                if old_status != ProcessorStatus.RUNNING:
+                    self._state_transitions += 1
+                    self._pause_resume_cycles += 1
+                self._commands_processed += 1
             await self._record_event("processor_control", "resume", success=success)
 
             return ProcessorControlResponse(
@@ -253,8 +284,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 processor_name="agent",
                 queue_size=queue_status.pending_thoughts + queue_status.pending_tasks,
                 max_size=1000,  # Default max size
-                processing_rate=1.0,  # Would need to calculate from metrics
-                average_latency_ms=0.0,  # Would need to calculate from metrics
+                processing_rate=self._calculate_processing_rate(),
+                average_latency_ms=self._calculate_average_latency(),
                 oldest_message_age_seconds=None,
             )
         except Exception as e:
@@ -964,8 +995,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 uptime_seconds=uptime,
                 processor_count=1,  # Single agent processor
                 adapter_count=len(adapters),
-                total_messages_processed=0,  # Would need to track this
-                current_load=0.0,  # Would need to calculate this
+                total_messages_processed=self._messages_processed,
+                current_load=self._calculate_current_load(),
             )
 
         except Exception as e:
@@ -1637,16 +1668,116 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             self._dependencies.add("RuntimeAdapterManager")
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect service-specific metrics."""
+        """Collect enhanced runtime control metrics."""
+        # Get queue depth if processor exists
+        queue_depth = 0
+        if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
+            if hasattr(self.runtime.agent_processor, "queue") and self.runtime.agent_processor.queue:
+                queue_depth = len(self.runtime.agent_processor.queue)
+
+        # Map cognitive state to float
+        cognitive_state = 0.0
+        if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
+            if hasattr(self.runtime.agent_processor, "state"):
+                state_map = {"WAKEUP": 1.0, "WORK": 2.0, "PLAY": 3.0, "SOLITUDE": 4.0, "DREAM": 5.0, "SHUTDOWN": 6.0}
+                cognitive_state = state_map.get(str(self.runtime.agent_processor.state), 0.0)
+
         metrics = {
+            # Original metrics
             "events_count": float(len(self._events_history)),
             "processor_status": 1.0 if self._processor_status == ProcessorStatus.RUNNING else 0.0,
+            "adapters_loaded": float(len(self.adapter_manager.active_adapters)) if self.adapter_manager else 0.0,
+            # Enhanced metrics
+            "queue_depth": float(queue_depth),
+            "thoughts_processed": float(self._thoughts_processed),
+            "thoughts_pending": float(self._thoughts_pending),
+            "cognitive_state": cognitive_state,
+            "average_thought_time_ms": self._calculate_average_thought_time(),
+            "runtime_paused": 1.0 if self._processor_status == ProcessorStatus.PAUSED else 0.0,
+            "runtime_step_mode": 1.0 if hasattr(self, "_step_mode") and self._step_mode else 0.0,
+            "service_overrides_active": float(self._service_overrides),
+            "runtime_errors": float(self._runtime_errors),
+            "messages_processed": float(self._messages_processed),
+            "average_message_latency_ms": self._calculate_average_latency(),
+            "processing_rate_per_sec": self._calculate_processing_rate(),
+            "system_load": self._calculate_current_load(),
         }
 
-        if self.adapter_manager and hasattr(self.adapter_manager, "active_adapters"):
-            metrics["adapters_loaded"] = float(len(self.adapter_manager.active_adapters))
+        return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all runtime control service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+        # Get queue size from agent processor
+        queue_size = 0
+        if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
+            if hasattr(self.runtime.agent_processor, "queue") and self.runtime.agent_processor.queue:
+                queue_size = len(self.runtime.agent_processor.queue)
+            elif hasattr(self.runtime.agent_processor, "get_queue_status"):
+                try:
+                    queue_status = self.runtime.agent_processor.get_queue_status()
+                    queue_size = queue_status.pending_thoughts + queue_status.pending_tasks
+                except Exception:
+                    queue_size = 0
+
+        # Map processor status to int (matching cognitive state pattern)
+        current_state = 0
+        if self._processor_status == ProcessorStatus.RUNNING:
+            current_state = 1
+        elif self._processor_status == ProcessorStatus.PAUSED:
+            current_state = 2
+        elif self._processor_status == ProcessorStatus.STOPPED:
+            current_state = 3
+
+        # Calculate uptime in seconds
+        uptime_seconds = self._calculate_uptime()
+
+        # Add v1.4.3 specific runtime metrics
+        metrics.update(
+            {
+                "runtime_state_transitions": float(self._state_transitions),
+                "runtime_commands_processed": float(self._commands_processed),
+                "runtime_current_state": float(current_state),
+                "runtime_queue_size": float(queue_size),
+                "runtime_uptime_seconds": float(uptime_seconds),
+            }
+        )
 
         return metrics
+
+    def _calculate_average_thought_time(self) -> float:
+        """Calculate average thought processing time."""
+        if self._thought_times:
+            return sum(self._thought_times) / len(self._thought_times)
+        return self._average_thought_time_ms
+
+    def _calculate_average_latency(self) -> float:
+        """Calculate average message processing latency."""
+        if self._message_times:
+            return sum(self._message_times) / len(self._message_times)
+        return 0.0
+
+    def _calculate_processing_rate(self) -> float:
+        """Calculate messages processed per second."""
+        if self._message_times and len(self._message_times) > 1:
+            # Rate based on recent messages
+            time_span = max(self._message_times) - min(self._message_times)
+            if time_span > 0:
+                return len(self._message_times) / (time_span / 1000.0)  # Convert ms to seconds
+        return 1.0  # Default rate
+
+    def _calculate_current_load(self) -> float:
+        """Calculate current system load (0.0 to 1.0)."""
+        # Load based on queue depth and processing rate
+        if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
+            if hasattr(self.runtime.agent_processor, "queue") and self.runtime.agent_processor.queue:
+                queue_depth = len(self.runtime.agent_processor.queue)
+                # Normalize to 0-1 range (assume 100 messages is full load)
+                return min(queue_depth / 100.0, 1.0)
+        return 0.0
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service provides."""

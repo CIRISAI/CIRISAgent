@@ -10,15 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union, cast
 
-# Optional import for psutil
-try:
-    import psutil
-
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    psutil = None  # type: ignore
-    PSUTIL_AVAILABLE = False
-
 from ciris_engine.logic.services.base_graph_service import BaseGraphService, GraphNodeConvertible
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
@@ -27,6 +18,9 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.nodes import ConfigNode, ConfigValue
 from ciris_engine.schemas.services.operations import MemoryQuery
+
+# No psutil needed - only resource_monitor uses it
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +36,13 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         self.graph = graph_memory_service
         self._running = False
         self._start_time: Optional[datetime] = None
-        self._process = psutil.Process() if PSUTIL_AVAILABLE else None  # For memory tracking
+        # No process tracking here - resource_monitor handles that
         self._config_cache: Dict[str, ConfigNode] = {}  # Cache for config nodes
         self._config_listeners: Dict[str, List[Callable]] = {}  # key_pattern -> [callbacks]
+
+        # Track cache metrics for v1.4.3
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     async def start(self) -> None:
         """Start the service."""
@@ -58,13 +56,37 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         # Nothing to clean up
         await super().stop()
 
-    def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect config-specific metrics."""
-        metrics = super()._collect_custom_metrics()
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all config service metrics including base, custom, and v1.4.3 specific.
+        """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
-        # Add config-specific metrics
+        # Get total config values count from graph
+        config_count = 0
+        try:
+            # Query all config nodes to get total count
+            nodes = await self.graph.search("type:config")
+            config_count = len(nodes)
+        except Exception:
+            # Fallback to cache count if graph query fails
+            config_count = len(self._config_cache)
+
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if self._started and self._start_time:
+            uptime_delta = (self._now() - self._start_time).total_seconds()
+            uptime_seconds = max(0.0, uptime_delta)  # Ensure non-negative
+
+        # Add v1.4.3 specific metrics
         metrics.update(
-            {"total_configs": float(len(self._config_cache)), "config_listeners": float(len(self._config_listeners))}
+            {
+                "config_cache_hits": float(self._cache_hits),
+                "config_cache_misses": float(self._cache_misses),
+                "config_values_total": float(config_count),
+                "config_uptime_seconds": uptime_seconds,
+            }
         )
 
         return metrics
@@ -122,6 +144,14 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
     async def get_config(self, key: str) -> Optional[ConfigNode]:
         """Get current configuration value."""
+        # Check cache first
+        if key in self._config_cache:
+            self._cache_hits += 1
+            return self._config_cache[key]
+
+        # Cache miss - query from graph
+        self._cache_misses += 1
+
         # Query config nodes by key
         graph_nodes = await self._query_config_by_key(key)
         if not graph_nodes:
@@ -142,7 +172,12 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
         # Sort by version, get latest
         config_nodes.sort(key=lambda n: n.version, reverse=True)
-        return config_nodes[0]
+        latest_config = config_nodes[0]
+
+        # Cache the result
+        self._config_cache[key] = latest_config
+
+        return latest_config
 
     async def set_config(
         self, key: str, value: Union[str, int, float, bool, List, Dict, Path], updated_by: str
@@ -189,23 +224,30 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
                 return
 
         # Create new config node with all required fields
+        now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         new_config = ConfigNode(
             # GraphNode required fields
             id=f"config_{key.replace('.', '_')}_{uuid.uuid4().hex[:8]}",
             # type will use default from ConfigNode
             scope=GraphScope.LOCAL,  # Config is always local scope
-            attributes={},  # Empty dict for base GraphNode
+            attributes={
+                "created_at": now.isoformat(),
+                "created_by": updated_by,
+            },  # Include created_at/created_by for compliance
             # ConfigNode specific fields
             key=key,
             value=config_value,
             version=(current.version + 1) if current else 1,
             updated_by=updated_by,
-            updated_at=self._time_service.now() if self._time_service else datetime.now(timezone.utc),
+            updated_at=now,
             previous_version=current.id if current else None,
         )
 
         # Store in graph (base class will handle conversion)
         await self.store_in_graph(new_config)
+
+        # Update cache with new config
+        self._config_cache[key] = new_config
 
         # Notify listeners of the change
         await self._notify_listeners(key, current.value if current else None, config_value)

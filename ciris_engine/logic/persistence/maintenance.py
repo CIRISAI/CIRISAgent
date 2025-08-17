@@ -428,14 +428,10 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get database maintenance metrics for v1.4.3.
-
-        Returns exactly these 4 metrics:
-        - db_vacuum_operations: Vacuum operations performed
-        - db_cleanup_operations: Cleanup operations performed
-        - db_size_mb: Current database size in MB
-        - db_maintenance_uptime_seconds: Service uptime
+        Get all database maintenance metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
         # Calculate database size
         db_size_mb = 0.0
         try:
@@ -457,9 +453,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             uptime_delta = current_time - self._start_time
             uptime_seconds = uptime_delta.total_seconds()
 
-        return {
-            "db_vacuum_operations": float(self._vacuum_runs),
-            "db_cleanup_operations": float(self._cleanup_runs),
-            "db_size_mb": db_size_mb,
-            "db_maintenance_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "db_vacuum_operations": float(self._vacuum_runs),
+                "db_cleanup_operations": float(self._cleanup_runs),
+                "db_size_mb": db_size_mb,
+                "db_maintenance_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics

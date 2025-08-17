@@ -58,14 +58,11 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get config service metrics for v1.4.3.
-
-        Returns EXACTLY these 4 metrics:
-        - config_cache_hits: Cache hit count
-        - config_cache_misses: Cache miss count
-        - config_values_total: Total config values stored
-        - config_uptime_seconds: Service uptime
+        Get all config service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         # Get total config values count from graph
         config_count = 0
         try:
@@ -82,12 +79,17 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
             uptime_delta = (self._now() - self._start_time).total_seconds()
             uptime_seconds = max(0.0, uptime_delta)  # Ensure non-negative
 
-        return {
-            "config_cache_hits": float(self._cache_hits),
-            "config_cache_misses": float(self._cache_misses),
-            "config_values_total": float(config_count),
-            "config_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "config_cache_hits": float(self._cache_hits),
+                "config_cache_misses": float(self._cache_misses),
+                "config_values_total": float(config_count),
+                "config_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     async def store_in_graph(self, node: Union[GraphNode, GraphNodeConvertible]) -> str:
         """Store config node in graph."""

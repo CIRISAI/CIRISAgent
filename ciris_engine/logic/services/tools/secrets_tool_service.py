@@ -301,26 +301,52 @@ class SecretsToolService(BaseService, ToolService):
 
         return capabilities
 
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect tool service specific metrics."""
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate success rate
+        success_rate = 0.0
+        if self._request_count > 0:
+            success_rate = (self._request_count - self._error_count) / self._request_count
+
+        # Add tool-specific metrics
+        metrics.update(
+            {
+                "tool_executions": float(self._request_count),
+                "tool_errors": float(self._error_count),
+                "success_rate": success_rate,
+                "secrets_retrieved": float(self._secrets_retrieved),
+                "audit_events_generated": float(self._error_count),  # Each error generates an audit event
+            }
+        )
+
+        return metrics
+
     async def get_metrics(self) -> Dict[str, float]:
-        """Get EXACTLY these metrics from the 362 v1.4.3 set for secrets_tool.
+        """Get all metrics including base, custom, and v1.4.3 specific.
 
         Returns:
-            Dict with exactly these 4 metrics:
-            - secrets_tool_invocations: Tool invocations count
-            - secrets_tool_retrieved: Secrets retrieved count
-            - secrets_tool_stored: Secrets stored count (always 0 for this service)
-            - secrets_tool_uptime_seconds: Service uptime
+            Dict with all metrics including tool-specific and v1.4.3 metrics
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         uptime_seconds = 0.0
         if self._start_time:
             uptime_seconds = max(0.0, (current_time - self._start_time).total_seconds())
 
-        return {
-            "secrets_tool_invocations": float(self._request_count),
-            "secrets_tool_retrieved": float(self._secrets_retrieved),
-            "secrets_tool_stored": 0.0,  # This service only retrieves, never stores
-            "secrets_tool_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "secrets_tool_invocations": float(self._request_count),
+                "secrets_tool_retrieved": float(self._secrets_retrieved),
+                "secrets_tool_stored": 0.0,  # This service only retrieves, never stores
+                "secrets_tool_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     # get_telemetry() removed - use get_metrics() from BaseService instead

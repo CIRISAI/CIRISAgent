@@ -590,14 +590,10 @@ class SecretsService(BaseService, SecretsServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get secrets service metrics - v1.4.3 set of 362 metrics.
-
-        Returns exactly these 4 secrets metrics:
-        - secrets_accessed_total: Secrets accessed count
-        - secrets_rotated_total: Secrets rotated count
-        - secrets_active: Active secrets in vault
-        - secrets_uptime_seconds: Service uptime
+        Get all secrets service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
         # Calculate accessed secrets from retrievals and decryptions
         accessed_total = self._secrets_retrieved + self._decryption_operations
 
@@ -618,13 +614,17 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         # Service uptime in seconds
         uptime_seconds = self._calculate_uptime()
 
-        # Return exact metrics from v1.4.3 set
-        return {
-            "secrets_accessed_total": float(accessed_total),
-            "secrets_rotated_total": float(rotated_total),
-            "secrets_active": float(active_secrets),
-            "secrets_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "secrets_accessed_total": float(accessed_total),
+                "secrets_rotated_total": float(rotated_total),
+                "secrets_active": float(active_secrets),
+                "secrets_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     def get_status(self) -> ServiceStatus:
         """Get service status."""

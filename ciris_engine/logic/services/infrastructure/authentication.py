@@ -1587,28 +1587,31 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         return metrics
 
     async def get_metrics(self) -> Dict[str, float]:
-        """Get EXACTLY the 362 v1.4.3 metrics for authentication service.
+        """Get all authentication service metrics including base, custom, and v1.4.3 specific.
 
         Returns:
-            Dict with exactly these 5 metrics:
-            - auth_attempts_total: Authentication attempts
-            - auth_successes_total: Successful authentications
-            - auth_failures_total: Failed authentications
-            - auth_active_sessions: Active sessions count
-            - auth_uptime_seconds: Service uptime
+            Dict with all metrics including base, custom, and v1.4.3 metrics
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         uptime_seconds = 0.0
         if self._start_time:
             uptime_seconds = (current_time - self._start_time).total_seconds()
 
-        return {
-            "auth_attempts_total": float(self._auth_attempts),
-            "auth_successes_total": float(self._auth_successes),
-            "auth_failures_total": float(self._auth_failures),
-            "auth_active_sessions": float(self._session_count),
-            "auth_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "auth_attempts_total": float(self._auth_attempts),
+                "auth_successes_total": float(self._auth_successes),
+                "auth_failures_total": float(self._auth_failures),
+                "auth_active_sessions": float(self._session_count),
+                "auth_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

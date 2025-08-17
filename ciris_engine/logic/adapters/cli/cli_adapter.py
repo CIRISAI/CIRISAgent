@@ -868,7 +868,7 @@ Tools available:
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get CLI adapter metrics.
+        Get all CLI adapter metrics including base, custom, and v1.4.3 specific.
 
         Returns:
             Dictionary containing CLI-specific metrics from the v1.4.3 set:
@@ -876,8 +876,16 @@ Tools available:
             - cli_errors_total: Total number of errors encountered
             - cli_sessions_active: Number of active CLI sessions (1 if running, 0 if not)
         """
-        return {
-            "cli_commands_executed": float(self._commands_executed_count),
-            "cli_errors_total": float(self._errors_total_count),
-            "cli_sessions_active": 1.0 if self._running else 0.0,
-        }
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "cli_commands_executed": float(self._commands_executed_count),
+                "cli_errors_total": float(self._errors_total_count),
+                "cli_sessions_active": 1.0 if self._running else 0.0,
+            }
+        )
+
+        return metrics

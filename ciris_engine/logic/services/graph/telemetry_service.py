@@ -989,19 +989,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get telemetry service metrics including the required v1.4.3 metrics.
-
-        Returns exactly these metrics from the 362 v1.4.3 set:
-        - telemetry_metrics_collected: Total metrics collected
-        - telemetry_services_monitored: Number of services monitored
-        - telemetry_cache_hits: Cache hits
-        - telemetry_collection_errors: Collection errors
-        - telemetry_uptime_seconds: Service uptime
-
-        Uses real values from service state, not zeros.
+        Get all telemetry service metrics including base, custom, and v1.4.3 specific.
         """
-        # Get base metrics first
-        base_metrics = await super().get_metrics()
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
 
         # Calculate telemetry-specific metrics using real service state
 
@@ -1027,24 +1018,23 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         cache_hits = len(self._summary_cache)
 
         # Collection errors from error count
-        collection_errors = base_metrics.get("error_count", 0.0)
+        collection_errors = metrics.get("error_count", 0.0)
 
         # Service uptime in seconds
-        uptime_seconds = base_metrics.get("uptime_seconds", 0.0)
+        uptime_seconds = metrics.get("uptime_seconds", 0.0)
 
-        # Combine with required v1.4.3 metrics
-        telemetry_metrics = {
-            "telemetry_metrics_collected": float(total_metrics_collected),
-            "telemetry_services_monitored": float(services_monitored),
-            "telemetry_cache_hits": float(cache_hits),
-            "telemetry_collection_errors": float(collection_errors),
-            "telemetry_uptime_seconds": float(uptime_seconds),
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "telemetry_metrics_collected": float(total_metrics_collected),
+                "telemetry_services_monitored": float(services_monitored),
+                "telemetry_cache_hits": float(cache_hits),
+                "telemetry_collection_errors": float(collection_errors),
+                "telemetry_uptime_seconds": float(uptime_seconds),
+            }
+        )
 
-        # Merge base metrics with telemetry-specific metrics
-        base_metrics.update(telemetry_metrics)
-
-        return base_metrics
+        return metrics
 
     def get_node_type(self) -> str:
         """Get the type of nodes this service manages."""

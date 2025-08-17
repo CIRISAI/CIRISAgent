@@ -733,14 +733,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get audit service metrics - v1.4.3 set of 362 metrics.
-
-        Returns exactly these 4 audit metrics:
-        - audit_events_total: Total audit events recorded
-        - audit_events_by_severity: Events by severity (dict)
-        - audit_compliance_checks: Compliance checks performed
-        - audit_uptime_seconds: Service uptime
+        Get all audit service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
         # Count total events from cache and estimate from graph
         total_events = len(self._recent_entries)
 
@@ -772,12 +768,17 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             uptime_seconds = (current_time - self._start_time).total_seconds()
 
         # Return exact metrics from v1.4.3 set
-        return {
-            "audit_events_total": float(total_events),
-            "audit_events_by_severity": float(sum(severity_counts.values())),  # Flattened count
-            "audit_compliance_checks": float(compliance_checks),
-            "audit_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "audit_events_total": float(total_events),
+                "audit_events_by_severity": float(sum(severity_counts.values())),  # Flattened count
+                "audit_compliance_checks": float(compliance_checks),
+                "audit_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     # ========== Private Helper Methods ==========
 

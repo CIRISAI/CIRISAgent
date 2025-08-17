@@ -484,7 +484,7 @@ class MemoryBus(BaseBus[MemoryService]):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get memory bus metrics from the v1.4.3 set.
+        Get all memory bus metrics including base, custom, and v1.4.3 specific.
 
         Returns exactly these metrics from the 362 v1.4.3 set:
         - memory_bus_operations: Total memory operations
@@ -494,6 +494,9 @@ class MemoryBus(BaseBus[MemoryService]):
 
         Uses real values from bus state, not zeros.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         # Get subscriber count (registered memory services)
         memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
         subscriber_count = len(memory_services) if memory_services else 0
@@ -508,9 +511,14 @@ class MemoryBus(BaseBus[MemoryService]):
         # Error count from our specific error counter (memory operation failures)
         error_count = self._error_count
 
-        return {
-            "memory_bus_operations": float(operations_count),
-            "memory_bus_broadcasts": float(broadcast_count),
-            "memory_bus_errors": float(error_count),
-            "memory_bus_subscribers": float(subscriber_count),
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "memory_bus_operations": float(operations_count),
+                "memory_bus_broadcasts": float(broadcast_count),
+                "memory_bus_errors": float(error_count),
+                "memory_bus_subscribers": float(subscriber_count),
+            }
+        )
+
+        return metrics

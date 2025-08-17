@@ -616,17 +616,11 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get adaptive filter service metrics - v1.4.3 set.
-
-        Returns EXACTLY these 5 metrics from the 362 v1.4.3 set:
-        - filter_messages_total: Total messages processed
-        - filter_passed_total: Messages that passed filter
-        - filter_blocked_total: Messages blocked
-        - filter_adaptations_total: Filter adaptations made
-        - filter_uptime_seconds: Service uptime
-
-        Uses real values from service state, not zeros.
+        Get all adaptive filter service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         # Calculate blocked messages (messages that didn't pass)
         blocked_count = 0
         passed_count = self._stats.total_messages_processed
@@ -645,13 +639,18 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             all_triggers = self._config.attention_triggers + self._config.review_triggers + self._config.llm_filters
             adaptations_count = sum(1 for trigger in all_triggers if trigger.true_positive_count > 0)
 
-        return {
-            "filter_messages_total": float(self._stats.total_messages_processed),
-            "filter_passed_total": float(passed_count),
-            "filter_blocked_total": float(blocked_count),
-            "filter_adaptations_total": float(adaptations_count),
-            "filter_uptime_seconds": float(self._calculate_uptime()),
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "filter_messages_total": float(self._stats.total_messages_processed),
+                "filter_passed_total": float(passed_count),
+                "filter_blocked_total": float(blocked_count),
+                "filter_adaptations_total": float(adaptations_count),
+                "filter_uptime_seconds": float(self._calculate_uptime()),
+            }
+        )
+
+        return metrics
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""

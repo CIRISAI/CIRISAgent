@@ -115,7 +115,10 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
         return metrics
 
     def get_metrics(self) -> Dict[str, float]:
-        """Get initialization service metrics from v1.4.3 set."""
+        """Get all initialization service metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         # Calculate init time in milliseconds
         init_time_ms = 0.0
         if self._start_time:
@@ -127,12 +130,17 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
         if self._start_time:
             uptime_seconds = (self.time_service.now() - self._start_time).total_seconds()
 
-        return {
-            "init_services_started": float(len(self._completed_steps)),
-            "init_errors_total": float(1 if self._error else 0),
-            "init_time_ms": init_time_ms,
-            "init_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "init_services_started": float(len(self._completed_steps)),
+                "init_errors_total": float(1 if self._error else 0),
+                "init_time_ms": init_time_ms,
+                "init_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

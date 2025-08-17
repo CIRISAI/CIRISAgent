@@ -1123,13 +1123,21 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
         }
 
     async def get_metrics(self) -> Dict[str, float]:
-        """Get v1.4.3 metrics for self_observation service."""
-        return {
-            "self_observation_observations": float(self._observations_made),
-            "self_observation_patterns_detected": float(self._patterns_detected),
-            "self_observation_identity_variance": float(self._last_variance_report),
-            "self_observation_uptime_seconds": self._calculate_uptime(),
-        }
+        """Get all self-observation metrics including base, custom, and v1.4.3 specific."""
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "self_observation_observations": float(self._observations_made),
+                "self_observation_patterns_detected": float(self._patterns_detected),
+                "self_observation_identity_variance": float(self._last_variance_report),
+                "self_observation_uptime_seconds": self._calculate_uptime(),
+            }
+        )
+
+        return metrics
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect self-observation metrics."""

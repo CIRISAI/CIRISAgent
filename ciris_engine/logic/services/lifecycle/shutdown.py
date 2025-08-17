@@ -121,14 +121,11 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
     def get_metrics(self) -> Dict[str, float]:
         """
-        Get v1.4.3 standard metrics for ShutdownService.
-
-        Returns EXACTLY these 4 metrics:
-        - shutdown_requests_total: Total shutdown requests received
-        - shutdown_graceful_total: Graceful shutdowns completed
-        - shutdown_emergency_total: Emergency shutdowns
-        - shutdown_uptime_seconds: Service uptime in seconds
+        Get all shutdown service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         with self._lock:
             shutdown_requests_total = float(self._shutdown_requests_total)
             shutdown_graceful_total = float(self._shutdown_graceful_total)
@@ -137,12 +134,17 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         # Calculate uptime from base service
         shutdown_uptime_seconds = self._calculate_uptime()
 
-        return {
-            "shutdown_requests_total": shutdown_requests_total,
-            "shutdown_graceful_total": shutdown_graceful_total,
-            "shutdown_emergency_total": shutdown_emergency_total,
-            "shutdown_uptime_seconds": shutdown_uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "shutdown_requests_total": shutdown_requests_total,
+                "shutdown_graceful_total": shutdown_graceful_total,
+                "shutdown_emergency_total": shutdown_emergency_total,
+                "shutdown_uptime_seconds": shutdown_uptime_seconds,
+            }
+        )
+
+        return metrics
 
     async def request_shutdown(self, reason: str) -> None:
         """

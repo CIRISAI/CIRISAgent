@@ -1663,7 +1663,7 @@ class TSDBConsolidationService(BaseGraphService):
             logger.error(f"Failed to create daily summary edges: {e}", exc_info=True)
 
     async def get_metrics(self) -> Dict[str, float]:
-        """Get TSDB consolidation service metrics.
+        """Get all TSDB consolidation service metrics including base, custom, and v1.4.3 specific.
 
         Returns exactly the 4 metrics from v1.4.3 API specification:
         - tsdb_consolidations_total: Total consolidations performed
@@ -1671,6 +1671,9 @@ class TSDBConsolidationService(BaseGraphService):
         - tsdb_storage_saved_mb: Storage saved by consolidation (MB)
         - tsdb_uptime_seconds: Service uptime in seconds
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         # Calculate uptime
         uptime_seconds = 0.0
         if hasattr(self, "_start_time") and self._start_time:
@@ -1686,12 +1689,17 @@ class TSDBConsolidationService(BaseGraphService):
         avg_record_size_kb = 2.0
         storage_saved_mb = (self._records_deleted * avg_record_size_kb) / 1024.0
 
-        return {
-            "tsdb_consolidations_total": float(total_consolidations),
-            "tsdb_datapoints_processed": float(self._records_consolidated),
-            "tsdb_storage_saved_mb": storage_saved_mb,
-            "tsdb_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific metrics
+        metrics.update(
+            {
+                "tsdb_consolidations_total": float(total_consolidations),
+                "tsdb_datapoints_processed": float(self._records_consolidated),
+                "tsdb_storage_saved_mb": storage_saved_mb,
+                "tsdb_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics
 
     def _run_profound_consolidation(self) -> None:
         """

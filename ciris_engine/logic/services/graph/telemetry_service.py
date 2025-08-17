@@ -239,11 +239,8 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {bus_name}: {e}")
             return self.get_fallback_metrics(bus_name, healthy=False)
 
-    def get_fallback_metrics(self, *args, **kwargs) -> Dict[str, Any]:
-        """NO FALLBACKS. Real metrics or nothing.
-
-        Args are accepted for compatibility but ignored - no fake metrics.
-        """
+    def get_fallback_metrics(self, service_name: str, healthy: bool = True) -> Dict[str, Any]:
+        """NO FALLBACKS. Real metrics or nothing."""
         # NO FAKE METRICS. Services must implement get_metrics() or they get nothing.
         return {}
 

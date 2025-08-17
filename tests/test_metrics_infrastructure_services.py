@@ -72,7 +72,8 @@ class TestTimeServiceMetrics(BaseMetricsTest):
         # Check valid ranges
         self.assert_metrics_valid_ranges(metrics)
 
-    def test_time_service_metrics_with_activity(self):
+    @pytest.mark.asyncio
+    async def test_time_service_metrics_with_activity(self):
         """Test TimeService metrics after some activity."""
         service = TimeService()
 
@@ -83,16 +84,14 @@ class TestTimeServiceMetrics(BaseMetricsTest):
         service.timestamp()  # Increments time_requests (via now())
         service.get_uptime()  # Increments time_requests (via now())
 
-        metrics = service._collect_metrics()
+        # v1.4.3: Use async get_metrics() method
+        metrics = await service.get_metrics()
 
-        # Check that request counts increased - all methods call now() internally
-        assert metrics["time_requests"] >= 4.0  # now() called 4 times total
-        # Individual method counters are not incremented directly in current implementation
-        assert metrics["iso_requests"] == 0.0  # Not tracked separately
-        assert metrics["timestamp_requests"] == 0.0  # Not tracked separately
-        assert metrics["uptime_requests"] == 0.0  # Not tracked separately
-        # Total includes all request types but most are 0
-        assert metrics["total_requests"] >= 4.0
+        # Check v1.4.3 metrics - different names
+        assert metrics["time_queries_total"] >= 4.0  # now() called 4 times total
+        assert metrics["time_sync_operations"] >= 0.0
+        assert metrics["time_drift_ms"] >= 0.0
+        assert metrics["time_uptime_seconds"] >= 0.0
 
     def test_time_service_ntp_metrics_with_ntplib(self):
         """Test NTP metrics when ntplib is available."""

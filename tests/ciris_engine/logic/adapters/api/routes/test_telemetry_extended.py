@@ -973,30 +973,35 @@ class TestResourceHistoryEndpoint:
             print(f"ERROR: Status {response.status_code}, Response: {response.text}")
         assert response.status_code == 200
 
-        data = response.json()
+        # Handle SuccessResponse wrapper
+        response_data = response.json()
+        data = response_data.get("data", response_data)  # Handle both wrapped and unwrapped
+
         # Check structure matches ResourceHistoryResponse schema
         assert "period" in data
         assert "cpu" in data
         assert "memory" in data
         assert "disk" in data
 
-        # Check CPU data - now uses simple ResourceMetricData format
+        # Check CPU data - now uses new format with data/stats/unit
         cpu = data["cpu"]
-        assert "current" in cpu
-        assert "average" in cpu
-        assert "peak" in cpu
-        assert cpu["current"] > 0
-        assert cpu["average"] > 0
-        assert cpu["peak"] >= cpu["average"]
+        assert "data" in cpu
+        assert "stats" in cpu
+        assert "unit" in cpu
+        assert cpu["unit"] == "percent"
+        assert cpu["stats"]["current"] > 0
+        assert cpu["stats"]["avg"] > 0
+        assert cpu["stats"]["max"] >= cpu["stats"]["avg"]
 
-        # Check memory data - now uses simple ResourceMetricData format
+        # Check memory data - now uses new format with data/stats/unit
         memory = data["memory"]
-        assert "current" in memory
-        assert "average" in memory
-        assert "peak" in memory
-        assert memory["current"] > 0
-        assert memory["average"] > 0
-        assert memory["peak"] >= memory["average"]
+        assert "data" in memory
+        assert "stats" in memory
+        assert "unit" in memory
+        assert memory["unit"] == "MB"
+        assert memory["stats"]["current"] > 0
+        assert memory["stats"]["avg"] > 0
+        assert memory["stats"]["max"] >= memory["stats"]["avg"]
 
     def test_resource_history_different_windows(self, client):
         """Test resource history with different time windows."""
@@ -1004,7 +1009,10 @@ class TestResourceHistoryEndpoint:
             response = client.get(f"/telemetry/resources/history?hours={hours}")
             assert response.status_code == 200
 
-            data = response.json()
+            # Handle SuccessResponse wrapper
+            response_data = response.json()
+            data = response_data.get("data", response_data)  # Handle both wrapped and unwrapped
+
             # Check period structure matches schema
             assert "period" in data
             assert data["period"]["hours"] == hours

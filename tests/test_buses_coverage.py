@@ -391,6 +391,122 @@ class TestMemoryBus:
 
     # MemoryBus doesn't have an update method - removed this test
 
+    async def test_search_memories(self, memory_bus, mock_registry):
+        """Test search_memories method."""
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+        mock_memory = AsyncMock()
+        test_nodes = [
+            GraphNode(id=f"node_{i}", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={}) for i in range(3)
+        ]
+        mock_memory.search = AsyncMock(return_value=test_nodes)
+        mock_memory.get_capabilities = MagicMock(return_value=MagicMock(actions=["search"]))
+        mock_registry.get_services_by_type.return_value = [mock_memory]
+        mock_registry.get_service = AsyncMock(return_value=mock_memory)
+
+        # Test search_memories with default scope
+        results = await memory_bus.search_memories("type:concept", limit=10)
+        assert len(results) == 3
+
+        # Test with different scope
+        results = await memory_bus.search_memories("type:concept", scope="global", limit=5)
+        assert len(results) == 3
+
+    async def test_memorize_metric(self, memory_bus, mock_registry):
+        """Test memorize_metric method - just test it can be called."""
+        mock_memory = AsyncMock()
+        mock_memory.memorize = AsyncMock(return_value=MagicMock(status="ok"))
+        mock_registry.get_services_by_type.return_value = []  # No service available
+
+        # Should handle no service gracefully
+        await memory_bus.memorize_metric(
+            metric_name="test_metric", value=42.5, tags={"source": "test"}, handler_name="test_handler"
+        )
+
+        # Method completes without error even with no service
+
+    async def test_memorize_log(self, memory_bus, mock_registry):
+        """Test memorize_log method - just test it can be called."""
+        mock_registry.get_services_by_type.return_value = []  # No service available
+
+        # Should handle no service gracefully
+        await memory_bus.memorize_log(
+            log_message="Test log message",
+            log_level="INFO",
+            tags={"source": "test_source"},
+            handler_name="test_handler",
+        )
+
+        # Method completes without error even with no service
+
+    async def test_recall_timeseries(self, memory_bus, mock_registry):
+        """Test recall_timeseries method - just test it can be called."""
+        mock_registry.get_services_by_type.return_value = []  # No service available
+        mock_registry.get_service = AsyncMock(return_value=None)  # No service available
+
+        # Should handle no service gracefully and return empty list
+        results = await memory_bus.recall_timeseries(scope="default", hours=24, handler_name="test_handler")
+
+        # Returns empty list when no service available
+        assert results == []
+
+    async def test_export_identity_context(self, memory_bus, mock_registry):
+        """Test export_identity_context method."""
+        mock_memory = AsyncMock()
+        mock_memory.export_identity_context = AsyncMock(return_value="exported_context_data")
+        mock_memory.get_capabilities = MagicMock(return_value=MagicMock(actions=["export_identity_context"]))
+        mock_registry.get_services_by_type.return_value = [mock_memory]
+        mock_registry.get_service = AsyncMock(return_value=mock_memory)
+
+        result = await memory_bus.export_identity_context()
+        assert result == "exported_context_data"
+
+    async def test_is_healthy(self, memory_bus, mock_registry):
+        """Test is_healthy method."""
+        mock_memory = AsyncMock()
+        mock_memory.is_healthy = AsyncMock(return_value=True)
+        mock_registry.get_services_by_type.return_value = [mock_memory]
+        mock_registry.get_service = AsyncMock(return_value=mock_memory)
+
+        result = await memory_bus.is_healthy()
+        assert result is True
+
+    async def test_get_capabilities(self, memory_bus, mock_registry):
+        """Test get_capabilities method."""
+        mock_memory = AsyncMock()
+        mock_memory.get_capabilities = MagicMock(
+            return_value=MagicMock(supports_operation_list=["memorize", "recall", "search"])
+        )
+        mock_registry.get_services_by_type.return_value = [mock_memory]
+        mock_registry.get_service = AsyncMock(return_value=mock_memory)
+
+        capabilities = await memory_bus.get_capabilities()
+        assert "memorize" in capabilities
+        assert "recall" in capabilities
+        assert "search" in capabilities
+
+    async def test_collect_telemetry(self, memory_bus, mock_registry):
+        """Test collect_telemetry method."""
+        mock_memory = AsyncMock()
+        mock_memory.get_telemetry = AsyncMock(
+            return_value={
+                "service_name": "test_memory",
+                "healthy": True,
+                "nodes_count": 100,
+                "cache_hits": 50,
+                "cache_misses": 20,
+            }
+        )
+        mock_registry.get_services_by_type.return_value = [mock_memory]
+        # Mock the _services attribute
+        mock_registry._services = {ServiceType.MEMORY: [MagicMock(instance=mock_memory)]}
+
+        result = await memory_bus.collect_telemetry()
+
+        assert result["service_name"] == "memory_bus"
+        assert result["healthy"] is True
+        assert result["provider_count"] == 1
+
     def test_get_metrics(self, memory_bus):
         """Test getting memory bus metrics."""
         memory_bus._operation_count = 100

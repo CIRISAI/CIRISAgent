@@ -60,20 +60,46 @@ def app_with_detailed_services():
     # Mock query_metrics to return detailed data for specific metric endpoint
     async def mock_query_metrics_detailed(metric_name=None, start_time=None, end_time=None, **kwargs):
         """Return detailed metric data for trend calculation and statistics."""
-        # Generate 100 data points for comprehensive statistics
-        values = []
-        base_value = 40.0
-        for i in range(100):
-            timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
-            value = base_value + (i % 10) * 2  # Create some variation
-            values.append(
-                {
-                    "timestamp": timestamp.isoformat(),
-                    "value": value,
-                    "tags": {"service": "test_service", "environment": "test"},
-                }
-            )
-        return values
+        # Return different data based on metric name
+        if metric_name == "cpu_percent":
+            # CPU data between 30-70%
+            values = []
+            for i in range(20):
+                timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
+                value = 50.0 + (i % 10) * 2  # Varies between 50-68%
+                values.append({"timestamp": timestamp.isoformat(), "value": value})
+            return values
+        elif metric_name == "memory_mb":
+            # Memory data between 400-600 MB
+            values = []
+            for i in range(20):
+                timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
+                value = 500.0 + (i % 10) * 10  # Varies between 500-590 MB
+                values.append({"timestamp": timestamp.isoformat(), "value": value})
+            return values
+        elif metric_name == "disk_usage_bytes":
+            # Disk data around 20GB
+            values = []
+            for i in range(20):
+                timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
+                value = 20000000000 + (i % 10) * 100000000  # Varies around 20GB
+                values.append({"timestamp": timestamp.isoformat(), "value": value})
+            return values
+        else:
+            # Default data for other metrics
+            values = []
+            base_value = 40.0
+            for i in range(100):
+                timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
+                value = base_value + (i % 10) * 2  # Create some variation
+                values.append(
+                    {
+                        "timestamp": timestamp.isoformat(),
+                        "value": value,
+                        "tags": {"service": "test_service", "environment": "test"},
+                    }
+                )
+            return values
 
     telemetry_service.query_metrics = AsyncMock(side_effect=mock_query_metrics_detailed)
     telemetry_service.collect_all = AsyncMock(return_value={})
@@ -252,6 +278,50 @@ def app_with_detailed_services():
     # Incident management service
     incident_service = MagicMock()
     incident_service.get_recent_incidents = AsyncMock(return_value=[])
+
+    # Mock query_incidents for the query endpoint
+    async def mock_query_incidents(start_time=None, end_time=None, severity=None, status=None, **kwargs):
+        """Return mock incidents based on filters."""
+        incidents = []
+
+        # Create a few mock incidents
+        for i in range(3):
+            incident = MagicMock()
+            incident.id = f"incident_{i}"
+            incident.severity = severity or "high"
+            incident.status = status or "investigating"
+            incident.description = f"Test incident {i}"
+            incident.detected_at = datetime.now(timezone.utc) - timedelta(hours=i)
+            incident.created_at = incident.detected_at  # Some incidents may have created_at
+            incidents.append(incident)
+
+        return incidents
+
+    incident_service.query_incidents = AsyncMock(side_effect=mock_query_incidents)
+
+    # Mock get_insights for insights query
+    async def mock_get_insights(start_time=None, end_time=None, limit=10, **kwargs):
+        """Return mock insights."""
+        insights = []
+
+        # Create mock insight objects
+        for i in range(2):
+            insight = MagicMock()
+            insight.id = f"insight_{i}"
+            insight.insight_type = "performance" if i == 0 else "resource"
+            insight.summary = "System performing optimally" if i == 0 else "Memory usage trending up"
+            insight.details = {
+                "metric": "cpu_usage" if i == 0 else "memory_usage",
+                "trend": "stable" if i == 0 else "increasing",
+            }
+            insight.analysis_timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 10)
+            insight.created_at = insight.analysis_timestamp
+            insights.append(insight)
+
+        return insights
+
+    incident_service.get_insights = AsyncMock(side_effect=mock_get_insights)
+
     app.state.incident_management_service = incident_service
 
     # Add all other required services
@@ -496,11 +566,22 @@ class TestQueryEndpointWithComplexFilters:
                 },
             },
         )
-        assert response.status_code in [200, 500]  # May fail if not all services mocked
+        assert response.status_code == 200  # Should succeed with mocked services
 
         data = response.json()["data"]
         assert "results" in data
-        assert "query_metadata" in data
+        assert "query_type" in data
+        assert data["query_type"] == "incidents"
+        assert "total" in data
+        assert "execution_time_ms" in data
+
+        # Verify we got incident results
+        assert len(data["results"]) > 0
+        for result in data["results"]:
+            assert result["type"] == "incident"
+            assert "incident_id" in result["data"]
+            assert result["data"]["severity"] == "high"
+            assert result["data"]["status"] == "investigating"
 
     def test_query_insights_generation(self, client_detailed):
         """Test insights generation from metrics."""
@@ -511,7 +592,7 @@ class TestQueryEndpointWithComplexFilters:
                 "filters": {},
             },
         )
-        assert response.status_code in [200, 500]  # May fail if not all services mocked
+        assert response.status_code == 200  # Should succeed with mocked services
 
         data = response.json()["data"]
         assert "results" in data
@@ -519,10 +600,16 @@ class TestQueryEndpointWithComplexFilters:
         assert len(data["results"]) > 0
 
         # Each insight should have proper structure
-        for insight in data["results"]:
-            assert "type" in insight
-            assert "message" in insight
-            assert "severity" in insight
+        for result in data["results"]:
+            assert result["type"] == "insight"
+            assert "data" in result
+            # The insights from mock should have these fields
+            insight_data = result["data"]
+            assert "insight_id" in insight_data
+            assert "insight_type" in insight_data
+            assert "summary" in insight_data
+            assert "details" in insight_data
+            assert "created_at" in insight_data
 
     def test_query_with_metric_aggregation(self, client_detailed):
         """Test query with metric aggregation and grouping."""
@@ -551,29 +638,54 @@ class TestResourceHistoryAggregation:
     def test_resource_history_cpu_memory_aggregates(self, client_detailed):
         """Test that resource history calculates proper aggregates."""
         response = client_detailed.get("/telemetry/resources/history?hours=24")
-        assert response.status_code in [200, 500]  # May fail if not all services mocked
+        assert response.status_code == 200  # Should succeed with mocked data
 
         data = response.json()["data"]
 
-        # Verify aggregates structure
-        assert "aggregates" in data
-        agg = data["aggregates"]
+        # Verify structure - has period, cpu, memory, disk
+        assert "period" in data
+        assert "cpu" in data
+        assert "memory" in data
+        assert "disk" in data
 
-        # CPU aggregates
-        assert "cpu" in agg
-        cpu_agg = agg["cpu"]
-        assert "min" in cpu_agg
-        assert "max" in cpu_agg
-        assert "avg" in cpu_agg
-        assert cpu_agg["min"] <= cpu_agg["avg"] <= cpu_agg["max"]
+        # Check period structure
+        period = data["period"]
+        assert "start" in period
+        assert "end" in period
+        assert "hours" in period
+        assert period["hours"] == 24
 
-        # Memory aggregates
-        assert "memory" in agg
-        mem_agg = agg["memory"]
-        assert "min" in mem_agg
-        assert "max" in mem_agg
-        assert "avg" in mem_agg
-        assert mem_agg["min"] <= mem_agg["avg"] <= mem_agg["max"]
+        # Check CPU data and stats
+        cpu = data["cpu"]
+        assert "data" in cpu
+        assert "stats" in cpu
+        assert "unit" in cpu
+        assert cpu["unit"] == "percent"
+
+        cpu_stats = cpu["stats"]
+        assert "min" in cpu_stats
+        assert "max" in cpu_stats
+        assert "avg" in cpu_stats
+        assert "current" in cpu_stats
+        assert cpu_stats["min"] <= cpu_stats["avg"] <= cpu_stats["max"]
+        assert cpu_stats["min"] >= 50.0  # Based on our mock data
+        assert cpu_stats["max"] <= 70.0  # Based on our mock data
+
+        # Check Memory data and stats
+        memory = data["memory"]
+        assert "data" in memory
+        assert "stats" in memory
+        assert "unit" in memory
+        assert memory["unit"] == "MB"
+
+        mem_stats = memory["stats"]
+        assert "min" in mem_stats
+        assert "max" in mem_stats
+        assert "avg" in mem_stats
+        assert "current" in mem_stats
+        assert mem_stats["min"] <= mem_stats["avg"] <= mem_stats["max"]
+        assert mem_stats["min"] >= 500.0  # Based on our mock data
+        assert mem_stats["max"] <= 600.0  # Based on our mock data
 
 
 class TestUnifiedEndpointEdgeCases:
@@ -582,19 +694,23 @@ class TestUnifiedEndpointEdgeCases:
     def test_unified_reliability_view(self, client_detailed):
         """Test unified endpoint with reliability view."""
         response = client_detailed.get("/telemetry/unified?view=reliability")
-        assert response.status_code in [200, 500]  # May fail if not all services mocked
+        assert response.status_code == 200  # Should succeed with mocked services
 
         data = response.json()
         # Should have reliability-specific data
         assert "timestamp" in data
+        # For reliability view, should have circuit breaker and other reliability metrics
+        if "view" in data:
+            assert data["view"] == "reliability"
 
     def test_unified_adapters_category(self, client_detailed):
         """Test unified endpoint with adapters category filter."""
         response = client_detailed.get("/telemetry/unified?category=adapters")
-        assert response.status_code in [200, 500]  # May fail if not all services mocked
+        assert response.status_code == 200  # Should succeed with mocked services
 
         data = response.json()
         assert "timestamp" in data
+        # Check that we got adapter-specific metrics if they exist
 
 
 class TestMetricNotFoundScenario:

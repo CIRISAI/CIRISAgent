@@ -27,56 +27,71 @@ class LogFileReader:
         self.logs_dir = Path(logs_dir)
 
     def _get_actual_log_files(self) -> tuple[Optional[Path], Optional[Path]]:
-        """Get the actual log files from stored filenames or logging handlers."""
+        """Get the actual log files from CURRENT logging handlers first, then fall back to stored paths."""
         main_log_file = None
         incident_log_file = None
 
-        # First try to read from stored filenames
-        current_log_path = self.logs_dir / ".current_log"
-        if current_log_path.exists():
-            try:
-                with open(current_log_path, "r") as f:
-                    main_log_file = Path(f.read().strip())
-            except (IOError, OSError, ValueError) as e:
-                logger.debug(f"Failed to read current log path: {e}")
-                pass
+        # CRITICAL FIX: Always check current logging handlers FIRST
+        # This ensures we get the current session's log files, not stale ones
+        import logging
 
-        current_incident_path = self.logs_dir / ".current_incident_log"
-        if current_incident_path.exists():
-            try:
-                with open(current_incident_path, "r") as f:
-                    incident_log_file = Path(f.read().strip())
-            except (IOError, OSError, ValueError) as e:
-                logger.debug(f"Failed to read current incident log path: {e}")
-                pass
+        root_logger = logging.getLogger()
 
-        # If we couldn't find stored filenames, try logging handlers
-        if main_log_file is None or incident_log_file is None:
-            import logging
-
-            root_logger = logging.getLogger()
-
-            for handler in root_logger.handlers:
-                if isinstance(handler, logging.FileHandler):
-                    filename = Path(handler.baseFilename)
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.FileHandler):
+                filename = Path(handler.baseFilename)
+                if filename.exists():  # Only use if file actually exists
                     if "incident" in filename.name and incident_log_file is None:
                         incident_log_file = filename
+                        logger.debug(f"Found incident log from handler: {incident_log_file}")
                     elif main_log_file is None:
                         main_log_file = filename
+                        logger.debug(f"Found main log from handler: {main_log_file}")
 
-        # Final fallback to symlinks
+        # Only use stored filenames if we couldn't find from handlers
+        # AND verify the files actually exist and are recent
+        if main_log_file is None:
+            current_log_path = self.logs_dir / ".current_log"
+            if current_log_path.exists():
+                try:
+                    with open(current_log_path, "r") as f:
+                        stored_path = Path(f.read().strip())
+                        # Verify the file exists and was modified recently (within last hour)
+                        if stored_path.exists():
+                            import time
+
+                            file_age = time.time() - stored_path.stat().st_mtime
+                            if file_age < 3600:  # Less than 1 hour old
+                                main_log_file = stored_path
+                                logger.debug(f"Using stored main log: {main_log_file}")
+                            else:
+                                logger.debug(f"Stored main log too old: {file_age:.0f} seconds")
+                except (IOError, OSError, ValueError) as e:
+                    logger.debug(f"Failed to read current log path: {e}")
+
+        if incident_log_file is None:
+            current_incident_path = self.logs_dir / ".current_incident_log"
+            if current_incident_path.exists():
+                try:
+                    with open(current_incident_path, "r") as f:
+                        stored_path = Path(f.read().strip())
+                        # Verify the file exists and was modified recently
+                        if stored_path.exists():
+                            import time
+
+                            file_age = time.time() - stored_path.stat().st_mtime
+                            if file_age < 3600:  # Less than 1 hour old
+                                incident_log_file = stored_path
+                                logger.debug(f"Using stored incident log: {incident_log_file}")
+                            else:
+                                logger.debug(f"Stored incident log too old: {file_age:.0f} seconds")
+                except (IOError, OSError, ValueError) as e:
+                    logger.debug(f"Failed to read current incident log path: {e}")
+
+        # Last resort: try symlinks (but these might be stale)
         if main_log_file is None:
             latest_log = self.logs_dir / "latest.log"
             if latest_log.exists():
-                try:
-                    main_log_file = latest_log.resolve()
-                except (OSError, RuntimeError) as e:
-                    logger.debug(f"Failed to resolve latest log symlink: {e}")
-                    main_log_file = latest_log
-
-        if incident_log_file is None:
-            incidents_log = self.logs_dir / "incidents_latest.log"
-            if incidents_log.exists():
                 try:
                     incident_log_file = incidents_log.resolve()
                 except (OSError, RuntimeError) as e:

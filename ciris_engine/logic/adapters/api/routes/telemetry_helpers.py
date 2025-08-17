@@ -17,7 +17,28 @@ async def get_telemetry_from_service(
 
 async def get_telemetry_fallback(app_state, view: str, category: Optional[str]) -> Dict:
     """Fallback method to get telemetry using TelemetryAggregator."""
-    aggregator = TelemetryAggregator(app_state)
+    # Get required services from app state
+    service_registry = getattr(app_state, "service_registry", None)
+    time_service = getattr(app_state, "time_service", None)
+
+    # If we don't have the required services, return a minimal response
+    if not service_registry or not time_service:
+        return {
+            "error": "Service registry or time service not available",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "view": view,
+            "category": category,
+            "services": {},
+            "_metadata": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "view": view,
+                "category": category,
+                "cached": False,
+                "format": "json",
+            },
+        }
+
+    aggregator = TelemetryAggregator(service_registry, time_service)
     telemetry_data = await aggregator.collect_all_parallel()
     result = aggregator.calculate_aggregates(telemetry_data)
 

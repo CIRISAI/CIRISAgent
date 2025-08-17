@@ -423,6 +423,7 @@ class ResourceUsageData(BaseModel):
     memory_mb: float = Field(..., description="Memory usage in MB")
     memory_percent: float = Field(..., description="Memory usage percentage")
     disk_usage_bytes: int = Field(0, description="Disk usage in bytes")
+    disk_usage_gb: float = Field(0.0, description="Disk usage in GB")
     active_threads: int = Field(0, description="Number of active threads")
     open_files: int = Field(0, description="Number of open files")
     timestamp: str = Field(..., description="Timestamp of measurement")
@@ -511,12 +512,17 @@ async def get_resource_telemetry(
                     )
                 )
 
+        # Convert disk bytes to GB for the response
+        disk_bytes = getattr(current_usage, "disk_usage_bytes", 0)
+        disk_gb = disk_bytes / (1024 * 1024 * 1024) if disk_bytes > 0 else 0.0
+
         response = ResourceTelemetryResponse(
             current=ResourceUsageData(
                 cpu_percent=current_usage.cpu_percent,
                 memory_mb=current_usage.memory_mb,
                 memory_percent=current_usage.memory_percent,
-                disk_usage_bytes=getattr(current_usage, "disk_usage_bytes", 0),
+                disk_usage_bytes=disk_bytes,
+                disk_usage_gb=disk_gb,
                 active_threads=getattr(current_usage, "active_threads", 0),
                 open_files=getattr(current_usage, "open_files", 0),
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -652,6 +658,41 @@ async def get_detailed_metrics(
                         ],
                     )
                     metrics.append(metric)
+
+        # If query_metrics is not available, fall back to get_metrics
+        if not hasattr(telemetry_service, "query_metrics") and hasattr(telemetry_service, "get_metrics"):
+            # Get metrics from the legacy get_metrics method
+            legacy_metrics = telemetry_service.get_metrics()
+            if legacy_metrics:
+                for metric_name, value in legacy_metrics.items():
+                    # Determine unit from metric name
+                    unit = "count"
+                    if "time" in metric_name or "ms" in metric_name:
+                        unit = "ms"
+                    elif "mb" in metric_name or "memory" in metric_name:
+                        unit = "MB"
+                    elif "percent" in metric_name or "cpu" in metric_name:
+                        unit = "%"
+                    elif "bytes" in metric_name:
+                        unit = "bytes"
+                    elif "tokens" in metric_name:
+                        unit = "tokens"
+                    elif "cents" in metric_name or "cost" in metric_name:
+                        unit = "cents"
+
+                    # Create a simple metric with current value only
+                    metrics.append(
+                        DetailedMetric(
+                            name=metric_name,
+                            current_value=float(value),
+                            unit=unit,
+                            trend="stable",  # Default trend when no history
+                            hourly_average=float(value),
+                            daily_average=float(value),
+                            by_service=[],
+                            recent_data=[],
+                        )
+                    )
 
         # Calculate summary statistics across all metrics
         all_values = []
@@ -870,15 +911,16 @@ async def get_system_logs(
 
             for entry in entries:
                 # Determine log level from action
+                # Check CRITICAL first (before ERROR) since "critical_failure" contains "fail"
                 log_level = "INFO"
-                if "error" in entry.action.lower() or "fail" in entry.action.lower():
+                if "critical" in entry.action.lower() or "fatal" in entry.action.lower():
+                    log_level = "CRITICAL"
+                elif "error" in entry.action.lower() or "fail" in entry.action.lower():
                     log_level = "ERROR"
                 elif "warning" in entry.action.lower() or "warn" in entry.action.lower():
                     log_level = "WARNING"
                 elif "debug" in entry.action.lower():
                     log_level = "DEBUG"
-                elif "critical" in entry.action.lower() or "fatal" in entry.action.lower():
-                    log_level = "CRITICAL"
 
                 # Filter by level if specified
                 if level and log_level != level.upper():
@@ -928,9 +970,12 @@ async def get_system_logs(
                 include_incidents=True,
             )
             logs.extend(file_logs)
+        except ImportError:
+            # Log reader module not available, use audit entries only
+            logger.debug("Log reader not available, using audit entries only")
         except Exception as e:
             # Log reading failed, but don't fail the endpoint
-            print(f"Failed to read log files: {e}")
+            logger.warning(f"Failed to read log files: {e}, using audit entries only")
 
     response = LogsResponse(logs=logs[:limit], total=len(logs), has_more=len(logs) > limit)
 
@@ -1263,8 +1308,8 @@ class ResourceStats(BaseModel):
     current: float = Field(..., description="Current value")
 
 
-class ResourceMetricData(BaseModel):
-    """Resource metric with data and statistics."""
+class ResourceTimeSeriesData(BaseModel):
+    """Resource metric time series with data and statistics."""
 
     data: List[ResourceDataPoint] = Field(default_factory=list, description="Time series data")
     stats: ResourceStats = Field(..., description="Statistical summary")
@@ -1340,7 +1385,7 @@ async def get_unified_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/resources/history", response_model=SuccessResponse[ResourceHistoryResponse])
+@router.get("/resources/history", response_model=ResourceHistoryResponse)
 async def get_resource_history(
     request: Request,
     auth: AuthContext = Depends(require_observer),
@@ -1378,40 +1423,59 @@ async def get_resource_history(
                 metric_name="disk_usage_bytes", start_time=start_time, end_time=now
             )
 
-        # Calculate aggregations
-        def calculate_stats(data: List[dict]) -> ResourceStats:
-            if not data:
-                return ResourceStats(min=0, max=0, avg=0, current=0)
-            values = [d.get("value", 0) for d in data]
-            return ResourceStats(
-                min=min(values), max=max(values), avg=sum(values) / len(values), current=values[-1] if values else 0
-            )
+        # Helper to calculate percentile
+        def percentile_95(values: List[float]) -> float:
+            if not values:
+                return 0
+            sorted_vals = sorted(values)
+            index = int(len(sorted_vals) * 0.95)
+            return sorted_vals[min(index, len(sorted_vals) - 1)]
+
+        # Helper to determine trend
+        def calc_trend(values: List[float]) -> str:
+            if len(values) < 2:
+                return "stable"
+            recent = values[-5:] if len(values) >= 5 else values[-2:]
+            older = values[:-5] if len(values) >= 5 else values[0:1]
+            recent_avg = sum(recent) / len(recent)
+            older_avg = sum(older) / len(older)
+            if recent_avg > older_avg * 1.1:
+                return "increasing"
+            elif recent_avg < older_avg * 0.9:
+                return "decreasing"
+            return "stable"
+
+        # Convert time series data to the ResourceMetricData format expected by ResourceHistoryResponse
+        cpu_values = [d.get("value", 0) for d in cpu_data] if cpu_data else [0]
+        memory_values = [d.get("value", 0) for d in memory_data] if memory_data else [0]
+        disk_values = [d.get("value", 0) for d in disk_data] if disk_data else [0]
 
         response = ResourceHistoryResponse(
             period=TimePeriod(start=start_time.isoformat(), end=now.isoformat(), hours=hours),
             cpu=ResourceMetricData(
-                data=[ResourceDataPoint(timestamp=d.get("timestamp"), value=d.get("value", 0)) for d in cpu_data],
-                stats=calculate_stats(cpu_data),
-                unit="percent",
+                current=cpu_values[-1] if cpu_values else 0,
+                average=sum(cpu_values) / len(cpu_values) if cpu_values else 0,
+                peak=max(cpu_values) if cpu_values else 0,
+                percentile_95=percentile_95(cpu_values),
+                trend=calc_trend(cpu_values),
             ),
             memory=ResourceMetricData(
-                data=[ResourceDataPoint(timestamp=d.get("timestamp"), value=d.get("value", 0)) for d in memory_data],
-                stats=calculate_stats(memory_data),
-                unit="MB",
+                current=memory_values[-1] if memory_values else 0,
+                average=sum(memory_values) / len(memory_values) if memory_values else 0,
+                peak=max(memory_values) if memory_values else 0,
+                percentile_95=percentile_95(memory_values),
+                trend=calc_trend(memory_values),
             ),
             disk=ResourceMetricData(
-                data=[ResourceDataPoint(timestamp=d.get("timestamp"), value=d.get("value", 0)) for d in disk_data],
-                stats=calculate_stats(disk_data),
-                unit="bytes",
+                current=disk_values[-1] if disk_values else 0,
+                average=sum(disk_values) / len(disk_values) if disk_values else 0,
+                peak=max(disk_values) if disk_values else 0,
+                percentile_95=percentile_95(disk_values),
+                trend=calc_trend(disk_values),
             ),
         )
 
-        return SuccessResponse(
-            data=response,
-            metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
-            ),
-        )
+        return response
 
     except HTTPException:
         # Re-raise HTTPException as-is to preserve status code

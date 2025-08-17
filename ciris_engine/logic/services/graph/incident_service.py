@@ -618,10 +618,7 @@ class IncidentManagementService(BaseGraphService):
         return ServiceType.AUDIT
 
     async def get_metrics(self) -> Dict[str, float]:
-        """Get all incident management service metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
-
+        """Get incident management service metrics - v1.4.3 set."""
         # Initialize tracking if not present
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
@@ -649,17 +646,13 @@ class IncidentManagementService(BaseGraphService):
             logger.warning(f"Failed to get active incident count: {e}")
             active_count = 0
 
-        # Add v1.4.3 specific metrics
-        metrics.update(
-            {
-                "incidents_created": self._track_metric("created", 0),
-                "incidents_resolved": self._track_metric("resolved", 0),
-                "incidents_active": float(active_count),
-                "incident_uptime_seconds": uptime_seconds,
-            }
-        )
-
-        return metrics
+        # Return exactly the 4 required v1.4.3 metrics
+        return {
+            "incidents_created": self._track_metric("created", 0),
+            "incidents_resolved": self._track_metric("resolved", 0),
+            "incidents_active": float(active_count),
+            "incident_uptime_seconds": uptime_seconds,
+        }
 
     def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
         """Track a metric with real values from service state."""

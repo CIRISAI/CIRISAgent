@@ -35,6 +35,7 @@ def mock_time_service():
     """Mock time service."""
     service = MagicMock()
     service.now = MagicMock(return_value=datetime.now(timezone.utc))
+    service.timestamp = MagicMock(return_value=1234567890.0)  # Return a float for timestamp
     return service
 
 
@@ -77,10 +78,15 @@ class TestCommunicationBusCoverage:
         bus = CommunicationBus(mock_registry, mock_time_service)
 
         service = AsyncMock()
+        # The service must have get_capabilities method
+        service.get_capabilities = MagicMock(return_value=MagicMock(actions=["fetch_messages"]))
         service.fetch_messages = AsyncMock(
             return_value=[{"content": "test", "timestamp": "2024-01-01T00:00:00Z", "author": "user"}]
         )
+
+        # Mock both get_services_by_type and get_service
         mock_registry.get_services_by_type.return_value = [service]
+        mock_registry.get_service = AsyncMock(return_value=service)
 
         messages = await bus.fetch_messages("channel123", 10, "test_handler")
 
@@ -148,18 +154,38 @@ class TestLLMBusCoverage:
         from pydantic import BaseModel
 
         from ciris_engine.schemas.runtime.resources import ResourceUsage
+        from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
         class TestModel(BaseModel):
             result: str
 
         bus = LLMBus(mock_registry, mock_time_service)
 
-        # Mock service
-        service = AsyncMock()
+        # Mock service with proper capabilities and health
+        service = MagicMock()
+        # Create a mock that has actions but NOT supports_operation_list (to avoid the first check)
+        caps_mock = MagicMock(spec=["actions"])  # spec limits which attributes exist
+        caps_mock.actions = [LLMCapabilities.CALL_LLM_STRUCTURED.value]
+        service.get_capabilities = MagicMock(return_value=caps_mock)
+        service.is_healthy = AsyncMock(return_value=True)
         service.call_llm_structured = AsyncMock(
             return_value=(TestModel(result="success"), ResourceUsage(tokens_used=100))
         )
+
+        # Mock registry to return the service
         mock_registry.get_services_by_type.return_value = [service]
+
+        # Mock get_provider_info to return proper structure for priority lookup
+        # The code looks for ServiceType.LLM (the enum) not ServiceType.LLM.value (the string)
+        mock_registry.get_provider_info = MagicMock(
+            return_value={
+                "services": {
+                    ServiceType.LLM: [  # Use the enum, not the value
+                        {"name": f"TestService_{id(service)}", "priority": "NORMAL", "metadata": {}}
+                    ]
+                }
+            }
+        )
 
         messages = [{"role": "user", "content": "test"}]
         result, usage = await bus.call_llm_structured(messages, TestModel)
@@ -199,10 +225,14 @@ class TestMemoryBusCoverage:
         """Test basic memorize operation."""
         bus = MemoryBus(mock_registry, mock_time_service)
 
-        # Mock memory service
+        # Mock memory service with capabilities
         memory_service = AsyncMock()
+        memory_service.get_capabilities = MagicMock(return_value=MagicMock(actions=["memorize"]))
         memory_service.memorize = AsyncMock(return_value=MagicMock(status="ok"))
+
+        # Mock both get_services_by_type and get_service
         mock_registry.get_services_by_type.return_value = [memory_service]
+        mock_registry.get_service = AsyncMock(return_value=memory_service)
 
         # Test memorize
         from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -212,7 +242,7 @@ class TestMemoryBusCoverage:
         result = await bus.memorize(node)
 
         memory_service.memorize.assert_called_once()
-        assert bus._operations_total > 0
+        assert bus._operation_count > 0
 
 
 # =============================================================================
@@ -281,8 +311,10 @@ class TestWiseBusCoverage:
 
         assert bus.service_type == ServiceType.WISE_AUTHORITY
         assert bus.PROHIBITED_CAPABILITIES is not None
-        # PROHIBITED_CAPABILITIES is a set, not a list
-        assert "medical_diagnosis" in bus.PROHIBITED_CAPABILITIES
+        # PROHIBITED_CAPABILITIES is a dict of categories with sets of capabilities
+        assert isinstance(bus.PROHIBITED_CAPABILITIES, dict)
+        # Check that medical capabilities are prohibited
+        assert "MEDICAL" in bus.PROHIBITED_CAPABILITIES
 
     def test_get_metrics(self, mock_registry, mock_time_service):
         """Test metrics."""
@@ -306,8 +338,10 @@ class TestWiseBusCoverage:
         result = bus._is_capability_allowed("weather_analysis")
         assert result is True
 
-        # Test prohibited capability
-        result = bus._is_capability_allowed("medical_diagnosis")
+        # Test prohibited capability - use one that's actually in the flattened set
+        # We need to check against actual capabilities in the PROHIBITED_CAPABILITIES dict
+        # "diagnosis" is in MEDICAL_CAPABILITIES
+        result = bus._is_capability_allowed("diagnosis")
         assert result is False
 
 

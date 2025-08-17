@@ -503,9 +503,13 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
     def _is_capability_allowed(self, capability: str) -> bool:
         """Check if a capability is allowed (not prohibited)."""
-        # Check if capability is in any prohibited set
-        if capability.lower() in [cap.lower() for cap in PROHIBITED_CAPABILITIES]:
-            return False
+        capability_lower = capability.lower()
+
+        # PROHIBITED_CAPABILITIES is a dict of categories, each containing a set of capabilities
+        for category, capabilities_set in PROHIBITED_CAPABILITIES.items():
+            for prohibited_cap in capabilities_set:
+                if capability_lower == prohibited_cap.lower() or prohibited_cap.lower() in capability_lower:
+                    return False
         return True
 
     def _collect_metrics(self) -> dict[str, float]:

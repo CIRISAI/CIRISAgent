@@ -469,13 +469,37 @@ class CIRISRuntime:
     async def _initialize_infrastructure(self) -> None:  # NOSONAR: Part of async initialization chain
         """Initialize infrastructure services that all other services depend on."""
         # Infrastructure services already initialized in initialize() method
-        # This is now just a no-op placeholder for the initialization step
-        pass
 
-        # TODO: Fix logging setup that causes CI tests to fail
-        # The setup_basic_logging call causes the async task to terminate in CI
-        # For now, skip logging setup entirely
-        logger.info("[_initialize_infrastructure] Skipping file logging setup temporarily")
+        # CRITICAL: File logging is REQUIRED for production
+        # FAIL FAST AND LOUD if we can't set it up
+        import os
+
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            from ciris_engine.logic.utils.logging_config import setup_basic_logging
+
+            # Get TimeService from service initializer
+            time_service = self.service_initializer.time_service
+            if not time_service:
+                error_msg = "CRITICAL: TimeService not available - CANNOT INITIALIZE FILE LOGGING"
+                logger.critical(error_msg)
+                raise RuntimeError(error_msg)
+
+            try:
+                setup_basic_logging(
+                    level=logging.DEBUG if self.debug else logging.INFO,
+                    log_to_file=True,
+                    console_output=False,  # Already logging to console from main.py
+                    enable_incident_capture=True,
+                    time_service=time_service,
+                    log_dir="logs",
+                )
+                logger.info("[_initialize_infrastructure] File logging initialized successfully")
+            except Exception as e:
+                error_msg = f"CRITICAL: Failed to setup file logging: {e}"
+                logger.critical(error_msg)
+                raise RuntimeError(error_msg)
+        else:
+            logger.debug("[_initialize_infrastructure] Test mode detected, skipping file logging setup")
 
     async def _verify_infrastructure(self) -> bool:
         """Verify infrastructure services are operational."""

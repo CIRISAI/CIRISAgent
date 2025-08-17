@@ -93,6 +93,15 @@ class LogFileReader:
             latest_log = self.logs_dir / "latest.log"
             if latest_log.exists():
                 try:
+                    main_log_file = latest_log.resolve()
+                except (OSError, RuntimeError) as e:
+                    logger.debug(f"Failed to resolve latest log symlink: {e}")
+                    main_log_file = latest_log
+
+        if incident_log_file is None:
+            incidents_log = self.logs_dir / "incidents_latest.log"
+            if incidents_log.exists():
+                try:
                     incident_log_file = incidents_log.resolve()
                 except (OSError, RuntimeError) as e:
                     logger.debug(f"Failed to resolve incidents log symlink: {e}")

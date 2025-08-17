@@ -650,8 +650,9 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics for v1.4.3 API."""
-        # Get total deferrals count from database (both pending and resolved)
+        # Get deferral counts from database
         total_deferrals_count = 0
+        resolved_deferrals_count = 0
 
         try:
             import sqlite3
@@ -668,14 +669,23 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             )
             total_deferrals_count = cursor.fetchone()[0]
 
+            # Count resolved deferrals (tasks with resolution in context)
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM tasks
+                WHERE context_json LIKE '%"resolution":%'
+            """
+            )
+            resolved_deferrals_count = cursor.fetchone()[0]
+
             conn.close()
         except Exception as e:
             logger.error(f"Error getting deferral counts: {e}")
 
         return {
-            # v1.4.3 specified metrics
-            "wise_deferrals_total": float(total_deferrals_count),
-            "wise_guidance_total": float(self._guidance_provided_count),
-            "wise_queries_total": float(self._queries_handled_count),
-            "wise_uptime_seconds": self._calculate_uptime(),
+            # v1.4.3 specified metrics - exact names from telemetry taxonomy
+            "wise_authority_deferrals_total": float(total_deferrals_count),
+            "wise_authority_deferrals_resolved": float(resolved_deferrals_count),
+            "wise_authority_guidance_requests": float(self._guidance_provided_count),
+            "wise_authority_uptime_seconds": self._calculate_uptime(),
         }

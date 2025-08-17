@@ -2,7 +2,7 @@
 
 **Release Date**: January 2025
 **Branch**: 1.4.3-beta
-**Focus**: Real Metrics Implementation - 362 Operational Metrics with Zero Placeholders
+**Focus**: Real Metrics Implementation - 362 Operational Metrics with Zero Placeholders + CIRISLens Support
 
 ## 🎯 Major Features
 
@@ -36,7 +36,28 @@ Delivered comprehensive real metrics collection across all 35 metric sources - e
 - Enables proper Discord channel routing
 - Maintains backward compatibility with optional fields
 
-### 3. Managed User Attributes Protection
+### 3. CIRISLens Visibility Platform Support (NEW)
+Comprehensive telemetry improvements for CIRISLens integration:
+- **Instance Tracking**: Adapter instances tracked with unique IDs (discord_0567, api_759F)
+- **Three-Level Aggregation**: Bus level, Type level, Instance level metrics
+- **Covenant Metrics**: New ethics/governance category tracking:
+  - Wise Authority deferrals
+  - Filter interventions
+  - Covenant compliance rate
+  - Transparency score
+- **Dynamic Topology**: Support for runtime service instance creation/destruction
+- **External Module Support**: Tracks metrics from ciris_modular_services
+- **36 Validated Source Types**: Rigorous analysis and categorization
+
+### 4. Telemetry Source Analysis
+Complete documentation of metric architecture:
+- **Static Types**: 36 metric source types identified and validated
+- **Dynamic Instances**: Unbounded runtime instances properly tracked
+- **Bus Registration**: Adapters create service instances that register on buses
+- **External Modules**: Support for wisdom providers (geo, weather, sensor)
+- **Documentation**: Created TELEMETRY_SOURCES_ANALYSIS.md with full taxonomy
+
+### 5. Managed User Attributes Protection
 Prevents LLM from setting system-managed attributes to maintain data integrity:
 - `user_id`, `agent_id`, `thread_id` cannot be set via memorize
 - System automatically manages these fields
@@ -69,6 +90,18 @@ Prevents LLM from setting system-managed attributes to maintain data integrity:
 - **Issue**: Logs endpoint returned previous session's logs instead of current
 - **Impact**: Incorrect operational visibility and potential security issue
 - **Fix**: Prioritized current logging handlers over stored paths
+
+### 5. Covenant Metrics Aggregation Bug (NEW)
+**Severity**: MEDIUM
+- **Issue**: Covenant category caused AttributeError in metrics aggregation
+- **Impact**: Test failure when iterating service metrics
+- **Fix**: Skip covenant category in _aggregate_service_metrics() as it contains computed metrics not service data
+
+### 6. Template Signature Issues (NEW)
+**Severity**: LOW
+- **Issue**: Echo templates had invalid signatures after content updates
+- **Impact**: Template validation failures
+- **Fix**: Re-signed templates with proper Ed25519 signatures
 
 ## 📊 Test Coverage Achievements
 
@@ -138,7 +171,28 @@ Prevents LLM from setting system-managed attributes to maintain data integrity:
 
 ### Files Modified
 
-**Telemetry System:**
+**Telemetry System Core (NEW):**
+- `ciris_engine/logic/services/graph/telemetry_service.py`
+  - Added collect_from_adapter_instances() for multi-instance tracking
+  - Added compute_covenant_metrics() for ethics visibility
+  - Updated CATEGORIES with validated 36 source types
+  - Added "tools" category separation
+  - Fixed covenant category aggregation bug
+
+- `ciris_engine/logic/persistence/maintenance.py`
+  - Implemented get_metrics() for DatabaseMaintenanceService
+  - Added archive size and next run tracking
+
+- `ciris_engine/logic/secrets/service.py`
+  - Confirmed get_metrics() implementation exists
+  - Tracks encryption/decryption operations
+
+- `tools/telemetry_analyzer.py`
+  - Rigorous categorization of metric sources
+  - Instance vs type distinction
+  - Validation of 36 source types
+
+**Telemetry API Routes:**
 - `ciris_engine/logic/adapters/api/routes/telemetry.py`
   - Fixed ResourceMetricData duplicate definition
   - Added disk_usage_gb conversion
@@ -193,10 +247,19 @@ Prevents LLM from setting system-managed attributes to maintain data integrity:
   - Changed "embrace" to "facilitate" for neutral tone
   - Added strike system with agent autonomy
   - Clarified spam/abuse deletion authority
+  - Re-signed with valid Ed25519 signatures
 
 - `ciris_templates/echo-core.yaml`
   - Added direct action authority section
   - Clarified immediate deletion for spam/flooding
+  - Re-signed with valid Ed25519 signatures
+
+**Documentation (NEW):**
+- `TELEMETRY_SOURCES_ANALYSIS.md`
+  - Complete taxonomy of 36 metric source types
+  - Instance vs type architecture explanation
+  - Adapter registration patterns
+  - External module integration
 
 ## 📈 Metrics
 

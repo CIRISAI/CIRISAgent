@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -158,23 +158,35 @@ class GraphNodeBuilder:
     def build_from_row(row: Tuple) -> Optional[GraphNode]:
         """Build a GraphNode from a database row."""
         try:
-            # Parse attributes
-            attributes = AttributeParser.parse_attributes(row[3], row[0])
+            # Parse attributes JSON
+            attributes_dict = AttributeParser.parse_attributes(row[3], row[0])
 
             # Parse timestamps
             updated_at = DateTimeParser.parse_datetime(row[6])
             created_at = DateTimeParser.parse_datetime(row[7]) if row[7] else None
 
-            # Create GraphNode
+            # Create typed GraphNodeAttributes
+            # Extract known fields and pass the rest as tags if present
+            tags = attributes_dict.pop("tags", [])
+            created_by = attributes_dict.pop("created_by", row[5] if row[5] else "system")
+
+            # Build proper GraphNodeAttributes
+            typed_attributes = GraphNodeAttributes(
+                created_at=created_at or updated_at or datetime.now(),
+                updated_at=updated_at or datetime.now(),
+                created_by=created_by,
+                tags=tags if isinstance(tags, list) else [],
+            )
+
+            # Create GraphNode with typed attributes
             return GraphNode(
                 id=row[0],  # node_id
                 scope=row[1],  # scope
                 type=row[2],  # node_type
-                attributes=attributes,
+                attributes=typed_attributes,
                 version=row[4] if row[4] else 1,  # version
                 updated_by=row[5] if row[5] else "system",  # updated_by
                 updated_at=updated_at,
-                created_at=created_at,
             )
         except Exception as e:
             logger.error(f"Failed to create GraphNode from row: {e}")

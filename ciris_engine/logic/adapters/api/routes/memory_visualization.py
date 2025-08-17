@@ -67,18 +67,23 @@ def get_node_color(node_type: NodeType) -> str:
     """Get color for node based on type."""
     # Map NodeType enums to colors
     type_colors = {
-        NodeType.THOUGHT: "#3b82f6",  # Blue
-        NodeType.TASK: "#10b981",  # Green
-        NodeType.MESSAGE: "#f59e0b",  # Amber
-        NodeType.ACTION: "#ef4444",  # Red
-        NodeType.MEMORY: "#8b5cf6",  # Purple
+        NodeType.AGENT: "#3b82f6",  # Blue
+        NodeType.USER: "#10b981",  # Green
+        NodeType.CHANNEL: "#f59e0b",  # Amber
         NodeType.CONCEPT: "#ec4899",  # Pink
-        NodeType.IDENTITY: "#06b6d4",  # Cyan
+        NodeType.CONFIG: "#4b5563",  # Dark gray
+        NodeType.TSDB_DATA: "#8b5cf6",  # Purple
+        NodeType.TSDB_SUMMARY: "#7c3aed",  # Violet
+        NodeType.CONVERSATION_SUMMARY: "#0891b2",  # Cyan
+        NodeType.TRACE_SUMMARY: "#ef4444",  # Red
+        NodeType.AUDIT_SUMMARY: "#dc2626",  # Dark red
+        NodeType.TASK_SUMMARY: "#059669",  # Dark green
+        NodeType.AUDIT_ENTRY: "#6b7280",  # Gray
+        NodeType.IDENTITY_SNAPSHOT: "#06b6d4",  # Cyan
         NodeType.BEHAVIORAL: "#84cc16",  # Lime
         NodeType.SOCIAL: "#f97316",  # Orange
-        NodeType.AUDIT_ENTRY: "#6b7280",  # Gray
-        NodeType.CONFIG: "#4b5563",  # Dark gray
-        NodeType.WISDOM: "#fbbf24",  # Yellow
+        NodeType.IDENTITY: "#06b6d4",  # Cyan
+        NodeType.OBSERVATION: "#fbbf24",  # Yellow
     }
     return type_colors.get(node_type, "#9ca3af")
 
@@ -88,9 +93,9 @@ def get_node_size(node: GraphNode) -> int:
     base_size = 8
 
     # Adjust based on scope
-    if node.scope == "IDENTITY":
+    if node.scope == "identity":
         base_size += 4
-    elif node.scope == "SHARED":
+    elif node.scope == "community":
         base_size += 2
 
     # Adjust based on number of attributes
@@ -111,8 +116,8 @@ def hierarchy_pos(
     # Build adjacency information from edges for better layout
     connections: Dict[str, int] = {}
     for edge in edges:
-        connections[edge.from_id] = connections.get(edge.from_id, 0) + 1
-        connections[edge.to_id] = connections.get(edge.to_id, 0) + 1
+        connections[edge.source] = connections.get(edge.source, 0) + 1
+        connections[edge.target] = connections.get(edge.target, 0) + 1
 
     # Group nodes by type
     by_type: Dict[NodeType, List[GraphNode]] = {}
@@ -130,12 +135,12 @@ def hierarchy_pos(
     type_layers = {
         NodeType.IDENTITY: 0,
         NodeType.CONCEPT: 1,
-        NodeType.WISDOM: 1,
-        NodeType.TASK: 2,
-        NodeType.THOUGHT: 3,
-        NodeType.ACTION: 4,
-        NodeType.MESSAGE: 5,
-        NodeType.MEMORY: 6,
+        NodeType.OBSERVATION: 1,
+        NodeType.AGENT: 2,
+        NodeType.USER: 3,
+        NodeType.CHANNEL: 4,
+        NodeType.TASK_SUMMARY: 5,
+        NodeType.AUDIT_SUMMARY: 6,
         NodeType.BEHAVIORAL: 7,
         NodeType.SOCIAL: 7,
         NodeType.AUDIT_ENTRY: 8,
@@ -263,8 +268,8 @@ def generate_svg(
             svg_parts.append(
                 f'<circle class="node" cx="{x}" cy="{y}" r="{size}" '
                 f'fill="{color}" stroke="white" stroke-width="2" '
-                f'data-node-id="{node.id}" data-node-type="{node.type}">'
-                f"<title>{node.id}\nType: {node.type}\nScope: {node.scope}</title>"
+                f'data-node-id="{node.id}" data-node-type="{node.type.value if hasattr(node.type, "value") else node.type}">'
+                f"<title>{node.id}\nType: {node.type.value if hasattr(node.type, 'value') else node.type}\nScope: {node.scope.value if hasattr(node.scope, 'value') else node.scope}</title>"
                 f"</circle>"
             )
 

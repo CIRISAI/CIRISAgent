@@ -19,7 +19,13 @@ class TimelineLayoutCalculator:
     @staticmethod
     def extract_timestamp(node: GraphNode) -> Optional[datetime]:
         """Extract the most relevant timestamp from a node."""
-        return node.updated_at or node.created_at
+        # GraphNode only has updated_at, created_at is in attributes
+        if node.updated_at:
+            return node.updated_at
+        # Try to get created_at from attributes if they're typed
+        if hasattr(node.attributes, "created_at"):
+            return node.attributes.created_at
+        return None
 
     @staticmethod
     def calculate_time_range(nodes: List[GraphNode]) -> Tuple[datetime, datetime, float]:

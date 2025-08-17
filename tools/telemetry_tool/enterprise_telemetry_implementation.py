@@ -608,7 +608,7 @@ async def quick_health_check(request: Request) -> Dict:
         return {
             "healthy": False,
             "services": f"0/{total_services}",
-            "error": str(e),
+            "error": "Health check failed. Check logs for details.",
             "timestamp": datetime.now().isoformat(),
         }
 

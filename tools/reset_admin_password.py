@@ -241,7 +241,9 @@ def main():
     # Determine the new password
     if args.generate:
         new_password = generate_secure_password()
-        print(f"Generated secure password: {new_password}")
+        print(
+            f"Generated secure password: {new_password}"
+        )  # noqa: S002 - Intentional: password reset tool must display password once
         print("⚠️  SAVE THIS PASSWORD - it will not be shown again!")
     elif args.password:
         new_password = args.password

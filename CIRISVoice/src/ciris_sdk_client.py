@@ -109,7 +109,7 @@ class CIRISVoiceClient:
             # Check if we have username:password format
             if self.client._transport.api_key and ":" in self.client._transport.api_key:
                 username, password = self.client._transport.api_key.split(":", 1)
-                logger.info(f"Using username/password auth for user: {username}")
+                logger.info("Using username/password auth")
 
                 # Login to get token
                 try:

@@ -443,7 +443,7 @@ class TestCIRISRuntimeServices:
         print(f"[test_service_properties] service_registry: {runtime.service_registry}")
         print(f"[test_service_properties] bus_manager: {runtime.bus_manager}")
         print(f"[test_service_properties] resource_monitor: {runtime.resource_monitor}")
-        print(f"[test_service_properties] secrets_service: {runtime.secrets_service}")
+        print(f"[test_service_properties] secrets_service: {runtime.secrets_service}")  # noqa: S002 - Test code
         print(f"[test_service_properties] telemetry_service: {runtime.telemetry_service}")
         print(f"[test_service_properties] llm_service: {runtime.llm_service}")
 

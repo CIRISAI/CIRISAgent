@@ -109,8 +109,8 @@ class MetricStatisticsCalculator:
 
         # Get recent and older samples
         sample_size = 5 if len(values) >= 5 else 2
-        recent = values[-sample_size:] if len(values) >= sample_size else values[-2:]
-        older = values[:-sample_size] if len(values) >= sample_size else values[0:1]
+        recent = values[-sample_size:]
+        older = values[:-sample_size] if len(values) > sample_size else values[0:1]
 
         # Calculate averages
         recent_avg = sum(recent) / len(recent)

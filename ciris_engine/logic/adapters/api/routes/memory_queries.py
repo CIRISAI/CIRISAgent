@@ -27,7 +27,7 @@ SQL_ORDER_RANDOM = "ORDER BY RANDOM()"
 SQL_LIMIT = "LIMIT ?"
 
 
-async def query_timeline_nodes(
+def query_timeline_nodes(
     memory_service: Any,
     hours: int = 24,
     scope: Optional[str] = None,
@@ -74,7 +74,7 @@ async def query_timeline_nodes(
     return GraphNodeBuilder.build_from_rows(rows)
 
 
-async def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
+def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
     """
     Get statistics about memory storage.
 
@@ -141,7 +141,7 @@ async def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
     return stats
 
 
-async def search_nodes(
+def search_nodes(
     memory_service: Any,
     query: Optional[str] = None,
     node_type: Optional[NodeType] = None,

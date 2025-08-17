@@ -85,7 +85,7 @@ class TimelineLayoutCalculator:
         positions = {}
 
         # Calculate time range
-        min_time, max_time, time_range = TimelineLayoutCalculator.calculate_time_range(nodes)
+        min_time, _, time_range = TimelineLayoutCalculator.calculate_time_range(nodes)
         if min_time is None:
             return positions
 

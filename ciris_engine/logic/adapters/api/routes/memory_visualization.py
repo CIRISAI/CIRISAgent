@@ -189,6 +189,79 @@ def calculate_timeline_layout(
     return positions
 
 
+def _get_layout_positions(
+    layout: str, nodes: List[GraphNode], edges: List[GraphEdge], width: int, height: int
+) -> Dict[str, Tuple[float, float]]:
+    """Get node positions based on layout type."""
+    if layout == "timeline":
+        return calculate_timeline_layout(nodes, width, height)
+    elif layout == "circular":
+        return _circular_layout(nodes, width, height)
+    else:  # hierarchy
+        return hierarchy_pos(nodes, edges, width, height)
+
+
+def _generate_svg_header(width: int, height: int) -> List[str]:
+    """Generate SVG header with styles."""
+    return [
+        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">',
+        "<style>",
+        ".node { cursor: pointer; }",
+        ".node:hover { opacity: 0.8; }",
+        ".edge { stroke-width: 2; fill: none; opacity: 0.6; }",
+        ".edge:hover { opacity: 1; stroke-width: 3; }",
+        ".node-label { font-family: monospace; font-size: 10px; fill: #374151; pointer-events: none; }",
+        ".edge-label { font-family: monospace; font-size: 8px; fill: #6b7280; pointer-events: none; }",
+        "</style>",
+    ]
+
+
+def _render_edge(edge: GraphEdge, positions: Dict[str, Tuple[float, float]]) -> List[str]:
+    """Render a single edge as SVG elements."""
+    if edge.source not in positions or edge.target not in positions:
+        return []
+
+    x1, y1 = positions[edge.source]
+    x2, y2 = positions[edge.target]
+    mid_x = (x1 + x2) / 2
+    mid_y = (y1 + y2) / 2
+
+    color = get_edge_color(edge.relationship)
+    style = get_edge_style(edge.relationship)
+
+    parts = [f'<line class="edge" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" ' f'stroke="{color}" {style}/>']
+
+    if edge.relationship:
+        parts.append(
+            f'<text class="edge-label" x="{mid_x}" y="{mid_y}" ' f'text-anchor="middle">{edge.relationship}</text>'
+        )
+
+    return parts
+
+
+def _render_node(node: GraphNode, position: Tuple[float, float]) -> List[str]:
+    """Render a single node as SVG elements."""
+    x, y = position
+    color = get_node_color(node.type)
+    size = get_node_size(node)
+
+    # Get string values for type and scope
+    type_str = node.type.value if hasattr(node.type, "value") else str(node.type)
+    scope_str = node.scope.value if hasattr(node.scope, "value") else str(node.scope)
+
+    # Truncate label if needed
+    label = node.id[:20] + "..." if len(node.id) > 20 else node.id
+
+    return [
+        f'<circle class="node" cx="{x}" cy="{y}" r="{size}" '
+        f'fill="{color}" stroke="white" stroke-width="2" '
+        f'data-node-id="{node.id}" data-node-type="{type_str}">'
+        f"<title>{node.id}\nType: {type_str}\nScope: {scope_str}</title>"
+        f"</circle>",
+        f'<text class="node-label" x="{x}" y="{y + size + 12}" ' f'text-anchor="middle">{label}</text>',
+    ]
+
+
 def generate_svg(
     nodes: List[GraphNode],
     edges: List[GraphEdge],
@@ -209,75 +282,23 @@ def generate_svg(
     Returns:
         SVG string
     """
-    # Calculate node positions based on layout
-    if layout == "timeline":
-        positions = calculate_timeline_layout(nodes, width, height)
-    elif layout == "circular":
-        positions = _circular_layout(nodes, width, height)
-    else:  # hierarchy
-        positions = hierarchy_pos(nodes, edges, width, height)
+    # Get node positions
+    positions = _get_layout_positions(layout, nodes, edges, width, height)
 
-    # Start SVG
-    svg_parts = [
-        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">',
-        "<style>",
-        ".node { cursor: pointer; }",
-        ".node:hover { opacity: 0.8; }",
-        ".edge { stroke-width: 2; fill: none; opacity: 0.6; }",
-        ".edge:hover { opacity: 1; stroke-width: 3; }",
-        ".node-label { font-family: monospace; font-size: 10px; fill: #374151; pointer-events: none; }",
-        ".edge-label { font-family: monospace; font-size: 8px; fill: #6b7280; pointer-events: none; }",
-        "</style>",
-    ]
+    # Build SVG parts
+    svg_parts = _generate_svg_header(width, height)
 
     # Draw edges
     svg_parts.append('<g id="edges">')
     for edge in edges:
-        if edge.source in positions and edge.target in positions:
-            x1, y1 = positions[edge.source]
-            x2, y2 = positions[edge.target]
-
-            # Calculate edge midpoint for label
-            mid_x = (x1 + x2) / 2
-            mid_y = (y1 + y2) / 2
-
-            color = get_edge_color(edge.relationship)
-            style = get_edge_style(edge.relationship)
-
-            svg_parts.append(
-                f'<line class="edge" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" ' f'stroke="{color}" {style}/>'
-            )
-
-            # Add edge label
-            if edge.relationship:
-                svg_parts.append(
-                    f'<text class="edge-label" x="{mid_x}" y="{mid_y}" '
-                    f'text-anchor="middle">{edge.relationship}</text>'
-                )
+        svg_parts.extend(_render_edge(edge, positions))
     svg_parts.append("</g>")
 
     # Draw nodes
     svg_parts.append('<g id="nodes">')
     for node in nodes:
         if node.id in positions:
-            x, y = positions[node.id]
-            color = get_node_color(node.type)
-            size = get_node_size(node)
-
-            # Draw node circle
-            svg_parts.append(
-                f'<circle class="node" cx="{x}" cy="{y}" r="{size}" '
-                f'fill="{color}" stroke="white" stroke-width="2" '
-                f'data-node-id="{node.id}" data-node-type="{node.type.value if hasattr(node.type, "value") else node.type}">'
-                f"<title>{node.id}\nType: {node.type.value if hasattr(node.type, 'value') else node.type}\nScope: {node.scope.value if hasattr(node.scope, 'value') else node.scope}</title>"
-                f"</circle>"
-            )
-
-            # Add node label
-            label = node.id[:20] + "..." if len(node.id) > 20 else node.id
-            svg_parts.append(
-                f'<text class="node-label" x="{x}" y="{y + size + 12}" ' f'text-anchor="middle">{label}</text>'
-            )
+            svg_parts.extend(_render_node(node, positions[node.id]))
     svg_parts.append("</g>")
 
     svg_parts.append("</svg>")

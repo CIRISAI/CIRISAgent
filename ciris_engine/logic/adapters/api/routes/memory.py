@@ -107,7 +107,7 @@ async def query_memory(
 
         # General search
         else:
-            nodes = await search_nodes(
+            nodes = search_nodes(
                 memory_service=memory_service,
                 query=body.query,
                 node_type=body.type,
@@ -192,7 +192,7 @@ async def get_timeline(
 
     try:
         # Query timeline nodes
-        nodes = await query_timeline_nodes(
+        nodes = query_timeline_nodes(
             memory_service=memory_service,
             hours=hours,
             scope=scope,
@@ -254,13 +254,13 @@ async def get_stats(
 
     try:
         # Get stats from database
-        stats_data = await get_memory_stats(memory_service)
+        stats_data = get_memory_stats(memory_service)
 
         # Get date range
         oldest = None
         newest = None
 
-        timeline_nodes = await query_timeline_nodes(
+        timeline_nodes = query_timeline_nodes(
             memory_service=memory_service,
             hours=24 * 365,  # Look back 1 year
             limit=1,
@@ -268,7 +268,7 @@ async def get_stats(
         if timeline_nodes:
             oldest = timeline_nodes[0].updated_at
 
-        timeline_nodes = await query_timeline_nodes(
+        timeline_nodes = query_timeline_nodes(
             memory_service=memory_service,
             hours=1,
             limit=1,
@@ -325,7 +325,7 @@ async def visualize_graph(
 
     try:
         # Query nodes
-        nodes = await query_timeline_nodes(
+        nodes = query_timeline_nodes(
             memory_service=memory_service,
             hours=hours,
             scope=scope,

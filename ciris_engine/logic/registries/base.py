@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Protocol, Union, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
 logger = logging.getLogger(__name__)
 
@@ -515,6 +515,10 @@ class ServiceRegistry:
                     circuit_breakers += 1
                     if provider.circuit_breaker.state == CircuitState.OPEN:
                         open_breakers += 1
+
+        # Track max open breakers
+        if open_breakers > self._circuit_breaker_opens:
+            self._circuit_breaker_opens = open_breakers
 
         # Calculate hit rate
         hit_rate = 0.0

@@ -229,11 +229,11 @@ def _render_edge(edge: GraphEdge, positions: Dict[str, Tuple[float, float]]) -> 
     color = get_edge_color(edge.relationship)
     style = get_edge_style(edge.relationship)
 
-    parts = [f'<line class="edge" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" ' f'stroke="{color}" {style}/>']
+    parts = [f'<line class="edge" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" {style}/>']
 
     if edge.relationship:
         parts.append(
-            f'<text class="edge-label" x="{mid_x}" y="{mid_y}" ' f'text-anchor="middle">{edge.relationship}</text>'
+            f'<text class="edge-label" x="{mid_x}" y="{mid_y}" text-anchor="middle">{edge.relationship}</text>'
         )
 
     return parts
@@ -258,7 +258,7 @@ def _render_node(node: GraphNode, position: Tuple[float, float]) -> List[str]:
         f'data-node-id="{node.id}" data-node-type="{type_str}">'
         f"<title>{node.id}\nType: {type_str}\nScope: {scope_str}</title>"
         f"</circle>",
-        f'<text class="node-label" x="{x}" y="{y + size + 12}" ' f'text-anchor="middle">{label}</text>',
+        f'<text class="node-label" x="{x}" y="{y + size + 12}" text-anchor="middle">{label}</text>',
     ]
 
 

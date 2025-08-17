@@ -338,7 +338,11 @@ class TelemetryAggregator:
         min_uptime = float("inf")
         error_rates = []
 
-        for category_data in telemetry.values():
+        for category_name, category_data in telemetry.items():
+            # Skip covenant category as it contains computed metrics, not service data
+            if category_name == "covenant":
+                continue
+
             for service_data in category_data.values():
                 total_services += 1
                 is_healthy, errors, requests, error_rate, uptime = self._process_service_metrics(service_data)

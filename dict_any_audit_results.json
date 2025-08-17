@@ -621,7 +621,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 360,
+        "line": 364,
         "class": "TelemetryAggregator",
         "function": "compute_covenant_metrics",
         "context": "function_parameter",
@@ -629,7 +629,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 360,
+        "line": 364,
         "class": "TelemetryAggregator",
         "function": "compute_covenant_metrics",
         "context": "return_type",
@@ -637,7 +637,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 408,
+        "line": 412,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "function_parameter",
@@ -645,7 +645,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 408,
+        "line": 412,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "return_type",
@@ -653,7 +653,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1452,
+        "line": 1456,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",

@@ -72,7 +72,9 @@ class TestCircuitBreakerMetrics:
 
         # Check it's a dict with expected metrics
         assert isinstance(metrics, dict)
-        assert len(metrics) == 10, f"Expected 10 metrics, got {len(metrics)}: {list(metrics.keys())}"
+        assert (
+            len(metrics) == 14
+        ), f"Expected 14 metrics (10 prefixed + 4 v1.4.3), got {len(metrics)}: {list(metrics.keys())}"
 
         # Check all expected metrics are present
         self.assert_required_metrics(metrics, self.CIRCUIT_BREAKER_METRICS)
@@ -356,7 +358,9 @@ class TestServiceRegistryMetrics:
 
         # Check it's a dict with expected metrics
         assert isinstance(metrics, dict)
-        assert len(metrics) == 10, f"Expected 10 metrics, got {len(metrics)}: {list(metrics.keys())}"
+        assert (
+            len(metrics) == 14
+        ), f"Expected 14 metrics (10 detailed + 4 v1.4.3), got {len(metrics)}: {list(metrics.keys())}"
 
         # Check all expected metrics are present
         self.assert_required_metrics(metrics, self.SERVICE_REGISTRY_METRICS)

@@ -583,22 +583,23 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get task scheduler service metrics - v1.4.3 set of 362 metrics.
-
-        Returns exactly these 5 metrics from the 362 v1.4.3 set:
-        - tasks_scheduled_total: Tasks scheduled
-        - tasks_completed_total: Tasks completed
-        - tasks_failed_total: Tasks failed
-        - tasks_pending: Currently pending tasks
-        - scheduler_uptime_seconds: Service uptime
+        Get all task scheduler service metrics including base, custom, and v1.4.3 specific.
         """
-        return {
-            "tasks_scheduled_total": float(self._tasks_scheduled),
-            "tasks_completed_total": float(self._tasks_completed),
-            "tasks_failed_total": float(self._tasks_failed),
-            "tasks_pending": float(len(self._active_tasks)),
-            "scheduler_uptime_seconds": self._calculate_uptime(),
-        }
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific scheduler metrics
+        metrics.update(
+            {
+                "tasks_scheduled_total": float(self._tasks_scheduled),
+                "tasks_completed_total": float(self._tasks_completed),
+                "tasks_failed_total": float(self._tasks_failed),
+                "tasks_pending": float(len(self._active_tasks)),
+                "scheduler_uptime_seconds": self._calculate_uptime(),
+            }
+        )
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if the service is healthy."""

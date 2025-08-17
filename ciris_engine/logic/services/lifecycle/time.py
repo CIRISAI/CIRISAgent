@@ -228,14 +228,11 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get time service metrics - v1.4.3 set of 362 metrics.
-
-        Returns exactly these 4 time metrics:
-        - time_queries_total: Time queries served
-        - time_sync_operations: Sync operations performed
-        - time_drift_ms: Current clock drift in ms
-        - time_uptime_seconds: Service uptime
+        Get all time service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
         # Calculate total time queries from all tracked request types
         total_queries = self._time_requests + self._iso_requests + self._timestamp_requests + self._uptime_requests
 
@@ -249,10 +246,14 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         # Service uptime in seconds
         uptime_seconds = self.get_uptime()
 
-        # Return exact metrics from v1.4.3 set
-        return {
-            "time_queries_total": float(total_queries),
-            "time_sync_operations": float(sync_operations),
-            "time_drift_ms": drift_ms,
-            "time_uptime_seconds": uptime_seconds,
-        }
+        # Add v1.4.3 specific time metrics
+        metrics.update(
+            {
+                "time_queries_total": float(total_queries),
+                "time_sync_operations": float(sync_operations),
+                "time_drift_ms": drift_ms,
+                "time_uptime_seconds": uptime_seconds,
+            }
+        )
+
+        return metrics

@@ -215,7 +215,7 @@ async def task_scheduler_service(mock_time_service):
 class TestLLMServiceMetrics(BaseMetricsTest):
     """Test metrics for LLM service."""
 
-    # Expected LLM service metrics (15 total, no caching)
+    # Expected LLM service metrics (base + custom + v1.4.3 specific)
     EXPECTED_LLM_METRICS = {
         # Circuit breaker metrics (7)
         "circuit_breaker_state",
@@ -238,6 +238,14 @@ class TestLLMServiceMetrics(BaseMetricsTest):
         "retry_delay_max",
         "model_timeout_seconds",
         "model_max_retries",
+        # v1.4.3 specific LLM metrics (7)
+        "llm_requests_total",
+        "llm_tokens_input",
+        "llm_tokens_output",
+        "llm_tokens_total",
+        "llm_cost_cents",
+        "llm_errors_total",
+        "llm_uptime_seconds",
     }
 
     NON_NEGATIVE_LLM_METRICS = {
@@ -256,6 +264,13 @@ class TestLLMServiceMetrics(BaseMetricsTest):
         "retry_delay_max",
         "model_timeout_seconds",
         "model_max_retries",
+        "llm_requests_total",
+        "llm_tokens_input",
+        "llm_tokens_output",
+        "llm_tokens_total",
+        "llm_cost_cents",
+        "llm_errors_total",
+        "llm_uptime_seconds",
     }
 
     RATIO_LLM_METRICS = {"success_rate", "api_success_rate"}
@@ -290,12 +305,8 @@ class TestLLMServiceMetrics(BaseMetricsTest):
         metrics = await self.get_service_metrics(llm_service)
 
         # Circuit breaker should be closed (0.0)
-        # v1.4.3: Old metric removed
-
-        # assert metrics["circuit_breaker_state"] == 0.0, "Circuit breaker should be closed"
-        # v1.4.3: Old metric removed
-
-        # assert metrics["consecutive_failures"] == 0, "No consecutive failures expected"
+        assert metrics["circuit_breaker_state"] == 0.0, "Circuit breaker should be closed"
+        assert metrics["consecutive_failures"] == 0, "No consecutive failures expected"
         assert metrics["success_rate"] == 1.0, "Success rate should be 1.0"
 
     @pytest.mark.asyncio

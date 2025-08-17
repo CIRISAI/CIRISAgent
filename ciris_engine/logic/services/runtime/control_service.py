@@ -1707,15 +1707,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get runtime control service metrics for v1.4.3.
-
-        Returns EXACTLY these 5 runtime metrics from the 362 v1.4.3 set:
-        - runtime_state_transitions: State transitions count
-        - runtime_commands_processed: Commands processed
-        - runtime_current_state: Current state (as int)
-        - runtime_queue_size: Processing queue size
-        - runtime_uptime_seconds: Service uptime
+        Get all runtime control service metrics including base, custom, and v1.4.3 specific.
         """
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
         # Get queue size from agent processor
         queue_size = 0
         if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
@@ -1740,13 +1735,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # Calculate uptime in seconds
         uptime_seconds = self._calculate_uptime()
 
-        return {
-            "runtime_state_transitions": float(self._state_transitions),
-            "runtime_commands_processed": float(self._commands_processed),
-            "runtime_current_state": float(current_state),
-            "runtime_queue_size": float(queue_size),
-            "runtime_uptime_seconds": float(uptime_seconds),
-        }
+        # Add v1.4.3 specific runtime metrics
+        metrics.update(
+            {
+                "runtime_state_transitions": float(self._state_transitions),
+                "runtime_commands_processed": float(self._commands_processed),
+                "runtime_current_state": float(current_state),
+                "runtime_queue_size": float(queue_size),
+                "runtime_uptime_seconds": float(uptime_seconds),
+            }
+        )
+
+        return metrics
 
     def _calculate_average_thought_time(self) -> float:
         """Calculate average thought processing time."""

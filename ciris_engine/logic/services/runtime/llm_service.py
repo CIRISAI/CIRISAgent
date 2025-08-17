@@ -243,26 +243,25 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
     async def get_metrics(self) -> Dict[str, float]:
         """
-        Get the 7 specific LLM metrics for v1.4.3 telemetry.
-
-        Returns exactly these metrics:
-        - llm_requests_total: Total LLM requests
-        - llm_tokens_input: Total input tokens
-        - llm_tokens_output: Total output tokens
-        - llm_tokens_total: Total tokens used
-        - llm_cost_cents: Total cost in cents
-        - llm_errors_total: Total errors
-        - llm_uptime_seconds: Service uptime
+        Get all LLM metrics including base, custom, and v1.4.3 specific metrics.
         """
-        return {
-            "llm_requests_total": float(self._total_requests),
-            "llm_tokens_input": float(self._total_input_tokens),
-            "llm_tokens_output": float(self._total_output_tokens),
-            "llm_tokens_total": float(self._total_input_tokens + self._total_output_tokens),
-            "llm_cost_cents": self._total_cost_cents,
-            "llm_errors_total": float(self._total_errors),
-            "llm_uptime_seconds": self._calculate_uptime(),
-        }
+        # Get all base + custom metrics
+        metrics = self._collect_metrics()
+
+        # Add v1.4.3 specific LLM metrics
+        metrics.update(
+            {
+                "llm_requests_total": float(self._total_requests),
+                "llm_tokens_input": float(self._total_input_tokens),
+                "llm_tokens_output": float(self._total_output_tokens),
+                "llm_tokens_total": float(self._total_input_tokens + self._total_output_tokens),
+                "llm_cost_cents": self._total_cost_cents,
+                "llm_errors_total": float(self._total_errors),
+                "llm_uptime_seconds": self._calculate_uptime(),
+            }
+        )
+
+        return metrics
 
     def _extract_json_from_response(self, raw: str) -> JSONExtractionResult:
         """Extract and parse JSON from LLM response (private method)."""

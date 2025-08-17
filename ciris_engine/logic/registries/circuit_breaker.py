@@ -195,15 +195,32 @@ class CircuitBreaker:
         logger.info(f"Circuit breaker '{self.name}' manually reset")
 
     def get_metrics(self) -> dict[str, float]:
-        """Get circuit breaker metrics for v1.4.3 telemetry set."""
-        # Convert state to numeric: 0=closed, 1=open, 2=half-open
+        """Get all circuit breaker metrics including detailed stats."""
+        # Get detailed stats
+        stats = self.get_stats()
+
+        # Convert state to numeric: 0=closed, 1=open, 0.5=half-open
         state_value = 0.0
         if self.state == CircuitState.OPEN:
             state_value = 1.0
         elif self.state == CircuitState.HALF_OPEN:
-            state_value = 2.0
+            state_value = 0.5
+
+        # Build metrics with service name prefix
+        prefix = f"cb_{self.name}"
 
         return {
+            f"{prefix}_state": state_value,
+            f"{prefix}_total_calls": float(stats["call_count"]),
+            f"{prefix}_total_failures": float(stats["total_failures"]),
+            f"{prefix}_total_successes": float(stats["total_successes"]),
+            f"{prefix}_success_rate": float(stats["success_rate"]),
+            f"{prefix}_consecutive_failures": float(stats["consecutive_failures"]),
+            f"{prefix}_recovery_attempts": float(stats["recovery_attempts"]),
+            f"{prefix}_state_transitions": float(stats["state_transitions"]),
+            f"{prefix}_time_in_open_state_sec": float(stats["time_in_open_state"]),
+            f"{prefix}_last_failure_age_sec": float(stats["last_failure_age"]),
+            # Also include v1.4.3 metrics without prefix
             "circuit_breaker_trips": float(self.total_trips),
             "circuit_breaker_resets": float(self.total_resets),
             "circuit_breaker_state": state_value,

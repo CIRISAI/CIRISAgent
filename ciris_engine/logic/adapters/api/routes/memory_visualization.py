@@ -106,6 +106,12 @@ def hierarchy_pos(
 
     Groups nodes by type and arranges them in layers.
     """
+    # Build adjacency information from edges for better layout
+    connections: Dict[str, int] = {}
+    for edge in edges:
+        connections[edge.from_id] = connections.get(edge.from_id, 0) + 1
+        connections[edge.to_id] = connections.get(edge.to_id, 0) + 1
+
     # Group nodes by type
     by_type: Dict[NodeType, List[GraphNode]] = {}
     for node in nodes:
@@ -113,6 +119,10 @@ def hierarchy_pos(
         if node_type not in by_type:
             by_type[node_type] = []
         by_type[node_type].append(node)
+
+    # Sort nodes within each type by connectivity (most connected first)
+    for node_type in by_type:
+        by_type[node_type].sort(key=lambda n: connections.get(n.id, 0), reverse=True)
 
     # Define vertical layers for different types
     type_layers = {

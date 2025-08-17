@@ -38,8 +38,10 @@ from .telemetry_models import (
     LogEntry,
     MetricData,
     MetricSeries,
+    ResourceDataPoint,
     ResourceHistoryResponse,
     ResourceMetricData,
+    ResourceMetricStats,
     ResourceUsage,
     ServiceHealth,
     ServiceHealthOverview,
@@ -1292,31 +1294,7 @@ async def get_detailed_metric(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class ResourceDataPoint(BaseModel):
-    """Resource usage data point."""
-
-    timestamp: datetime = Field(..., description="Timestamp of measurement")
-    value: float = Field(..., description="Measured value")
-
-
-class ResourceStats(BaseModel):
-    """Resource usage statistics."""
-
-    min: float = Field(..., description="Minimum value")
-    max: float = Field(..., description="Maximum value")
-    avg: float = Field(..., description="Average value")
-    current: float = Field(..., description="Current value")
-
-
-class ResourceTimeSeriesData(BaseModel):
-    """Resource metric time series with data and statistics."""
-
-    data: List[ResourceDataPoint] = Field(default_factory=list, description="Time series data")
-    stats: ResourceStats = Field(..., description="Statistical summary")
-    unit: str = Field(..., description="Unit of measurement")
-
-
-# TimePeriod and ResourceHistoryResponse models moved to telemetry_models.py
+# All resource metric models are now in telemetry_models.py with proper type safety
 
 
 # Helper functions moved to telemetry_helpers.py
@@ -1450,62 +1428,56 @@ async def get_resource_history(
         memory_values = [d.get("value", 0) for d in memory_data] if memory_data else [0]
         disk_values = [d.get("value", 0) for d in disk_data] if disk_data else [0]
 
-        # Create time series data points
+        # Create properly typed data points
         cpu_points = [
-            ResourceDataPoint(
-                timestamp=datetime.fromisoformat(d.get("timestamp", now.isoformat())), value=d.get("value", 0)
-            )
+            ResourceDataPoint(timestamp=d.get("timestamp", now.isoformat()), value=d.get("value", 0))
             for d in (cpu_data if cpu_data else [])
         ]
 
         memory_points = [
-            ResourceDataPoint(
-                timestamp=datetime.fromisoformat(d.get("timestamp", now.isoformat())), value=d.get("value", 0)
-            )
+            ResourceDataPoint(timestamp=d.get("timestamp", now.isoformat()), value=d.get("value", 0))
             for d in (memory_data if memory_data else [])
         ]
 
         disk_points = [
-            ResourceDataPoint(
-                timestamp=datetime.fromisoformat(d.get("timestamp", now.isoformat())), value=d.get("value", 0)
-            )
+            ResourceDataPoint(timestamp=d.get("timestamp", now.isoformat()), value=d.get("value", 0))
             for d in (disk_data if disk_data else [])
         ]
 
-        # Create a different response format that matches the test expectations
-        response = {
-            "period": {"start": start_time.isoformat(), "end": now.isoformat(), "hours": hours},
-            "cpu": {
-                "data": cpu_points,
-                "stats": {
-                    "min": min(cpu_values) if cpu_values else 0,
-                    "max": max(cpu_values) if cpu_values else 0,
-                    "avg": sum(cpu_values) / len(cpu_values) if cpu_values else 0,
-                    "current": cpu_values[-1] if cpu_values else 0,
-                },
-                "unit": "percent",
-            },
-            "memory": {
-                "data": memory_points,
-                "stats": {
-                    "min": min(memory_values) if memory_values else 0,
-                    "max": max(memory_values) if memory_values else 0,
-                    "avg": sum(memory_values) / len(memory_values) if memory_values else 0,
-                    "current": memory_values[-1] if memory_values else 0,
-                },
-                "unit": "MB",
-            },
-            "disk": {
-                "data": disk_points,
-                "stats": {
-                    "min": min(disk_values) if disk_values else 0,
-                    "max": max(disk_values) if disk_values else 0,
-                    "avg": sum(disk_values) / len(disk_values) if disk_values else 0,
-                    "current": disk_values[-1] if disk_values else 0,
-                },
-                "unit": "GB",
-            },
-        }
+        # Create properly typed response using Pydantic models
+        response = ResourceHistoryResponse(
+            period=TimePeriod(start=start_time.isoformat(), end=now.isoformat(), hours=hours),
+            cpu=ResourceMetricData(
+                data=cpu_points,
+                stats=ResourceMetricStats(
+                    min=min(cpu_values) if cpu_values else 0,
+                    max=max(cpu_values) if cpu_values else 0,
+                    avg=sum(cpu_values) / len(cpu_values) if cpu_values else 0,
+                    current=cpu_values[-1] if cpu_values else 0,
+                ),
+                unit="percent",
+            ),
+            memory=ResourceMetricData(
+                data=memory_points,
+                stats=ResourceMetricStats(
+                    min=min(memory_values) if memory_values else 0,
+                    max=max(memory_values) if memory_values else 0,
+                    avg=sum(memory_values) / len(memory_values) if memory_values else 0,
+                    current=memory_values[-1] if memory_values else 0,
+                ),
+                unit="MB",
+            ),
+            disk=ResourceMetricData(
+                data=disk_points,
+                stats=ResourceMetricStats(
+                    min=min(disk_values) if disk_values else 0,
+                    max=max(disk_values) if disk_values else 0,
+                    avg=sum(disk_values) / len(disk_values) if disk_values else 0,
+                    current=disk_values[-1] if disk_values else 0,
+                ),
+                unit="GB",
+            ),
+        )
 
         return SuccessResponse(
             data=response,

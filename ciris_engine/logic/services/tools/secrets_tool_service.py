@@ -39,6 +39,11 @@ class SecretsToolService(BaseService, ToolService):
         # v1.4.3 metrics tracking
         self._secrets_retrieved = 0
         self._secrets_stored = 0
+        self._metrics_tracking = {}  # For custom metric tracking
+
+    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
+        """Track a metric with default value."""
+        return self._metrics_tracking.get(metric_name, default)
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
@@ -317,7 +322,8 @@ class SecretsToolService(BaseService, ToolService):
                 "tool_errors": float(self._error_count),
                 "success_rate": success_rate,
                 "secrets_retrieved": float(self._secrets_retrieved),
-                "audit_events_generated": float(self._error_count),  # Each error generates an audit event
+                "audit_events_generated": float(self._request_count),  # Each execution generates an audit event
+                "available_tools": 3.0,  # recall_secret, update_secrets_filter, self_help
             }
         )
 
@@ -344,6 +350,7 @@ class SecretsToolService(BaseService, ToolService):
                 "secrets_tool_retrieved": float(self._secrets_retrieved),
                 "secrets_tool_stored": 0.0,  # This service only retrieves, never stores
                 "secrets_tool_uptime_seconds": uptime_seconds,
+                "tools_enabled": 3.0,  # recall_secret, update_secrets_filter, self_help
             }
         )
 

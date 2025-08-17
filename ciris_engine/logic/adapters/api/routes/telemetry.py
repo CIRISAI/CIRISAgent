@@ -53,6 +53,12 @@ from .telemetry_models import (
     TimePeriod,
     TraceSpan,
 )
+from .telemetry_resource_helpers import (
+    MetricValueExtractor,
+    ResourceDataPointBuilder,
+    ResourceMetricBuilder,
+    ResourceMetricsCollector,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1377,100 +1383,37 @@ async def get_resource_history(
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours)
 
-        # Query different resource metrics
-        cpu_data = []
-        memory_data = []
-        disk_data = []
+        # Use helper classes for clean separation of concerns
+        collector = ResourceMetricsCollector()
+        extractor = MetricValueExtractor()
+        builder = ResourceMetricBuilder()
 
-        if hasattr(telemetry_service, "query_metrics"):
-            cpu_data = await telemetry_service.query_metrics(
-                metric_name="cpu_percent", start_time=start_time, end_time=now
-            )
+        # Fetch all metrics concurrently
+        cpu_data, memory_data, disk_data = await collector.fetch_all_resource_metrics(
+            telemetry_service, start_time, now
+        )
 
-            memory_data = await telemetry_service.query_metrics(
-                metric_name="memory_mb", start_time=start_time, end_time=now
-            )
+        # Extract values for statistics
+        cpu_values, memory_values, disk_values = extractor.extract_all_values(cpu_data, memory_data, disk_data)
 
-            disk_data = await telemetry_service.query_metrics(
-                metric_name="disk_usage_bytes", start_time=start_time, end_time=now
-            )
+        # Build data points
+        default_timestamp = now.isoformat()
+        point_builder = ResourceDataPointBuilder()
+        cpu_points, memory_points, disk_points = point_builder.build_all_data_points(
+            cpu_data, memory_data, disk_data, default_timestamp
+        )
 
-        # Helper to calculate percentile
-        def percentile_95(values: List[float]) -> float:
-            if not values:
-                return 0
-            sorted_vals = sorted(values)
-            index = int(len(sorted_vals) * 0.95)
-            return sorted_vals[min(index, len(sorted_vals) - 1)]
-
-        # Helper to determine trend
-        def calc_trend(values: List[float]) -> str:
-            if len(values) < 2:
-                return "stable"
-            recent = values[-5:] if len(values) >= 5 else values[-2:]
-            older = values[:-5] if len(values) >= 5 else values[0:1]
-            recent_avg = sum(recent) / len(recent)
-            older_avg = sum(older) / len(older)
-            if recent_avg > older_avg * 1.1:
-                return "increasing"
-            elif recent_avg < older_avg * 0.9:
-                return "decreasing"
-            return "stable"
-
-        # Convert time series data to ResourceTimeSeriesData format
-        cpu_values = [d.get("value", 0) for d in cpu_data] if cpu_data else [0]
-        memory_values = [d.get("value", 0) for d in memory_data] if memory_data else [0]
-        disk_values = [d.get("value", 0) for d in disk_data] if disk_data else [0]
-
-        # Create properly typed data points
-        cpu_points = [
-            ResourceDataPoint(timestamp=d.get("timestamp", now.isoformat()), value=d.get("value", 0))
-            for d in (cpu_data if cpu_data else [])
-        ]
-
-        memory_points = [
-            ResourceDataPoint(timestamp=d.get("timestamp", now.isoformat()), value=d.get("value", 0))
-            for d in (memory_data if memory_data else [])
-        ]
-
-        disk_points = [
-            ResourceDataPoint(timestamp=d.get("timestamp", now.isoformat()), value=d.get("value", 0))
-            for d in (disk_data if disk_data else [])
-        ]
+        # Build complete metrics with stats
+        cpu_metric, memory_metric, disk_metric = builder.build_all_metrics(
+            cpu_points, cpu_values, memory_points, memory_values, disk_points, disk_values
+        )
 
         # Create properly typed response using Pydantic models
         response = ResourceHistoryResponse(
             period=TimePeriod(start=start_time.isoformat(), end=now.isoformat(), hours=hours),
-            cpu=ResourceMetricData(
-                data=cpu_points,
-                stats=ResourceMetricStats(
-                    min=min(cpu_values) if cpu_values else 0,
-                    max=max(cpu_values) if cpu_values else 0,
-                    avg=sum(cpu_values) / len(cpu_values) if cpu_values else 0,
-                    current=cpu_values[-1] if cpu_values else 0,
-                ),
-                unit="percent",
-            ),
-            memory=ResourceMetricData(
-                data=memory_points,
-                stats=ResourceMetricStats(
-                    min=min(memory_values) if memory_values else 0,
-                    max=max(memory_values) if memory_values else 0,
-                    avg=sum(memory_values) / len(memory_values) if memory_values else 0,
-                    current=memory_values[-1] if memory_values else 0,
-                ),
-                unit="MB",
-            ),
-            disk=ResourceMetricData(
-                data=disk_points,
-                stats=ResourceMetricStats(
-                    min=min(disk_values) if disk_values else 0,
-                    max=max(disk_values) if disk_values else 0,
-                    avg=sum(disk_values) / len(disk_values) if disk_values else 0,
-                    current=disk_values[-1] if disk_values else 0,
-                ),
-                unit="GB",
-            ),
+            cpu=cpu_metric,
+            memory=memory_metric,
+            disk=disk_metric,
         )
 
         return SuccessResponse(

@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
+from .memory_query_helpers import DatabaseExecutor, DateTimeParser, GraphNodeBuilder, QueryBuilder, TimeRangeCalculator
+
 logger = logging.getLogger(__name__)
 
 # SQL Query Constants
@@ -47,75 +49,29 @@ async def query_timeline_nodes(
     Returns:
         List of GraphNode objects
     """
-    nodes = []
+    # Get database path
+    db_path = DatabaseExecutor.get_db_path(memory_service)
+    if not db_path:
+        return []
 
-    try:
-        # Calculate time range
-        now = datetime.now()
-        start_time = now - timedelta(hours=hours)
+    # Calculate time range
+    start_time, end_time = TimeRangeCalculator.calculate_range(hours)
 
-        # Build query
-        query_parts = [SQL_SELECT_NODES, SQL_FROM_NODES, SQL_WHERE_TIME_RANGE]
-        params = [start_time.isoformat(), now.isoformat()]
+    # Build query with all filters
+    query, params = QueryBuilder.build_timeline_query(
+        start_time=start_time,
+        end_time=end_time,
+        scope=scope,
+        node_type=node_type,
+        exclude_metrics=exclude_metrics,
+        limit=limit,
+    )
 
-        if exclude_metrics:
-            query_parts.append(SQL_EXCLUDE_METRICS)
+    # Execute query and get rows
+    rows = DatabaseExecutor.execute_query(db_path, query, params)
 
-        if scope:
-            query_parts.append(SQL_WHERE_SCOPE)
-            params.append(scope.value if hasattr(scope, "value") else str(scope))
-
-        if node_type:
-            query_parts.append(SQL_WHERE_NODE_TYPE)
-            params.append(node_type.value if hasattr(node_type, "value") else str(node_type))
-
-        query_parts.append("ORDER BY updated_at DESC")
-        query_parts.append(SQL_LIMIT)
-        params.append(limit)
-
-        query = " ".join(query_parts)
-
-        # Execute query
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
-            logger.warning("Memory service has no db_path")
-            return nodes
-
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-
-            for row in cursor.fetchall():
-                try:
-                    # Parse attributes
-                    attributes = {}
-                    if row[3]:  # attributes_json
-                        try:
-                            attributes = json.loads(row[3])
-                        except json.JSONDecodeError:
-                            logger.warning(f"Failed to parse attributes for node {row[0]}")
-
-                    # Create GraphNode
-                    node = GraphNode(
-                        id=row[0],  # node_id
-                        scope=row[1],  # scope
-                        type=row[2],  # node_type
-                        attributes=attributes,
-                        version=row[4] if row[4] else 1,  # version
-                        updated_by=row[5] if row[5] else "system",  # updated_by
-                        updated_at=_parse_datetime(row[6]),  # updated_at
-                        created_at=_parse_datetime(row[7]) if row[7] else None,  # created_at
-                    )
-                    nodes.append(node)
-
-                except Exception as e:
-                    logger.error(f"Failed to create GraphNode from row: {e}")
-                    continue
-
-    except Exception as e:
-        logger.error(f"Failed to query timeline nodes: {e}")
-
-    return nodes
+    # Build GraphNode objects from rows
+    return GraphNodeBuilder.build_from_rows(rows)
 
 
 async def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
@@ -213,85 +169,21 @@ async def search_nodes(
     Returns:
         List of matching GraphNode objects
     """
-    nodes = []
+    # Get database path
+    db_path = DatabaseExecutor.get_db_path(memory_service)
+    if not db_path:
+        return []
 
-    try:
-        # Build query
-        query_parts = [SQL_SELECT_NODES, SQL_FROM_NODES, "WHERE 1=1"]
-        params = []
+    # Build search query with all filters
+    sql_query, params = QueryBuilder.build_search_query(
+        query=query, node_type=node_type, scope=scope, since=since, until=until, tags=tags, limit=limit, offset=offset
+    )
 
-        if node_type:
-            query_parts.append("AND node_type = ?")
-            params.append(node_type.value if hasattr(node_type, "value") else str(node_type))
+    # Execute query and get rows
+    rows = DatabaseExecutor.execute_query(db_path, sql_query, params)
 
-        if scope:
-            query_parts.append("AND scope = ?")
-            params.append(scope.value if hasattr(scope, "value") else str(scope))
-
-        if since:
-            query_parts.append("AND updated_at >= ?")
-            params.append(since.isoformat())
-
-        if until:
-            query_parts.append("AND updated_at <= ?")
-            params.append(until.isoformat())
-
-        if query:
-            # Simple text search in attributes
-            query_parts.append("AND attributes_json LIKE ?")
-            params.append(f"%{query}%")
-
-        if tags:
-            # Search for tags in attributes
-            for tag in tags:
-                query_parts.append("AND attributes_json LIKE ?")
-                params.append(f'%"{tag}"%')
-
-        query_parts.append("ORDER BY updated_at DESC")
-        query_parts.append(f"LIMIT {limit} OFFSET {offset}")
-
-        sql_query = " ".join(query_parts)
-
-        # Execute query
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
-            return nodes
-
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql_query, params)
-
-            for row in cursor.fetchall():
-                try:
-                    # Parse attributes
-                    attributes = {}
-                    if row[3]:  # attributes_json
-                        try:
-                            attributes = json.loads(row[3])
-                        except json.JSONDecodeError:
-                            pass
-
-                    # Create GraphNode
-                    node = GraphNode(
-                        id=row[0],
-                        scope=row[1],
-                        type=row[2],
-                        attributes=attributes,
-                        version=row[4] if row[4] else 1,
-                        updated_by=row[5] if row[5] else "system",
-                        updated_at=_parse_datetime(row[6]),
-                        created_at=_parse_datetime(row[7]) if row[7] else None,
-                    )
-                    nodes.append(node)
-
-                except Exception as e:
-                    logger.error(f"Failed to create GraphNode from row: {e}")
-                    continue
-
-    except Exception as e:
-        logger.error(f"Failed to search nodes: {e}")
-
-    return nodes
+    # Build GraphNode objects from rows
+    return GraphNodeBuilder.build_from_rows(rows)
 
 
 def _parse_datetime(value: Any) -> Optional[datetime]:

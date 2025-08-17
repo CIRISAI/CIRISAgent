@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, NodeType
 
+from .memory_visualization_helpers import TimelineLayoutCalculator
+
 logger = logging.getLogger(__name__)
 
 # Visualization Constants
@@ -172,52 +174,12 @@ def calculate_timeline_layout(
     if not nodes:
         return {}
 
-    # Get time range
-    timestamps = []
-    for node in nodes:
-        if node.updated_at:
-            timestamps.append(node.updated_at)
-        elif node.created_at:
-            timestamps.append(node.created_at)
+    # Use helper to calculate positions
+    positions = TimelineLayoutCalculator.build_positions(nodes, width, height, TIMELINE_PADDING)
 
-    if not timestamps:
-        # Fall back to simple layout if no timestamps
+    # Fall back to hierarchy layout if no timestamps
+    if not positions:
         return hierarchy_pos(nodes, [], width, height)
-
-    min_time = min(timestamps)
-    max_time = max(timestamps)
-    time_range = (max_time - min_time).total_seconds()
-
-    if time_range == 0:
-        time_range = 1  # Avoid division by zero
-
-    # Group nodes by type for vertical tracks
-    tracks: Dict[NodeType, int] = {}
-    track_count = 0
-
-    positions = {}
-    padding = TIMELINE_PADDING
-
-    for node in nodes:
-        # Get timestamp
-        timestamp = node.updated_at or node.created_at
-        if not timestamp:
-            continue
-
-        # Calculate horizontal position based on time
-        time_offset = (timestamp - min_time).total_seconds()
-        x = padding + (width - 2 * padding) * (time_offset / time_range)
-
-        # Calculate vertical position based on type track
-        if node.type not in tracks:
-            tracks[node.type] = track_count
-            track_count += 1
-
-        track = tracks[node.type]
-        track_height = (height - 2 * padding) / max(len(tracks), 1)
-        y = padding + track * track_height + track_height / 2
-
-        positions[node.id] = (x, y)
 
     return positions
 

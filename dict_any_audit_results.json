@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 174,
-    "files_affected": 79,
+    "occurrences": 175,
+    "files_affected": 80,
     "categories": {
-      "generic_data": 155,
+      "generic_data": 156,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -821,7 +821,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/memory_queries.py",
-        "line": 121,
+        "line": 77,
         "class": null,
         "function": "get_memory_stats",
         "context": "return_type",
@@ -865,6 +865,14 @@
         "class": null,
         "function": "verify_signature",
         "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_query_helpers.py",
+        "line": 114,
+        "class": "AttributeParser",
+        "function": "parse_attributes",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -3184,7 +3192,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 395,
-    "files_affected": 123
+    "occurrences": 396,
+    "files_affected": 124
   }
 }

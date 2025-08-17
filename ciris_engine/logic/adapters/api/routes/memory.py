@@ -94,8 +94,11 @@ async def query_memory(
     try:
         # If querying by specific ID
         if body.node_id:
-            node = await memory_service.recall_node(body.node_id)
-            nodes = [node] if node else []
+            # Use recall method with a query for the specific node
+            from ciris_engine.schemas.services.graph_core import MemoryQuery
+
+            query = MemoryQuery(node_ids=[body.node_id], limit=1)
+            nodes = await memory_service.recall(query)
 
         # If querying by relationship
         elif body.related_to:
@@ -504,9 +507,14 @@ async def recall_by_id(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        node = await memory_service.recall_node(node_id)
-        if not node:
+        # Use recall method with a query for the specific node
+        from ciris_engine.schemas.services.graph_core import MemoryQuery
+
+        query = MemoryQuery(node_ids=[node_id], limit=1)
+        nodes = await memory_service.recall(query)
+        if not nodes:
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+        node = nodes[0]
 
         return SuccessResponse(
             data=node,

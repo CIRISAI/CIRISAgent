@@ -49,11 +49,13 @@ class CommunicationBus(BaseBus[CommunicationService]):
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.COMMUNICATION, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
 
         # Metrics tracking
         self._messages_sent = 0
         self._messages_received = 0
         self._broadcasts = 0
+        self._errors = 0
 
     async def get_default_channel(self) -> Optional[str]:
         """Get home channel from highest priority communication adapter.
@@ -286,6 +288,22 @@ class CommunicationBus(BaseBus[CommunicationService]):
                 self._broadcasts += 1
         else:
             logger.warning(f"Failed to send message to {resolved_channel_id} " f"via {type(service).__name__}")
+
+    def _collect_metrics(self) -> dict:
+        """Collect base metrics for the communication bus."""
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            # Calculate uptime if we have a start time
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "communication_messages_sent": float(self._messages_sent),
+            "communication_messages_received": float(self._messages_received),
+            "communication_broadcasts": float(self._broadcasts),
+            "communication_errors": float(self._errors),
+            "communication_uptime_seconds": uptime_seconds,
+        }
 
     def get_metrics(self) -> dict:
         """Get all metrics including base, custom, and v1.4.3 specific."""

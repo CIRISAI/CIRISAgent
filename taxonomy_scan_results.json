@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-16T21:36:58.130212",
+  "timestamp": "2025-08-17T10:28:15.074267",
   "version": "1.4.3",
   "results": {
     "core_services": {
@@ -378,22 +378,34 @@
             "location": "logic/services/runtime/llm_service.py"
           },
           {
-            "name": "configs_cached",
+            "name": "llm_requests_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
-            "location": "logic/services/graph/config_service.py"
+            "location": "logic/services/runtime/llm_service.py"
           },
           {
-            "name": "configs_total",
+            "name": "llm_tokens_input",
             "method": "_collect_custom_metrics",
             "type": "PULL",
-            "location": "logic/services/graph/config_service.py"
+            "location": "logic/services/runtime/llm_service.py"
           },
           {
-            "name": "config_listeners",
+            "name": "llm_tokens_output",
             "method": "_collect_custom_metrics",
             "type": "PULL",
-            "location": "logic/services/graph/config_service.py"
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_errors_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
           }
         ],
         "push": [
@@ -573,6 +585,24 @@
             "location": "logic/secrets/service.py"
           },
           {
+            "name": "secrets_accessed_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_rotated_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
+            "name": "secrets_active",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/secrets/service.py"
+          },
+          {
             "name": "secrets_stored",
             "method": "_collect_custom_metrics",
             "type": "PULL",
@@ -591,7 +621,25 @@
             "location": "logic/services/tools/secrets_tool_service.py"
           },
           {
+            "name": "secrets_retrieved",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
             "name": "audit_events_generated",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "secrets_tool_invocations",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/tools/secrets_tool_service.py"
+          },
+          {
+            "name": "secrets_tool_retrieved",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/tools/secrets_tool_service.py"
@@ -649,6 +697,18 @@
             "location": "logic/services/lifecycle/initialization.py"
           },
           {
+            "name": "init_services_started",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_errors_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
             "name": "initialization_complete",
             "method": "_collect_custom_metrics",
             "type": "PULL",
@@ -668,6 +728,18 @@
           },
           {
             "name": "total_steps",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_services_started",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/initialization.py"
+          },
+          {
+            "name": "init_errors_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/lifecycle/initialization.py"
@@ -715,6 +787,18 @@
           },
           {
             "name": "ntp_failures",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "time_queries_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/lifecycle/time.py"
+          },
+          {
+            "name": "time_sync_operations",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/lifecycle/time.py"
@@ -768,6 +852,36 @@
             "location": "logic/services/runtime/control_service.py"
           },
           {
+            "name": "runtime_state_transitions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_commands_processed",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_current_state",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_queue_size",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
+            "name": "runtime_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/control_service.py"
+          },
+          {
             "name": "events_count",
             "method": "_collect_custom_metrics",
             "type": "PULL",
@@ -798,19 +912,19 @@
             "location": "logic/services/graph/memory_service.py"
           },
           {
-            "name": "graph_node_count",
+            "name": "memory_nodes_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/memory_service.py"
           },
           {
-            "name": "total_nodes",
+            "name": "memory_edges_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/memory_service.py"
           },
           {
-            "name": "total_edges",
+            "name": "memory_operations_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/memory_service.py"
@@ -821,43 +935,19 @@
       "governance/visibility": {
         "pull": [
           {
-            "name": "dsar_requests",
+            "name": "visibility_requests_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/governance/visibility.py"
           },
           {
-            "name": "transparency_requests",
+            "name": "visibility_explanations_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/governance/visibility.py"
           },
           {
-            "name": "audit_requests",
-            "method": "_collect_custom_metrics",
-            "type": "PULL",
-            "location": "logic/services/governance/visibility.py"
-          },
-          {
-            "name": "export_operations",
-            "method": "_collect_custom_metrics",
-            "type": "PULL",
-            "location": "logic/services/governance/visibility.py"
-          },
-          {
-            "name": "redaction_operations",
-            "method": "_collect_custom_metrics",
-            "type": "PULL",
-            "location": "logic/services/governance/visibility.py"
-          },
-          {
-            "name": "consent_updates",
-            "method": "_collect_custom_metrics",
-            "type": "PULL",
-            "location": "logic/services/governance/visibility.py"
-          },
-          {
-            "name": "feed_subscribers",
+            "name": "visibility_redactions_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/governance/visibility.py"
@@ -1016,6 +1106,30 @@
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_attempts_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_successes_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_failures_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
+          },
+          {
+            "name": "auth_active_sessions",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/infrastructure/authentication.py"
           }
         ],
         "push": []
@@ -1096,42 +1210,6 @@
           },
           {
             "name": "wise_authority",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "available",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "uptime_seconds",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "error_count",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "error_rate",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "request_count",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "last_updated",
             "method": "get_telemetry",
             "type": "PULL",
             "location": "logic/services/graph/telemetry_service.py"
@@ -1767,6 +1845,36 @@
             "location": "logic/services/graph/telemetry_service.py"
           },
           {
+            "name": "telemetry_metrics_collected",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
             "name": "tokens",
             "method": "get_telemetry",
             "type": "PULL",
@@ -1911,10 +2019,34 @@
             "location": "logic/services/graph/telemetry_service.py"
           },
           {
-            "name": "attributes",
+            "name": "telemetry_metrics_collected",
             "method": "_collect_custom_metrics",
             "type": "PULL",
-            "location": "logic/services/graph/memory_service.py"
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
           },
           {
             "name": "attributes",
@@ -1929,19 +2061,25 @@
             "location": "logic/services/graph/memory_service.py"
           },
           {
-            "name": "graph_node_count",
+            "name": "attributes",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/memory_service.py"
           },
           {
-            "name": "total_nodes",
+            "name": "memory_nodes_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/memory_service.py"
           },
           {
-            "name": "total_edges",
+            "name": "memory_edges_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/memory_service.py"
+          },
+          {
+            "name": "memory_operations_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/memory_service.py"
@@ -2038,42 +2176,6 @@
             "location": "logic/services/graph/telemetry_service.py"
           },
           {
-            "name": "available",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "uptime_seconds",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "error_count",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "error_rate",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "request_count",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "last_updated",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
             "name": "status",
             "method": "get_telemetry",
             "type": "PULL",
@@ -2704,6 +2806,36 @@
             "location": "logic/services/graph/telemetry_service.py"
           },
           {
+            "name": "telemetry_metrics_collected",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
             "name": "tokens",
             "method": "get_telemetry",
             "type": "PULL",
@@ -2843,6 +2975,36 @@
           },
           {
             "name": "max_cached_metrics_per_type",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/telemetry_service.py"
@@ -2926,42 +3088,6 @@
             "location": "logic/services/graph/telemetry_service.py"
           },
           {
-            "name": "available",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "uptime_seconds",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "error_count",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "error_rate",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "request_count",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
-            "name": "last_updated",
-            "method": "get_telemetry",
-            "type": "PULL",
-            "location": "logic/services/graph/telemetry_service.py"
-          },
-          {
             "name": "status",
             "method": "get_telemetry",
             "type": "PULL",
@@ -3592,6 +3718,36 @@
             "location": "logic/services/graph/telemetry_service.py"
           },
           {
+            "name": "telemetry_metrics_collected",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
+            "method": "get_telemetry",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
             "name": "tokens",
             "method": "get_telemetry",
             "type": "PULL",
@@ -3731,6 +3887,36 @@
           },
           {
             "name": "max_cached_metrics_per_type",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_metrics_collected",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_services_monitored",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_cache_hits",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_collection_errors",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/telemetry_service.py"
+          },
+          {
+            "name": "telemetry_uptime_seconds",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/graph/telemetry_service.py"
@@ -3984,6 +4170,24 @@
             "location": "logic/services/graph/audit_service.py"
           },
           {
+            "name": "audit_events_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "audit_events_by_severity",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
+            "name": "audit_compliance_checks",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/graph/audit_service.py"
+          },
+          {
             "name": "thought_id",
             "method": "_collect_custom_metrics",
             "type": "PULL",
@@ -4110,6 +4314,36 @@
           },
           {
             "name": "model_max_retries",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_requests_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_input",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_output",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_tokens_total",
+            "method": "_collect_custom_metrics",
+            "type": "PULL",
+            "location": "logic/services/runtime/llm_service.py"
+          },
+          {
+            "name": "llm_errors_total",
             "method": "_collect_custom_metrics",
             "type": "PULL",
             "location": "logic/services/runtime/llm_service.py"

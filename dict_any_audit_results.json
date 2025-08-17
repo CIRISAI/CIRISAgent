@@ -597,7 +597,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 255,
+        "line": 247,
         "class": "TelemetryAggregator",
         "function": "status_to_telemetry",
         "context": "return_type",
@@ -605,7 +605,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 274,
+        "line": 266,
         "class": "TelemetryAggregator",
         "function": "_aggregate_service_metrics",
         "context": "function_parameter",
@@ -613,7 +613,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 302,
+        "line": 294,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "function_parameter",
@@ -621,7 +621,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 302,
+        "line": 294,
         "class": "TelemetryAggregator",
         "function": "calculate_aggregates",
         "context": "return_type",
@@ -629,7 +629,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1297,
+        "line": 1348,
         "class": "GraphTelemetryService",
         "function": "get_aggregated_telemetry",
         "context": "return_type",
@@ -885,7 +885,7 @@
       },
       {
         "file": "ciris_engine/logic/buses/runtime_control_bus.py",
-        "line": 157,
+        "line": 165,
         "class": "RuntimeControlBus",
         "function": "get_runtime_status",
         "context": "return_type",
@@ -1045,7 +1045,7 @@
       },
       {
         "file": "ciris_engine/logic/registries/base.py",
-        "line": 95,
+        "line": 97,
         "class": "ServiceRegistry",
         "function": "register_service",
         "context": "other",

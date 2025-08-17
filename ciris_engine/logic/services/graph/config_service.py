@@ -40,6 +40,10 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         self._config_cache: Dict[str, ConfigNode] = {}  # Cache for config nodes
         self._config_listeners: Dict[str, List[Callable]] = {}  # key_pattern -> [callbacks]
 
+        # Track cache metrics for v1.4.3
+        self._cache_hits = 0
+        self._cache_misses = 0
+
     async def start(self) -> None:
         """Start the service."""
         await super().start()
@@ -52,84 +56,38 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         # Nothing to clean up
         await super().stop()
 
-    def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect config-specific metrics."""
-        metrics = super()._collect_custom_metrics()
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get config service metrics for v1.4.3.
 
-        # Count config nodes in graph
+        Returns EXACTLY these 4 metrics:
+        - config_cache_hits: Cache hit count
+        - config_cache_misses: Cache miss count
+        - config_values_total: Total config values stored
+        - config_uptime_seconds: Service uptime
+        """
+        # Get total config values count from graph
         config_count = 0
         try:
-            from ciris_engine.schemas.services.operations import MemoryQuery
-
-            query = MemoryQuery(node_type="config")
-            # Use asyncio to run async method in sync context
-            import asyncio
-
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # We're already in an async context, can't use run_until_complete
-                    config_count = len(self._config_cache)
-                else:
-                    configs = loop.run_until_complete(self.query_graph(query))
-                    config_count = len(configs)
-            except RuntimeError:
-                # No event loop, just use cache count
-                config_count = len(self._config_cache)
+            # Query all config nodes to get total count
+            nodes = await self.graph.search("type:config")
+            config_count = len(nodes)
         except Exception:
+            # Fallback to cache count if graph query fails
             config_count = len(self._config_cache)
 
-        # Add comprehensive config metrics
-        metrics.update(
-            {
-                # Cache metrics
-                "configs_cached": float(len(self._config_cache)),
-                "cache_hit_rate": self._calculate_cache_hit_rate(),
-                "cache_size_bytes": self._estimate_cache_size(),
-                # Config metrics
-                "configs_total": float(config_count),
-                "config_listeners": float(len(self._config_listeners)),
-                "config_versions_avg": self._calculate_avg_versions(),
-                # Operation metrics
-                "updates_total": self._track_metric("updates", 0),
-                "validation_errors": self._track_metric("validation_errors", 0),
-                "deprecated_keys_accessed": self._track_metric("deprecated_keys", 0),
-                "missing_keys_requested": self._track_metric("missing_keys", 0),
-                "config_reloads": self._track_metric("reloads", 0),
-                "active_overrides": self._track_metric("overrides", 0),
-            }
-        )
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if self._started and self._start_time:
+            uptime_delta = (self._now() - self._start_time).total_seconds()
+            uptime_seconds = max(0.0, uptime_delta)  # Ensure non-negative
 
-        return metrics
-
-    def _calculate_cache_hit_rate(self) -> float:
-        """Calculate cache hit rate."""
-        hits = self._track_metric("cache_hits", 0)
-        misses = self._track_metric("cache_misses", 0)
-        total = hits + misses
-        return (hits / total) if total > 0 else 0.0
-
-    def _estimate_cache_size(self) -> float:
-        """Estimate cache size in bytes."""
-        # Rough estimate: 1KB per config node
-        return float(len(self._config_cache) * 1024)
-
-    def _calculate_avg_versions(self) -> float:
-        """Calculate average number of versions per config key."""
-        if not self._config_cache:
-            return 0.0
-        total_versions = sum(node.version for node in self._config_cache.values())
-        return total_versions / len(self._config_cache) if self._config_cache else 0.0
-
-    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
-        """Track a metric (placeholder for actual tracking)."""
-        # In a real implementation, this would track the actual metric
-        # For now, return default
-        if not hasattr(self, "_metrics_tracking"):
-            self._metrics_tracking = {}
-        return self._metrics_tracking.get(metric_name, default)
-
-    # get_telemetry() removed - use get_metrics() from BaseService instead
+        return {
+            "config_cache_hits": float(self._cache_hits),
+            "config_cache_misses": float(self._cache_misses),
+            "config_values_total": float(config_count),
+            "config_uptime_seconds": uptime_seconds,
+        }
 
     async def store_in_graph(self, node: Union[GraphNode, GraphNodeConvertible]) -> str:
         """Store config node in graph."""
@@ -184,6 +142,14 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
     async def get_config(self, key: str) -> Optional[ConfigNode]:
         """Get current configuration value."""
+        # Check cache first
+        if key in self._config_cache:
+            self._cache_hits += 1
+            return self._config_cache[key]
+
+        # Cache miss - query from graph
+        self._cache_misses += 1
+
         # Query config nodes by key
         graph_nodes = await self._query_config_by_key(key)
         if not graph_nodes:
@@ -204,7 +170,12 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
         # Sort by version, get latest
         config_nodes.sort(key=lambda n: n.version, reverse=True)
-        return config_nodes[0]
+        latest_config = config_nodes[0]
+
+        # Cache the result
+        self._config_cache[key] = latest_config
+
+        return latest_config
 
     async def set_config(
         self, key: str, value: Union[str, int, float, bool, List, Dict, Path], updated_by: str
@@ -268,6 +239,9 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
         # Store in graph (base class will handle conversion)
         await self.store_in_graph(new_config)
+
+        # Update cache with new config
+        self._config_cache[key] = new_config
 
         # Notify listeners of the change
         await self._notify_listeners(key, current.value if current else None, config_value)

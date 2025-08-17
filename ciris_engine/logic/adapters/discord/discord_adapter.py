@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Union
 
 import discord
 from discord.errors import ConnectionClosed, HTTPException
@@ -114,6 +114,11 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         self._tool_handler = DiscordToolHandler(None, bot, self._time_service)
         self._start_time: Optional[datetime] = None
         self._approval_timeout_task: Optional[asyncio.Task] = None
+
+        # Metrics tracking for v1.4.3 - Discord adapter metrics
+        self._messages_processed = 0
+        self._commands_handled = 0
+        self._errors_total = 0
 
         # Set up connection callbacks
         self._setup_connection_callbacks()
@@ -254,6 +259,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                 time_service,
             )
 
+            # Increment message processed counter for sent messages too
+            self._messages_processed += 1
+
             # Emit telemetry for message sent
             await self._emit_telemetry(
                 "discord.message.sent",
@@ -273,12 +281,14 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         except (HTTPException, ConnectionClosed, asyncio.TimeoutError, RuntimeError, OSError, ConnectionError) as e:
             # These are retryable exceptions - let them propagate so retry logic can handle them
             # But first log the error for debugging
+            self._errors_total += 1
             error_info = self._error_handler.handle_message_error(e, content, channel_id)
             logger.error(f"Failed to send message via Discord: {error_info}")
             # Re-raise the exception so retry logic can handle it
             raise
         except Exception as e:
             # Handle non-retryable errors
+            self._errors_total += 1
             error_info = self._error_handler.handle_message_error(e, content, channel_id)
             logger.error(f"Failed to send message via Discord (non-retryable): {error_info}")
             return False
@@ -437,6 +447,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
             return guidance_text
         except Exception as e:
+            self._errors_total += 1
             logger.exception(f"Failed to fetch guidance from Discord: {e}")
             raise
 
@@ -604,6 +615,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             return approval_result.status == ApprovalStatus.APPROVED
 
         except Exception as e:
+            self._errors_total += 1
             logger.exception(f"Failed to request approval: {e}")
             return False
 
@@ -620,6 +632,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         )
 
         guidance = await self.fetch_guidance(context)
+
+        # Increment commands handled counter for guidance requests
+        self._commands_handled += 1
 
         return GuidanceResponse(
             selected_option=guidance if guidance in request.options else None,
@@ -855,6 +870,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         args = tool_args or parameters or {}
         result = await self._tool_handler.execute_tool(tool_name, args)
 
+        # Increment commands handled counter
+        self._commands_handled += 1
+
         # Emit telemetry for tool execution
         await self._emit_telemetry(
             "discord.tool.executed",
@@ -1064,8 +1082,12 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                 time_service,
             )
 
+            # Increment commands handled counter for deferral requests
+            self._commands_handled += 1
+
             return correlation_id
         except Exception as e:
+            self._errors_total += 1
             logger.exception(f"Failed to send deferral to Discord: {e}")
             raise
 
@@ -1145,6 +1167,33 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             metrics={"latency": latency_ms},
         )
 
+    def get_metrics(self) -> Dict[str, float]:
+        """
+        Get Discord adapter metrics from the v1.4.3 set of 362 metrics.
+
+        Returns EXACTLY these 4 metrics:
+        - discord_messages_processed: Messages processed count
+        - discord_commands_handled: Commands handled
+        - discord_errors_total: Total Discord errors
+        - discord_guilds_active: Active guild count
+
+        All values are real from adapter state, not zeros.
+        """
+        # Get active guild count from client if available
+        guilds_active = 0.0
+        if self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready():
+            try:
+                guilds_active = float(len(self._channel_manager.client.guilds))
+            except Exception:
+                guilds_active = 0.0
+
+        return {
+            "discord_messages_processed": float(self._messages_processed),
+            "discord_commands_handled": float(self._commands_handled),
+            "discord_errors_total": float(self._errors_total),
+            "discord_guilds_active": guilds_active,
+        }
+
     async def _send_output(self, channel_id: str, content: str) -> None:
         """Send output to a Discord channel with retry logic"""
         await self._retry_discord_operation(
@@ -1159,6 +1208,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
     async def _on_message(self, message: discord.Message) -> None:
         """Handle incoming Discord messages."""
         await self._channel_manager.on_message(message)
+
+        # Increment message processed counter
+        self._messages_processed += 1
 
         # Emit telemetry for message received
         await self._emit_telemetry(

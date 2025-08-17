@@ -129,6 +129,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         Returns:
             str: Current UTC time in ISO format
         """
+        self._iso_requests += 1
         return self.now().isoformat()
 
     def timestamp(self) -> float:
@@ -138,6 +139,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         Returns:
             float: Seconds since Unix epoch
         """
+        self._timestamp_requests += 1
         return self.now().timestamp()
 
     def get_uptime(self) -> float:
@@ -147,6 +149,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         Returns:
             float: Seconds since service started
         """
+        self._uptime_requests += 1
         if self._start_time is None:
             return 0.0
         return (self.now() - self._start_time).total_seconds()
@@ -222,3 +225,34 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
 
         offset_seconds = self.get_ntp_offset()
         return self.now() - timedelta(seconds=offset_seconds)
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get time service metrics - v1.4.3 set of 362 metrics.
+
+        Returns exactly these 4 time metrics:
+        - time_queries_total: Time queries served
+        - time_sync_operations: Sync operations performed
+        - time_drift_ms: Current clock drift in ms
+        - time_uptime_seconds: Service uptime
+        """
+        # Calculate total time queries from all tracked request types
+        total_queries = self._time_requests + self._iso_requests + self._timestamp_requests + self._uptime_requests
+
+        # Sync operations = NTP checks performed
+        sync_operations = self._ntp_check_count
+
+        # Current clock drift in milliseconds (from NTP)
+        self._check_ntp_drift_if_needed()
+        drift_ms = self._ntp_offset_ms
+
+        # Service uptime in seconds
+        uptime_seconds = self.get_uptime()
+
+        # Return exact metrics from v1.4.3 set
+        return {
+            "time_queries_total": float(total_queries),
+            "time_sync_operations": float(sync_operations),
+            "time_drift_ms": drift_ms,
+            "time_uptime_seconds": uptime_seconds,
+        }

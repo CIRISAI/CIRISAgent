@@ -1274,3 +1274,40 @@ class AgentProcessor:
         """
         # Use the centralized persistence function
         return persistence.get_queue_status()
+
+    def get_metrics(self) -> dict:
+        """
+        Get exactly the 4 specified metrics from the v1.4.3 set (362 metrics total).
+
+        Returns EXACTLY these metrics with real values from processor state:
+        - processor_thoughts_total: Total thoughts processed
+        - processor_actions_total: Total actions taken
+        - processor_state_transitions: State transitions count
+        - processor_current_state: Current cognitive state (as int)
+        """
+        # Calculate total thoughts processed by aggregating from all state processors
+        total_thoughts = 0
+        total_actions = 0
+
+        for processor in self.state_processors.values():
+            if hasattr(processor, "metrics"):
+                processor_metrics = processor.get_metrics()
+                total_thoughts += processor_metrics.items_processed
+                total_actions += processor_metrics.additional_metrics.actions_dispatched
+
+        # Get state transitions count from state manager history
+        state_transitions = len(self.state_manager.get_state_history())
+
+        # Get current state as integer (AgentState enum values map to ints)
+        current_state_int = self.state_manager.get_state().value
+
+        # Convert state string to integer mapping for the API
+        state_mapping = {"wakeup": 0, "work": 1, "play": 2, "solitude": 3, "dream": 4, "shutdown": 5}
+        current_state_value = state_mapping.get(current_state_int.lower(), 0)
+
+        return {
+            "processor_thoughts_total": total_thoughts,
+            "processor_actions_total": total_actions,
+            "processor_state_transitions": state_transitions,
+            "processor_current_state": current_state_value,
+        }

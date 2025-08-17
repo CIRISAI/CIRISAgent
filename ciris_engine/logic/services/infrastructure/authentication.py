@@ -881,9 +881,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def authenticate(self, token: str) -> Optional[AuthenticationResult]:
         """Authenticate a WA token and return identity info."""
+        self._auth_attempts += 1
         try:
             claims = await self.verify_token(token)
             if not claims:
+                self._auth_failures += 1
                 return None
 
             if hasattr(claims, "get"):
@@ -891,6 +893,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             else:
                 wa_id = getattr(claims, "wa_id", None)
             if not wa_id:
+                self._auth_failures += 1
                 return None
 
             # Update last login
@@ -899,8 +902,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Get WA details
             wa = await self.get_wa(wa_id)
             if not wa:
+                self._auth_failures += 1
                 return None
 
+            self._auth_successes += 1
+            self._session_count += 1  # Track active session
             return AuthenticationResult(
                 authenticated=True,
                 wa_id=wa_id,
@@ -916,6 +922,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
         except Exception as e:
             logger.error(f"Authentication failed: {e}")
+            self._auth_failures += 1
             return None
 
     async def create_token(self, wa_id: str, token_type: TokenType, ttl: int = 3600) -> str:
@@ -1578,6 +1585,30 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
         return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """Get EXACTLY the 362 v1.4.3 metrics for authentication service.
+
+        Returns:
+            Dict with exactly these 5 metrics:
+            - auth_attempts_total: Authentication attempts
+            - auth_successes_total: Successful authentications
+            - auth_failures_total: Failed authentications
+            - auth_active_sessions: Active sessions count
+            - auth_uptime_seconds: Service uptime
+        """
+        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        uptime_seconds = 0.0
+        if self._start_time:
+            uptime_seconds = (current_time - self._start_time).total_seconds()
+
+        return {
+            "auth_attempts_total": float(self._auth_attempts),
+            "auth_successes_total": float(self._auth_successes),
+            "auth_failures_total": float(self._auth_failures),
+            "auth_active_sessions": float(self._session_count),
+            "auth_uptime_seconds": uptime_seconds,
+        }
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

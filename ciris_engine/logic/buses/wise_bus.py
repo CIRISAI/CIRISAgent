@@ -42,6 +42,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         self._time_service = time_service
         self._agent_tier: Optional[int] = None  # Cached agent tier
 
+        # Metrics tracking
+        self._requests_count = 0
+        self._deferrals_count = 0
+        self._guidance_count = 0
+
     async def _get_tier_from_config(self) -> Optional[int]:
         """Try to get agent tier from configuration service."""
         try:
@@ -207,6 +212,10 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     logger.warning(f"Failed to send deferral to WA service {service.__class__.__name__}: {e}")
                     continue
 
+            # Track deferral count if any service received it
+            if any_success:
+                self._deferrals_count += 1
+
             return any_success
         except Exception as e:
             logger.error(f"Failed to prepare deferral request: {e}", exc_info=True)
@@ -222,6 +231,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         try:
             result = await service.fetch_guidance(context)
+            if result is not None:
+                self._guidance_count += 1
             return str(result) if result is not None else None
         except Exception as e:
             logger.error(f"Failed to fetch guidance: {e}", exc_info=True)
@@ -375,6 +386,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             ValueError: If capability is prohibited for the agent's tier
             RuntimeError: If no WiseAuthority service is available
         """
+        # Track request count
+        self._requests_count += 1
+
         # Auto-detect agent tier if not provided
         if agent_tier is None:
             agent_tier = await self.get_agent_tier()
@@ -482,6 +496,23 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         )
 
         return best_response
+
+    def get_metrics(self) -> dict[str, int]:
+        """
+        Return EXACTLY the 4 v1.4.3 wise_bus metrics.
+
+        Returns:
+            Dictionary with wise_bus metrics using real values from bus state
+        """
+        # Count active authorities (WiseAuthority services)
+        all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+
+        return {
+            "wise_bus_requests": self._requests_count,
+            "wise_bus_deferrals": self._deferrals_count,
+            "wise_bus_guidance": self._guidance_count,
+            "wise_bus_authorities": len(all_wa_services),
+        }
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process a wise authority message - currently all WA operations are synchronous"""

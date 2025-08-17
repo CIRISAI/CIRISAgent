@@ -7,7 +7,7 @@ Tests all 6 Graph services for their custom metrics:
 3. telemetry (GraphTelemetryService) - 17 metrics
 4. audit (AuditService) - 9 metrics
 5. incident_management (IncidentService) - 7 metrics
-6. tsdb_consolidation (TSDBConsolidationService) - 17 metrics
+6. tsdb_consolidation (TSDBConsolidationService) - 4 metrics
 
 For each service:
 - Import from ciris_engine.logic.services.graph.*
@@ -433,16 +433,10 @@ class TestTSDBConsolidationServiceMetrics(BaseMetricsTest):
     """Test TSDBConsolidationService metrics."""
 
     EXPECTED_TSDB_METRICS = {
-        "basic_consolidations",
-        "extensive_consolidations",
-        "profound_consolidations",
-        "records_consolidated",
-        "records_deleted",
-        "compression_ratio",
-        "last_consolidation_duration_s",
-        "hours_until_next_consolidation",
-        "consolidation_due",
-        "storage_target_mb_per_day",
+        "tsdb_consolidations_total",
+        "tsdb_datapoints_processed",
+        "tsdb_storage_saved_mb",
+        "tsdb_uptime_seconds",
     }
 
     @pytest.fixture
@@ -507,12 +501,10 @@ class TestTSDBConsolidationServiceMetrics(BaseMetricsTest):
             self.assert_metrics_exist(metrics, self.EXPECTED_TSDB_METRICS)
 
             # Check specific metric values
-            assert metrics["basic_consolidations"] >= 0
-            assert metrics["extensive_consolidations"] >= 0
-            assert metrics["profound_consolidations"] >= 0
-            assert metrics["records_consolidated"] >= 0
-            assert metrics["records_deleted"] >= 0
-            assert metrics["compression_ratio"] >= 0
+            assert metrics["tsdb_consolidations_total"] >= 0
+            assert metrics["tsdb_datapoints_processed"] >= 0
+            assert metrics["tsdb_storage_saved_mb"] >= 0
+            assert metrics["tsdb_uptime_seconds"] >= 0
 
         except AttributeError as e:
             if "'super' object has no attribute '_collect_custom_metrics'" in str(e):
@@ -527,9 +519,9 @@ class TestTSDBConsolidationServiceMetrics(BaseMetricsTest):
     async def test_tsdb_metrics_change_with_consolidation(self, tsdb_service):
         """Test that TSDB metrics change during consolidation."""
         try:
-            # Test basic consolidations counter increases
+            # Test total consolidations counter increases
             await self.assert_metric_increases(
-                tsdb_service, "basic_consolidations", lambda: self._trigger_consolidation(tsdb_service)
+                tsdb_service, "tsdb_consolidations_total", lambda: self._trigger_consolidation(tsdb_service)
             )
 
         except AttributeError as e:
@@ -547,6 +539,7 @@ class TestTSDBConsolidationServiceMetrics(BaseMetricsTest):
         tsdb_service._basic_consolidations += 1
         # Also update some related metrics to simulate real consolidation
         tsdb_service._records_consolidated += 10
+        tsdb_service._records_deleted += 5  # Some records were deleted during consolidation
         tsdb_service._last_consolidation = datetime.now(timezone.utc)
 
 

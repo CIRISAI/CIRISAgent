@@ -5,6 +5,7 @@ Implements ToolService protocol to expose RECALL_SECRET and UPDATE_SECRETS_FILTE
 """
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,10 @@ class SecretsToolService(BaseService, ToolService):
         super().__init__(time_service=time_service)
         self.secrets_service = secrets_service
         self.adapter_name = "secrets"
+
+        # v1.4.3 metrics tracking
+        self._secrets_retrieved = 0
+        self._secrets_stored = 0
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
@@ -106,6 +111,7 @@ class SecretsToolService(BaseService, ToolService):
                 value = await self.secrets_service.retrieve_secret(secret_uuid)
                 if value is None:
                     return ToolResult(success=False, error=f"Secret {secret_uuid} not found")
+                self._secrets_retrieved += 1  # Track successful retrieval
                 result_data = {"value": value, "decrypted": True}
             else:
                 # Just verify it exists
@@ -113,6 +119,7 @@ class SecretsToolService(BaseService, ToolService):
                 value = await self.secrets_service.retrieve_secret(secret_uuid)
                 if value is None:
                     return ToolResult(success=False, error=f"Secret {secret_uuid} not found")
+                self._secrets_retrieved += 1  # Track successful retrieval
                 result_data = {"exists": True, "decrypted": False}
 
             return ToolResult(success=True, data=result_data)
@@ -294,43 +301,26 @@ class SecretsToolService(BaseService, ToolService):
 
         return capabilities
 
-    def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect service-specific metrics."""
-        metrics = super()._collect_custom_metrics()
+    async def get_metrics(self) -> Dict[str, float]:
+        """Get EXACTLY these metrics from the 362 v1.4.3 set for secrets_tool.
 
-        # Calculate success rate
-        success_rate = 0.0
-        if self._request_count > 0:
-            success_rate = 1.0 - (self._error_count / self._request_count)
+        Returns:
+            Dict with exactly these 4 metrics:
+            - secrets_tool_invocations: Tool invocations count
+            - secrets_tool_retrieved: Secrets retrieved count
+            - secrets_tool_stored: Secrets stored count (always 0 for this service)
+            - secrets_tool_uptime_seconds: Service uptime
+        """
+        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        uptime_seconds = 0.0
+        if self._start_time:
+            uptime_seconds = max(0.0, (current_time - self._start_time).total_seconds())
 
-        # Add comprehensive tool metrics
-        metrics.update(
-            {
-                # Tool availability
-                "available_tools": 3.0,
-                "tools_enabled": 3.0,
-                # Execution metrics
-                "tool_executions": float(self._request_count),
-                "tool_errors": float(self._error_count),
-                "success_rate": success_rate,
-                # Secret operations
-                "secrets_recalled": self._track_metric("recalls", 0),
-                "secrets_decrypted": self._track_metric("decrypts", 0),
-                "filter_updates": self._track_metric("filter_updates", 0),
-                # Audit metrics
-                "audit_events_generated": float(self._request_count),  # Each exec generates audit
-                "self_help_accesses": self._track_metric("self_help", 0),
-                # Performance
-                "avg_execution_time_ms": self._track_metric("avg_exec_time", 0),
-            }
-        )
-
-        return metrics
-
-    def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
-        """Track a metric (placeholder for actual tracking)."""
-        if not hasattr(self, "_metrics_tracking"):
-            self._metrics_tracking = {}
-        return self._metrics_tracking.get(metric_name, default)
+        return {
+            "secrets_tool_invocations": float(self._request_count),
+            "secrets_tool_retrieved": float(self._secrets_retrieved),
+            "secrets_tool_stored": 0.0,  # This service only retrieves, never stores
+            "secrets_tool_uptime_seconds": uptime_seconds,
+        }
 
     # get_telemetry() removed - use get_metrics() from BaseService instead

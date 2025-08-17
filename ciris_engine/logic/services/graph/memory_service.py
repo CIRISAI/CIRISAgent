@@ -61,6 +61,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def memorize(self, node: GraphNode) -> MemoryOpResult:
         """Store a node with automatic secrets detection and processing."""
+        self._track_request()
         try:
             # Process secrets in node attributes before storing
             processed_node = await self._process_secrets_for_memorize(node)
@@ -78,6 +79,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def recall(self, recall_query: MemoryQuery) -> List[GraphNode]:
         """Recall nodes from memory based on query."""
+        self._track_request()
         try:
             from ciris_engine.logic.persistence import get_all_graph_nodes
             from ciris_engine.logic.persistence.models import graph as persistence
@@ -303,6 +305,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     def forget(self, node: GraphNode) -> MemoryOpResult:
         """Forget a node and clean up any associated secrets."""
+        self._track_request()
         try:
             # First retrieve the node to check for secrets
             from ciris_engine.logic.persistence.models import graph as persistence
@@ -463,6 +466,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         Returns:
             List of time-series data points from graph nodes
         """
+        self._track_request()
         try:
             # Calculate time window
             if not self._time_service:
@@ -582,6 +586,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         Metrics are stored only as TSDB_DATA nodes in the graph, not as correlations,
         to prevent double storage and aggregation issues.
         """
+        self._track_request()
         try:
             # Create a graph node for the metric
             if not self._time_service:
@@ -630,6 +635,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     def create_edge(self, edge: GraphEdge) -> MemoryOpResult:
         """Create an edge between two nodes in the memory graph."""
+        self._track_request()
         try:
             from ciris_engine.logic.persistence.models.graph import add_graph_edge
 
@@ -658,6 +664,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         """
         Convenience method to memorize a log entry as both a graph node and TSDB correlation.
         """
+        self._track_request()
         try:
             # Import correlation models here to avoid circular imports
             from ciris_engine.logic.persistence.models.correlations import add_correlation
@@ -740,6 +747,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def search(self, query: str, filters: Optional[MemorySearchFilter] = None) -> List[GraphNode]:
         """Search memories in the graph."""
+        self._track_request()
         logger.debug(f"Memory search START: query='{query}', filters={filters}")
         try:
             from ciris_engine.logic.persistence import get_all_graph_nodes, get_nodes_by_type
@@ -837,7 +845,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         self._started = False
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect memory-specific metrics."""
+        """Collect memory-specific metrics from v1.4.3 set."""
         metrics = super()._collect_custom_metrics()
 
         # Count graph nodes and edges
@@ -872,20 +880,23 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             # Ignore file system and import errors when checking storage size
             pass
 
-        # Resource monitor service handles process-level metrics
-        # This service just tracks its database storage
+        # Calculate uptime in seconds
+        uptime_seconds = 0.0
+        if self._start_time and self._time_service:
+            uptime_delta = self._time_service.now() - self._start_time
+            uptime_seconds = uptime_delta.total_seconds()
 
-        # Add memory-specific metrics
-        metrics.update(
-            {
-                "secrets_enabled": 1.0 if self.secrets_service else 0.0,
-                "graph_node_count": float(node_count),
-                "total_nodes": float(node_count),
-                "total_edges": float(edge_count),
-                "storage_backend": 1.0,  # 1.0 = sqlite
-                "storage_size_mb": storage_size_mb,
-            }
-        )
+        # Return EXACTLY the 5 metrics from v1.4.3 set - no other metrics
+        memory_metrics = {
+            "memory_nodes_total": float(node_count),
+            "memory_edges_total": float(edge_count),
+            "memory_operations_total": float(self._request_count),
+            "memory_db_size_mb": storage_size_mb,
+            "memory_uptime_seconds": uptime_seconds,
+        }
+
+        # Update with the exact v1.4.3 memory metrics
+        metrics.update(memory_metrics)
 
         return metrics
 

@@ -83,6 +83,10 @@ class CLIAdapter(Service, CommunicationService, ToolService):
 
         self._guidance_queue: asyncio.Queue[str] = asyncio.Queue()
 
+        # Metrics tracking
+        self._commands_executed_count = 0
+        self._errors_total_count = 0
+
     def _get_time_service(self) -> TimeServiceProtocol:
         """Get time service instance from runtime."""
         if self._time_service is None:
@@ -206,6 +210,8 @@ class CLIAdapter(Service, CommunicationService, ToolService):
             return True
         except Exception as e:
             logger.error(f"Failed to send CLI message: {e}")
+            # Track error
+            self._errors_total_count += 1
             return False
 
     async def fetch_messages(
@@ -317,6 +323,9 @@ class CLIAdapter(Service, CommunicationService, ToolService):
             result = await self._available_tools[tool_name](parameters)
             execution_time = (time.time() - start_time) * 1000
 
+            # Track successful command execution
+            self._commands_executed_count += 1
+
             # Emit telemetry for tool execution
             await self._emit_telemetry(
                 "tool_executed",
@@ -385,6 +394,8 @@ class CLIAdapter(Service, CommunicationService, ToolService):
 
         except Exception as e:
             logger.error(f"Error executing tool {tool_name}: {e}")
+            # Track error
+            self._errors_total_count += 1
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.FAILED,
@@ -545,6 +556,8 @@ class CLIAdapter(Service, CommunicationService, ToolService):
                 break
             except Exception as e:
                 logger.error(f"Error in interactive input loop: {e}")
+                # Track error
+                self._errors_total_count += 1
                 await asyncio.sleep(1)  # Prevent tight error loop
 
     async def _show_help(self) -> None:
@@ -852,3 +865,19 @@ Tools available:
             channels.append(channel)
 
         return channels
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get CLI adapter metrics.
+
+        Returns:
+            Dictionary containing CLI-specific metrics from the v1.4.3 set:
+            - cli_commands_executed: Total number of commands executed
+            - cli_errors_total: Total number of errors encountered
+            - cli_sessions_active: Number of active CLI sessions (1 if running, 0 if not)
+        """
+        return {
+            "cli_commands_executed": float(self._commands_executed_count),
+            "cli_errors_total": float(self._errors_total_count),
+            "cli_sessions_active": 1.0 if self._running else 0.0,
+        }

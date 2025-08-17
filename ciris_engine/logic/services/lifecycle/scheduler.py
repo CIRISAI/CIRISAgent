@@ -581,6 +581,25 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             logger.error(f"Failed to calculate next cron time: {e}")
             return "unknown"
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get task scheduler service metrics - v1.4.3 set of 362 metrics.
+
+        Returns exactly these 5 metrics from the 362 v1.4.3 set:
+        - tasks_scheduled_total: Tasks scheduled
+        - tasks_completed_total: Tasks completed
+        - tasks_failed_total: Tasks failed
+        - tasks_pending: Currently pending tasks
+        - scheduler_uptime_seconds: Service uptime
+        """
+        return {
+            "tasks_scheduled_total": float(self._tasks_scheduled),
+            "tasks_completed_total": float(self._tasks_completed),
+            "tasks_failed_total": float(self._tasks_failed),
+            "tasks_pending": float(len(self._active_tasks)),
+            "scheduler_uptime_seconds": self._calculate_uptime(),
+        }
+
     async def is_healthy(self) -> bool:
         """Check if the service is healthy."""
         return bool(self._task and not self._shutdown_event.is_set())

@@ -65,6 +65,10 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self._process = psutil.Process()
         self._monitoring = False  # For backward compatibility with tests
 
+        # Network tracking for v1.4.3 metrics
+        self._network_bytes_sent = 0
+        self._network_bytes_recv = 0
+
     def get_service_type(self) -> ServiceType:
         """Get service type."""
         return ServiceType.VISIBILITY
@@ -122,6 +126,13 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         else:  # pragma: no cover - fallback
             self.snapshot.disk_free_mb = 0
             self.snapshot.disk_used_mb = 0
+
+        # Update network statistics for v1.4.3 metrics
+        if psutil:
+            net_io = psutil.net_io_counters()
+            if net_io:
+                self._network_bytes_sent = net_io.bytes_sent
+                self._network_bytes_recv = net_io.bytes_recv
 
         now = self.time_service.now() if self.time_service else datetime.now(timezone.utc)
         hour_ago = now - timedelta(hours=1)
@@ -192,10 +203,23 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             return 0
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect resource monitoring metrics."""
+        """Collect resource monitoring metrics for v1.4.3 and backward compatibility."""
+        # Calculate disk usage in GB
+        disk_usage_gb = float(self.snapshot.disk_used_mb) / 1024.0
+
+        # Calculate service uptime in seconds (resource_monitor_uptime_seconds)
+        uptime_seconds = self._calculate_uptime()
+
+        # Return both v1.4.3 required metrics and existing metrics for backward compatibility
         return {
-            "memory_mb": float(self.snapshot.memory_mb),
+            # v1.4.3 Required metrics (EXACTLY these 6 metrics)
             "cpu_percent": float(self.snapshot.cpu_percent),
+            "memory_mb": float(self.snapshot.memory_mb),
+            "disk_usage_gb": disk_usage_gb,
+            "network_bytes_sent": float(self._network_bytes_sent),
+            "network_bytes_recv": float(self._network_bytes_recv),
+            "resource_monitor_uptime_seconds": uptime_seconds,
+            # Existing metrics for backward compatibility
             "tokens_used_hour": float(self.snapshot.tokens_used_hour),
             "thoughts_active": float(self.snapshot.thoughts_active),
             "warnings": float(len(self.snapshot.warnings)),

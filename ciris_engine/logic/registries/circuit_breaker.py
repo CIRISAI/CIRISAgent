@@ -63,6 +63,10 @@ class CircuitBreaker:
         self.recovery_attempts = 0
         self.consecutive_failures = 0
 
+        # v1.4.3 specific metrics
+        self.total_trips = 0  # Count of transitions to OPEN state
+        self.total_resets = 0  # Count of transitions to CLOSED state
+
         logger.debug(f"Circuit breaker '{name}' initialized")
 
     def is_available(self) -> bool:
@@ -119,6 +123,7 @@ class CircuitBreaker:
         self.state = CircuitState.OPEN
         self.success_count = 0
         self.state_transitions += 1
+        self.total_trips += 1  # Count trip events
         self.last_open_time = time.time()
         logger.warning(f"Circuit breaker '{self.name}' opened due to {self.failure_count} failures")
 
@@ -141,6 +146,7 @@ class CircuitBreaker:
         self.failure_count = 0
         self.success_count = 0
         self.state_transitions += 1
+        self.total_resets += 1  # Count reset events
         self.consecutive_failures = 0
         logger.info(f"Circuit breaker '{self.name}' closed - service recovered")
 
@@ -180,6 +186,8 @@ class CircuitBreaker:
 
     def reset(self) -> None:
         """Reset circuit breaker to initial state"""
+        if self.state != CircuitState.CLOSED:
+            self.total_resets += 1  # Count manual reset as a reset event
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
@@ -187,25 +195,17 @@ class CircuitBreaker:
         logger.info(f"Circuit breaker '{self.name}' manually reset")
 
     def get_metrics(self) -> dict[str, float]:
-        """Get circuit breaker metrics for telemetry."""
-        stats = self.get_stats()
-
-        # Convert state to numeric for metrics
+        """Get circuit breaker metrics for v1.4.3 telemetry set."""
+        # Convert state to numeric: 0=closed, 1=open, 2=half-open
         state_value = 0.0
-        if stats["state"] == "open":
+        if self.state == CircuitState.OPEN:
             state_value = 1.0
-        elif stats["state"] == "half_open":
-            state_value = 0.5
+        elif self.state == CircuitState.HALF_OPEN:
+            state_value = 2.0
 
         return {
-            f"cb_{self.name}_state": state_value,
-            f"cb_{self.name}_total_calls": float(stats["call_count"]),
-            f"cb_{self.name}_total_failures": float(stats["total_failures"]),
-            f"cb_{self.name}_total_successes": float(stats["total_successes"]),
-            f"cb_{self.name}_success_rate": stats["success_rate"],
-            f"cb_{self.name}_consecutive_failures": float(stats["consecutive_failures"]),
-            f"cb_{self.name}_recovery_attempts": float(stats["recovery_attempts"]),
-            f"cb_{self.name}_state_transitions": float(stats["state_transitions"]),
-            f"cb_{self.name}_time_in_open_state_sec": stats["time_in_open_state"],
-            f"cb_{self.name}_last_failure_age_sec": stats["last_failure_age"],
+            "circuit_breaker_trips": float(self.total_trips),
+            "circuit_breaker_resets": float(self.total_resets),
+            "circuit_breaker_state": state_value,
+            "circuit_breaker_failures": float(self.total_failures),
         }

@@ -555,6 +555,58 @@ class LLMBus(BaseBus[LLMService]):
         base_stats["distribution_strategy"] = self.distribution_strategy.value
         return base_stats
 
+    def get_metrics(self) -> dict[str, float]:
+        """Get LLM bus metrics for v1.4.3 telemetry set.
+
+        Returns exactly these 4 metrics from the 362 v1.4.3 set:
+        - llm_bus_messages_routed: Total messages routed to providers
+        - llm_bus_provider_selections: Total provider selections made
+        - llm_bus_routing_errors: Total routing errors encountered
+        - llm_bus_active_providers: Current number of active providers
+        """
+        # Calculate messages routed from all service metrics
+        total_messages_routed = sum(metrics.total_requests for metrics in self.service_metrics.values())
+
+        # Provider selections = total requests across all services
+        # (each request requires a provider selection)
+        provider_selections = total_messages_routed
+
+        # Calculate routing errors from all service metrics
+        routing_errors = sum(metrics.failed_requests for metrics in self.service_metrics.values())
+
+        # Count active providers (services that are available and healthy)
+        active_providers = len(
+            [
+                service
+                for service in self.service_registry.get_services_by_type(ServiceType.LLM)
+                if self._is_service_available_sync(service)
+            ]
+        )
+
+        return {
+            "llm_bus_messages_routed": float(total_messages_routed),
+            "llm_bus_provider_selections": float(provider_selections),
+            "llm_bus_routing_errors": float(routing_errors),
+            "llm_bus_active_providers": float(active_providers),
+        }
+
+    def _is_service_available_sync(self, service: object) -> bool:
+        """Synchronous check if a service is available (for metrics collection)."""
+        try:
+            # Check if service has basic capabilities
+            if not self._check_service_capabilities(service):
+                return False
+
+            # Check circuit breaker state
+            service_name = f"{type(service).__name__}_{id(service)}"
+            if not self._check_circuit_breaker(service_name):
+                return False
+
+            # Service is considered active if it passes basic checks
+            return True
+        except Exception:
+            return False
+
     def clear_circuit_breakers(self) -> None:
         """Clear all circuit breakers - useful for testing.
 

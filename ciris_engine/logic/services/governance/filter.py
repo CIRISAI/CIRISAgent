@@ -614,6 +614,45 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         if self.llm:
             self._dependencies.add("LLMService")
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get adaptive filter service metrics - v1.4.3 set.
+
+        Returns EXACTLY these 5 metrics from the 362 v1.4.3 set:
+        - filter_messages_total: Total messages processed
+        - filter_passed_total: Messages that passed filter
+        - filter_blocked_total: Messages blocked
+        - filter_adaptations_total: Filter adaptations made
+        - filter_uptime_seconds: Service uptime
+
+        Uses real values from service state, not zeros.
+        """
+        # Calculate blocked messages (messages that didn't pass)
+        blocked_count = 0
+        passed_count = self._stats.total_messages_processed
+
+        if self._stats.by_priority:
+            # Messages with IGNORE priority are blocked
+            from ciris_engine.schemas.services.filters_core import FilterPriority
+
+            blocked_count = self._stats.by_priority.get(FilterPriority.IGNORE, 0)
+            passed_count = self._stats.total_messages_processed - blocked_count
+
+        # Count adaptations (filter config changes)
+        adaptations_count = 0
+        if self._config:
+            # Count triggers that have been modified (have non-zero true_positive_count)
+            all_triggers = self._config.attention_triggers + self._config.review_triggers + self._config.llm_filters
+            adaptations_count = sum(1 for trigger in all_triggers if trigger.true_positive_count > 0)
+
+        return {
+            "filter_messages_total": float(self._stats.total_messages_processed),
+            "filter_passed_total": float(passed_count),
+            "filter_blocked_total": float(blocked_count),
+            "filter_adaptations_total": float(adaptations_count),
+            "filter_uptime_seconds": float(self._calculate_uptime()),
+        }
+
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics."""
         metrics = {

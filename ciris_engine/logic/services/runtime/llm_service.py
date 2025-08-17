@@ -125,6 +125,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self._total_api_calls = 0
         self._successful_api_calls = 0
 
+        # LLM-specific metrics tracking for v1.4.3 telemetry
+        self._total_requests = 0
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cost_cents = 0.0
+        self._total_errors = 0
+
     # Required BaseService abstract methods
 
     def get_service_type(self) -> ServiceType:
@@ -234,6 +241,29 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         return metrics
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get the 7 specific LLM metrics for v1.4.3 telemetry.
+
+        Returns exactly these metrics:
+        - llm_requests_total: Total LLM requests
+        - llm_tokens_input: Total input tokens
+        - llm_tokens_output: Total output tokens
+        - llm_tokens_total: Total tokens used
+        - llm_cost_cents: Total cost in cents
+        - llm_errors_total: Total errors
+        - llm_uptime_seconds: Service uptime
+        """
+        return {
+            "llm_requests_total": float(self._total_requests),
+            "llm_tokens_input": float(self._total_input_tokens),
+            "llm_tokens_output": float(self._total_output_tokens),
+            "llm_tokens_total": float(self._total_input_tokens + self._total_output_tokens),
+            "llm_cost_cents": self._total_cost_cents,
+            "llm_errors_total": float(self._total_errors),
+            "llm_uptime_seconds": self._calculate_uptime(),
+        }
+
     def _extract_json_from_response(self, raw: str) -> JSONExtractionResult:
         """Extract and parse JSON from LLM response (private method)."""
         return self._extract_json(raw)
@@ -270,6 +300,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Make a structured LLM call with circuit breaker protection."""
         # Track the request
         self._track_request()
+        # Track LLM-specific request
+        self._total_requests += 1
 
         # No mock service integration - LLMService and MockLLMService are separate
         logger.debug(f"Structured LLM call for {response_model.__name__}")
@@ -338,6 +370,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                 total_cost_cents = input_cost_cents + output_cost_cents
 
+                # Track metrics for get_metrics() method
+                self._total_input_tokens += prompt_tokens
+                self._total_output_tokens += completion_tokens
+                self._total_cost_cents += total_cost_cents
+
                 # Estimate carbon footprint
                 # Energy usage varies by model size and hosting
                 if "llama" in self.model_name.lower() and "17B" in self.model_name:
@@ -374,6 +411,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self.circuit_breaker.record_failure()
                 # Track error in base service
                 self._track_error(e)
+                # Track LLM-specific error
+                self._total_errors += 1
                 logger.warning(f"LLM structured API error recorded by circuit breaker: {e}")
                 raise
             except Exception as e:
@@ -383,6 +422,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         logger.error(f"LLM structured timeout detected, circuit breaker recorded failure: {e}")
                         self.circuit_breaker.record_failure()
                         self._track_error(e)
+                        # Track LLM-specific error
+                        self._total_errors += 1
                         raise TimeoutError("LLM API timeout in structured call - circuit breaker activated") from e
                 # Re-raise other exceptions
                 raise

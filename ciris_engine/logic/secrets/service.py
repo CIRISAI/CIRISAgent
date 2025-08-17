@@ -72,6 +72,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         self._filter_detections = 0
         self._auto_encryptions = 0
         self._failed_decryptions = 0
+        self._rotation_count = 0
 
     async def process_incoming_text(self, text: str, source_message_id: str) -> Tuple[str, List[SecretReference]]:
         """
@@ -155,7 +156,11 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         if not secret_record:
             return None
 
+        # Track secret access
+        self._secrets_retrieved += 1
+
         if decrypt:
+            self._decryption_operations += 1
             decrypted_value = self.store.decrypt_secret_value(secret_record)
             result = SecretRecallResult(
                 found=True, value=decrypted_value, error=None if decrypted_value else "Failed to decrypt secret value"
@@ -421,6 +426,9 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         try:
             secret_record = await self.store.retrieve_secret(key, decrypt=True)
             if secret_record:
+                # Track secret access
+                self._secrets_retrieved += 1
+                self._decryption_operations += 1
                 decrypted = self.store.decrypt_secret_value(secret_record)
                 return decrypted
             return None
@@ -522,6 +530,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             success = await self.store.reencrypt_all(new_master_key)
 
             if success:
+                self._rotation_count += 1  # Track successful rotation operations
                 logger.info("Successfully re-encrypted all secrets")
             else:
                 logger.error("Failed to re-encrypt some or all secrets")
@@ -578,6 +587,44 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         )
 
         return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get secrets service metrics - v1.4.3 set of 362 metrics.
+
+        Returns exactly these 4 secrets metrics:
+        - secrets_accessed_total: Secrets accessed count
+        - secrets_rotated_total: Secrets rotated count
+        - secrets_active: Active secrets in vault
+        - secrets_uptime_seconds: Service uptime
+        """
+        # Calculate accessed secrets from retrievals and decryptions
+        accessed_total = self._secrets_retrieved + self._decryption_operations
+
+        # Rotated secrets = re-encryption operations (when master key changes)
+        rotated_total = 0  # Track via reencrypt_all calls
+        if hasattr(self, "_rotation_count"):
+            rotated_total = self._rotation_count
+
+        # Active secrets = current secrets in store
+        active_secrets = 0
+        try:
+            all_secrets = await self.store.list_secrets()
+            active_secrets = len(all_secrets) if all_secrets else 0
+        except Exception:
+            # Fallback to current task secrets if store query fails
+            active_secrets = len(self._current_task_secrets)
+
+        # Service uptime in seconds
+        uptime_seconds = self._calculate_uptime()
+
+        # Return exact metrics from v1.4.3 set
+        return {
+            "secrets_accessed_total": float(accessed_total),
+            "secrets_rotated_total": float(rotated_total),
+            "secrets_active": float(active_secrets),
+            "secrets_uptime_seconds": uptime_seconds,
+        }
 
     def get_status(self) -> ServiceStatus:
         """Get service status."""

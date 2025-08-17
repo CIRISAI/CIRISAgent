@@ -84,6 +84,8 @@ class ServiceRegistry:
         self._service_misses = 0
         self._health_check_failures = 0
         self._circuit_breaker_opens = 0
+        self._registrations_total = 0
+        self._deregistrations_total = 0
 
     def register_service(
         self,
@@ -151,6 +153,9 @@ class ServiceRegistry:
 
         self._services[service_type].append(sp)
         self._services[service_type].sort(key=lambda x: x.priority.value)
+
+        # Track registration metric
+        self._registrations_total += 1
 
         logger.info(
             f"Registered {service_type} service '{provider_name}' "
@@ -342,6 +347,10 @@ class ServiceRegistry:
             for i, provider in enumerate(providers):
                 if provider.name == provider_name:
                     providers.pop(i)
+
+                    # Track deregistration metric
+                    self._deregistrations_total += 1
+
                     logger.info(f"Unregistered {service_type} provider '{provider_name}'")
 
                     # Remove circuit breaker
@@ -490,35 +499,15 @@ class ServiceRegistry:
         return bool(self._services.get(service_type))
 
     def get_metrics(self) -> Dict[str, float]:
-        """Get service registry metrics."""
-        from .circuit_breaker import CircuitState
-
+        """Get service registry metrics - v1.4.3 specification."""
+        # Calculate total services registered
         total_services = sum(len(providers) for providers in self._services.values())
-        total_circuit_breakers = len(self._circuit_breakers)
-
-        # Count open circuit breakers
-        open_breakers = 0
-        for cb in self._circuit_breakers.values():
-            if cb.state == CircuitState.OPEN:
-                open_breakers += 1
-                self._circuit_breaker_opens = max(self._circuit_breaker_opens, open_breakers)
-
-        # Calculate hit rate
-        hit_rate = 0.0
-        if self._service_lookups > 0:
-            hit_rate = self._service_hits / self._service_lookups
 
         return {
-            "registry_total_services": float(total_services),
-            "registry_service_types": float(len(self._services)),
-            "registry_circuit_breakers": float(total_circuit_breakers),
-            "registry_open_breakers": float(open_breakers),
-            "registry_service_lookups": float(self._service_lookups),
-            "registry_service_hits": float(self._service_hits),
-            "registry_service_misses": float(self._service_misses),
-            "registry_hit_rate": hit_rate,
-            "registry_health_check_failures": float(self._health_check_failures),
-            "registry_max_open_breakers": float(self._circuit_breaker_opens),
+            "registry_services_registered": float(total_services),
+            "registry_lookups_total": float(self._service_lookups),
+            "registry_registrations_total": float(self._registrations_total),
+            "registry_deregistrations_total": float(self._deregistrations_total),
         }
 
 

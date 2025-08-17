@@ -154,7 +154,7 @@ class TelemetryAggregator:
                         telemetry[category][service_name] = result
                     except Exception as e:
                         logger.warning(f"Failed to collect from {service_name}: {e}")
-                        telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+                        telemetry[category][service_name] = {}  # NO FALLBACKS
                 else:
                     # Task timed out
                     telemetry[category][service_name] = self.get_fallback_metrics(service_name)
@@ -173,11 +173,11 @@ class TelemetryAggregator:
 
             # Try different collection methods
             metrics = await self._try_collect_metrics(service)
-            return metrics if metrics is not None else self.get_fallback_metrics(service_name)
+            return metrics if metrics is not None else {}  # NO FALLBACKS
 
         except Exception as e:
             logger.error(f"Failed to collect from {service_name}: {e}")
-            return self.get_fallback_metrics(service_name, healthy=False)
+            return {}  # NO FALLBACKS - service failed
 
     def _get_service_from_registry(self, service_name: str):
         """Get service from registry by name."""
@@ -240,17 +240,9 @@ class TelemetryAggregator:
             return self.get_fallback_metrics(bus_name, healthy=False)
 
     def get_fallback_metrics(self, service_name: str, healthy: bool = True) -> Dict[str, Any]:
-        """Return fallback metrics when collection fails."""
-        return {
-            "service_name": service_name,
-            "healthy": healthy,
-            "available": healthy,
-            "uptime_seconds": 0,
-            "error_count": 0 if healthy else 1,
-            "error_rate": 0.0 if healthy else 1.0,
-            "request_count": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-        }
+        """NO FALLBACKS. Real metrics or nothing."""
+        # NO FAKE METRICS. Services must implement get_metrics() or they get nothing.
+        return {}
 
     def status_to_telemetry(self, status: Any) -> Dict[str, Any]:
         """Convert ServiceStatus to telemetry dict."""
@@ -994,6 +986,65 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         )
 
         return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get telemetry service metrics including the required v1.4.3 metrics.
+
+        Returns exactly these metrics from the 362 v1.4.3 set:
+        - telemetry_metrics_collected: Total metrics collected
+        - telemetry_services_monitored: Number of services monitored
+        - telemetry_cache_hits: Cache hits
+        - telemetry_collection_errors: Collection errors
+        - telemetry_uptime_seconds: Service uptime
+
+        Uses real values from service state, not zeros.
+        """
+        # Get base metrics first
+        base_metrics = await super().get_metrics()
+
+        # Calculate telemetry-specific metrics using real service state
+
+        # Total metrics collected from cached metrics
+        total_metrics_collected = sum(len(metrics_list) for metrics_list in self._recent_metrics.values())
+
+        # Number of services monitored (from telemetry aggregator if available)
+        services_monitored = 0
+        if self._telemetry_aggregator:
+            # Count total services across all categories
+            for category, services_list in self._telemetry_aggregator.CATEGORIES.items():
+                services_monitored += len(services_list)
+        else:
+            # Fallback: count unique services from cached metrics
+            unique_services = set()
+            for metric_list in self._recent_metrics.values():
+                for metric in metric_list:
+                    if hasattr(metric, "tags") and metric.tags and "service" in metric.tags:
+                        unique_services.add(metric.tags["service"])
+            services_monitored = len(unique_services)
+
+        # Cache hits from summary cache
+        cache_hits = len(self._summary_cache)
+
+        # Collection errors from error count
+        collection_errors = base_metrics.get("error_count", 0.0)
+
+        # Service uptime in seconds
+        uptime_seconds = base_metrics.get("uptime_seconds", 0.0)
+
+        # Combine with required v1.4.3 metrics
+        telemetry_metrics = {
+            "telemetry_metrics_collected": float(total_metrics_collected),
+            "telemetry_services_monitored": float(services_monitored),
+            "telemetry_cache_hits": float(cache_hits),
+            "telemetry_collection_errors": float(collection_errors),
+            "telemetry_uptime_seconds": float(uptime_seconds),
+        }
+
+        # Merge base metrics with telemetry-specific metrics
+        base_metrics.update(telemetry_metrics)
+
+        return base_metrics
 
     def get_node_type(self) -> str:
         """Get the type of nodes this service manages."""

@@ -97,6 +97,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         self._single_steps = 0
         self._pause_resume_cycles = 0
 
+        # State transition tracking for v1.4.3 metrics
+        self._state_transitions = 0
+        self._commands_processed = 0
+
         # Kill switch configuration
         self._kill_switch_config = KillSwitchConfig(
             enabled=True,
@@ -143,6 +147,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 )
 
             result = await self.runtime.agent_processor.single_step()
+            self._single_steps += 1
+            self._commands_processed += 1
             await self._record_event("processor_control", "single_step", success=True, result=result)
 
             return ProcessorControlResponse(
@@ -181,7 +187,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             success = await self.runtime.agent_processor.pause_processing()
             if success:
+                old_status = self._processor_status
                 self._processor_status = ProcessorStatus.PAUSED
+                if old_status != ProcessorStatus.PAUSED:
+                    self._state_transitions += 1
+                    self._pause_resume_cycles += 1
+                self._commands_processed += 1
             await self._record_event("processor_control", "pause", success=success)
 
             return ProcessorControlResponse(
@@ -216,7 +227,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             success = await self.runtime.agent_processor.resume_processing()
             if success:
+                old_status = self._processor_status
                 self._processor_status = ProcessorStatus.RUNNING
+                if old_status != ProcessorStatus.RUNNING:
+                    self._state_transitions += 1
+                    self._pause_resume_cycles += 1
+                self._commands_processed += 1
             await self._record_event("processor_control", "resume", success=success)
 
             return ProcessorControlResponse(
@@ -1688,6 +1704,49 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         }
 
         return metrics
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get runtime control service metrics for v1.4.3.
+
+        Returns EXACTLY these 5 runtime metrics from the 362 v1.4.3 set:
+        - runtime_state_transitions: State transitions count
+        - runtime_commands_processed: Commands processed
+        - runtime_current_state: Current state (as int)
+        - runtime_queue_size: Processing queue size
+        - runtime_uptime_seconds: Service uptime
+        """
+        # Get queue size from agent processor
+        queue_size = 0
+        if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
+            if hasattr(self.runtime.agent_processor, "queue") and self.runtime.agent_processor.queue:
+                queue_size = len(self.runtime.agent_processor.queue)
+            elif hasattr(self.runtime.agent_processor, "get_queue_status"):
+                try:
+                    queue_status = self.runtime.agent_processor.get_queue_status()
+                    queue_size = queue_status.pending_thoughts + queue_status.pending_tasks
+                except Exception:
+                    queue_size = 0
+
+        # Map processor status to int (matching cognitive state pattern)
+        current_state = 0
+        if self._processor_status == ProcessorStatus.RUNNING:
+            current_state = 1
+        elif self._processor_status == ProcessorStatus.PAUSED:
+            current_state = 2
+        elif self._processor_status == ProcessorStatus.STOPPED:
+            current_state = 3
+
+        # Calculate uptime in seconds
+        uptime_seconds = self._calculate_uptime()
+
+        return {
+            "runtime_state_transitions": float(self._state_transitions),
+            "runtime_commands_processed": float(self._commands_processed),
+            "runtime_current_state": float(current_state),
+            "runtime_queue_size": float(queue_size),
+            "runtime_uptime_seconds": float(uptime_seconds),
+        }
 
     def _calculate_average_thought_time(self) -> float:
         """Calculate average thought processing time."""

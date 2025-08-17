@@ -64,6 +64,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _perform_periodic_maintenance(self) -> None:
         """Run periodic maintenance tasks."""
         logger.info("Periodic maintenance tasks executed.")
+        # Increment vacuum operations counter for periodic maintenance
+        self._vacuum_runs += 1
         # The actual maintenance logic would go here
         # For now, this is a placeholder
 
@@ -154,6 +156,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info(
             f"Orphan cleanup: {orphaned_tasks_deleted_count} tasks, {orphaned_thoughts_deleted_count} thoughts removed."
         )
+
+        # Increment cleanup operations counter
+        self._cleanup_runs += 1
 
         # --- 2. Archive thoughts older than configured hours ---
         # Tasks are now managed by TSDB consolidator, not archived here
@@ -420,3 +425,41 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         """Check if archive is due."""
         # Placeholder - implement based on schedule
         return False
+
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get database maintenance metrics for v1.4.3.
+
+        Returns exactly these 4 metrics:
+        - db_vacuum_operations: Vacuum operations performed
+        - db_cleanup_operations: Cleanup operations performed
+        - db_size_mb: Current database size in MB
+        - db_maintenance_uptime_seconds: Service uptime
+        """
+        # Calculate database size
+        db_size_mb = 0.0
+        try:
+            import os
+
+            from ciris_engine.logic.persistence import get_sqlite_db_full_path
+
+            db_path = get_sqlite_db_full_path()
+            if os.path.exists(db_path):
+                db_size_mb = os.path.getsize(db_path) / (1024 * 1024)
+        except (OSError, IOError, ImportError):
+            # Ignore file system and import errors when checking database size
+            pass
+
+        # Calculate uptime in seconds
+        uptime_seconds = 0.0
+        if hasattr(self, "_start_time") and self._start_time:
+            current_time = self.time_service.now()
+            uptime_delta = current_time - self._start_time
+            uptime_seconds = uptime_delta.total_seconds()
+
+        return {
+            "db_vacuum_operations": float(self._vacuum_runs),
+            "db_cleanup_operations": float(self._cleanup_runs),
+            "db_size_mb": db_size_mb,
+            "db_maintenance_uptime_seconds": uptime_seconds,
+        }

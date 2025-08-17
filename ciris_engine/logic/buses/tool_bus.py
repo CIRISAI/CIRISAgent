@@ -35,6 +35,7 @@ class ToolBus(BaseBus[ToolService]):
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.TOOL, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
 
         # Metrics tracking
         self._executions_count = 0
@@ -308,6 +309,21 @@ class ToolBus(BaseBus[ToolService]):
 
             if "available_tools" in telemetry:
                 aggregated["unique_tools"].add(telemetry["available_tools"])
+
+    def _collect_metrics(self) -> dict[str, float]:
+        """Collect base metrics for the tool bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "tool_executions_total": float(self._executions_count),
+            "tool_execution_errors": float(self._errors_count),
+            "tools_available": float(self._cached_tools_count),
+            "tool_uptime_seconds": uptime_seconds,
+        }
 
     def get_metrics(self) -> dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""

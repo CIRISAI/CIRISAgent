@@ -50,6 +50,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.RUNTIME_CONTROL, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         # Track ongoing operations to prevent conflicts
         self._active_operations: Dict[str, asyncio.Task] = {}
         self._operation_lock = asyncio.Lock()
@@ -470,6 +471,21 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
         except Exception as e:
             logger.error(f"Failed to get capabilities: {e}")
             return []
+
+    def _collect_metrics(self) -> Dict[str, float]:
+        """Collect base metrics for the runtime control bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "runtime_control_commands": float(self._commands_sent),
+            "runtime_control_state_queries": float(self._state_broadcasts),
+            "runtime_control_emergency_stops": float(self._emergency_stops),
+            "runtime_control_uptime_seconds": uptime_seconds,
+        }
 
     def get_metrics(self) -> Dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""

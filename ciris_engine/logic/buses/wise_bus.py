@@ -37,9 +37,13 @@ class WiseBus(BaseBus[WiseAuthorityService]):
     - Comprehensive capability prohibition with tier-based access
     """
 
+    # Import prohibited capabilities from the prohibitions module
+    PROHIBITED_CAPABILITIES = PROHIBITED_CAPABILITIES
+
     def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
         super().__init__(service_type=ServiceType.WISE_AUTHORITY, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         self._agent_tier: Optional[int] = None  # Cached agent tier
 
         # Metrics tracking
@@ -496,6 +500,28 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         )
 
         return best_response
+
+    def _is_capability_allowed(self, capability: str) -> bool:
+        """Check if a capability is allowed (not prohibited)."""
+        # Check if capability is in any prohibited set
+        if capability.lower() in [cap.lower() for cap in PROHIBITED_CAPABILITIES]:
+            return False
+        return True
+
+    def _collect_metrics(self) -> dict[str, float]:
+        """Collect base metrics for the wise bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "wise_guidance_requests": float(self._requests_count),
+            "wise_guidance_deferrals": float(self._deferrals_count),
+            "wise_guidance_responses": float(self._guidance_count),
+            "wise_uptime_seconds": uptime_seconds,
+        }
 
     def get_metrics(self) -> dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""

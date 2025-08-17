@@ -100,6 +100,7 @@ class LLMBus(BaseBus[LLMService]):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
 
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         self.distribution_strategy = distribution_strategy
         self.circuit_breaker_config = circuit_breaker_config or {}
         self.telemetry_service = telemetry_service
@@ -554,6 +555,32 @@ class LLMBus(BaseBus[LLMService]):
         base_stats["service_stats"] = self.get_service_stats()
         base_stats["distribution_strategy"] = self.distribution_strategy.value
         return base_stats
+
+    def _collect_metrics(self) -> dict[str, float]:
+        """Collect base metrics for the LLM bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        # Calculate aggregate metrics from service metrics
+        total_requests = sum(m.total_requests for m in self.service_metrics.values())
+        failed_requests = sum(m.failed_requests for m in self.service_metrics.values())
+        total_latency = sum(m.total_latency_ms for m in self.service_metrics.values())
+        avg_latency = total_latency / total_requests if total_requests > 0 else 0.0
+
+        # Count circuit breakers open
+        circuit_breakers_open = sum(1 for cb in self.circuit_breakers.values() if cb.is_open)
+
+        return {
+            "llm_requests_total": float(total_requests),
+            "llm_failed_requests": float(failed_requests),
+            "llm_average_latency_ms": avg_latency,
+            "llm_circuit_breakers_open": float(circuit_breakers_open),
+            "llm_providers_available": float(len(self.service_metrics)),
+            "llm_uptime_seconds": uptime_seconds,
+        }
 
     def get_metrics(self) -> dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""

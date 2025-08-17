@@ -57,36 +57,35 @@ class TestCommunicationBusCoverage:
         assert "communication_broadcasts" in metrics
         assert "communication_uptime_seconds" in metrics
 
-    async def test_broadcast(self, mock_registry, mock_time_service):
-        """Test broadcast method."""
+    async def test_send_message(self, mock_registry, mock_time_service):
+        """Test send_message method."""
         bus = CommunicationBus(mock_registry, mock_time_service)
 
-        # Mock services
-        service1 = AsyncMock()
-        service1.send_message = AsyncMock(return_value=True)
-        service2 = AsyncMock()
-        service2.send_message = AsyncMock(return_value=False)
-
-        mock_registry.get_services_by_type.return_value = [service1, service2]
-
-        # Test broadcast
-        results = await bus.broadcast("channel", "message", {})
-
-        assert len(results) == 2
-        assert bus._broadcasts > 0
-
-    async def test_send_to_user(self, mock_registry, mock_time_service):
-        """Test send_to_user method."""
-        bus = CommunicationBus(mock_registry, mock_time_service)
-
+        # Mock service
         service = AsyncMock()
-        service.send_to_user = AsyncMock(return_value=True)
+        service.send_message = AsyncMock(return_value=True)
         mock_registry.get_services_by_type.return_value = [service]
 
-        result = await bus.send_to_user("user123", "Hello")
+        # Test send_message_sync
+        result = await bus.send_message_sync("test_channel", "message", "test_handler")
 
         assert result is True
         assert bus._messages_sent > 0
+
+    async def test_fetch_messages(self, mock_registry, mock_time_service):
+        """Test fetch_messages method."""
+        bus = CommunicationBus(mock_registry, mock_time_service)
+
+        service = AsyncMock()
+        service.fetch_messages = AsyncMock(
+            return_value=[{"content": "test", "timestamp": "2024-01-01T00:00:00Z", "author": "user"}]
+        )
+        mock_registry.get_services_by_type.return_value = [service]
+
+        messages = await bus.fetch_messages("channel123", 10, "test_handler")
+
+        assert len(messages) == 1
+        assert bus._messages_received > 0
 
 
 # =============================================================================
@@ -144,17 +143,29 @@ class TestLLMBusCoverage:
         assert "llm_circuit_breakers_open" in metrics
         assert "llm_uptime_seconds" in metrics
 
-    async def test_record_metrics(self, mock_registry, mock_time_service):
-        """Test metric recording."""
-        telemetry = AsyncMock()
-        telemetry.memorize_metric = AsyncMock()
+    async def test_call_llm_structured(self, mock_registry, mock_time_service):
+        """Test call_llm_structured method."""
+        from pydantic import BaseModel
 
-        bus = LLMBus(mock_registry, mock_time_service, telemetry_service=telemetry)
+        from ciris_engine.schemas.runtime.resources import ResourceUsage
 
-        # Record some metrics
-        await bus._record_metric("test_metric", 42.0)
+        class TestModel(BaseModel):
+            result: str
 
-        telemetry.memorize_metric.assert_called()
+        bus = LLMBus(mock_registry, mock_time_service)
+
+        # Mock service
+        service = AsyncMock()
+        service.call_llm_structured = AsyncMock(
+            return_value=(TestModel(result="success"), ResourceUsage(tokens_used=100))
+        )
+        mock_registry.get_services_by_type.return_value = [service]
+
+        messages = [{"role": "user", "content": "test"}]
+        result, usage = await bus.call_llm_structured(messages, TestModel)
+
+        assert result.result == "success"
+        assert usage.tokens_used == 100
 
 
 # =============================================================================
@@ -167,11 +178,10 @@ class TestMemoryBusCoverage:
 
     def test_init(self, mock_registry, mock_time_service):
         """Test initialization."""
-        telemetry = AsyncMock()
-        bus = MemoryBus(mock_registry, mock_time_service, telemetry_service=telemetry)
+        bus = MemoryBus(mock_registry, mock_time_service)
 
         assert bus.service_type == ServiceType.MEMORY
-        assert bus._telemetry_service == telemetry
+        assert bus._operation_count == 0
 
     def test_get_metrics(self, mock_registry, mock_time_service):
         """Test metrics method."""
@@ -181,8 +191,8 @@ class TestMemoryBusCoverage:
 
         assert isinstance(metrics, dict)
         assert "memory_operations_total" in metrics
-        assert "memory_cache_size" in metrics
-        assert "memory_cache_hits" in metrics
+        assert "memory_errors_total" in metrics
+        assert "memory_broadcasts" in metrics
         assert "memory_uptime_seconds" in metrics
 
     async def test_memorize_basic(self, mock_registry, mock_time_service):
@@ -218,17 +228,17 @@ class TestToolBusCoverage:
         bus = ToolBus(mock_registry, mock_time_service)
 
         assert bus.service_type == ServiceType.TOOL
-        assert bus._tools_available == 0
-        assert bus._executions_total == 0
+        assert bus._executions_count == 0
+        assert bus._errors_count == 0
 
     def test_get_metrics(self, mock_registry, mock_time_service):
         """Test metrics."""
         bus = ToolBus(mock_registry, mock_time_service)
 
         # Set some metrics
-        bus._tools_available = 5
-        bus._executions_total = 100
-        bus._execution_errors = 10
+        bus._cached_tools_count = 5
+        bus._executions_count = 100
+        bus._errors_count = 10
 
         metrics = bus.get_metrics()
 
@@ -243,13 +253,18 @@ class TestToolBusCoverage:
 
         # Mock tool service
         tool_service = AsyncMock()
+        tool_service.get_available_tools = AsyncMock(return_value=["test_tool", "other_tool"])
         tool_service.execute_tool = AsyncMock(return_value=MagicMock(success=True))
+
+        # Mock registry to return our service
         mock_registry.get_services_by_type.return_value = [tool_service]
+        # Also mock the internal _services attribute that ToolBus checks
+        mock_registry._services = {ServiceType.TOOL: [MagicMock(instance=tool_service)]}
 
         result = await bus.execute_tool("test_tool", {"param": "value"})
 
         tool_service.execute_tool.assert_called_once()
-        assert bus._executions_total > 0
+        assert bus._executions_count > 0
 
 
 # =============================================================================
@@ -265,16 +280,17 @@ class TestWiseBusCoverage:
         bus = WiseBus(mock_registry, mock_time_service)
 
         assert bus.service_type == ServiceType.WISE_AUTHORITY
-        assert len(bus.PROHIBITED_CAPABILITIES) > 0
-        assert "medical" in bus.PROHIBITED_CAPABILITIES[0]
+        assert bus.PROHIBITED_CAPABILITIES is not None
+        # PROHIBITED_CAPABILITIES is a set, not a list
+        assert "medical_diagnosis" in bus.PROHIBITED_CAPABILITIES
 
     def test_get_metrics(self, mock_registry, mock_time_service):
         """Test metrics."""
         bus = WiseBus(mock_registry, mock_time_service)
 
         # Set some metrics
-        bus._guidance_requests = 100
-        bus._deferrals = 20
+        bus._requests_count = 100
+        bus._deferrals_count = 20
 
         metrics = bus.get_metrics()
 

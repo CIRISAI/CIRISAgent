@@ -63,6 +63,7 @@ class MemoryBus(BaseBus[MemoryService]):
     ):
         super().__init__(service_type=ServiceType.MEMORY, service_registry=service_registry)
         self._time_service = time_service
+        self._start_time = time_service.now() if time_service else None
         self._audit_service = audit_service
 
         # Memory bus specific metrics
@@ -482,7 +483,22 @@ class MemoryBus(BaseBus[MemoryService]):
 
         return aggregated
 
-    async def get_metrics(self) -> Dict[str, float]:
+    def _collect_metrics(self) -> Dict[str, float]:
+        """Collect base metrics for the memory bus."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
+
+        return {
+            "memory_operations_total": float(self._operation_count),
+            "memory_errors_total": float(self._error_count),
+            "memory_broadcasts": float(self._broadcast_count),
+            "memory_uptime_seconds": uptime_seconds,
+        }
+
+    def get_metrics(self) -> Dict[str, float]:
         """
         Get all memory bus metrics including base, custom, and v1.4.3 specific.
 

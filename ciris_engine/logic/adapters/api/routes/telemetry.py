@@ -31,6 +31,10 @@ from ..constants import (
 )
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
+# Error message constants to avoid duplication
+ERROR_TELEMETRY_NOT_INITIALIZED = "Critical system failure: Telemetry service not initialized"
+ERROR_AUDIT_NOT_INITIALIZED = "Critical system failure: Audit service not initialized"
+
 # Import extracted modules
 from .telemetry_converters import convert_to_graphite, convert_to_prometheus
 from .telemetry_helpers import get_telemetry_fallback, get_telemetry_from_service
@@ -226,7 +230,7 @@ async def _get_system_overview(request: Request) -> SystemOverview:
 
     # If any critical service is missing, we have a system failure
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
     if not time_service:
         raise HTTPException(status_code=503, detail="Critical system failure: Time service not initialized")
 
@@ -476,7 +480,7 @@ async def get_resource_telemetry(
     if not resource_monitor:
         raise HTTPException(status_code=503, detail="Critical system failure: Resource monitor service not initialized")
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         # Get current resource usage
@@ -564,7 +568,7 @@ async def get_detailed_metrics(
     # Telemetry service MUST exist - if it doesn't, we have a critical failure
     telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         # Common metrics to query - use actual metric names that exist in TSDB nodes
@@ -743,7 +747,7 @@ async def get_reasoning_traces(
     if not visibility_service:
         raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
     if not audit_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Audit service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
 
     traces = []
 
@@ -895,7 +899,7 @@ async def get_system_logs(
     audit_service = request.app.state.audit_service
 
     if not audit_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Audit service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
     logs = []
 
     if audit_service:
@@ -1001,11 +1005,11 @@ async def query_telemetry(
     incident_service = request.app.state.incident_management_service
 
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
     if not visibility_service:
         raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
     if not audit_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Audit service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
     if not incident_service:
         raise HTTPException(status_code=503, detail="Critical system failure: Incident service not initialized")
 
@@ -1209,7 +1213,7 @@ async def get_detailed_metric(
     # Telemetry service MUST exist - if it doesn't, we have a critical failure
     telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         now = datetime.now(timezone.utc)
@@ -1367,7 +1371,7 @@ async def get_resource_history(
     # Telemetry service MUST exist - if it doesn't, we have a critical failure
     telemetry_service = request.app.state.telemetry_service
     if not telemetry_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Telemetry service not initialized")
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
 
     try:
         now = datetime.now(timezone.utc)

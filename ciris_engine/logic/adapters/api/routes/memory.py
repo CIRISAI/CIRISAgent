@@ -335,7 +335,7 @@ async def visualize_graph(
 
         # Query edges (simplified - just between nodes we have)
         edges = []
-        node_ids = {node.id for node in nodes}
+        # Note: node_ids would be used for edge filtering in a full implementation
 
         # Generate SVG
         svg = generate_svg(

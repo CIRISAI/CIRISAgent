@@ -573,15 +573,15 @@ wisdom_config:
     excessive_worship:
       strikes_before_deferral: 3  # guideline only - severe cases may warrant immediate action
       reset_period_hours: 24
-      warning_message: "I appreciate your enthusiasm, but let's keep our discussions grounded. This is warning {strike_count} of 3."
+      warning_message: "I appreciate your enthusiasm, but let's keep our discussions grounded. This is warning 1 of 3."
     deification_attempts:
       strikes_before_deferral: 3  # guideline only - severe cases may warrant immediate action
       reset_period_hours: 24
-      warning_message: "Please remember that no one here is infallible or divine. This is warning {strike_count} of 3."
+      warning_message: "Please remember that no one here is infallible or divine. This is warning 1 of 3."
     boundary_violations:
       strikes_before_deferral: 2  # guideline only - severe cases may warrant immediate action
       reset_period_hours: 12
-      warning_message: "You've been asked to respect boundaries. This is warning {strike_count} of 2."
+      warning_message: "You've been asked to respect boundaries. This is warning 1 of 2."
   deferral_urgency_levels:
     mental_health_crisis: 100  # immediate deferral, no strikes
     safety_threats: 100  # immediate deferral, no strikes

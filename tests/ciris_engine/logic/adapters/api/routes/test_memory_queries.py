@@ -64,16 +64,16 @@ class TestParseDateTime:
 class TestQueryTimelineNodes:
     """Test query_timeline_nodes function."""
 
-    def test_no_db_path(self):
+    async def test_no_db_path(self):
         """Test returns empty list when no db_path."""
         memory_service = Mock()
         memory_service.db_path = None
 
-        result = query_timeline_nodes(memory_service)
+        result = await query_timeline_nodes(memory_service)
         assert result == []
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_successful_query(self, mock_execute):
+    async def test_successful_query(self, mock_execute):
         """Test successful query returns GraphNodes."""
         # Mock database rows
         mock_execute.return_value = [
@@ -92,7 +92,7 @@ class TestQueryTimelineNodes:
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        result = query_timeline_nodes(memory_service, hours=24)
+        result = await query_timeline_nodes(memory_service, hours=24)
 
         assert len(result) == 1
         assert result[0].id == "node1"
@@ -100,14 +100,14 @@ class TestQueryTimelineNodes:
         assert result[0].type == "concept"
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_with_filters(self, mock_execute):
+    async def test_with_filters(self, mock_execute):
         """Test query with scope and node_type filters."""
         mock_execute.return_value = []
 
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        query_timeline_nodes(
+        await query_timeline_nodes(
             memory_service, hours=48, scope="identity", node_type="observation", limit=50, exclude_metrics=True
         )
 
@@ -125,14 +125,14 @@ class TestQueryTimelineNodes:
         assert "LIMIT ?" in query
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_exclude_metrics_false(self, mock_execute):
+    async def test_exclude_metrics_false(self, mock_execute):
         """Test query without excluding metrics."""
         mock_execute.return_value = []
 
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        query_timeline_nodes(memory_service, exclude_metrics=False)
+        await query_timeline_nodes(memory_service, exclude_metrics=False)
 
         db_path, query, params = mock_execute.call_args[0]
         assert "tsdb_data" not in query  # Should not exclude metrics
@@ -141,37 +141,37 @@ class TestQueryTimelineNodes:
 class TestSearchNodes:
     """Test search_nodes function."""
 
-    def test_no_db_path(self):
+    async def test_no_db_path(self):
         """Test returns empty list when no db_path."""
         memory_service = Mock()
         memory_service.db_path = None
 
-        result = search_nodes(memory_service)
+        result = await search_nodes(memory_service)
         assert result == []
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_text_search(self, mock_execute):
+    async def test_text_search(self, mock_execute):
         """Test search with text query."""
         mock_execute.return_value = []
 
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        search_nodes(memory_service, query="test search")
+        await search_nodes(memory_service, query="test search")
 
         db_path, query, params = mock_execute.call_args[0]
         assert "attributes_json LIKE ?" in query
         assert "%test search%" in params
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_search_with_tags(self, mock_execute):
+    async def test_search_with_tags(self, mock_execute):
         """Test search with tags filter."""
         mock_execute.return_value = []
 
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        search_nodes(memory_service, tags=["important", "urgent"])
+        await search_nodes(memory_service, tags=["important", "urgent"])
 
         db_path, query, params = mock_execute.call_args[0]
         # Should have two LIKE clauses for tags
@@ -180,7 +180,7 @@ class TestSearchNodes:
         assert '%"urgent"%' in str(params)
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_search_with_time_range(self, mock_execute):
+    async def test_search_with_time_range(self, mock_execute):
         """Test search with time range filters."""
         mock_execute.return_value = []
 
@@ -190,7 +190,7 @@ class TestSearchNodes:
         since = datetime(2024, 1, 1)
         until = datetime(2024, 1, 31)
 
-        search_nodes(memory_service, since=since, until=until)
+        await search_nodes(memory_service, since=since, until=until)
 
         db_path, query, params = mock_execute.call_args[0]
         assert "updated_at >= ?" in query
@@ -199,20 +199,20 @@ class TestSearchNodes:
         assert until.isoformat() in params
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_search_with_pagination(self, mock_execute):
+    async def test_search_with_pagination(self, mock_execute):
         """Test search with pagination."""
         mock_execute.return_value = []
 
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        search_nodes(memory_service, limit=10, offset=20)
+        await search_nodes(memory_service, limit=10, offset=20)
 
         db_path, query, params = mock_execute.call_args[0]
         assert "LIMIT 10 OFFSET 20" in query
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
-    def test_search_with_all_filters(self, mock_execute):
+    async def test_search_with_all_filters(self, mock_execute):
         """Test search with all filters combined."""
         mock_execute.return_value = [
             (
@@ -230,7 +230,7 @@ class TestSearchNodes:
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        result = search_nodes(
+        result = await search_nodes(
             memory_service,
             query="concept",
             node_type=NodeType.CONCEPT,
@@ -249,12 +249,12 @@ class TestSearchNodes:
 class TestGetMemoryStats:
     """Test get_memory_stats function."""
 
-    def test_no_db_path(self):
+    async def test_no_db_path(self):
         """Test returns default stats when no db_path."""
         memory_service = Mock()
         memory_service.db_path = None
 
-        stats = get_memory_stats(memory_service)
+        stats = await get_memory_stats(memory_service)
 
         assert stats["total_nodes"] == 0
         assert stats["total_edges"] == 0
@@ -264,7 +264,7 @@ class TestGetMemoryStats:
     @patch("ciris_engine.logic.adapters.api.routes.memory_queries.get_db_connection")
     @patch("os.path.exists")
     @patch("os.path.getsize")
-    def test_successful_stats(self, mock_getsize, mock_exists, mock_get_conn):
+    async def test_successful_stats(self, mock_getsize, mock_exists, mock_get_conn):
         """Test successful stats retrieval."""
         # Mock database connection and cursor
         mock_cursor = MagicMock()
@@ -294,7 +294,7 @@ class TestGetMemoryStats:
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        stats = get_memory_stats(memory_service)
+        stats = await get_memory_stats(memory_service)
 
         assert stats["total_nodes"] == 100
         assert stats["total_edges"] == 50
@@ -306,14 +306,14 @@ class TestGetMemoryStats:
         assert stats["storage_size_mb"] == 10.0
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_queries.get_db_connection")
-    def test_database_error(self, mock_get_conn):
+    async def test_database_error(self, mock_get_conn):
         """Test handles database errors gracefully."""
         mock_get_conn.side_effect = Exception("Database error")
 
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        stats = get_memory_stats(memory_service)
+        stats = await get_memory_stats(memory_service)
 
         # Should return default stats on error
         assert stats["total_nodes"] == 0

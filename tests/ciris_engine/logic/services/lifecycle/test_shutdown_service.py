@@ -192,8 +192,11 @@ def test_shutdown_service_thread_safety():
     def thread_shutdown(reason):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(service.request_shutdown(reason))
-        loop.close()
+        try:
+            loop.run_until_complete(service.request_shutdown(reason))
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
     # Multiple threads trying to shutdown
     threads = []

@@ -187,8 +187,11 @@ class TestTSDBLogHandler:
     def test_set_async_loop(self, log_handler):
         """Test setting async event loop."""
         loop = asyncio.new_event_loop()
-        log_handler.set_async_loop(loop)
-        assert log_handler._async_loop == loop
+        try:
+            log_handler.set_async_loop(loop)
+            assert log_handler._async_loop == loop
+        finally:
+            loop.close()
 
     def test_formatter_integration(self, log_handler, time_service):
         """Test that formatter is properly used."""

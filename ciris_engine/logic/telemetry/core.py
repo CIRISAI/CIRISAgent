@@ -7,9 +7,10 @@ from datetime import datetime, timedelta
 from typing import Deque, Dict, Optional, Tuple
 from uuid import uuid4
 
-from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.persistence.models.correlations import add_correlation
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
@@ -23,7 +24,7 @@ from .security import SecurityFilter
 logger = logging.getLogger(__name__)
 
 
-class BasicTelemetryCollector(Service):
+class BasicTelemetryCollector(BaseService):
     """Collects and exposes basic telemetry for agent introspection."""
 
     def __init__(
@@ -32,13 +33,17 @@ class BasicTelemetryCollector(Service):
         security_filter: SecurityFilter | None = None,
         time_service: TimeService | None = None,
     ) -> None:
-        super().__init__()
+        # Initialize BaseService with time_service
+        super().__init__(time_service=time_service, service_name="BasicTelemetryCollector")
         self.buffer_size = buffer_size
         self._history: Dict[str, Deque[Tuple[datetime, float]]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
         self._filter = security_filter or SecurityFilter()
-        self._time_service = time_service or TimeService()
+        # Use the time_service from BaseService instead of creating a new one
+        if not self._time_service:
+            self._time_service = TimeService()
         self.start_time = self._time_service.now()
         self._store_task: Optional[asyncio.Task] = None
+        # Note: _started is now provided by BaseService
 
     async def start(self) -> None:
         await super().start()
@@ -188,3 +193,19 @@ class BasicTelemetryCollector(Service):
             return "aggregated"  # Aggregate cold path metrics
         else:
             return "aggregated"  # Default to aggregated
+
+    # Required abstract methods from BaseService
+
+    def get_service_type(self) -> ServiceType:
+        """Get the service type enum value."""
+        return ServiceType.TELEMETRY
+
+    def _get_actions(self) -> list[str]:
+        """Get list of actions this service provides."""
+        return ["record_metric", "update_system_snapshot", "get_metrics"]
+
+    def _check_dependencies(self) -> bool:
+        """Check if all required dependencies are available."""
+        # TimeService is our only dependency and it's optional
+        # (we create one if not provided)
+        return True

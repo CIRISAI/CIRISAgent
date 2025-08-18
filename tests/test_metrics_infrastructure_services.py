@@ -472,7 +472,21 @@ class TestDatabaseMaintenanceServiceMetrics(BaseMetricsTest):
 
     def test_database_maintenance_service_metrics_exist(self, db_maintenance_service):
         """Test that DatabaseMaintenanceService has all expected metrics."""
-        metrics = db_maintenance_service._collect_metrics()
+        from unittest.mock import Mock, patch
+
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
+        # Create a mock config service with essential config
+        mock_config_service = Mock()
+        mock_config_service.essential_config = EssentialConfig()
+
+        # Mock the ServiceRegistry to return our config service
+        with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry:
+            mock_registry = Mock()
+            mock_registry.get_services_by_type.return_value = [mock_config_service]
+            MockRegistry.return_value = mock_registry
+
+            metrics = db_maintenance_service._collect_metrics()
 
         # Check base metrics present
         self.assert_base_metrics_present(metrics)
@@ -488,6 +502,10 @@ class TestDatabaseMaintenanceServiceMetrics(BaseMetricsTest):
 
     def test_database_maintenance_service_metrics_with_activity(self, db_maintenance_service):
         """Test DatabaseMaintenanceService metrics with simulated activity."""
+        from unittest.mock import Mock, patch
+
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
         # Simulate some maintenance activity
         db_maintenance_service._cleanup_runs = 3
         db_maintenance_service._records_deleted = 150
@@ -495,7 +513,17 @@ class TestDatabaseMaintenanceServiceMetrics(BaseMetricsTest):
         db_maintenance_service._archive_runs = 1
         db_maintenance_service._last_cleanup_duration = 5.5
 
-        metrics = db_maintenance_service._collect_metrics()
+        # Create a mock config service with essential config
+        mock_config_service = Mock()
+        mock_config_service.essential_config = EssentialConfig()
+
+        # Mock the ServiceRegistry to return our config service
+        with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry:
+            mock_registry = Mock()
+            mock_registry.get_services_by_type.return_value = [mock_config_service]
+            MockRegistry.return_value = mock_registry
+
+            metrics = db_maintenance_service._collect_metrics()
 
         # Check that activity is reflected in metrics
         assert metrics["cleanup_runs"] == 3.0
@@ -612,11 +640,19 @@ class TestInfrastructureServicesIntegration(BaseMetricsTest):
     @pytest.mark.asyncio
     async def test_all_infrastructure_services_base_metrics(self):
         """Test that all infrastructure services provide base metrics."""
+        from unittest.mock import Mock, patch
+
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
         services = []
 
         # Create mock time service
         mock_time_service = MagicMock()
         mock_time_service.now.return_value = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        # Create a mock config service with essential config
+        mock_config_service = Mock()
+        mock_config_service.essential_config = EssentialConfig()
 
         # Create all services
         services.append(TimeService())
@@ -659,11 +695,17 @@ class TestInfrastructureServicesIntegration(BaseMetricsTest):
                     services.append(secrets_service)
 
                 # Test that each service provides base metrics
-                for service in services:
-                    metrics = service._collect_metrics()
+                # Mock the ServiceRegistry for DatabaseMaintenanceService
+                with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry:
+                    mock_registry = Mock()
+                    mock_registry.get_services_by_type.return_value = [mock_config_service]
+                    MockRegistry.return_value = mock_registry
 
-                    # All services should have base metrics
-                    self.assert_base_metrics_present(metrics)
+                    for service in services:
+                        metrics = service._collect_metrics()
+
+                        # All services should have base metrics
+                        self.assert_base_metrics_present(metrics)
 
                     # All metrics should be numeric
                     self.assert_all_metrics_are_floats(metrics)

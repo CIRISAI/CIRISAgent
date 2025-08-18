@@ -119,14 +119,16 @@ class TestTSDBLogHandler:
             args=(),
             exc_info=None,
         )
-        # Don't set module or funcName
+        # Don't set module or funcName - Python will derive module from pathname
         record.created = datetime.now(timezone.utc).timestamp()
 
         with patch("ciris_engine.logic.telemetry.log_collector.add_correlation") as mock_add:
             log_handler.emit(record)
 
             correlation = mock_add.call_args[0][0]
-            assert correlation.log_data.module_name == "unknown"
+            # Python's logging derives module name "path" from pathname "/path.py"
+            assert correlation.log_data.module_name == "path"
+            # funcName wasn't set, so it should be "unknown"
             assert correlation.log_data.function_name == "unknown"
 
     def test_emit_error_handling(self, log_handler):
@@ -411,11 +413,12 @@ class TestIntegration:
             correlations.append(correlation)
 
         with patch("ciris_engine.logic.telemetry.log_collector.add_correlation", capture_correlation):
-            with patch("logging.getLogger") as mock_get_logger:
-                # Create a real logger for testing
-                test_logger = logging.getLogger("test.levels")
-                test_logger.handlers.clear()
+            # Create a real logger for testing BEFORE patching
+            test_logger = logging.getLogger("test.levels")
+            test_logger.handlers.clear()
 
+            with patch("logging.getLogger") as mock_get_logger:
+                # Mock should return our test logger when collector calls getLogger()
                 mock_get_logger.return_value = test_logger
 
                 await collector.start()

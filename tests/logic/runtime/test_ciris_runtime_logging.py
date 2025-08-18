@@ -288,26 +288,33 @@ class TestLoggingInitializationFailFast:
     async def test_logging_creates_all_required_files(self, essential_config, allow_runtime_creation, temp_dir):
         """Test that logging initialization creates all required log files and symlinks."""
 
-        # Create a logs directory in temp
-        log_dir = temp_dir / "logs"
-        log_dir.mkdir(exist_ok=True)
+        # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+        try:
+            # Create a logs directory in temp
+            log_dir = temp_dir / "logs"
+            log_dir.mkdir(exist_ok=True)
 
-        # No need to patch Path - just let it create logs in the default location
-        runtime = CIRISRuntime(
-            adapter_types=["cli"],
-            essential_config=essential_config,
-            modules=["mock_llm"],
-            timeout=2,
-        )
+            # No need to patch Path - just let it create logs in the default location
+            runtime = CIRISRuntime(
+                adapter_types=["cli"],
+                essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
+            )
 
-        await runtime.initialize()
+            await runtime.initialize()
 
-        # Check that log files were created in the default logs directory
-        default_log_dir = Path("logs")
-        log_files = list(default_log_dir.glob("ciris_agent_*.log"))
-        assert len(log_files) > 0, "No log files created"
+            # Check that log files were created in the default logs directory
+            default_log_dir = Path("logs")
+            log_files = list(default_log_dir.glob("ciris_agent_*.log"))
+            assert len(log_files) > 0, "No log files created"
 
-        await runtime.shutdown()
+            await runtime.shutdown()
+        finally:
+            # CRITICAL: Restore PYTEST_CURRENT_TEST to not affect other tests
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_logging_handles_symlink_failures_gracefully(self, essential_config, allow_runtime_creation):
@@ -614,125 +621,139 @@ class TestLoggingInitializationFailFast:
     async def test_logging_creates_actual_files_and_all_symlinks(self, essential_config, allow_runtime_creation):
         """Test that logging creates actual log files and all 4 symlinks/tracking files."""
 
-        # Use the actual logs directory (will be created if it doesn't exist)
-        log_dir = Path("logs")
+        # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+        try:
+            # Use the actual logs directory (will be created if it doesn't exist)
+            log_dir = Path("logs")
 
-        # Don't patch setup_basic_logging - let it run for real
-        runtime = CIRISRuntime(
-            adapter_types=["cli"],
-            essential_config=essential_config,
-            modules=["mock_llm"],
-            timeout=2,
-        )
+            # Don't patch setup_basic_logging - let it run for real
+            runtime = CIRISRuntime(
+                adapter_types=["cli"],
+                essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
+            )
 
-        # Initialize should create actual log files
-        await runtime.initialize()
+            # Initialize should create actual log files
+            await runtime.initialize()
 
-        # Check that the main log file was created
-        log_files = list(log_dir.glob("ciris_agent_*.log"))
-        assert len(log_files) > 0, "No log files created"
-        # Get the most recent log file (sort by modification time)
-        main_log_file = max(log_files, key=lambda f: f.stat().st_mtime)
-        assert main_log_file.exists(), f"Main log file {main_log_file} does not exist"
-        assert main_log_file.stat().st_size >= 0, "Main log file is not accessible"
+            # Check that the main log file was created
+            log_files = list(log_dir.glob("ciris_agent_*.log"))
+            assert len(log_files) > 0, "No log files created"
+            # Get the most recent log file (sort by modification time)
+            main_log_file = max(log_files, key=lambda f: f.stat().st_mtime)
+            assert main_log_file.exists(), f"Main log file {main_log_file} does not exist"
+            assert main_log_file.stat().st_size >= 0, "Main log file is not accessible"
 
-        # Check symlink 1: latest.log
-        latest_log = log_dir / "latest.log"
-        assert latest_log.exists() or latest_log.is_symlink(), "latest.log symlink not created"
-        if latest_log.is_symlink():
-            assert latest_log.resolve().name == main_log_file.name, "latest.log points to wrong file"
+            # Check symlink 1: latest.log
+            latest_log = log_dir / "latest.log"
+            assert latest_log.exists() or latest_log.is_symlink(), "latest.log symlink not created"
+            if latest_log.is_symlink():
+                assert latest_log.resolve().name == main_log_file.name, "latest.log points to wrong file"
 
-        # Check hidden file 1: .current_log (stores actual log filename)
-        current_log_file = log_dir / ".current_log"
-        assert current_log_file.exists(), ".current_log tracking file not created"
-        stored_path = current_log_file.read_text().strip()
-        assert stored_path == str(main_log_file.absolute()), f".current_log contains wrong path: {stored_path}"
+            # Check hidden file 1: .current_log (stores actual log filename)
+            current_log_file = log_dir / ".current_log"
+            assert current_log_file.exists(), ".current_log tracking file not created"
+            stored_path = current_log_file.read_text().strip()
+            assert stored_path == str(main_log_file.absolute()), f".current_log contains wrong path: {stored_path}"
 
-        # Check for incident log file (created by incident handler)
-        # Exclude symlinks from the glob to find the actual incident file
-        incident_files = [f for f in log_dir.glob("incidents_*.log") if not f.is_symlink()]
-        if incident_files:  # Incident file might not exist yet if no incidents
-            # Get the most recent incident log file
-            incident_log_file = max(incident_files, key=lambda f: f.stat().st_mtime)
+            # Check for incident log file (created by incident handler)
+            # Exclude symlinks from the glob to find the actual incident file
+            incident_files = [f for f in log_dir.glob("incidents_*.log") if not f.is_symlink()]
+            if incident_files:  # Incident file might not exist yet if no incidents
+                # Get the most recent incident log file
+                incident_log_file = max(incident_files, key=lambda f: f.stat().st_mtime)
 
-            # Check symlink 2: incidents_latest.log
-            incidents_latest = log_dir / "incidents_latest.log"
-            if incidents_latest.exists():
-                assert (
-                    incidents_latest.exists() or incidents_latest.is_symlink()
-                ), "incidents_latest.log symlink not created"
-                if incidents_latest.is_symlink():
+                # Check symlink 2: incidents_latest.log
+                incidents_latest = log_dir / "incidents_latest.log"
+                if incidents_latest.exists():
                     assert (
-                        incidents_latest.resolve().name == incident_log_file.name
-                    ), "incidents_latest.log points to wrong file"
+                        incidents_latest.exists() or incidents_latest.is_symlink()
+                    ), "incidents_latest.log symlink not created"
+                    if incidents_latest.is_symlink():
+                        assert (
+                            incidents_latest.resolve().name == incident_log_file.name
+                        ), "incidents_latest.log points to wrong file"
 
-            # Check hidden file 2: .current_incident_log (stores actual incident log filename)
-            current_incident_file = log_dir / ".current_incident_log"
-            if current_incident_file.exists():
-                stored_incident_path = current_incident_file.read_text().strip()
-                assert stored_incident_path == str(
-                    incident_log_file.absolute()
-                ), f".current_incident_log contains wrong path: {stored_incident_path}"
+                # Check hidden file 2: .current_incident_log (stores actual incident log filename)
+                current_incident_file = log_dir / ".current_incident_log"
+                if current_incident_file.exists():
+                    stored_incident_path = current_incident_file.read_text().strip()
+                    assert stored_incident_path == str(
+                        incident_log_file.absolute()
+                    ), f".current_incident_log contains wrong path: {stored_incident_path}"
 
-        await runtime.shutdown()
+            await runtime.shutdown()
+        finally:
+            # CRITICAL: Restore PYTEST_CURRENT_TEST to not affect other tests
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_logging_symlinks_are_updated_on_restart(self, essential_config, allow_runtime_creation):
         """Test that symlinks are properly updated when runtime restarts."""
 
-        # Use the actual logs directory
-        log_dir = Path("logs")
+        # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+        try:
+            # Use the actual logs directory
+            log_dir = Path("logs")
 
-        # First runtime session
-        runtime1 = CIRISRuntime(
-            adapter_types=["cli"],
-            essential_config=essential_config,
-            modules=["mock_llm"],
-            timeout=2,
-        )
-        await runtime1.initialize()
+            # First runtime session
+            runtime1 = CIRISRuntime(
+                adapter_types=["cli"],
+                essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
+            )
+            await runtime1.initialize()
 
-        # Get first log file (the most recent one)
-        first_log_files = list(log_dir.glob("ciris_agent_*.log"))
-        assert len(first_log_files) > 0
-        first_log = max(first_log_files, key=lambda f: f.stat().st_mtime)
+            # Get first log file (the most recent one)
+            first_log_files = list(log_dir.glob("ciris_agent_*.log"))
+            assert len(first_log_files) > 0
+            first_log = max(first_log_files, key=lambda f: f.stat().st_mtime)
 
-        # Check symlink points to first log
-        latest_log = log_dir / "latest.log"
-        if latest_log.is_symlink():
-            assert latest_log.resolve().name == first_log.name
+            # Check symlink points to first log
+            latest_log = log_dir / "latest.log"
+            if latest_log.is_symlink():
+                assert latest_log.resolve().name == first_log.name
 
-        # Check .current_log points to first log
-        current_log_file = log_dir / ".current_log"
-        assert current_log_file.read_text().strip() == str(first_log.absolute())
+            # Check .current_log points to first log
+            current_log_file = log_dir / ".current_log"
+            assert current_log_file.read_text().strip() == str(first_log.absolute())
 
-        await runtime1.shutdown()
+            await runtime1.shutdown()
 
-        # Wait a moment to ensure different timestamp
-        await asyncio.sleep(0.1)
+            # Wait a moment to ensure different timestamp
+            await asyncio.sleep(0.1)
 
-        # Second runtime session
-        runtime2 = CIRISRuntime(
-            adapter_types=["cli"],
-            essential_config=essential_config,
-            modules=["mock_llm"],
-            timeout=2,
-        )
-        await runtime2.initialize()
+            # Second runtime session
+            runtime2 = CIRISRuntime(
+                adapter_types=["cli"],
+                essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
+            )
+            await runtime2.initialize()
 
-        # Get all log files and find the newest
-        all_log_files = list(log_dir.glob("ciris_agent_*.log"))
-        assert len(all_log_files) > 1, "Second log file not created"
-        newest_log = max(all_log_files, key=lambda f: f.stat().st_mtime)
+            # Get all log files and find the newest
+            all_log_files = list(log_dir.glob("ciris_agent_*.log"))
+            assert len(all_log_files) > 1, "Second log file not created"
+            newest_log = max(all_log_files, key=lambda f: f.stat().st_mtime)
 
-        # Verify symlink was updated to point to newest log
-        if latest_log.is_symlink():
-            assert latest_log.resolve().name == newest_log.name, "latest.log not updated to newest file"
+            # Verify symlink was updated to point to newest log
+            if latest_log.is_symlink():
+                assert latest_log.resolve().name == newest_log.name, "latest.log not updated to newest file"
 
-        # Verify .current_log was updated
-        assert current_log_file.read_text().strip() == str(newest_log.absolute()), ".current_log not updated"
+            # Verify .current_log was updated
+            assert current_log_file.read_text().strip() == str(newest_log.absolute()), ".current_log not updated"
 
-        await runtime2.shutdown()
+            await runtime2.shutdown()
+        finally:
+            # CRITICAL: Restore PYTEST_CURRENT_TEST to not affect other tests
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_incident_log_files_and_tracking(self, essential_config, allow_runtime_creation):
@@ -801,82 +822,93 @@ class TestLoggingInitializationFailFast:
     async def test_all_four_tracking_mechanisms(self, essential_config, allow_runtime_creation):
         """Explicitly test all 4 tracking mechanisms: 2 symlinks + 2 hidden files."""
 
-        # Use the actual logs directory
-        log_dir = Path("logs")
+        # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+        try:
+            # Use the actual logs directory
+            log_dir = Path("logs")
 
-        runtime = CIRISRuntime(
-            adapter_types=["cli"],
-            essential_config=essential_config,
-            modules=["mock_llm"],
-            timeout=2,
-        )
+            runtime = CIRISRuntime(
+                adapter_types=["cli"],
+                essential_config=essential_config,
+                modules=["mock_llm"],
+                timeout=2,
+            )
 
-        await runtime.initialize()
+            await runtime.initialize()
 
-        # Log some warnings to ensure incident file is created
-        logger = logging.getLogger("test")
-        logger.warning("Test warning 1")
-        logger.error("Test error 1")
-        await asyncio.sleep(0.1)  # Let handler write
+            # Log some warnings to ensure incident file is created
+            logger = logging.getLogger("test")
+            logger.warning("Test warning 1")
+            logger.error("Test error 1")
+            await asyncio.sleep(0.1)  # Let handler write
 
-        # The 4 tracking mechanisms:
-        # 1. latest.log (symlink to main log)
-        # 2. incidents_latest.log (symlink to incident log)
-        # 3. .current_log (hidden file with main log path)
-        # 4. .current_incident_log (hidden file with incident log path)
+            # The 4 tracking mechanisms:
+            # 1. latest.log (symlink to main log)
+            # 2. incidents_latest.log (symlink to incident log)
+            # 3. .current_log (hidden file with main log path)
+            # 4. .current_incident_log (hidden file with incident log path)
 
-        tracking_found = {}
+            tracking_found = {}
 
-        # Check mechanism 1: latest.log symlink
-        latest_log = log_dir / "latest.log"
-        tracking_found["latest.log"] = latest_log.exists() or latest_log.is_symlink()
+            # Check mechanism 1: latest.log symlink
+            latest_log = log_dir / "latest.log"
+            tracking_found["latest.log"] = latest_log.exists() or latest_log.is_symlink()
 
-        # Check mechanism 2: incidents_latest.log symlink
-        incidents_latest = log_dir / "incidents_latest.log"
-        tracking_found["incidents_latest.log"] = incidents_latest.exists() or incidents_latest.is_symlink()
+            # Check mechanism 2: incidents_latest.log symlink
+            incidents_latest = log_dir / "incidents_latest.log"
+            tracking_found["incidents_latest.log"] = incidents_latest.exists() or incidents_latest.is_symlink()
 
-        # Check mechanism 3: .current_log hidden file
-        current_log = log_dir / ".current_log"
-        tracking_found[".current_log"] = current_log.exists()
+            # Check mechanism 3: .current_log hidden file
+            current_log = log_dir / ".current_log"
+            tracking_found[".current_log"] = current_log.exists()
 
-        # Check mechanism 4: .current_incident_log hidden file
-        current_incident = log_dir / ".current_incident_log"
-        tracking_found[".current_incident_log"] = current_incident.exists()
+            # Check mechanism 4: .current_incident_log hidden file
+            current_incident = log_dir / ".current_incident_log"
+            tracking_found[".current_incident_log"] = current_incident.exists()
 
-        # Report what was found
-        print(f"\nTracking mechanisms found:")
-        for name, found in tracking_found.items():
-            status = "✓" if found else "✗"
-            print(f"  {status} {name}")
+            # Report what was found
+            print(f"\nTracking mechanisms found:")
+            for name, found in tracking_found.items():
+                status = "✓" if found else "✗"
+                print(f"  {status} {name}")
 
-        # Verify main tracking (at least 2 should exist for main log)
-        assert tracking_found["latest.log"], "latest.log symlink not found"
-        assert tracking_found[".current_log"], ".current_log hidden file not found"
+            # Verify main tracking (at least 2 should exist for main log)
+            assert tracking_found["latest.log"], "latest.log symlink not found"
+            assert tracking_found[".current_log"], ".current_log hidden file not found"
 
-        # For incident tracking, both might not exist if no incidents yet
-        # But if one exists, verify it's valid
-        if tracking_found["incidents_latest.log"]:
-            assert incidents_latest.exists(), "incidents_latest.log exists but is broken"
+            # For incident tracking, both might not exist if no incidents yet
+            # But if one exists, verify it's valid
+            if tracking_found["incidents_latest.log"]:
+                assert incidents_latest.exists(), "incidents_latest.log exists but is broken"
 
-        if tracking_found[".current_incident_log"]:
-            assert current_incident.exists(), ".current_incident_log exists but is broken"
-            # Verify it contains a valid path
-            incident_path = current_incident.read_text().strip()
-            assert Path(incident_path).exists(), f".current_incident_log points to non-existent file: {incident_path}"
+            if tracking_found[".current_incident_log"]:
+                assert current_incident.exists(), ".current_incident_log exists but is broken"
+                # Verify it contains a valid path
+                incident_path = current_incident.read_text().strip()
+                assert Path(
+                    incident_path
+                ).exists(), f".current_incident_log points to non-existent file: {incident_path}"
 
-        # Verify the main tracking files point to real log files
-        if latest_log.is_symlink():
-            target = latest_log.resolve()
-            assert target.exists(), f"latest.log points to non-existent file: {target}"
-            assert "ciris_agent_" in target.name, f"latest.log points to wrong file type: {target.name}"
+            # Verify the main tracking files point to real log files
+            if latest_log.is_symlink():
+                target = latest_log.resolve()
+                assert target.exists(), f"latest.log points to non-existent file: {target}"
+                assert "ciris_agent_" in target.name, f"latest.log points to wrong file type: {target.name}"
 
-        if current_log.exists():
-            main_path = current_log.read_text().strip()
-            assert Path(main_path).exists(), f".current_log points to non-existent file: {main_path}"
-            assert "ciris_agent_" in Path(main_path).name, f".current_log points to wrong file type: {main_path}"
+            if current_log.exists():
+                main_path = current_log.read_text().strip()
+                assert Path(main_path).exists(), f".current_log points to non-existent file: {main_path}"
+                assert "ciris_agent_" in Path(main_path).name, f".current_log points to wrong file type: {main_path}"
 
-        await runtime.shutdown()
+            # Summary assertion
+            found_count = sum(1 for found in tracking_found.values() if found)
+            assert (
+                found_count >= 2
+            ), f"Only {found_count}/4 tracking mechanisms found. Need at least main log tracking (2)."
 
-        # Summary assertion
-        found_count = sum(1 for found in tracking_found.values() if found)
-        assert found_count >= 2, f"Only {found_count}/4 tracking mechanisms found. Need at least main log tracking (2)."
+            await runtime.shutdown()
+        finally:
+            # CRITICAL: Restore PYTEST_CURRENT_TEST to not affect other tests
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env

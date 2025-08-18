@@ -1,0 +1,42 @@
+"""
+Global configuration mock for tests that need database access.
+
+This module provides a fixture that mocks the ServiceRegistry to return
+a config service with EssentialConfig, preventing "No configuration available"
+errors during testing.
+"""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from ciris_engine.schemas.config import EssentialConfig
+
+
+@pytest.fixture(autouse=False)
+def mock_config_service_registry(tmp_path):
+    """
+    Mock ServiceRegistry to provide config service with EssentialConfig.
+
+    Use this fixture in tests that access the database but don't explicitly
+    set up their own config service.
+    """
+    with patch("ciris_engine.logic.registries.base.ServiceRegistry") as mock_registry:
+        mock_instance = MagicMock()
+        mock_config_with_essential = MagicMock()
+        mock_config_with_essential.essential_config = EssentialConfig(
+            sqllite_db_path=str(tmp_path / "test.db"), archive_dir_path=str(tmp_path / "archive")
+        )
+        mock_instance.get_services_by_type.return_value = [mock_config_with_essential]
+        mock_registry.return_value = mock_instance
+        yield mock_instance
+
+
+@pytest.fixture(autouse=False)
+def mock_db_path(tmp_path):
+    """
+    Direct mock of get_sqlite_db_full_path for simpler tests.
+    """
+    with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path") as mock_get_db:
+        mock_get_db.return_value = str(tmp_path / "test.db")
+        yield mock_get_db

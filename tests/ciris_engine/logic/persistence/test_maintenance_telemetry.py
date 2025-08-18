@@ -2,12 +2,13 @@
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
 
 from ciris_engine.logic.persistence.maintenance import DatabaseMaintenanceService
+from ciris_engine.schemas.config import EssentialConfig
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 
 
@@ -40,17 +41,21 @@ class TestDatabaseMaintenanceTelemetry:
         return str(archive_dir)
 
     @pytest_asyncio.fixture
-    async def maintenance_service(self, mock_time_service, mock_config_service, temp_archive_dir):
+    async def maintenance_service(self, mock_time_service, mock_config_service, temp_archive_dir, tmp_path):
         """Create the database maintenance service."""
-        service = DatabaseMaintenanceService(
-            time_service=mock_time_service,
-            archive_dir_path=temp_archive_dir,
-            archive_older_than_hours=24,
-            config_service=mock_config_service,
-        )
-        await service.start()
-        service._start_time = mock_time_service.now()
-        return service
+        # Mock get_sqlite_db_full_path directly to avoid ServiceRegistry lookup
+        with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path") as mock_get_db_path:
+            mock_get_db_path.return_value = str(tmp_path / "test.db")
+
+            service = DatabaseMaintenanceService(
+                time_service=mock_time_service,
+                archive_dir_path=temp_archive_dir,
+                archive_older_than_hours=24,
+                config_service=mock_config_service,
+            )
+            await service.start()
+            service._start_time = mock_time_service.now()
+            yield service
 
     @pytest.mark.asyncio
     async def test_get_metrics(self, maintenance_service):

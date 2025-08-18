@@ -696,9 +696,14 @@ class TestEdgeCases:
         test_thought: Thought,
         dispatch_context: DispatchContext,
         test_task: Task,
+        tmp_path,
     ) -> None:
         """Test handling when follow-up thought creation fails."""
-        with patch("ciris_engine.logic.handlers.external.speak_handler.persistence") as mock_persistence:
+        # Mock get_sqlite_db_full_path to avoid config service lookup
+        with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path") as mock_get_db_path, patch(
+            "ciris_engine.logic.handlers.external.speak_handler.persistence"
+        ) as mock_persistence:
+            mock_get_db_path.return_value = str(tmp_path / "test.db")
             mock_persistence.get_task_by_id.return_value = test_task
             mock_persistence.add_thought.side_effect = Exception("DB error")
             mock_persistence.update_thought_status = Mock()

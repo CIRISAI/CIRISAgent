@@ -11,9 +11,10 @@ from ciris_engine.logic.persistence.maintenance import DatabaseMaintenanceServic
 from ciris_engine.schemas.config import EssentialConfig
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 
+# Import the mock_db_path fixture from conftest
+from tests.conftest_config_mock import mock_db_path  # noqa: F401
 
-@patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path")
-@patch("ciris_engine.logic.persistence.get_sqlite_db_full_path")
+
 class TestDatabaseMaintenanceTelemetry:
     """Test the database maintenance service metrics functionality."""
 
@@ -49,14 +50,13 @@ class TestDatabaseMaintenanceTelemetry:
         mock_config_service,
         temp_archive_dir,
         tmp_path,
-        mock_get_db_path_persistence,
-        mock_get_db_path_config,
+        monkeypatch,
     ):
         """Create the database maintenance service."""
-        # Configure both mocks to return the test database path
+        # Patch database path functions for the duration of the test
         test_db_path = str(tmp_path / "test.db")
-        mock_get_db_path_persistence.return_value = test_db_path
-        mock_get_db_path_config.return_value = test_db_path
+        monkeypatch.setattr("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", lambda: test_db_path)
+        monkeypatch.setattr("ciris_engine.logic.persistence.get_sqlite_db_full_path", lambda: test_db_path)
 
         service = DatabaseMaintenanceService(
             time_service=mock_time_service,
@@ -69,7 +69,7 @@ class TestDatabaseMaintenanceTelemetry:
         return service
 
     @pytest.mark.asyncio
-    async def test_get_metrics(self, mock_get_db_path_persistence, mock_get_db_path_config, maintenance_service):
+    async def test_get_metrics(self, maintenance_service):
         """Test getting metrics data from database maintenance service."""
         # Set up some metrics
         maintenance_service._cleanup_runs = 5
@@ -97,9 +97,7 @@ class TestDatabaseMaintenanceTelemetry:
         assert "archive_due" in metrics
 
     @pytest.mark.asyncio
-    async def test_get_metrics_no_archive(
-        self, mock_get_db_path_persistence, mock_get_db_path_config, maintenance_service
-    ):
+    async def test_get_metrics_no_archive(self, maintenance_service):
         """Test metrics when no archives exist."""
         # Set metrics to zero
         maintenance_service._archive_runs = 0
@@ -110,9 +108,7 @@ class TestDatabaseMaintenanceTelemetry:
         assert metrics["healthy"] == 1.0  # Service should be healthy
 
     @pytest.mark.asyncio
-    async def test_get_metrics_without_run_count(
-        self, mock_get_db_path_persistence, mock_get_db_path_config, maintenance_service
-    ):
+    async def test_get_metrics_without_run_count(self, maintenance_service):
         """Test metrics when task has never run."""
         # Reset all counters
         maintenance_service._cleanup_runs = 0
@@ -127,9 +123,7 @@ class TestDatabaseMaintenanceTelemetry:
         assert metrics["healthy"] == 1.0
 
     @pytest.mark.asyncio
-    async def test_get_metrics_without_start_time(
-        self, mock_get_db_path_persistence, mock_get_db_path_config, maintenance_service
-    ):
+    async def test_get_metrics_without_start_time(self, maintenance_service):
         """Test metrics without start time."""
         maintenance_service._start_time = None
 
@@ -139,9 +133,7 @@ class TestDatabaseMaintenanceTelemetry:
         assert metrics["healthy"] == 1.0  # Still healthy
 
     @pytest.mark.asyncio
-    async def test_get_metrics_error_handling(
-        self, mock_get_db_path_persistence, mock_get_db_path_config, maintenance_service
-    ):
+    async def test_get_metrics_error_handling(self, maintenance_service):
         """Test metrics handles errors gracefully."""
         # Set error count
         maintenance_service._error_count = 5
@@ -152,9 +144,7 @@ class TestDatabaseMaintenanceTelemetry:
         assert metrics["error_rate"] > 0  # Should have error rate
 
     @pytest.mark.asyncio
-    async def test_get_metrics_with_running_status(
-        self, mock_get_db_path_persistence, mock_get_db_path_config, maintenance_service
-    ):
+    async def test_get_metrics_with_running_status(self, maintenance_service):
         """Test metrics reflects running status."""
         # The task_running metric is based on the _task attribute being active
         # When the service starts, it creates a scheduled task that runs in the background

@@ -159,14 +159,49 @@ class TestCircuitBreakerReset:
         """Test resetting all circuit breakers."""
         # Setup
         mock_runtime.service_registry.reset_circuit_breakers = MagicMock()
+        # Mock the _circuit_breakers attribute that the code accesses
+        mock_runtime.service_registry._circuit_breakers = {
+            "provider1": MagicMock(),
+            "provider2": MagicMock(),
+            "provider3": MagicMock(),
+        }
 
         # Execute
         result = await runtime_control_service.reset_circuit_breakers()
 
         # Verify
         assert result.success is True
-        assert "Circuit breakers reset" in result.message
+        assert "Reset all 3 circuit breakers" in result.message
+        assert result.reset_count == 3
         mock_runtime.service_registry.reset_circuit_breakers.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_reset_specific_service_type_breakers(self, runtime_control_service, mock_runtime):
+        """Test resetting circuit breakers for a specific service type."""
+        # Setup
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create mock providers with circuit breakers
+        mock_provider1 = MagicMock()
+        mock_provider1.name = "LLMProvider1"
+        mock_provider1.circuit_breaker = MagicMock()
+
+        mock_provider2 = MagicMock()
+        mock_provider2.name = "LLMProvider2"
+        mock_provider2.circuit_breaker = MagicMock()
+
+        # Mock the _services dictionary
+        mock_runtime.service_registry._services = {ServiceType.LLM: [mock_provider1, mock_provider2]}
+
+        # Execute
+        result = await runtime_control_service.reset_circuit_breakers(service_type="llm")
+
+        # Verify
+        assert result.success is True
+        assert "Reset 2 circuit breakers for llm services" in result.message
+        assert result.reset_count == 2
+        mock_provider1.circuit_breaker.reset.assert_called_once()
+        mock_provider2.circuit_breaker.reset.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_reset_breakers_no_registry(self, runtime_control_service):

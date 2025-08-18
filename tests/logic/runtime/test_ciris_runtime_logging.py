@@ -292,24 +292,22 @@ class TestLoggingInitializationFailFast:
         log_dir = temp_dir / "logs"
         log_dir.mkdir(exist_ok=True)
 
-        # Patch the log directory
-        with patch("ciris_engine.logic.runtime.ciris_runtime.Path") as MockPath:
-            MockPath.return_value = log_dir
+        # No need to patch Path - just let it create logs in the default location
+        runtime = CIRISRuntime(
+            adapter_types=["cli"],
+            essential_config=essential_config,
+            modules=["mock_llm"],
+            timeout=2,
+        )
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-            )
+        await runtime.initialize()
 
-            await runtime.initialize()
+        # Check that log files were created in the default logs directory
+        default_log_dir = Path("logs")
+        log_files = list(default_log_dir.glob("ciris_agent_*.log"))
+        assert len(log_files) > 0, "No log files created"
 
-            # After initialization, check that log files were created
-            # Note: In the actual test, the patched setup_basic_logging might not create real files
-            # This test is more about ensuring the initialization path is followed
-
-            await runtime.shutdown()
+        await runtime.shutdown()
 
     @pytest.mark.asyncio
     async def test_logging_handles_symlink_failures_gracefully(self, essential_config, allow_runtime_creation):
@@ -577,7 +575,8 @@ class TestLoggingInitializationFailFast:
         # Check that the main log file was created
         log_files = list(log_dir.glob("ciris_agent_*.log"))
         assert len(log_files) > 0, "No log files created"
-        main_log_file = log_files[0]
+        # Get the most recent log file (sort by modification time)
+        main_log_file = max(log_files, key=lambda f: f.stat().st_mtime)
         assert main_log_file.exists(), f"Main log file {main_log_file} does not exist"
         assert main_log_file.stat().st_size >= 0, "Main log file is not accessible"
 
@@ -596,7 +595,8 @@ class TestLoggingInitializationFailFast:
         # Check for incident log file (created by incident handler)
         incident_files = list(log_dir.glob("incidents_*.log"))
         if incident_files:  # Incident file might not exist yet if no incidents
-            incident_log_file = incident_files[0]
+            # Get the most recent incident log file
+            incident_log_file = max(incident_files, key=lambda f: f.stat().st_mtime)
 
             # Check symlink 2: incidents_latest.log
             incidents_latest = log_dir / "incidents_latest.log"
@@ -635,10 +635,10 @@ class TestLoggingInitializationFailFast:
         )
         await runtime1.initialize()
 
-        # Get first log file
+        # Get first log file (the most recent one)
         first_log_files = list(log_dir.glob("ciris_agent_*.log"))
         assert len(first_log_files) > 0
-        first_log = first_log_files[0]
+        first_log = max(first_log_files, key=lambda f: f.stat().st_mtime)
 
         # Check symlink points to first log
         latest_log = log_dir / "latest.log"
@@ -704,7 +704,8 @@ class TestLoggingInitializationFailFast:
         # Check for incident log file
         incident_files = list(log_dir.glob("incidents_*.log"))
         if incident_files:  # Should exist after logging warnings/errors
-            incident_log = incident_files[0]
+            # Get the most recent incident log file
+            incident_log = max(incident_files, key=lambda f: f.stat().st_mtime)
             assert incident_log.exists(), f"Incident log {incident_log} does not exist"
 
             # Check incidents_latest.log symlink

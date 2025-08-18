@@ -263,14 +263,16 @@ class TestRuntimeControlServiceSingleStep:
     def mock_runtime(self):
         """Create mock runtime with agent processor."""
         mock_runtime = Mock()
-        mock_processor = AsyncMock()
-        mock_processor.is_paused.return_value = True
-        mock_processor.single_step.return_value = {
-            "success": True,
-            "thought_id": "test_thought",
-            "processing_time_ms": 150.0,
-            "current_step": "build_context",
-        }
+        mock_processor = Mock()  # Use regular Mock, not AsyncMock
+        mock_processor.is_paused = Mock(return_value=True)  # is_paused is a regular method
+        mock_processor.single_step = AsyncMock(
+            return_value={  # single_step is async
+                "success": True,
+                "thought_id": "test_thought",
+                "processing_time_ms": 150.0,
+                "current_step": "build_context",
+            }
+        )
         mock_runtime.agent_processor = mock_processor
         return mock_runtime
 

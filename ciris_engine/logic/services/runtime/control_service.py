@@ -1301,7 +1301,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 message=message,
                 timestamp=self._now(),
                 service_type=service_type,
-                providers_reset=providers_reset,
+                reset_count=len(providers_reset),
             )
         except Exception as e:
             logger.error(f"Failed to reset circuit breakers: {e}")

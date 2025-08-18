@@ -12,7 +12,23 @@ async def get_telemetry_from_service(
     telemetry_service, view: str, category: Optional[str], format: str, live: bool
 ) -> Dict:
     """Get telemetry from the service's built-in aggregator."""
-    return await telemetry_service.get_aggregated_telemetry(view=view, category=category, format=format, live=live)
+    # The telemetry service's get_aggregated_telemetry() doesn't accept parameters
+    # Get the raw data and apply filtering in the API layer
+    result = await telemetry_service.get_aggregated_telemetry()
+
+    # Add metadata about the requested view and category
+    result["_metadata"] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "view": view,
+        "category": category,
+        "cached": not live,
+        "format": format,
+    }
+
+    # Apply view filtering if needed (handled by the API layer)
+    # The actual view filtering is done by the endpoint after this function returns
+
+    return result
 
 
 async def get_telemetry_fallback(app_state, view: str, category: Optional[str]) -> Dict:

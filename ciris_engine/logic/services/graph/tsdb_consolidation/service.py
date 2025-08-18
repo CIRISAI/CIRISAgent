@@ -64,6 +64,7 @@ class TSDBConsolidationService(BaseGraphService):
         time_service: Optional[TimeServiceProtocol] = None,
         consolidation_interval_hours: int = 6,
         raw_retention_hours: int = 24,
+        db_path: Optional[str] = None,
     ) -> None:
         """
         Initialize the consolidation service.
@@ -73,9 +74,11 @@ class TSDBConsolidationService(BaseGraphService):
             time_service: Time service for consistent timestamps
             consolidation_interval_hours: How often to run (default: 6)
             raw_retention_hours: How long to keep raw data (default: 24)
+            db_path: Database path to use (if not provided, uses default)
         """
         super().__init__(memory_bus=memory_bus, time_service=time_service)
         self.service_name = "TSDBConsolidationService"
+        self.db_path = db_path
 
         # Initialize components
         self._period_manager = PeriodManager(consolidation_interval_hours)
@@ -745,7 +748,7 @@ class TSDBConsolidationService(BaseGraphService):
         try:
             from ciris_engine.logic.persistence.db.core import get_db_connection
 
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
                 # Check for oldest TSDB data
@@ -795,7 +798,7 @@ class TSDBConsolidationService(BaseGraphService):
             # Connect to database
             from ciris_engine.logic.config import get_sqlite_db_full_path
 
-            db_path = get_sqlite_db_full_path()
+            db_path = self.db_path or get_sqlite_db_full_path()
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
@@ -1058,7 +1061,7 @@ class TSDBConsolidationService(BaseGraphService):
             # Check if SUMMARIZES edges already exist
             from ciris_engine.logic.persistence.db.core import get_db_connection
 
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -1263,7 +1266,7 @@ class TSDBConsolidationService(BaseGraphService):
 
             from ciris_engine.logic.persistence.db.core import get_db_connection
 
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
                 # Get all summary types to consolidate
@@ -1640,7 +1643,7 @@ class TSDBConsolidationService(BaseGraphService):
                     # Check if it already has a TEMPORAL_PREV edge
                     from ciris_engine.logic.persistence.db.core import get_db_connection
 
-                    with get_db_connection() as conn:
+                    with get_db_connection(db_path=self.db_path) as conn:
                         cursor = conn.cursor()
                         cursor.execute(
                             """
@@ -1744,7 +1747,7 @@ class TSDBConsolidationService(BaseGraphService):
 
             from ciris_engine.logic.persistence.db.core import get_db_connection
 
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
                 # Get all extensive summaries from the calendar month

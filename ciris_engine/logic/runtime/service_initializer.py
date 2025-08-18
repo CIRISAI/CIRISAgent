@@ -14,6 +14,7 @@ import aiofiles
 
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor
+from ciris_engine.logic.persistence import get_sqlite_db_full_path
 from ciris_engine.logic.persistence.maintenance import DatabaseMaintenanceService
 from ciris_engine.logic.registries.base import Priority, ServiceRegistry
 
@@ -128,14 +129,13 @@ class ServiceInitializer:
         logger.info("InitializationService initialized")
 
         # Initialize ResourceMonitorService
-        from ciris_engine.logic.persistence import get_sqlite_db_full_path
         from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService
         from ciris_engine.schemas.services.resources_core import ResourceBudget
 
         # Create default resource budget
         budget = ResourceBudget()  # Uses defaults from schema
         self.resource_monitor_service = ResourceMonitorService(
-            budget=budget, db_path=get_sqlite_db_full_path(), time_service=self.time_service
+            budget=budget, db_path=get_sqlite_db_full_path(self.essential_config), time_service=self.time_service
         )
         await self.resource_monitor_service.start()
         self._services_started_count += 1
@@ -147,11 +147,9 @@ class ServiceInitializer:
         import os
         from pathlib import Path
 
-        from ciris_engine.logic.persistence import get_sqlite_db_full_path
-
-        # Ensure .ciris_keys directory exists
-        keys_dir = Path(".ciris_keys")
-        keys_dir.mkdir(exist_ok=True)
+        # Use configurable secrets key path from essential config
+        keys_dir = Path(self.essential_config.security.secrets_key_path)
+        keys_dir.mkdir(parents=True, exist_ok=True)
 
         # Load or generate master key
         master_key_path = keys_dir / "secrets_master.key"
@@ -217,7 +215,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 await f.write(readme_content)
             logger.info("Created .ciris_keys/README.md")
 
-        db_path = get_sqlite_db_full_path()
+        db_path = get_sqlite_db_full_path(self.essential_config)
         secrets_db_path = db_path.replace(".db", "_secrets.db")
 
         if self.time_service is None:
@@ -240,9 +238,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         logger.info("SecretsToolService created and started")
 
-        # LocalGraphMemoryService uses SQLite by default
+        # LocalGraphMemoryService needs the correct db path from our config
+        db_path = get_sqlite_db_full_path(self.essential_config)
         self.memory_service = LocalGraphMemoryService(
-            time_service=self.time_service, secrets_service=self.secrets_service
+            db_path=db_path, time_service=self.time_service, secrets_service=self.secrets_service
         )
         self.memory_service.start()
         self._services_started_count += 1
@@ -328,9 +327,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         if self.config_accessor is None:
             raise RuntimeError("ConfigAccessor must be initialized before AuthenticationService")
-        auth_db_path = await self.config_accessor.get_path("database.auth_db", Path("data/ciris_auth.db"))
+        # Use the same directory as main database, but different file
+        main_db_path = get_sqlite_db_full_path(self.essential_config)
+        auth_db_path = main_db_path.replace(".db", "_auth.db")
         self.auth_service = AuthenticationService(
-            db_path=str(auth_db_path), time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
+            db_path=auth_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
         )
         await self.auth_service.start()
         self._services_started_count += 1
@@ -536,9 +537,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Initialize task scheduler service
         from ciris_engine.logic.services.lifecycle.scheduler import TaskSchedulerService
 
-        self.task_scheduler_service = TaskSchedulerService(
-            db_path=getattr(config, "database_path", "data/ciris_engine.db"), time_service=self.time_service
-        )
+        # Get the correct db path from our essential config
+        db_path = get_sqlite_db_full_path(self.essential_config)
+        self.task_scheduler_service = TaskSchedulerService(db_path=db_path, time_service=self.time_service)
         await self.task_scheduler_service.start()
         self._services_started_count += 1
         logger.info("Task scheduler service initialized")
@@ -554,11 +555,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
         config = self.essential_config
         graph_config = config.graph if hasattr(config, "graph") else None
 
+        # Get the correct db path from our essential config
+        db_path = get_sqlite_db_full_path(self.essential_config)
         self.tsdb_consolidation_service = TSDBConsolidationService(
             memory_bus=self.bus_manager.memory,  # Use memory bus, not direct service
             time_service=self.time_service,  # Pass time service
             consolidation_interval_hours=6,  # Fixed for calendar alignment
             raw_retention_hours=graph_config.tsdb_raw_retention_hours if graph_config else 24,
+            db_path=db_path,
         )
         await self.tsdb_consolidation_service.start()
         self._services_started_count += 1
@@ -601,13 +605,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("Self observation service initialized and started")
 
         # Initialize visibility service
-        from ciris_engine.logic.persistence import get_sqlite_db_full_path
         from ciris_engine.logic.services.governance.visibility import VisibilityService
 
         assert self.bus_manager is not None
         assert self.time_service is not None
         self.visibility_service = VisibilityService(
-            bus_manager=self.bus_manager, time_service=self.time_service, db_path=get_sqlite_db_full_path()
+            bus_manager=self.bus_manager,
+            time_service=self.time_service,
+            db_path=get_sqlite_db_full_path(self.essential_config),
         )
         await self.visibility_service.start()
         self._services_started_count += 1

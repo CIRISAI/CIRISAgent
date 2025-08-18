@@ -73,6 +73,7 @@ class CIRISRuntime:
         self.adapter_configs = adapter_configs or {}
         self.adapters: List[BaseAdapterProtocol] = []
         self.modules_to_load = kwargs.get("modules", [])
+        self.debug = kwargs.get("debug", False)
 
         # CRITICAL: Check for mock LLM environment variable
         if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
@@ -517,10 +518,10 @@ class CIRISRuntime:
 
     async def _init_database(self) -> None:
         """Initialize database and run migrations."""
-        # Pass the db path from our config
-        db_path = persistence.get_sqlite_db_full_path()
+        # Pass the db path from our config - MUST pass the config!
+        db_path = persistence.get_sqlite_db_full_path(self.essential_config)
         persistence.initialize_database(db_path)
-        persistence.run_migrations()
+        persistence.run_migrations(db_path)
 
         if not self.essential_config:
             # Use default essential config if none provided
@@ -530,8 +531,9 @@ class CIRISRuntime:
     async def _verify_database_integrity(self) -> bool:
         """Verify database integrity before proceeding."""
         try:
-            # Check core tables exist
-            conn = persistence.get_db_connection()
+            # Check core tables exist - pass the correct db path!
+            db_path = persistence.get_sqlite_db_full_path(self.essential_config)
+            conn = persistence.get_db_connection(db_path)
             cursor = conn.cursor()
 
             required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]

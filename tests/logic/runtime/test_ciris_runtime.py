@@ -131,6 +131,7 @@ def essential_config(temp_dir):
         security=SecurityConfig(
             audit_retention_days=7,
             secrets_encryption_key_env="TEST_KEY",
+            secrets_key_path=temp_dir / "secrets_keys",
             audit_key_path=temp_dir / "audit_keys",
             enable_signed_audit=False,
             max_thought_depth=5,

@@ -71,9 +71,12 @@ class IdentityManager:
     ) -> Optional[dict]:  # NOSONAR: Maintains async consistency in identity chain
         """Retrieve agent identity from the persistence tier."""
         try:
+            from ciris_engine.logic.config import get_sqlite_db_full_path
             from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
 
-            identity = retrieve_agent_identity()
+            # Get the correct db path from our config
+            db_path = get_sqlite_db_full_path(self.config)
+            identity = retrieve_agent_identity(db_path=db_path)
             if identity:
                 return identity.model_dump()
 
@@ -85,9 +88,12 @@ class IdentityManager:
     async def _save_identity_to_graph(self, identity: AgentIdentityRoot) -> None:
         """Save agent identity to the persistence tier."""
         try:
+            from ciris_engine.logic.config import get_sqlite_db_full_path
             from ciris_engine.logic.persistence.models.identity import store_agent_identity
 
-            success = store_agent_identity(identity, self.time_service)
+            # Get the correct db path from our config
+            db_path = get_sqlite_db_full_path(self.config)
+            success = store_agent_identity(identity, self.time_service, db_path=db_path)
             if success:
                 logger.info("Agent identity saved to persistence tier")
             else:

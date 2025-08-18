@@ -58,9 +58,45 @@ def essential_config(temp_dir):
     templates_dir = temp_dir / "templates"
     templates_dir.mkdir(exist_ok=True)
 
-    # Create a simple test template
+    # Create a valid test template using the actual test.yaml content
     test_template = templates_dir / "test.yaml"
-    test_template.write_text("name: test\nversion: 1.0.0\n")
+    test_template_content = """description: 'Agent profile: test'
+name: test
+role_description: 'Test Agent - Minimal agent for development and debugging purposes only. Limited to observe action for safety.'
+permitted_actions:
+- observe
+stewardship:
+  stewardship_tier: 1
+  creator_intent_statement:
+    purpose_and_functionalities:
+    - Test template for development and debugging purposes only.
+    - Minimal agent for testing basic functionality.
+    - Not intended for production use.
+    limitations_and_design_choices:
+    - Designed with a fixed ethical framework (Covenant 1.0b).
+    - Limited to observe action only.
+    - Minimal configuration for testing purposes.
+    anticipated_benefits:
+    - Safe testing environment for development.
+    - Minimal risk due to limited capabilities.
+    - Quick iteration during development.
+    anticipated_risks:
+    - Not suitable for production environments.
+    - Limited functionality may not represent real agent behavior.
+  creator_ledger_entry:
+    creator_id: eric-moore
+    creation_timestamp: '2025-08-07T00:00:00Z'
+    covenant_version: 1.0b
+    book_vi_compliance_check: passed
+    stewardship_tier_calculation:
+      creator_influence_score: 7
+      risk_magnitude: 1
+      formula: ceil((CIS * RM) / 7)
+      result: 1
+    public_key_fingerprint: NEEDS_FINGERPRINTING
+    signature: NEEDS_SIGNING
+"""
+    test_template.write_text(test_template_content)
 
     return EssentialConfig(
         database=DatabaseConfig(
@@ -77,6 +113,7 @@ def essential_config(temp_dir):
         security=SecurityConfig(
             audit_retention_days=7,
             secrets_encryption_key_env="TEST_KEY",
+            secrets_key_path=temp_dir / "secrets_keys",
             audit_key_path=temp_dir / "audit_keys",
             enable_signed_audit=False,
             max_thought_depth=5,
@@ -209,18 +246,22 @@ class TestLoggingInitializationFailFast:
         # Create a mock TimeService
         mock_time_service = MockTimeService()
 
-        # Patch setup_basic_logging to track if it was called correctly
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-            mock_setup.return_value = None  # Success
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-            )
+        try:
+            # Patch setup_basic_logging to track if it was called correctly
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                mock_setup.return_value = None  # Success
 
-            await runtime.initialize()
+                runtime = CIRISRuntime(
+                    adapter_types=["cli"],
+                    essential_config=essential_config,
+                    modules=["mock_llm"],
+                    timeout=2,
+                )
+
+                await runtime.initialize()
 
             # Verify setup_basic_logging was called
             assert mock_setup.called
@@ -238,6 +279,10 @@ class TestLoggingInitializationFailFast:
             assert kwargs.get("time_service") is not None
 
             await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_logging_creates_all_required_files(self, essential_config, allow_runtime_creation, temp_dir):

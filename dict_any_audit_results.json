@@ -1710,7 +1710,7 @@
     ]
   },
   "tests": {
-    "occurrences": 38,
+    "occurrences": 39,
     "findings": [
       {
         "file": "tests/test_handlers_api_mock_simple.py",
@@ -2014,6 +2014,14 @@
         "class": "TestTelemetrySummary",
         "function": "mock_query_metrics",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/runtime/test_modular_service_loader.py",
+        "line": 43,
+        "class": "MockService",
+        "function": "health_check",
+        "context": "return_type",
         "usage_hint": "generic_data"
       }
     ]
@@ -3016,7 +3024,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 374,
-    "files_affected": 116
+    "occurrences": 375,
+    "files_affected": 117
   }
 }

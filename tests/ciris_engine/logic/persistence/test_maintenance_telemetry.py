@@ -44,9 +44,12 @@ class TestDatabaseMaintenanceTelemetry:
     async def maintenance_service(self, mock_time_service, mock_config_service, temp_archive_dir, tmp_path):
         """Create the database maintenance service."""
         # Mock get_sqlite_db_full_path directly to avoid ServiceRegistry lookup
-        with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path") as mock_get_db_path:
-            mock_get_db_path.return_value = str(tmp_path / "test.db")
+        # Use patch.object to keep the mock active during the entire test
+        patcher = patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path")
+        mock_get_db_path = patcher.start()
+        mock_get_db_path.return_value = str(tmp_path / "test.db")
 
+        try:
             service = DatabaseMaintenanceService(
                 time_service=mock_time_service,
                 archive_dir_path=temp_archive_dir,
@@ -56,6 +59,8 @@ class TestDatabaseMaintenanceTelemetry:
             await service.start()
             service._start_time = mock_time_service.now()
             yield service
+        finally:
+            patcher.stop()
 
     @pytest.mark.asyncio
     async def test_get_metrics(self, maintenance_service):

@@ -16,6 +16,9 @@ from ciris_engine.logic.persistence import initialize_database
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
 from ciris_engine.schemas.services.authority_core import DeferralApprovalContext
 
+# Import the mock_db_path fixture from conftest
+from tests.conftest_config_mock import mock_db_path  # noqa: F401
+
 
 @pytest.fixture
 def mock_time_service():
@@ -160,7 +163,7 @@ class TestDiscordAdapterCore:
         discord_adapter.bus_manager.memory.memorize_metric.assert_called()
 
     @pytest.mark.asyncio
-    async def test_send_message_with_rate_limiting(self, discord_adapter):
+    async def test_send_message_with_rate_limiting(self, discord_adapter, mock_db_path):
         """Test message sending respects rate limits."""
         # Mock connection manager to return connected
         discord_adapter._connection_manager.is_connected = Mock(return_value=True)

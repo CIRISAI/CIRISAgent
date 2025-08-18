@@ -291,11 +291,10 @@ class TestLoggingInitializationFailFast:
         # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
         original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
         try:
-            # Create a logs directory in temp
-            log_dir = temp_dir / "logs"
-            log_dir.mkdir(exist_ok=True)
+            # Ensure the default logs directory exists
+            default_log_dir = Path("logs")
+            default_log_dir.mkdir(exist_ok=True)
 
-            # No need to patch Path - just let it create logs in the default location
             runtime = CIRISRuntime(
                 adapter_types=["cli"],
                 essential_config=essential_config,
@@ -306,9 +305,10 @@ class TestLoggingInitializationFailFast:
             await runtime.initialize()
 
             # Check that log files were created in the default logs directory
-            default_log_dir = Path("logs")
             log_files = list(default_log_dir.glob("ciris_agent_*.log"))
-            assert len(log_files) > 0, "No log files created"
+            assert (
+                len(log_files) > 0
+            ), f"No log files created in {default_log_dir}. Files in dir: {list(default_log_dir.iterdir())}"
 
             await runtime.shutdown()
         finally:
@@ -624,8 +624,9 @@ class TestLoggingInitializationFailFast:
         # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
         original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
         try:
-            # Use the actual logs directory (will be created if it doesn't exist)
+            # Ensure the logs directory exists (will be created if it doesn't exist)
             log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
 
             # Don't patch setup_basic_logging - let it run for real
             runtime = CIRISRuntime(
@@ -697,8 +698,9 @@ class TestLoggingInitializationFailFast:
         # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
         original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
         try:
-            # Use the actual logs directory
+            # Ensure the logs directory exists
             log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
 
             # First runtime session
             runtime1 = CIRISRuntime(
@@ -825,8 +827,9 @@ class TestLoggingInitializationFailFast:
         # CRITICAL: Temporarily clear PYTEST_CURRENT_TEST to enable logging file creation
         original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
         try:
-            # Use the actual logs directory
+            # Ensure the logs directory exists
             log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
 
             runtime = CIRISRuntime(
                 adapter_types=["cli"],

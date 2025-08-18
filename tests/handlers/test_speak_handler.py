@@ -33,6 +33,9 @@ from ciris_engine.schemas.runtime.models import Task, Thought, ThoughtContext
 from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
+# Import the mock_db_path fixture to avoid database config issues
+from tests.conftest_config_mock import mock_db_path  # noqa: F401
+
 # Import database fixtures would go here if we were using a real database
 # For now, these tests use mocked persistence
 
@@ -696,14 +699,11 @@ class TestEdgeCases:
         test_thought: Thought,
         dispatch_context: DispatchContext,
         test_task: Task,
-        tmp_path,
+        mock_db_path,  # Use the fixture
     ) -> None:
         """Test handling when follow-up thought creation fails."""
-        # Mock get_sqlite_db_full_path to avoid config service lookup
-        with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path") as mock_get_db_path, patch(
-            "ciris_engine.logic.handlers.external.speak_handler.persistence"
-        ) as mock_persistence:
-            mock_get_db_path.return_value = str(tmp_path / "test.db")
+        # mock_db_path fixture already handles the database path mocking
+        with patch("ciris_engine.logic.handlers.external.speak_handler.persistence") as mock_persistence:
             mock_persistence.get_task_by_id.return_value = test_task
             mock_persistence.add_thought.side_effect = Exception("DB error")
             mock_persistence.update_thought_status = Mock()

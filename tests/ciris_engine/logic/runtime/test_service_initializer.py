@@ -29,6 +29,19 @@ class TestServiceInitializer:
         config.log_level = "INFO"
         config.openai_api_key = "test-key"
         config.anthropic_api_key = None
+
+        # Add database attribute for db_paths functions
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        mock_database.secrets_db = Path(temp_data_dir) / "secrets.db"
+        mock_database.audit_db = Path(temp_data_dir) / "audit.db"
+        config.database = mock_database
+
+        # Add security attribute with secrets_key_path
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
         # Add model_dump method that returns a dict for config migration
         config.model_dump = Mock(
             return_value={
@@ -37,6 +50,14 @@ class TestServiceInitializer:
                 "log_level": "INFO",
                 "openai_api_key": "test-key",
                 "anthropic_api_key": None,
+                "database": {
+                    "main_db": str(Path(temp_data_dir) / "test.db"),
+                    "secrets_db": str(Path(temp_data_dir) / "secrets.db"),
+                    "audit_db": str(Path(temp_data_dir) / "audit.db"),
+                },
+                "security": {
+                    "secrets_key_path": str(Path(temp_data_dir) / ".ciris_keys"),
+                },
             }
         )
         return config

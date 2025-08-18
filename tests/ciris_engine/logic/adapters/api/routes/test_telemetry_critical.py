@@ -106,6 +106,7 @@ def fully_initialized_app():
 
     # Governance Services (4)
     app.state.wise_authority = MagicMock()
+    app.state.wise_authority_service = app.state.wise_authority  # Some code expects _service suffix
     app.state.adaptive_filter_service = MagicMock()
 
     app.state.visibility_service = MagicMock()

@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
-from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
+from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
 
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
@@ -95,9 +95,11 @@ async def query_memory(
         # If querying by specific ID
         if body.node_id:
             # Use recall method with a query for the specific node
-            from ciris_engine.schemas.services.graph_core import MemoryQuery
+            from ciris_engine.schemas.services.operations import MemoryQuery
 
-            query = MemoryQuery(node_ids=[body.node_id], limit=1)
+            query = MemoryQuery(
+                node_id=body.node_id, scope=body.scope or GraphScope.LOCAL, type=body.type, include_edges=False, depth=1
+            )
             nodes = await memory_service.recall(query)
 
         # If querying by relationship
@@ -508,9 +510,15 @@ async def recall_by_id(
 
     try:
         # Use recall method with a query for the specific node
-        from ciris_engine.schemas.services.graph_core import MemoryQuery
+        from ciris_engine.schemas.services.operations import MemoryQuery
 
-        query = MemoryQuery(node_ids=[node_id], limit=1)
+        query = MemoryQuery(
+            node_id=node_id,
+            scope=GraphScope.LOCAL,
+            type=None,
+            include_edges=True,  # Include edges for detail view
+            depth=1,
+        )
         nodes = await memory_service.recall(query)
         if not nodes:
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")

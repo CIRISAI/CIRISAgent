@@ -248,7 +248,9 @@ class TestActualEndpointCode:
     def test_actual_overview_code_path(self):
         """Test that the wise_authority bug has been fixed."""
         # Simulate the actual code from the overview endpoint
-        mock_state = MagicMock()
+        from unittest.mock import Mock
+
+        mock_state = Mock(spec=["telemetry_service"])  # Only has telemetry_service, not wise_authority
         mock_state.telemetry_service = MagicMock()
         # No wise_authority attribute!
 

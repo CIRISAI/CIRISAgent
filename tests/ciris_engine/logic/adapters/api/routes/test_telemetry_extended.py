@@ -497,6 +497,7 @@ def full_app():
         }
     )
     app.state.wise_authority = wise_authority
+    app.state.wise_authority_service = wise_authority  # Some code expects _service suffix
 
     # LLM service with detailed metrics
     llm_service = MagicMock()

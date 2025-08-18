@@ -703,11 +703,14 @@ class TestEdgeCases:
     ) -> None:
         """Test handling when follow-up thought creation fails."""
         # mock_db_path fixture already handles the database path mocking
-        with patch("ciris_engine.logic.handlers.external.speak_handler.persistence") as mock_persistence:
+        with patch("ciris_engine.logic.handlers.external.speak_handler.persistence") as mock_persistence, patch(
+            "ciris_engine.logic.persistence.add_correlation"
+        ) as mock_add_correlation:
             mock_persistence.get_task_by_id.return_value = test_task
             mock_persistence.add_thought.side_effect = Exception("DB error")
             mock_persistence.update_thought_status = Mock()
             mock_persistence.add_correlation = Mock()
+            mock_add_correlation.return_value = "test-correlation-id"
 
             # Should raise FollowUpCreationError
             from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError

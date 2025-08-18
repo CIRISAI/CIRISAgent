@@ -446,12 +446,34 @@ class TestStepResultSchemas:
 
     def test_step_result_perform_dmas(self):
         """Test StepResultPerformDMAs schema."""
+        from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
+
+        # Create proper DMA result objects
+        ethical_result = EthicalDMAResult(
+            decision="approve",
+            reasoning="Action aligns with ethical principles",
+            alignment_check={"benevolence": True, "integrity": True},
+        )
+
+        csdma_result = CSDMAResult(
+            plausibility_score=0.9,
+            flags=[],
+            reasoning="Action makes practical sense",
+        )
+
+        dsdma_result = DSDMAResult(
+            domain="general",
+            domain_alignment=0.8,
+            flags=[],
+            reasoning="No specific domain expertise required",
+        )
+
         result = StepResultPerformDMAs(
             success=True,
             thought_id="thought_1",
-            ethical_dma={"decision": "approve"},
-            common_sense_dma={"plausibility": 0.9},
-            domain_dma={"domain": "general"},
+            ethical_dma=ethical_result,
+            common_sense_dma=csdma_result,
+            domain_dma=dsdma_result,
             dmas_executed=["ethical", "common_sense", "domain"],
             dma_failures=[],
             longest_dma_time_ms=150.0,
@@ -461,7 +483,9 @@ class TestStepResultSchemas:
         assert result.step_point == StepPoint.PERFORM_DMAS
         assert result.success
         assert len(result.dmas_executed) == 3
-        assert result.ethical_dma["decision"] == "approve"
+        assert result.ethical_dma.decision == "approve"
+        assert result.common_sense_dma.plausibility_score == 0.9
+        assert result.domain_dma.domain == "general"
 
 
 class TestEndToEndPipelineStepping:

@@ -137,8 +137,9 @@ class TestQueryMemory:
 
     def test_query_by_node_id(self, client, app, sample_node, auth_context):
         """Test querying by specific node ID."""
-        # The route now uses recall_node which returns a single node
-        app.state.memory_service.recall_node.return_value = sample_node
+        # The route uses recall method with a MemoryQuery
+        # Mock the recall method to return a list with the sample node
+        app.state.memory_service.recall.return_value = [sample_node]
         app.dependency_overrides[require_observer] = lambda: auth_context
 
         response = client.post(

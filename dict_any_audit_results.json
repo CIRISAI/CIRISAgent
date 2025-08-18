@@ -1,14 +1,14 @@
 {
   "production": {
-    "occurrences": 179,
-    "files_affected": 81,
+    "occurrences": 212,
+    "files_affected": 83,
     "categories": {
-      "generic_data": 160,
+      "generic_data": 189,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
-      "api_response": 3,
-      "context_data": 6
+      "api_response": 5,
+      "context_data": 8
     },
     "findings": [
       {
@@ -537,6 +537,38 @@
         "class": "MockLLMService",
         "function": "get_status",
         "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 22,
+        "class": "PipelineControlProtocol",
+        "function": "pause_at_step_point",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 88,
+        "class": "PipelineController",
+        "function": "pause_at_step_point",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 171,
+        "class": "PipelineController",
+        "function": "_update_thought_data",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 188,
+        "class": "PipelineController",
+        "function": "_create_step_result",
+        "context": "function_parameter",
         "usage_hint": "generic_data"
       },
       {
@@ -1113,6 +1145,238 @@
         "class": "AuditSummaryNode",
         "function": null,
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 287,
+        "class": "ThoughtInPipeline",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 294,
+        "class": "ThoughtInPipeline",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 395,
+        "class": "StepResultFinalizeTasksQueue",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 470,
+        "class": "StepResultBuildContext",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 471,
+        "class": "StepResultBuildContext",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 472,
+        "class": "StepResultBuildContext",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 473,
+        "class": "StepResultBuildContext",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 474,
+        "class": "StepResultBuildContext",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 644,
+        "class": "StepResultHandlerStart",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 647,
+        "class": "StepResultHandlerStart",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 667,
+        "class": "StepResultBusOutbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 668,
+        "class": "StepResultBusOutbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 669,
+        "class": "StepResultBusOutbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 696,
+        "class": "StepResultPackageHandling",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 710,
+        "class": "StepResultBusInbound",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 713,
+        "class": "StepResultBusInbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 714,
+        "class": "StepResultBusInbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 715,
+        "class": "StepResultBusInbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 719,
+        "class": "StepResultBusInbound",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 735,
+        "class": "StepResultHandlerComplete",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 829,
+        "class": "DMAExecutionContext",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 830,
+        "class": "DMAExecutionContext",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 849,
+        "class": "LLMPromptData",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 878,
+        "class": "StepResultPostConsciencePreHandler",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 879,
+        "class": "StepResultPostConsciencePreHandler",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 880,
+        "class": "StepResultPostConsciencePreHandler",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 884,
+        "class": "StepResultPostConsciencePreHandler",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 888,
+        "class": "StepResultPostConsciencePreHandler",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 901,
+        "class": "StepResultPostConsciencePreHandler",
+        "function": null,
+        "context": "variable_annotation",
         "usage_hint": "generic_data"
       },
       {
@@ -2752,7 +3016,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 341,
-    "files_affected": 114
+    "occurrences": 374,
+    "files_affected": 116
   }
 }

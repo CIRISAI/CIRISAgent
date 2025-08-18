@@ -154,6 +154,15 @@ class AgentProcessor:
         self._stop_event: Optional[asyncio.Event] = None
         self._processing_task: Optional[asyncio.Task] = None
 
+        # Pause/resume control for single-stepping
+        self._is_paused = False
+        self._pause_event: Optional[asyncio.Event] = None
+        self._pipeline_controller: Optional[Any] = None  # PipelineController when paused
+        self._single_step_mode = False
+
+        # Track processing time for thoughts
+        self._thought_processing_callback: Optional[Any] = None  # Callback for thought timing
+
         logger.info("AgentProcessor initialized with v1 schemas and modular processors")
 
     def _load_preload_tasks(self) -> None:
@@ -725,6 +734,170 @@ class AgentProcessor:
             except Exception as corr_error:
                 logger.error(f"Failed to update correlation after critical error: {corr_error}")
             raise
+
+    async def pause_processing(self) -> bool:
+        """
+        Pause the agent processor.
+        Safe to call even if already paused.
+
+        Returns:
+            True if successfully paused or already paused
+        """
+        if self._is_paused:
+            logger.info("AgentProcessor already paused")
+            return True
+
+        logger.info("Pausing AgentProcessor")
+        self._is_paused = True
+
+        # Create pause event if needed
+        if self._pause_event is None:
+            self._pause_event = asyncio.Event()
+
+        # Create pipeline controller for single-stepping
+        if self._pipeline_controller is None:
+            from ciris_engine.protocols.pipeline_control import PipelineController
+
+            self._pipeline_controller = PipelineController(is_paused=True)
+
+        # Inject pipeline controller into thought processor
+        if hasattr(self.thought_processor, "set_pipeline_controller"):
+            self.thought_processor.set_pipeline_controller(self._pipeline_controller)
+
+        return True
+
+    async def resume_processing(self) -> bool:
+        """
+        Resume the agent processor from pause.
+
+        Returns:
+            True if successfully resumed
+        """
+        if not self._is_paused:
+            logger.info("AgentProcessor not paused")
+            return False
+
+        logger.info("Resuming AgentProcessor")
+        self._is_paused = False
+        self._single_step_mode = False
+
+        # Resume all paused thoughts in pipeline
+        if self._pipeline_controller:
+            self._pipeline_controller.resume_all()
+
+        # Signal pause event to continue
+        if self._pause_event:
+            self._pause_event.set()
+
+        return True
+
+    def is_paused(self) -> bool:
+        """Check if processor is paused."""
+        return self._is_paused
+
+    def set_thought_processing_callback(self, callback: Any) -> None:
+        """Set callback for thought processing time tracking."""
+        self._thought_processing_callback = callback
+
+    async def single_step(self) -> dict:
+        """
+        Execute one step in the pipeline when paused.
+
+        Drains pipeline in order:
+        1. First process thoughts at later step points
+        2. Then process thoughts at earlier step points
+        3. Finally allow new thoughts to enter
+
+        Returns:
+            StepResult for the step executed
+        """
+        if not self._is_paused:
+            return {"success": False, "error": "Cannot single-step unless paused"}
+
+        if not self._pipeline_controller:
+            return {"success": False, "error": "Pipeline controller not initialized"}
+
+        start_time = self._time_service.now()
+
+        # Enable single-step mode
+        self._single_step_mode = True
+        self._pipeline_controller._single_step_mode = True
+
+        try:
+            # Get next thought to process based on pipeline state
+            thought_id = self._pipeline_controller.drain_pipeline_step()
+
+            if thought_id:
+                # Resume this specific thought
+                logger.info(f"Single-stepping thought {thought_id}")
+                self._pipeline_controller.resume_thought(thought_id)
+
+                # Wait for it to hit the next step point
+                # The thought will pause at the next step point automatically
+                await asyncio.sleep(0.1)  # Give it time to process
+
+                # Get the step result from pipeline controller
+                pipeline_state = self._pipeline_controller.get_pipeline_state()
+
+                # Find the thought and its current step
+                for step_thoughts in pipeline_state.thoughts_by_step.values():
+                    for thought in step_thoughts:
+                        if thought.thought_id == thought_id:
+                            return {
+                                "success": True,
+                                "thought_id": thought_id,
+                                "current_step": thought.current_step.value,
+                                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+                                "pipeline_state": pipeline_state.dict(),
+                            }
+
+            # No thoughts in pipeline, try to get a new one
+            from ciris_engine.logic import persistence
+            from ciris_engine.schemas.runtime.models import ThoughtStatus
+
+            pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)
+
+            if not pending_thoughts:
+                return {
+                    "success": True,
+                    "message": "No thoughts to process",
+                    "pipeline_empty": True,
+                    "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+                }
+
+            thought = pending_thoughts[0]
+
+            # Process this thought - it will pause at first step point
+            logger.info(f"Single-stepping new thought {thought.thought_id}")
+
+            # Mark for single-step processing
+            success = await self._process_single_thought(thought)
+
+            # Track processing time
+            processing_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000
+            if self._thought_processing_callback:
+                self._thought_processing_callback(processing_time_ms)
+
+            return {
+                "success": success,
+                "thought_id": thought.thought_id,
+                "new_thought": True,
+                "processing_time_ms": processing_time_ms,
+                "current_state": self.state_manager.get_state().value,
+            }
+
+        except Exception as e:
+            logger.error(f"Error in single_step: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+            }
+        finally:
+            # Disable single-step mode
+            self._single_step_mode = False
+            if self._pipeline_controller:
+                self._pipeline_controller._single_step_mode = False
 
     async def stop_processing(self) -> None:
         """Stop the processing loop gracefully."""

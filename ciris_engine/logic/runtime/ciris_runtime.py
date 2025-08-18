@@ -896,6 +896,14 @@ class CIRISRuntime:
 
             self.agent_processor = self.component_builder.build_all_components()
             logger.info(f"[_build_components] agent_processor created: {self.agent_processor}")
+
+            # Set up thought tracking callback now that agent_processor exists
+            # This avoids the race condition where RuntimeControlService tried to access
+            # agent_processor during Phase 5 (SERVICES) before it was created in Phase 6 (COMPONENTS)
+            if self.runtime_control_service:
+                self.runtime_control_service.setup_thought_tracking()
+                logger.debug("Thought tracking callback set up after agent_processor creation")
+
         except Exception as e:
             logger.error(f"[_build_components] Failed to build components: {e}", exc_info=True)
             raise

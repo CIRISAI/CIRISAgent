@@ -152,8 +152,33 @@ class TestLoggingInitializationFailFast:
             MockServiceRegistry.get_instance.return_value = mock_registry
 
             # Also patch the service initializer to not create TimeService
-            with patch("ciris_engine.logic.services.initialization_service.TimeService") as MockTimeService:
+            with patch("ciris_engine.logic.runtime.service_initializer.TimeService") as MockTimeService:
                 MockTimeService.side_effect = Exception("TimeService creation failed")
+
+                # Runtime initialization should fail with Exception (the real error)
+                with pytest.raises(Exception) as exc_info:
+                    runtime = CIRISRuntime(
+                        adapter_types=["cli"],
+                        essential_config=essential_config,
+                        modules=["mock_llm"],
+                        timeout=2,
+                    )
+                    await runtime.initialize()
+
+                # Check that the error message is about TimeService
+                assert "TimeService creation failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_logging_fails_fast_when_setup_fails(self, essential_config, allow_runtime_creation):
+        """Test that runtime initialization fails immediately if logging setup fails."""
+
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+
+        try:
+            # Patch setup_basic_logging to raise an exception
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                mock_setup.side_effect = Exception("Failed to create log file: Permission denied")
 
                 # Runtime initialization should fail with RuntimeError
                 with pytest.raises(RuntimeError) as exc_info:
@@ -165,33 +190,17 @@ class TestLoggingInitializationFailFast:
                     )
                     await runtime.initialize()
 
-                # Check that the error message is about TimeService
-                assert "TimeService" in str(exc_info.value) or "Failed to initialize" in str(exc_info.value)
-
-    @pytest.mark.asyncio
-    async def test_logging_fails_fast_when_setup_fails(self, essential_config, allow_runtime_creation):
-        """Test that runtime initialization fails immediately if logging setup fails."""
-
-        # Patch setup_basic_logging to raise an exception
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
-            mock_setup.side_effect = Exception("Failed to create log file: Permission denied")
-
-            # Runtime initialization should fail with RuntimeError
-            with pytest.raises(RuntimeError) as exc_info:
-                runtime = CIRISRuntime(
-                    adapter_types=["cli"],
-                    essential_config=essential_config,
-                    modules=["mock_llm"],
-                    timeout=2,
+                # Check that the error message is about initialization failure
+                # The actual error is wrapped in a generic message
+                assert (
+                    "Initialization sequence failed" in str(exc_info.value)
+                    or "Failed to setup file logging" in str(exc_info.value)
+                    or "Permission denied" in str(exc_info.value)
                 )
-                await runtime.initialize()
-
-            # Check that the error message is about logging setup
-            assert (
-                "Failed to setup file logging" in str(exc_info.value)
-                or "Permission denied" in str(exc_info.value)
-                or "Failed to initialize" in str(exc_info.value)
-            )
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_logging_succeeds_with_valid_time_service(self, essential_config, allow_runtime_creation):
@@ -201,7 +210,7 @@ class TestLoggingInitializationFailFast:
         mock_time_service = MockTimeService()
 
         # Patch setup_basic_logging to track if it was called correctly
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
             mock_setup.return_value = None  # Success
 
             runtime = CIRISRuntime(
@@ -300,7 +309,7 @@ class TestLoggingInitializationFailFast:
                 return original_open(*args, **kwargs)
 
             with patch("builtins.open", side_effect=mock_open):
-                with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+                with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
                     mock_setup.return_value = None
 
                     runtime = CIRISRuntime(
@@ -321,7 +330,7 @@ class TestLoggingInitializationFailFast:
     async def test_incident_capture_handler_is_added(self, essential_config, allow_runtime_creation):
         """Test that incident capture handler is added when enabled."""
 
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
             mock_setup.return_value = None
 
             runtime = CIRISRuntime(
@@ -348,7 +357,7 @@ class TestLoggingInitializationFailFast:
         # Test with debug mode enabled
         essential_config.debug_mode = True
 
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
             mock_setup.return_value = None
 
             runtime = CIRISRuntime(
@@ -371,7 +380,7 @@ class TestLoggingInitializationFailFast:
         # Test with debug mode disabled
         essential_config.debug_mode = False
 
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
             mock_setup.return_value = None
 
             runtime = CIRISRuntime(
@@ -397,7 +406,7 @@ class TestLoggingInitializationFailFast:
 
         # Capture log messages
         with patch("ciris_engine.logic.runtime.ciris_runtime.logger") as mock_logger:
-            with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
                 mock_setup.side_effect = Exception("Disk full")
 
                 with pytest.raises(RuntimeError):
@@ -419,7 +428,7 @@ class TestLoggingInitializationFailFast:
     async def test_runtime_continues_after_successful_logging_init(self, essential_config, allow_runtime_creation):
         """Test that runtime continues initialization after successful logging setup."""
 
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
             mock_setup.return_value = None  # Success
 
             runtime = CIRISRuntime(
@@ -445,7 +454,7 @@ class TestLoggingInitializationFailFast:
         initialization_order = []
 
         # Track order of initialization
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_logging:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_logging:
 
             def log_init(*args, **kwargs):
                 initialization_order.append("logging")
@@ -483,7 +492,7 @@ class TestLoggingInitializationFailFast:
     async def test_logging_with_no_console_output(self, essential_config, allow_runtime_creation):
         """Test that console output is disabled for file-only logging."""
 
-        with patch("ciris_engine.logic.runtime.ciris_runtime.setup_basic_logging") as mock_setup:
+        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
             mock_setup.return_value = None
 
             runtime = CIRISRuntime(

@@ -1924,9 +1924,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Set the runtime reference after initialization (private method)."""
         self.runtime = runtime
 
-        # Set up thought processing callback
-        if runtime and hasattr(runtime, "agent_processor"):
-            runtime.agent_processor.set_thought_processing_callback(self._track_thought_processing_time)
+        # NOTE: agent_processor doesn't exist yet during initialization phase
+        # The callback will be set up later via setup_thought_tracking()
+
         # If adapter manager exists, update its runtime reference too
         if self.adapter_manager:
             from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
@@ -1935,6 +1935,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             # Re-register config listener with updated runtime
             self.adapter_manager._register_config_listener()
         logger.info("Runtime reference set in RuntimeControlService")
+
+    def setup_thought_tracking(self) -> None:
+        """Set up thought processing callback after agent_processor is created.
+
+        This must be called AFTER Phase 6 (COMPONENTS) when agent_processor exists.
+        Called during Phase 5 (SERVICES) would cause a race condition.
+        """
+        if self.runtime and hasattr(self.runtime, "agent_processor") and self.runtime.agent_processor:
+            self.runtime.agent_processor.set_thought_processing_callback(self._track_thought_processing_time)
+            logger.debug("Thought processing callback registered with agent_processor")
 
     async def _on_start(self) -> None:
         """Custom startup logic for runtime control service."""

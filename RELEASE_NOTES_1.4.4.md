@@ -1,8 +1,8 @@
 # Release Notes - CIRIS v1.4.4
 
-**Release Date**: January 2025
-**Branch**: 1.4.4-beta
-**Focus**: Pipeline Stepping Debugger & Critical Bug Fixes - Type Safety Throughout
+**Release Date**: August 18, 2025
+**Branch**: 1.4.4-beta → main
+**Focus**: Pipeline Stepping Debugger, Critical Bug Fixes & Complete Test Suite Stabilization
 
 ## 🎯 Major Features
 
@@ -37,6 +37,41 @@ Fixed critical bugs in thought processing metrics:
 - **Seconds Per Thought**: Correctly returns 5-15 seconds per thought (not thoughts/second!)
 - **Average Calculation**: Maintains rolling average of last 100 thoughts
 - **Bounded Lists**: Prevents memory leaks with proper list trimming
+
+## 🧪 Test Suite Stabilization - GREEN CI Achievement
+
+### Complete Test Suite Fix (23 → 0 Failures)
+Successfully resolved all CI test failures through systematic fixes:
+
+**Database Configuration Issues (7 tests)**
+- Created `conftest_config_mock.py` with global mock_db_path fixture
+- Fixed ServiceRegistry FAIL FAST behavior for missing config
+- Ensured proper database path mocking throughout test suite
+
+**Logging Test Failures (4 tests)**
+- Fixed PYTEST_CURRENT_TEST environment variable handling
+- Ensured logs directory creation in CI environment
+- Documented requirements to prevent v1.4.3-like regressions
+
+**Telemetry Endpoint Issues (8 tests)**
+- Fixed critical view parameter bug in telemetry unified endpoint
+- Added wise_authority_service alias for compatibility
+- Corrected test expectations for bug-fixed behavior
+
+**Memory Route Failures (1 test + SUT bug)**
+- Fixed incorrect MemoryQuery import path (graph_core → operations)
+- Corrected MemoryQuery parameters (node_ids → node_id)
+- Added proper GraphScope import and initialization
+
+**Other Fixes (3 tests)**
+- Discord adapter persistence mocking
+- Maintenance telemetry with monkeypatch approach
+- Speak handler follow-up creation test
+
+### Test Philosophy: "Strengthen the SUT and the test both"
+- Fixed actual bugs in system code, not just test expectations
+- Added robust mocking patterns to prevent future failures
+- Created comprehensive documentation for test requirements
 
 ## 🚨 Critical Bug Fixes
 
@@ -110,10 +145,19 @@ Fixed critical bugs in thought processing metrics:
 - `ciris_engine/logic/processors/core/main_processor.py` - Pause/resume/single-step implementation
 - `ciris_engine/protocols/pipeline_control.py` - New pipeline control protocol
 - `ciris_engine/schemas/services/runtime_control.py` - Pipeline step schemas
+- `ciris_engine/logic/config/db_paths.py` - FAIL FAST behavior for missing config
+- `ciris_engine/logic/adapters/api/routes/memory.py` - Fixed MemoryQuery import and parameters
+- `ciris_engine/logic/adapters/api/routes/telemetry_helpers.py` - Fixed view parameter passing
 
-### Test Additions
+### Test Additions & Fixes
 - `tests/services/test_control_service_bugs.py` - Bug reproduction and fix validation
 - `tests/services/test_pipeline_stepping.py` - Pipeline stepping test coverage
+- `tests/conftest_config_mock.py` - Global database mocking fixtures
+- `tests/ciris_engine/logic/runtime/test_ciris_runtime_logging.py` - Logging test fixes
+- `tests/ciris_engine/logic/adapters/api/routes/test_telemetry_*.py` - Telemetry test fixes
+- `tests/ciris_engine/logic/persistence/test_maintenance_telemetry.py` - Monkeypatch approach
+- `tests/handlers/test_speak_handler.py` - Persistence mocking fixes
+- `docs/LOGGING_TEST_REQUIREMENTS.md` - Comprehensive test documentation
 
 ## 🚀 Migration Guide
 

@@ -180,22 +180,25 @@ class TestProcessingRateBugs:
 
     def test_processing_rate_correct_calculation(self):
         """
-        FIX: _calculate_processing_rate now correctly uses average thought time.
-        Calculates thoughts per second from average processing time.
+        FIX: _calculate_processing_rate now returns seconds per thought.
+        Thoughts take 5-15 seconds each, not milliseconds!
         """
         service = RuntimeControlService()
 
-        # Populate thought times (these are durations in ms)
-        service._thought_times = [100, 150, 120, 180, 90]  # Processing durations in ms
-        service._average_thought_time_ms = sum(service._thought_times) / len(service._thought_times)  # 128ms average
+        # Populate thought times (realistic: 5-15 seconds)
+        # Store as milliseconds as the system does
+        service._thought_times = [5000, 8000, 12000, 15000, 10000]  # 5-15 seconds in ms
+        service._average_thought_time_ms = sum(service._thought_times) / len(
+            service._thought_times
+        )  # 10000ms = 10s average
 
         rate = service._calculate_processing_rate()
 
-        # FIX: Now correctly calculates 1000ms/128ms = 7.8125 thoughts per second
-        expected_rate = 1000.0 / 128.0  # 7.8125 thoughts/second
-        assert rate == pytest.approx(expected_rate, rel=0.01)
+        # FIX: Now correctly returns 10 seconds per thought
+        expected_seconds_per_thought = 10.0  # 10 seconds per thought
+        assert rate == pytest.approx(expected_seconds_per_thought, rel=0.01)
 
-        # Correctly uses average processing time for rate calculation
+        # Returns seconds per thought, not thoughts per second!
 
 
 class TestInitializationBugs:

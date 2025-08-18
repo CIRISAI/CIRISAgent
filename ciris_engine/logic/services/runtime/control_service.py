@@ -311,7 +311,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 processor_name="agent",
                 queue_size=queue_status.pending_thoughts + queue_status.pending_tasks,
                 max_size=1000,  # Default max size
-                processing_rate=self._calculate_processing_rate(),
+                processing_rate=self._calculate_processing_rate(),  # Seconds per thought (5-15 typical)
                 average_latency_ms=self._calculate_average_latency(),
                 oldest_message_age_seconds=None,
             )
@@ -1759,7 +1759,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             "runtime_errors": float(self._runtime_errors),
             "messages_processed": float(self._messages_processed),
             "average_message_latency_ms": self._calculate_average_latency(),
-            "processing_rate_per_sec": self._calculate_processing_rate(),
+            "seconds_per_thought": self._calculate_processing_rate(),  # Renamed to be clear
             "system_load": self._calculate_current_load(),
         }
 
@@ -1838,12 +1838,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         return self._calculate_average_thought_time()
 
     def _calculate_processing_rate(self) -> float:
-        """Calculate thoughts processed per second."""
+        """Calculate seconds per thought (not thoughts per second!).
+
+        Thoughts take 5-15 seconds each, so this returns the average
+        time in seconds to process one thought.
+        """
         if self._thought_times and self._average_thought_time_ms > 0:
-            # Thoughts per second based on average processing time
+            # Convert milliseconds to seconds
             avg_time_seconds = self._average_thought_time_ms / 1000.0
-            return 1.0 / avg_time_seconds  # Thoughts per second
-        return 1.0  # Default rate
+            return avg_time_seconds  # Seconds per thought (5-15 typical)
+        return 10.0  # Default: 10 seconds per thought
 
     def _calculate_current_load(self) -> float:
         """Calculate current system load (0.0 to 1.0)."""

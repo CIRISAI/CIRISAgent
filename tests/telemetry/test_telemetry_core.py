@@ -218,7 +218,7 @@ class TestBasicTelemetryCollector:
         await telemetry_collector.record_metric("task_completed", 1.0)
 
         # Create snapshot
-        snapshot = SystemSnapshot(timestamp=now)
+        snapshot = SystemSnapshot()
 
         # Update snapshot
         await telemetry_collector.update_system_snapshot(snapshot)
@@ -244,7 +244,7 @@ class TestBasicTelemetryCollector:
 
         time_service.now.return_value = now
 
-        snapshot = SystemSnapshot(timestamp=now)
+        snapshot = SystemSnapshot()
         await telemetry_collector.update_system_snapshot(snapshot)
 
         # Old metric should be filtered out
@@ -263,7 +263,7 @@ class TestBasicTelemetryCollector:
         for _ in range(2):
             await telemetry_collector.record_metric("error", 1.0)
 
-        snapshot = SystemSnapshot(timestamp=now)
+        snapshot = SystemSnapshot()
         await telemetry_collector.update_system_snapshot(snapshot)
 
         # Error rate should be 20%
@@ -280,7 +280,7 @@ class TestBasicTelemetryCollector:
         await telemetry_collector.record_metric("service_auth_call", 1.0)
         await telemetry_collector.record_metric("service_memory_call", 1.0)
 
-        snapshot = SystemSnapshot(timestamp=now)
+        snapshot = SystemSnapshot()
         await telemetry_collector.update_system_snapshot(snapshot)
 
         # Check service calls
@@ -296,7 +296,7 @@ class TestBasicTelemetryCollector:
         telemetry_collector.start_time = start_time
         time_service.now.return_value = current_time
 
-        snapshot = SystemSnapshot(timestamp=current_time)
+        snapshot = SystemSnapshot()
         await telemetry_collector.update_system_snapshot(snapshot)
 
         # Uptime should be 2 hours in seconds
@@ -336,7 +336,7 @@ class TestBasicTelemetryCollector:
         now = datetime.now(timezone.utc)
         time_service.now.return_value = now
 
-        snapshot = SystemSnapshot(timestamp=now)
+        snapshot = SystemSnapshot()
         await telemetry_collector.update_system_snapshot(snapshot)
 
         # Should have telemetry summary with zero values
@@ -363,7 +363,7 @@ class TestIntegration:
             await collector.record_metric("service_test_call", 1.0)
 
         # Create and update snapshot
-        snapshot = SystemSnapshot(timestamp=time_service.now())
+        snapshot = SystemSnapshot()
         await collector.update_system_snapshot(snapshot)
 
         # Stop collector
@@ -393,7 +393,7 @@ class TestIntegration:
                 await collector.record_metric("thought_processed", 1.0, path_type="hot")
 
         # Update snapshot
-        snapshot = SystemSnapshot(timestamp=time_service.now())
+        snapshot = SystemSnapshot()
         await collector.update_system_snapshot(snapshot)
 
         # Verify realistic metrics

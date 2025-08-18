@@ -365,7 +365,7 @@ class TestRuntimeControlServiceMetrics(BaseMetricsTest):
         "runtime_errors",
         "messages_processed",
         "average_message_latency_ms",
-        "processing_rate_per_sec",
+        "seconds_per_thought",
         "system_load",
     }
 
@@ -380,7 +380,7 @@ class TestRuntimeControlServiceMetrics(BaseMetricsTest):
         "runtime_errors",
         "messages_processed",
         "average_message_latency_ms",
-        "processing_rate_per_sec",
+        "seconds_per_thought",
     }
 
     RATIO_RUNTIME_METRICS = {"processor_status", "runtime_paused", "runtime_step_mode", "system_load"}
@@ -437,7 +437,7 @@ class TestRuntimeControlServiceMetrics(BaseMetricsTest):
 
         # Should have processing metrics
         assert metrics["messages_processed"] == 15.0, "Should track messages processed"
-        assert metrics["processing_rate_per_sec"] >= 0, "Processing rate should be non-negative"
+        assert metrics["seconds_per_thought"] >= 0, "Seconds per thought should be non-negative"
         assert metrics["average_message_latency_ms"] > 0, "Should have average latency"
 
     @pytest.mark.asyncio

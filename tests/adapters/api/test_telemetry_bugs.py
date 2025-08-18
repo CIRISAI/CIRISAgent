@@ -165,7 +165,7 @@ class TestTelemetryProductionBugs:
         Root Cause: LocalGraphMemoryService has recall() not recall_node()
         Fix: Use recall() with MemoryQuery
         """
-        from ciris_engine.schemas.services.graph_core import MemoryQuery
+        from ciris_engine.schemas.services.operations import MemoryQuery
 
         # Mock memory service with correct method
         mock_memory = MagicMock()

@@ -55,8 +55,8 @@ class TestMemoryLeakBugs:
         # _calculate_processing_rate now only uses thought times
         rate = service._calculate_processing_rate()
 
-        # Should return default when no thoughts processed
-        assert rate == 1.0
+        # Should return default when no thoughts processed (10 seconds per thought)
+        assert rate == 10.0
 
         # The attribute should not exist at all
         with pytest.raises(AttributeError):

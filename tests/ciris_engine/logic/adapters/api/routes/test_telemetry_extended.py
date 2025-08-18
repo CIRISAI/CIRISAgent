@@ -571,8 +571,9 @@ def client(full_app):
 class TestOverviewEndpointExtended:
     """Extended tests for overview endpoint to cover more code paths."""
 
-    def test_overview_with_incidents(self, client):
+    def test_overview_with_incidents(self, full_app):
         """Test overview correctly counts active incidents."""
+        client = TestClient(full_app)
         response = client.get("/telemetry/overview")
         assert response.status_code == 200
 
@@ -583,8 +584,9 @@ class TestOverviewEndpointExtended:
         if "active_incidents" in data:
             assert data["active_incidents"] >= 0
 
-    def test_overview_with_detailed_metrics(self, client):
+    def test_overview_with_detailed_metrics(self, full_app):
         """Test overview aggregates metrics correctly."""
+        client = TestClient(full_app)
         response = client.get("/telemetry/overview")
         assert response.status_code == 200
 
@@ -931,8 +933,9 @@ class TestUnifiedEndpointExtended:
             response = client.get(f"/telemetry/unified?category={category}")
             assert response.status_code == 200
 
-    def test_unified_with_metadata(self, client):
+    def test_unified_with_metadata(self, full_app):
         """Test unified endpoint includes metadata."""
+        client = TestClient(full_app)
         response = client.get("/telemetry/unified?live=true")
         assert response.status_code == 200
 

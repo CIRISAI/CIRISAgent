@@ -17,9 +17,10 @@ class TestReproduceWiseAuthorityBug:
 
     def test_overview_endpoint_fails_with_missing_wise_authority(self):
         """
-        This test should FAIL with AttributeError, reproducing the production bug.
+        This test verifies the wise_authority bug has been FIXED.
 
-        Production error: "'State' object has no attribute 'wise_authority'"
+        Original bug: "'State' object has no attribute 'wise_authority'"
+        Fix: Use getattr with default None to handle missing attribute.
         """
         from ciris_engine.logic.adapters.api.routes.telemetry import router
 
@@ -40,6 +41,8 @@ class TestReproduceWiseAuthorityBug:
         app.state.memory_service = MagicMock()
         app.state.audit_service = MagicMock()
         app.state.service_registry = MagicMock()
+        app.state.time_service = MagicMock()
+        app.state.time_service.uptime = Mock(return_value=3600)
 
         # Add proper auth service mock to avoid "Invalid auth service type" error
         mock_auth = create_autospec(APIAuthService, instance=True)
@@ -57,7 +60,7 @@ class TestReproduceWiseAuthorityBug:
         mock_auth.verify_user_password.return_value = mock_user
         app.state.auth_service = mock_auth
 
-        # MISSING: app.state.wise_authority - this causes the bug!
+        # MISSING: app.state.wise_authority - but the fix handles this gracefully!
 
         # Mock telemetry service response
         app.state.telemetry_service.get_system_overview = AsyncMock(
@@ -68,17 +71,23 @@ class TestReproduceWiseAuthorityBug:
                 "health_status": "healthy",
             }
         )
+        app.state.telemetry_service.collect_all = AsyncMock(return_value={})
+
+        # Mock resource monitor
+        snapshot = MagicMock()
+        snapshot.cpu_percent = 45.5
+        snapshot.memory_mb = 512.0
+        app.state.resource_monitor.snapshot = snapshot
 
         client = TestClient(app)
 
-        # This should raise an AttributeError in the actual code
+        # This should NO LONGER raise an AttributeError - the bug is fixed!
         # Send proper auth headers to get past authentication
         response = client.get("/telemetry/overview", headers={"Authorization": "Bearer admin:test"})
 
-        # This should reproduce the bug - expecting 500 error
-        # In CI, the fix might not be deployed yet
-        assert response.status_code == 500
-        # The error should indicate missing wise_authority attribute
+        # Bug is FIXED - should return 200 even without wise_authority
+        assert response.status_code == 200
+        # The endpoint gracefully handles missing wise_authority
 
 
 class TestReproduceUnifiedViewBug:
@@ -250,14 +259,14 @@ class TestActualEndpointCode:
         # Should NOT raise AttributeError if fixed properly
         assert wa_service is None  # It safely returns None instead of crashing
 
-        # But in production the bug might still exist, so test for the actual behavior
-        # If the endpoint doesn't use getattr yet, it will fail
+        # Verify the buggy approach would still fail
+        # This demonstrates why the fix was necessary
         try:
             # This is what the buggy code does:
             wa_service_buggy = mock_state.wise_authority  # Direct attribute access
             assert False, "Should have raised AttributeError"
         except AttributeError:
-            # This is the bug we're reproducing
+            # This is the bug that we fixed
             pass
 
     def test_actual_unified_code_with_view(self):

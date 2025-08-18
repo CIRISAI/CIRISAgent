@@ -139,7 +139,7 @@ class TestQueryMemory:
         """Test querying by specific node ID."""
         # The route uses recall method with a MemoryQuery
         # Mock the recall method to return a list with the sample node
-        app.state.memory_service.recall.return_value = [sample_node]
+        app.state.memory_service.recall = AsyncMock(return_value=[sample_node])
         app.dependency_overrides[require_observer] = lambda: auth_context
 
         response = client.post(

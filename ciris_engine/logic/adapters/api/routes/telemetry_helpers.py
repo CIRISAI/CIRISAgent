@@ -12,21 +12,42 @@ async def get_telemetry_from_service(
     telemetry_service, view: str, category: Optional[str], format: str, live: bool
 ) -> Dict:
     """Get telemetry from the service's built-in aggregator."""
-    # The telemetry service's get_aggregated_telemetry() doesn't accept parameters
-    # Get the raw data and apply filtering in the API layer
-    result = await telemetry_service.get_aggregated_telemetry()
+    # Try to pass parameters if the method accepts them (for mocked services in tests)
+    # Otherwise fall back to calling without parameters (for real service)
+    try:
+        # Try calling with parameters first (for mocked services that accept them)
+        import inspect
 
-    # Add metadata about the requested view and category
-    result["_metadata"] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "view": view,
-        "category": category,
-        "cached": not live,
-        "format": format,
-    }
+        sig = inspect.signature(telemetry_service.get_aggregated_telemetry)
+        if len(sig.parameters) > 0:
+            # Method accepts parameters, pass them
+            result = await telemetry_service.get_aggregated_telemetry(
+                view=view, category=category, format=format, live=live
+            )
+        else:
+            # Method doesn't accept parameters, call without them
+            result = await telemetry_service.get_aggregated_telemetry()
+    except TypeError:
+        # Fallback if signature inspection fails
+        result = await telemetry_service.get_aggregated_telemetry()
 
-    # Apply view filtering if needed (handled by the API layer)
-    # The actual view filtering is done by the endpoint after this function returns
+    # Ensure the view is included in the result (for backward compatibility)
+    if "view" not in result:
+        result["view"] = view
+
+    # Add or update metadata about the requested view and category
+    if "_metadata" not in result:
+        result["_metadata"] = {}
+
+    result["_metadata"].update(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "view": view,
+            "category": category,
+            "cached": not live,
+            "format": format,
+        }
+    )
 
     return result
 

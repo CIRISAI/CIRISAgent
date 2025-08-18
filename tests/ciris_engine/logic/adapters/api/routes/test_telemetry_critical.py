@@ -196,8 +196,9 @@ class TestCriticalServiceRequirements:
 class TestBasicFunctionality:
     """Test basic functionality with all services initialized."""
 
-    def test_overview_success(self, client):
+    def test_overview_success(self, fully_initialized_app):
         """Test successful overview retrieval."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/overview")
         assert response.status_code == 200
 
@@ -207,8 +208,9 @@ class TestBasicFunctionality:
         assert "memory_mb" in data
         assert "cpu_percent" in data
 
-    def test_resources_success(self, client):
+    def test_resources_success(self, fully_initialized_app):
         """Test successful resource telemetry retrieval."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/resources")
         assert response.status_code == 200
 
@@ -223,8 +225,9 @@ class TestBasicFunctionality:
         assert data["limits"]["max_memory_mb"] == 2048.0
         assert data["health"]["status"] in ["healthy", "warning", "critical"]
 
-    def test_metrics_success(self, client):
+    def test_metrics_success(self, fully_initialized_app):
         """Test successful metrics retrieval."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/metrics")
         assert response.status_code == 200
 
@@ -232,8 +235,9 @@ class TestBasicFunctionality:
         assert "metrics" in data
         assert "summary" in data
 
-    def test_traces_success(self, client):
+    def test_traces_success(self, fully_initialized_app):
         """Test successful traces retrieval."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/traces")
         assert response.status_code == 200
 
@@ -242,8 +246,9 @@ class TestBasicFunctionality:
         assert "total" in data
         assert "has_more" in data
 
-    def test_logs_success(self, client):
+    def test_logs_success(self, fully_initialized_app):
         """Test successful logs retrieval."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/logs")
         assert response.status_code == 200
 
@@ -256,8 +261,9 @@ class TestBasicFunctionality:
 class TestUnifiedEndpoint:
     """Test the unified telemetry endpoint."""
 
-    def test_unified_json_format(self, client):
+    def test_unified_json_format(self, fully_initialized_app):
         """Test unified endpoint with JSON format."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/unified?format=json")
         assert response.status_code == 200
 
@@ -265,8 +271,9 @@ class TestUnifiedEndpoint:
         assert "timestamp" in data
         assert "services" in data
 
-    def test_unified_prometheus_format(self, client):
+    def test_unified_prometheus_format(self, fully_initialized_app):
         """Test unified endpoint with Prometheus format."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/unified?format=prometheus")
         assert response.status_code == 200
 
@@ -275,8 +282,9 @@ class TestUnifiedEndpoint:
         assert "# TYPE" in content
         assert "ciris_" in content  # Metrics should be prefixed
 
-    def test_unified_graphite_format(self, client):
+    def test_unified_graphite_format(self, fully_initialized_app):
         """Test unified endpoint with Graphite format."""
+        client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/unified?format=graphite")
         assert response.status_code == 200
 

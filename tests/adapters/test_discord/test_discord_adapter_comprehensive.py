@@ -165,25 +165,26 @@ class TestDiscordAdapterCore:
     @pytest.mark.asyncio
     async def test_send_message_with_rate_limiting(self, discord_adapter, mock_db_path):
         """Test message sending respects rate limits."""
-        # Mock connection manager to return connected
-        discord_adapter._connection_manager.is_connected = Mock(return_value=True)
+        # Mock persistence.add_correlation to avoid database access
+        with patch("ciris_engine.logic.persistence.add_correlation") as mock_add_correlation:
+            mock_add_correlation.return_value = "test-correlation-id"
 
-        # Mock rate limiter to introduce delay
-        discord_adapter._rate_limiter.acquire = AsyncMock()
+            # Mock connection manager to return connected
+            discord_adapter._connection_manager.is_connected = Mock(return_value=True)
 
-        # Mock connection manager to return connected
-        discord_adapter._connection_manager.is_connected = Mock(return_value=True)
+            # Mock rate limiter to introduce delay
+            discord_adapter._rate_limiter.acquire = AsyncMock()
 
-        # Mock channel
-        mock_channel = AsyncMock()
-        mock_channel.send = AsyncMock(return_value=Mock(id=123))
-        discord_adapter._message_handler._resolve_channel = AsyncMock(return_value=mock_channel)
+            # Mock channel
+            mock_channel = AsyncMock()
+            mock_channel.send = AsyncMock(return_value=Mock(id=123))
+            discord_adapter._message_handler._resolve_channel = AsyncMock(return_value=mock_channel)
 
-        # Send message
-        await discord_adapter.send_message("123456789", "Test message")
+            # Send message
+            await discord_adapter.send_message("123456789", "Test message")
 
-        # Verify rate limiter was called
-        discord_adapter._rate_limiter.acquire.assert_called_once()
+            # Verify rate limiter was called
+            discord_adapter._rate_limiter.acquire.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_fetch_messages(self, discord_adapter):

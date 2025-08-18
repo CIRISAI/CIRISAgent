@@ -130,7 +130,8 @@ class TestBasicTelemetryCollector:
     @pytest.mark.asyncio
     async def test_security_filter_blocks_metric(self, telemetry_collector, security_filter):
         """Test that security filter can block metrics."""
-        # Configure filter to block this metric
+        # Configure filter to block this metric - override the side_effect
+        security_filter.sanitize.side_effect = None
         security_filter.sanitize.return_value = None
 
         await telemetry_collector.record_metric("blocked_metric", 100.0)
@@ -141,7 +142,8 @@ class TestBasicTelemetryCollector:
     @pytest.mark.asyncio
     async def test_security_filter_sanitizes_metric(self, telemetry_collector, security_filter):
         """Test that security filter can sanitize metrics."""
-        # Configure filter to sanitize the value
+        # Configure filter to sanitize the value - override the side_effect
+        security_filter.sanitize.side_effect = None
         security_filter.sanitize.return_value = ("sanitized_metric", 0.0)
 
         await telemetry_collector.record_metric("original_metric", 999.0)

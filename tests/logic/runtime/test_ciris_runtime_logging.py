@@ -649,7 +649,8 @@ class TestLoggingInitializationFailFast:
         assert stored_path == str(main_log_file.absolute()), f".current_log contains wrong path: {stored_path}"
 
         # Check for incident log file (created by incident handler)
-        incident_files = list(log_dir.glob("incidents_*.log"))
+        # Exclude symlinks from the glob to find the actual incident file
+        incident_files = [f for f in log_dir.glob("incidents_*.log") if not f.is_symlink()]
         if incident_files:  # Incident file might not exist yet if no incidents
             # Get the most recent incident log file
             incident_log_file = max(incident_files, key=lambda f: f.stat().st_mtime)
@@ -758,10 +759,17 @@ class TestLoggingInitializationFailFast:
         await asyncio.sleep(0.1)
 
         # Check for incident log file
-        incident_files = list(log_dir.glob("incidents_*.log"))
+        # Exclude symlinks from the glob to find the actual incident file
+        incident_files = [f for f in log_dir.glob("incidents_*.log") if not f.is_symlink()]
         if incident_files:  # Should exist after logging warnings/errors
-            # Get the most recent incident log file
-            incident_log = max(incident_files, key=lambda f: f.stat().st_mtime)
+            # Get the most recent incident log file (created after runtime start)
+            # This ensures we get the file created for THIS test run
+            runtime_start_time = runtime._start_time if hasattr(runtime, "_start_time") else 0
+            recent_incident_files = [f for f in incident_files if f.stat().st_mtime >= runtime_start_time]
+            if recent_incident_files:
+                incident_log = max(recent_incident_files, key=lambda f: f.stat().st_mtime)
+            else:
+                incident_log = max(incident_files, key=lambda f: f.stat().st_mtime)
             assert incident_log.exists(), f"Incident log {incident_log} does not exist"
 
             # Check incidents_latest.log symlink

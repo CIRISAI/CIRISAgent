@@ -28,12 +28,35 @@ class TestReproduceWiseAuthorityBug:
         app.include_router(router)
 
         # Mock app.state WITHOUT wise_authority attribute (simulating production)
+        from datetime import datetime, timezone
+        from unittest.mock import create_autospec
+
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
+        from ciris_engine.schemas.runtime.api import APIRole
+
         app.state = MagicMock()
         app.state.telemetry_service = MagicMock()
         app.state.resource_monitor = MagicMock()
         app.state.memory_service = MagicMock()
         app.state.audit_service = MagicMock()
         app.state.service_registry = MagicMock()
+
+        # Add proper auth service mock to avoid "Invalid auth service type" error
+        mock_auth = create_autospec(APIAuthService, instance=True)
+        mock_user = User(
+            wa_id="test-user",
+            name="Test User",
+            auth_type="password",
+            api_role=APIRole.OBSERVER,
+            wa_role=None,
+            created_at=datetime.now(timezone.utc),
+            is_active=True,
+            password_hash="hashed",
+        )
+        mock_auth.validate_api_key.return_value = None
+        mock_auth.verify_user_password.return_value = mock_user
+        app.state.auth_service = mock_auth
+
         # MISSING: app.state.wise_authority - this causes the bug!
 
         # Mock telemetry service response
@@ -49,8 +72,8 @@ class TestReproduceWiseAuthorityBug:
         client = TestClient(app)
 
         # This should raise an AttributeError in the actual code
-        with patch("ciris_engine.logic.adapters.api.dependencies.auth.require_observer", return_value=None):
-            response = client.get("/telemetry/overview")
+        # Send proper auth headers to get past authentication
+        response = client.get("/telemetry/overview", headers={"Authorization": "Bearer admin:test"})
 
         # The bug causes a 500 error with AttributeError
         assert response.status_code == 500
@@ -75,8 +98,30 @@ class TestReproduceUnifiedViewBug:
         app.include_router(router)
 
         # Mock app.state
+        from datetime import datetime, timezone
+        from unittest.mock import create_autospec
+
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
+        from ciris_engine.schemas.runtime.api import APIRole
+
         app.state = MagicMock()
         app.state.telemetry_service = MagicMock()
+
+        # Add proper auth service mock
+        mock_auth = create_autospec(APIAuthService, instance=True)
+        mock_user = User(
+            wa_id="test-user",
+            name="Test User",
+            auth_type="password",
+            api_role=APIRole.OBSERVER,
+            wa_role=None,
+            created_at=datetime.now(timezone.utc),
+            is_active=True,
+            password_hash="hashed",
+        )
+        mock_auth.validate_api_key.return_value = None
+        mock_auth.verify_user_password.return_value = mock_user
+        app.state.auth_service = mock_auth
 
         # Mock telemetry service that DOESN'T accept 'view' parameter (current bug)
         async def buggy_get_aggregated_telemetry(**kwargs):
@@ -90,8 +135,7 @@ class TestReproduceUnifiedViewBug:
         client = TestClient(app)
 
         # Call with view parameter (as the API currently does)
-        with patch("ciris_engine.logic.adapters.api.dependencies.auth.require_observer", return_value=None):
-            response = client.get("/telemetry/unified?view=bus")
+        response = client.get("/telemetry/unified?view=bus", headers={"Authorization": "Bearer admin:test"})
 
         # This should fail with 500 error due to TypeError
         assert response.status_code == 500
@@ -113,8 +157,30 @@ class TestReproduceEmptyLogsBug:
         app.include_router(router)
 
         # Mock app.state
+        from datetime import datetime, timezone
+        from unittest.mock import create_autospec
+
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
+        from ciris_engine.schemas.runtime.api import APIRole
+
         app.state = MagicMock()
         app.state.audit_service = MagicMock()
+
+        # Add proper auth service mock
+        mock_auth = create_autospec(APIAuthService, instance=True)
+        mock_user = User(
+            wa_id="test-user",
+            name="Test User",
+            auth_type="password",
+            api_role=APIRole.OBSERVER,
+            wa_role=None,
+            created_at=datetime.now(timezone.utc),
+            is_active=True,
+            password_hash="hashed",
+        )
+        mock_auth.validate_api_key.return_value = None
+        mock_auth.verify_user_password.return_value = mock_user
+        app.state.auth_service = mock_auth
 
         # Mock log reader that finds no files (because file logging was disabled)
         with patch("ciris_engine.logic.adapters.api.routes.telemetry_logs_reader.log_reader") as mock_reader:
@@ -122,8 +188,7 @@ class TestReproduceEmptyLogsBug:
 
             client = TestClient(app)
 
-            with patch("ciris_engine.logic.adapters.api.dependencies.auth.require_observer", return_value=None):
-                response = client.get("/telemetry/logs?limit=10")
+            response = client.get("/telemetry/logs?limit=10", headers={"Authorization": "Bearer admin:test"})
 
             # Bug: Returns empty logs even though system is running
             assert response.status_code == 200

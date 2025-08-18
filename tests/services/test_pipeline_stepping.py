@@ -36,11 +36,23 @@ class TestAgentProcessorPause:
     @pytest.fixture
     def mock_services(self):
         """Create mock services for testing."""
+        mock_time_service = Mock()
+        current_time = datetime.now(timezone.utc)
+        mock_time_service.now.return_value = current_time
+        mock_time_service.now_iso.return_value = current_time.isoformat()
+
         return {
-            "time_service": Mock(),
+            "time_service": mock_time_service,
             "memory_service": Mock(),
             "llm_service": Mock(),
             "config_service": Mock(),
+            "resource_monitor": Mock(
+                get_current_metrics=Mock(
+                    return_value={"cpu_percent": 10.0, "memory_percent": 20.0, "disk_usage_percent": 30.0}
+                )
+            ),
+            "telemetry_service": Mock(memorize_metric=AsyncMock()),
+            "identity_manager": Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
         }
 
     @pytest.fixture
@@ -51,7 +63,9 @@ class TestAgentProcessorPause:
         mock_thought_processor = Mock()
         mock_dispatcher = Mock()
         mock_time_service = Mock()
-        mock_time_service.now.return_value = datetime.now(timezone.utc)
+        current_time = datetime.now(timezone.utc)
+        mock_time_service.now.return_value = current_time
+        mock_time_service.now_iso.return_value = current_time.isoformat()
 
         processor = AgentProcessor(
             app_config=mock_config,

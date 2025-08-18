@@ -22,7 +22,10 @@ class TestGraphAuditService:
     def mock_time_service(self) -> Mock:
         """Create mock time service."""
         current_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        return Mock(now=Mock(return_value=current_time), now_iso=Mock(return_value=current_time.isoformat()))
+        mock_service = Mock()
+        mock_service.now.return_value = current_time
+        mock_service.now_iso.return_value = current_time.isoformat()
+        return mock_service
 
     @pytest.fixture
     def mock_memory_bus(self) -> Mock:

@@ -19,10 +19,11 @@ class TestDreamProcessor:
     def mock_services(self):
         """Create mock services."""
         current_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        mock_time_service = Mock()
+        mock_time_service.now.return_value = current_time
+        mock_time_service.now_iso.return_value = current_time.isoformat()
         return {
-            "time_service": Mock(
-                now=Mock(return_value=current_time), now_iso=Mock(return_value=current_time.isoformat())
-            ),
+            "time_service": mock_time_service,
             "resource_monitor": Mock(snapshot=Mock(healthy=True, warnings=[], critical=[])),
             "memory_service": Mock(),
             "telemetry_service": Mock(memorize_metric=AsyncMock()),

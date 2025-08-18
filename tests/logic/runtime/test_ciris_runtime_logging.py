@@ -337,184 +337,56 @@ class TestLoggingInitializationFailFast:
     async def test_logging_updates_current_log_file_tracking(self, essential_config, allow_runtime_creation):
         """Test that logging updates .current_log file for telemetry endpoint."""
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_dir = Path(tmpdir) / "logs"
-            log_dir.mkdir()
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
 
-            # Track if .current_log was written
-            current_log_written = False
-            original_open = open
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                log_dir = Path(tmpdir) / "logs"
+                log_dir.mkdir()
 
-            def mock_open(*args, **kwargs):
-                nonlocal current_log_written
-                if args and ".current_log" in str(args[0]):
-                    current_log_written = True
-                return original_open(*args, **kwargs)
+                # Track if .current_log was written
+                current_log_written = False
+                original_open = open
 
-            with patch("builtins.open", side_effect=mock_open):
-                with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-                    mock_setup.return_value = None
+                def mock_open(*args, **kwargs):
+                    nonlocal current_log_written
+                    if args and ".current_log" in str(args[0]):
+                        current_log_written = True
+                    return original_open(*args, **kwargs)
 
-                    runtime = CIRISRuntime(
-                        adapter_types=["cli"],
-                        essential_config=essential_config,
-                        modules=["mock_llm"],
-                        timeout=2,
-                    )
+                with patch("builtins.open", side_effect=mock_open):
+                    with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                        mock_setup.return_value = None
 
-                    await runtime.initialize()
+                        runtime = CIRISRuntime(
+                            adapter_types=["cli"],
+                            essential_config=essential_config,
+                            modules=["mock_llm"],
+                            timeout=2,
+                        )
 
-                    # Verify setup_basic_logging was called
-                    assert mock_setup.called
+                        await runtime.initialize()
 
-                    await runtime.shutdown()
+                        # Verify setup_basic_logging was called
+                        assert mock_setup.called
+
+                        await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_incident_capture_handler_is_added(self, essential_config, allow_runtime_creation):
         """Test that incident capture handler is added when enabled."""
 
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-            mock_setup.return_value = None
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-            )
-
-            await runtime.initialize()
-
-            # Verify setup_basic_logging was called with incident capture enabled
-            call_args = mock_setup.call_args
-            assert call_args is not None
-            kwargs = call_args.kwargs
-            assert kwargs.get("enable_incident_capture") is True
-
-            await runtime.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_logging_respects_debug_mode(self, essential_config, allow_runtime_creation):
-        """Test that logging level respects debug mode setting."""
-
-        # Test with debug mode enabled
-        essential_config.debug_mode = True
-
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-            mock_setup.return_value = None
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-                debug=True,
-            )
-
-            await runtime.initialize()
-
-            # Verify DEBUG level was used
-            call_args = mock_setup.call_args
-            kwargs = call_args.kwargs
-            assert kwargs.get("level") == logging.DEBUG
-
-            await runtime.shutdown()
-
-        # Test with debug mode disabled
-        essential_config.debug_mode = False
-
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-            mock_setup.return_value = None
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-                debug=False,
-            )
-
-            await runtime.initialize()
-
-            # Verify INFO level was used
-            call_args = mock_setup.call_args
-            kwargs = call_args.kwargs
-            assert kwargs.get("level") == logging.INFO
-
-            await runtime.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_logging_critical_messages_on_failure(self, essential_config, allow_runtime_creation):
-        """Test that critical log messages are emitted on logging failures."""
-
-        # Capture log messages
-        with patch("ciris_engine.logic.runtime.ciris_runtime.logger") as mock_logger:
+        try:
             with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-                mock_setup.side_effect = Exception("Disk full")
-
-                with pytest.raises(RuntimeError):
-                    runtime = CIRISRuntime(
-                        adapter_types=["cli"],
-                        essential_config=essential_config,
-                        modules=["mock_llm"],
-                        timeout=2,
-                    )
-                    await runtime.initialize()
-
-                # Verify critical log was called
-                assert any(
-                    "CRITICAL" in str(call) or "Failed to setup file logging" in str(call)
-                    for call in mock_logger.critical.call_args_list
-                )
-
-    @pytest.mark.asyncio
-    async def test_runtime_continues_after_successful_logging_init(self, essential_config, allow_runtime_creation):
-        """Test that runtime continues initialization after successful logging setup."""
-
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-            mock_setup.return_value = None  # Success
-
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-            )
-
-            await runtime.initialize()
-
-            # Verify runtime completed initialization
-            assert runtime._initialized is True
-            assert runtime.agent_processor is not None
-            assert runtime.service_initializer is not None
-
-            await runtime.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_logging_initialization_order(self, essential_config, allow_runtime_creation):
-        """Test that logging is initialized early in the infrastructure setup."""
-
-        initialization_order = []
-
-        # Track order of initialization
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_logging:
-
-            def log_init(*args, **kwargs):
-                initialization_order.append("logging")
-                return None
-
-            mock_logging.side_effect = log_init
-
-            with patch("ciris_engine.logic.runtime.ciris_runtime.ServiceRegistry") as MockRegistry:
-                original_get_instance = MockRegistry.get_instance
-
-                def track_registry(*args, **kwargs):
-                    if "logging" not in initialization_order:
-                        # Logging should be initialized before extensive service registry use
-                        initialization_order.append("registry_before_logging")
-                    return original_get_instance(*args, **kwargs)
-
-                MockRegistry.get_instance = track_registry
+                mock_setup.return_value = None
 
                 runtime = CIRISRuntime(
                     adapter_types=["cli"],
@@ -525,34 +397,218 @@ class TestLoggingInitializationFailFast:
 
                 await runtime.initialize()
 
-                # Verify logging was initialized early
-                assert "logging" in initialization_order
-                assert initialization_order.index("logging") < 5  # Should be in first few steps
+                # Verify setup_basic_logging was called with incident capture enabled
+                call_args = mock_setup.call_args
+                assert call_args is not None
+                kwargs = call_args.kwargs
+                assert kwargs.get("enable_incident_capture") is True
 
                 await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
+
+    @pytest.mark.asyncio
+    async def test_logging_respects_debug_mode(self, essential_config, allow_runtime_creation):
+        """Test that logging level respects debug mode setting."""
+
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+
+        try:
+            # Test with debug mode enabled
+            essential_config.debug_mode = True
+
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                mock_setup.return_value = None
+
+                runtime = CIRISRuntime(
+                    adapter_types=["cli"],
+                    essential_config=essential_config,
+                    modules=["mock_llm"],
+                    timeout=2,
+                    debug=True,
+                )
+
+                await runtime.initialize()
+
+                # Verify DEBUG level was used
+                call_args = mock_setup.call_args
+                kwargs = call_args.kwargs
+                assert kwargs.get("level") == logging.DEBUG
+
+                await runtime.shutdown()
+
+            # Test with debug mode disabled
+            essential_config.debug_mode = False
+
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                mock_setup.return_value = None
+
+                runtime = CIRISRuntime(
+                    adapter_types=["cli"],
+                    essential_config=essential_config,
+                    modules=["mock_llm"],
+                    timeout=2,
+                    debug=False,
+                )
+
+                await runtime.initialize()
+
+                # Verify INFO level was used
+                call_args = mock_setup.call_args
+                kwargs = call_args.kwargs
+                assert kwargs.get("level") == logging.INFO
+
+                await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
+
+    @pytest.mark.asyncio
+    async def test_logging_critical_messages_on_failure(self, essential_config, allow_runtime_creation):
+        """Test that critical log messages are emitted on logging failures."""
+
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+
+        try:
+            # Capture log messages
+            with patch("ciris_engine.logic.runtime.ciris_runtime.logger") as mock_logger:
+                with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                    mock_setup.side_effect = Exception("Disk full")
+
+                    with pytest.raises(RuntimeError):
+                        runtime = CIRISRuntime(
+                            adapter_types=["cli"],
+                            essential_config=essential_config,
+                            modules=["mock_llm"],
+                            timeout=2,
+                        )
+                        await runtime.initialize()
+
+                    # Verify critical log was called
+                    assert any(
+                        "CRITICAL" in str(call) or "Failed to setup file logging" in str(call)
+                        for call in mock_logger.critical.call_args_list
+                    )
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
+
+    @pytest.mark.asyncio
+    async def test_runtime_continues_after_successful_logging_init(self, essential_config, allow_runtime_creation):
+        """Test that runtime continues initialization after successful logging setup."""
+
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+
+        try:
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                mock_setup.return_value = None  # Success
+
+                runtime = CIRISRuntime(
+                    adapter_types=["cli"],
+                    essential_config=essential_config,
+                    modules=["mock_llm"],
+                    timeout=2,
+                )
+
+                await runtime.initialize()
+
+                # Verify runtime completed initialization
+                assert runtime._initialized is True
+                assert runtime.agent_processor is not None
+                assert runtime.service_initializer is not None
+
+                await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
+
+    @pytest.mark.asyncio
+    async def test_logging_initialization_order(self, essential_config, allow_runtime_creation):
+        """Test that logging is initialized early in the infrastructure setup."""
+
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+
+        try:
+            initialization_order = []
+
+            # Track order of initialization
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_logging:
+
+                def log_init(*args, **kwargs):
+                    initialization_order.append("logging")
+                    return None
+
+                mock_logging.side_effect = log_init
+
+                with patch("ciris_engine.logic.runtime.ciris_runtime.ServiceRegistry") as MockRegistry:
+                    original_get_instance = MockRegistry.get_instance
+
+                    def track_registry(*args, **kwargs):
+                        if "logging" not in initialization_order:
+                            # Logging should be initialized before extensive service registry use
+                            initialization_order.append("registry_before_logging")
+                        return original_get_instance(*args, **kwargs)
+
+                    MockRegistry.get_instance = track_registry
+
+                    runtime = CIRISRuntime(
+                        adapter_types=["cli"],
+                        essential_config=essential_config,
+                        modules=["mock_llm"],
+                        timeout=2,
+                    )
+
+                    await runtime.initialize()
+
+                    # Verify logging was initialized early
+                    assert "logging" in initialization_order
+                    assert initialization_order.index("logging") < 5  # Should be in first few steps
+
+                    await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_logging_with_no_console_output(self, essential_config, allow_runtime_creation):
         """Test that console output is disabled for file-only logging."""
 
-        with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
-            mock_setup.return_value = None
+        # Temporarily clear PYTEST_CURRENT_TEST to enable logging setup code path
+        original_pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
 
-            runtime = CIRISRuntime(
-                adapter_types=["cli"],
-                essential_config=essential_config,
-                modules=["mock_llm"],
-                timeout=2,
-            )
+        try:
+            with patch("ciris_engine.logic.utils.logging_config.setup_basic_logging") as mock_setup:
+                mock_setup.return_value = None
 
-            await runtime.initialize()
+                runtime = CIRISRuntime(
+                    adapter_types=["cli"],
+                    essential_config=essential_config,
+                    modules=["mock_llm"],
+                    timeout=2,
+                )
 
-            # Verify console_output was set to False
-            call_args = mock_setup.call_args
-            kwargs = call_args.kwargs
-            assert kwargs.get("console_output") is False
+                await runtime.initialize()
 
-            await runtime.shutdown()
+                # Verify console_output was set to False
+                call_args = mock_setup.call_args
+                kwargs = call_args.kwargs
+                assert kwargs.get("console_output") is False
+
+                await runtime.shutdown()
+        finally:
+            # Restore PYTEST_CURRENT_TEST if it was set
+            if original_pytest_env is not None:
+                os.environ["PYTEST_CURRENT_TEST"] = original_pytest_env
 
     @pytest.mark.asyncio
     async def test_logging_creates_actual_files_and_all_symlinks(self, essential_config, allow_runtime_creation):

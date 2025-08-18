@@ -232,7 +232,7 @@ async def _get_system_overview(request: Request) -> SystemOverview:
     time_service = request.app.state.time_service
     resource_monitor = request.app.state.resource_monitor
     incident_service = request.app.state.incident_management_service
-    wise_authority = request.app.state.wise_authority
+    wise_authority = request.app.state.wise_authority_service
 
     # If any critical service is missing, we have a system failure
     if not telemetry_service:

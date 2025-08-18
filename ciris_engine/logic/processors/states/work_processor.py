@@ -71,7 +71,7 @@ class WorkProcessor(BaseProcessor):
 
     async def process(self, round_number: int) -> WorkResult:
         """Execute one round of work processing."""
-        logger.info(f"[WORK DEBUG] WorkProcessor.process called for round {round_number}")
+        logger.debug(f"WorkProcessor.process called for round {round_number}")
         start_time = self.time_service.now()
 
         round_metrics: dict = {
@@ -85,31 +85,31 @@ class WorkProcessor(BaseProcessor):
 
         try:
             # Phase 1: Task activation
-            logger.info("[WORK DEBUG] Phase 1: Activating pending tasks...")
+            logger.debug("Phase 1: Activating pending tasks...")
             activated = self.task_manager.activate_pending_tasks()
-            logger.info(f"[WORK DEBUG] Activated {activated} tasks")
+            logger.debug(f"Activated {activated} tasks")
             round_metrics["tasks_activated"] = activated
 
             # Phase 2: Seed thought generation
-            logger.info("[WORK DEBUG] Phase 2: Generating seed thoughts...")
+            logger.debug("Phase 2: Generating seed thoughts...")
             tasks_needing_seed = self.task_manager.get_tasks_needing_seed()
-            logger.info(f"[WORK DEBUG] Found {len(tasks_needing_seed)} tasks needing seed thoughts")
+            logger.debug(f"Found {len(tasks_needing_seed)} tasks needing seed thoughts")
             generated = self.thought_manager.generate_seed_thoughts(tasks_needing_seed, round_number)
-            logger.info(f"[WORK DEBUG] Generated {generated} seed thoughts")
+            logger.debug(f"Generated {generated} seed thoughts")
             round_metrics["thoughts_generated"] = generated
 
             # Phase 3: Populate processing queue
-            logger.info("[WORK DEBUG] Phase 3: Populating processing queue...")
+            logger.debug("Phase 3: Populating processing queue...")
             queue_size = self.thought_manager.populate_queue(round_number)
-            logger.info(f"[WORK DEBUG] Queue size after population: {queue_size}")
+            logger.debug(f"Queue size after population: {queue_size}")
 
             if queue_size > 0:
                 # Phase 4: Process thought batch
-                logger.info("[WORK DEBUG] Phase 4: Processing thought batch...")
+                logger.debug("Phase 4: Processing thought batch...")
                 batch = self.thought_manager.get_queue_batch()
-                logger.info(f"[WORK DEBUG] Got batch of {len(batch)} thoughts to process")
+                logger.debug(f"Got batch of {len(batch)} thoughts to process")
                 processed = await self._process_batch(batch, round_number)
-                logger.info(f"[WORK DEBUG] Processed {processed} thoughts")
+                logger.debug(f"Processed {processed} thoughts")
                 round_metrics["thoughts_processed"] = processed
 
                 # Update activity tracking

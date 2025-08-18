@@ -574,7 +574,7 @@ class AgentProcessor:
 
             # Use fallback-aware process_thought_item
             try:
-                logger.info(f"[DEBUG TIMING] Calling processor.process_thought_item for thought {thought.thought_id}")
+                logger.debug(f"Calling processor.process_thought_item for thought {thought.thought_id}")
                 context = ProcessorContext(
                     origin="wakeup_async",
                     prefetched_thought=thought if prefetched else None,
@@ -980,22 +980,22 @@ class AgentProcessor:
 
                     # Process based on current state
                     current_state = self.state_manager.get_state()
-                    logger.info(f"Processing round {round_count}, current state: {current_state}")
+                    logger.debug(f"Processing round {round_count}, current state: {current_state}")
 
                     # Get processor for current state
                     processor = self.state_processors.get(current_state)
-                    logger.info(
+                    logger.debug(
                         f"Got processor for state {current_state}: {processor.__class__.__name__ if processor else 'None'}"
                     )
 
                     if processor and current_state != AgentState.SHUTDOWN:
                         # Use the appropriate processor (except for SHUTDOWN which has special handling)
                         try:
-                            logger.info(
+                            logger.debug(
                                 f"Calling {processor.__class__.__name__}.process(round={self.current_round_number})"
                             )
                             result = await processor.process(self.current_round_number)
-                            logger.info(
+                            logger.debug(
                                 f"Processor returned: {result.__class__.__name__ if hasattr(result, '__class__') else type(result)}"
                             )
                             round_count += 1

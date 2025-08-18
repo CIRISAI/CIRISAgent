@@ -90,8 +90,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         self._thought_times = []  # Track last N thought processing times
         self._max_thought_history = 100
         self._messages_processed = 0
-        self._message_times = []  # Track message processing times
-        self._max_message_history = 100
+        # Note: _message_times removed - not applicable since messages can be REJECTed
         self._service_overrides = 0
         self._runtime_errors = 0
         self._single_steps = 0
@@ -146,17 +145,45 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     error="Agent processor not available",
                 )
 
+            # Ensure processor is paused
+            if not self.runtime.agent_processor.is_paused():
+                return ProcessorControlResponse(
+                    success=False,
+                    processor_name="agent",
+                    operation="single_step",
+                    new_status=self._processor_status,
+                    error="Cannot single-step unless processor is paused",
+                )
+
             result = await self.runtime.agent_processor.single_step()
+
+            # Track thought processing time if a thought was processed
+            if result.get("success") and result.get("processing_time_ms"):
+                processing_time = result["processing_time_ms"]
+
+                # Add to thought times list
+                self._thought_times.append(processing_time)
+
+                # Trim list to max history
+                if len(self._thought_times) > self._max_thought_history:
+                    self._thought_times = self._thought_times[-self._max_thought_history :]
+
+                # Update average
+                self._average_thought_time_ms = sum(self._thought_times) / len(self._thought_times)
+
+                # Track metrics
+                self._thoughts_processed += 1
+
             self._single_steps += 1
             self._commands_processed += 1
             await self._record_event("processor_control", "single_step", success=True, result=result)
 
             return ProcessorControlResponse(
-                success=True,
+                success=result.get("success", False),
                 processor_name="agent",
                 operation="single_step",
                 new_status=self._processor_status,
-                error=None,
+                error=result.get("error"),
             )
 
         except Exception as e:
@@ -1231,17 +1258,50 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     error="Service registry not available",
                 )
 
-            self.runtime.service_registry.reset_circuit_breakers()
+            # Reset circuit breakers - either all or for specific service type
+            if service_type:
+                # Get all providers of this service type and reset their breakers
+                from ciris_engine.schemas.runtime.enums import ServiceType
+
+                try:
+                    service_type_enum = ServiceType(service_type)
+                    providers_reset = []
+
+                    # Get all providers for this service type
+                    if service_type_enum in self.runtime.service_registry._services:
+                        for provider in self.runtime.service_registry._services[service_type_enum]:
+                            if provider.circuit_breaker:
+                                provider.circuit_breaker.reset()
+                                providers_reset.append(provider.name)
+
+                    message = f"Reset {len(providers_reset)} circuit breakers for {service_type} services"
+                except ValueError:
+                    # Invalid service type
+                    return CircuitBreakerResetResponse(
+                        success=False,
+                        message=f"Invalid service type: {service_type}",
+                        service_type=service_type,
+                        error=f"Invalid service type: {service_type}",
+                    )
+            else:
+                # Reset all circuit breakers
+                self.runtime.service_registry.reset_circuit_breakers()
+                providers_reset = list(self.runtime.service_registry._circuit_breakers.keys())
+                message = f"Reset all {len(providers_reset)} circuit breakers"
 
             await self._record_event(
-                "service_management", "reset_circuit_breakers", True, result={"service_type": service_type}
+                "service_management",
+                "reset_circuit_breakers",
+                True,
+                result={"service_type": service_type, "providers_reset": len(providers_reset)},
             )
 
             return CircuitBreakerResetResponse(
                 success=True,
-                message="Circuit breakers reset successfully",
+                message=message,
                 timestamp=self._now(),
                 service_type=service_type,
+                providers_reset=providers_reset,
             )
         except Exception as e:
             logger.error(f"Failed to reset circuit breakers: {e}")
@@ -1748,6 +1808,25 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         return metrics
 
+    def _track_thought_processing_time(self, processing_time_ms: float) -> None:
+        """
+        Callback to track thought processing times.
+        Called by AgentProcessor when a thought completes.
+        """
+        # Add to thought times list
+        self._thought_times.append(processing_time_ms)
+
+        # Trim list to max history
+        if len(self._thought_times) > self._max_thought_history:
+            self._thought_times = self._thought_times[-self._max_thought_history :]
+
+        # Update average
+        if self._thought_times:
+            self._average_thought_time_ms = sum(self._thought_times) / len(self._thought_times)
+
+        # Track metrics
+        self._thoughts_processed += 1
+
     def _calculate_average_thought_time(self) -> float:
         """Calculate average thought processing time."""
         if self._thought_times:
@@ -1755,18 +1834,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         return self._average_thought_time_ms
 
     def _calculate_average_latency(self) -> float:
-        """Calculate average message processing latency."""
-        if self._message_times:
-            return sum(self._message_times) / len(self._message_times)
-        return 0.0
+        """Calculate average thought processing latency."""
+        return self._calculate_average_thought_time()
 
     def _calculate_processing_rate(self) -> float:
-        """Calculate messages processed per second."""
-        if self._message_times and len(self._message_times) > 1:
-            # Rate based on recent messages
-            time_span = max(self._message_times) - min(self._message_times)
-            if time_span > 0:
-                return len(self._message_times) / (time_span / 1000.0)  # Convert ms to seconds
+        """Calculate thoughts processed per second."""
+        if self._thought_times and self._average_thought_time_ms > 0:
+            # Thoughts per second based on average processing time
+            avg_time_seconds = self._average_thought_time_ms / 1000.0
+            return 1.0 / avg_time_seconds  # Thoughts per second
         return 1.0  # Default rate
 
     def _calculate_current_load(self) -> float:
@@ -1843,6 +1919,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     def _set_runtime(self, runtime: "RuntimeInterface") -> None:
         """Set the runtime reference after initialization (private method)."""
         self.runtime = runtime
+
+        # Set up thought processing callback
+        if runtime and hasattr(runtime, "agent_processor"):
+            runtime.agent_processor.set_thought_processing_callback(self._track_thought_processing_time)
         # If adapter manager exists, update its runtime reference too
         if self.adapter_manager:
             from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime

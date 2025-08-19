@@ -57,14 +57,14 @@ class TestTSDBConfigTimingBug:
         return mock
 
     def test_bug_reproduction_without_fix(self, mock_memory_bus, mock_time_service, temp_db_path):
-        """Reproduce the bug where get_db_connection() is called without config.
+        """Verify the fix: get_db_connection() is now called WITH db_path.
 
-        This test demonstrates the issue:
+        This test verifies the fix:
         1. TSDBConsolidationService is created with a db_path
-        2. QueryManager is created WITHOUT the db_path
+        2. QueryManager is created WITH the db_path (FIXED)
         3. When start() is called, _consolidate_missed_windows() runs immediately
-        4. This calls QueryManager methods which call get_db_connection() without config
-        5. get_db_connection() tries to get config from ServiceRegistry (not available yet)
+        4. This calls QueryManager methods which call get_db_connection() WITH db_path
+        5. get_db_connection() uses the provided db_path, not ServiceRegistry
         """
         # Track calls to get_db_connection
         get_db_calls = []
@@ -72,7 +72,7 @@ class TestTSDBConfigTimingBug:
         def track_get_db_connection(db_path=None, **kwargs):
             """Track calls to get_db_connection."""
             get_db_calls.append({"db_path": db_path})
-            # This would normally fail without config, but for test we return mock
+            # Return a working connection
             conn = Mock()
             conn.cursor = Mock(return_value=Mock(fetchall=Mock(return_value=[]), fetchone=Mock(return_value=None)))
             conn.__enter__ = Mock(return_value=conn)
@@ -91,41 +91,47 @@ class TestTSDBConfigTimingBug:
                 db_path=temp_db_path,  # <-- db_path provided here
             )
 
-            # Start service - this triggers the bug
+            # Start service - now works correctly
             asyncio.run(service.start())
 
-            # Verify that get_db_connection was called WITHOUT db_path
-            # This is the bug - QueryManager doesn't have the db_path
+            # Verify that get_db_connection was called WITH db_path (FIXED!)
             assert len(get_db_calls) > 0, "get_db_connection should have been called"
 
-            # All calls should have db_path=None (the bug)
+            # All calls should have the db_path provided (the fix works!)
             for call in get_db_calls:
-                assert call["db_path"] is None, (
-                    f"BUG: get_db_connection called without db_path! "
-                    f"This means it will try to get config from ServiceRegistry "
-                    f"which isn't available during initialization."
+                assert call["db_path"] == temp_db_path, (
+                    f"FIXED: get_db_connection called WITH db_path={call['db_path']}! "
+                    f"This means it uses the provided path, not ServiceRegistry."
                 )
 
     def test_config_service_not_available_error(self, mock_memory_bus, mock_time_service):
-        """Test that the actual error occurs when config service is not available."""
+        """Test that the service works correctly even without config when db_path is provided."""
 
         # Ensure ServiceRegistry returns no config service
         with patch("ciris_engine.logic.registries.base.get_global_registry") as mock_registry:
             mock_registry.return_value.get_services_by_type.return_value = []
 
-            # This should raise RuntimeError about no config available
-            with pytest.raises(RuntimeError) as exc_info:
-                # Create service
+            # Create service WITH db_path - this should work now even without config
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+                test_db_path = f.name
+
+            try:
                 service = TSDBConsolidationService(
                     memory_bus=mock_memory_bus,
                     time_service=mock_time_service,
-                    # No db_path provided, so it will try to get from config
+                    db_path=test_db_path,  # With db_path, it doesn't need config
                 )
 
-                # Start service - this should fail
+                # Start service - this should work now
                 asyncio.run(service.start())
 
-            assert "No configuration available" in str(exc_info.value)
+                # Service started successfully even without config
+                assert service._running is True
+
+                # Stop service
+                asyncio.run(service.stop())
+            finally:
+                Path(test_db_path).unlink(missing_ok=True)
 
     @pytest.mark.asyncio
     async def test_proper_initialization_sequence(

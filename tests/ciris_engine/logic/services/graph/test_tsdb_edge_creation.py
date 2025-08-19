@@ -141,7 +141,7 @@ class TestTemporalEdgeCreation:
     async def test_daily_summary_temporal_edges(self, edge_manager, mock_db_connection):
         """Test temporal edges between daily summaries."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -248,7 +248,7 @@ class TestTemporalEdgeCreation:
     async def test_gap_in_temporal_chain(self, edge_manager, mock_db_connection):
         """Test temporal edges when there's a gap in the chain."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -314,7 +314,7 @@ class TestSameDayEdgeCreation:
     async def test_same_day_cross_type_edges(self, edge_manager, mock_db_connection):
         """Test edges between different summary types on the same day."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -392,7 +392,7 @@ class TestSameDayEdgeCreation:
     async def test_partial_types_same_day(self, edge_manager, mock_db_connection):
         """Test same-day edges with only some summary types present."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -461,7 +461,7 @@ class TestDuplicatePrevention:
     async def test_duplicate_edge_prevention(self, edge_manager, mock_db_connection):
         """Test that duplicate edges are prevented."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -516,7 +516,7 @@ class TestDuplicatePrevention:
     async def test_update_next_period_edges(self, edge_manager, mock_db_connection):
         """Test updating edges when a new period is inserted between existing ones."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -652,7 +652,7 @@ class TestEdgeAttributes:
     async def test_edge_attributes_json(self, edge_manager, mock_db_connection):
         """Test that edge attributes are properly stored as JSON."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -700,7 +700,7 @@ class TestEdgeAttributes:
     async def test_days_apart_attribute(self, edge_manager, mock_db_connection):
         """Test days_apart calculation in temporal edges."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(
@@ -784,7 +784,7 @@ class TestCleanupOrphanedEdges:
     async def test_cleanup_orphaned_edges(self, edge_manager, mock_db_connection):
         """Test that edges pointing to deleted nodes are cleaned up."""
 
-        def get_test_connection():
+        def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch(

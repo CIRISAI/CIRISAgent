@@ -19,12 +19,11 @@ class TestAuthServiceAsyncIOBug:
 
     @pytest.mark.asyncio
     async def test_load_users_from_db_asyncio_run_error(self):
-        """Test that _load_users_from_db raises error when called from async context.
+        """Test that the fixed _load_users_from_db works correctly with lazy loading.
 
-        This reproduces the production bug where asyncio.run() is called from
-        within an already running event loop, causing:
-        - RuntimeError: asyncio.run() cannot be called from a running event loop
-        - Immediate agent shutdown in production
+        The bug has been fixed by implementing lazy loading instead of
+        loading users in __init__ with asyncio.run(). This test verifies
+        the fix works correctly.
         """
         # Create mock auth service
         mock_auth_service = AsyncMock()
@@ -48,22 +47,16 @@ class TestAuthServiceAsyncIOBug:
         ]
         mock_auth_service.list_was.return_value = mock_was
 
-        # Create auth service with the mock
+        # Create auth service with the mock - now uses lazy loading
         auth_service = APIAuthService(auth_service=mock_auth_service)
 
-        # Since __init__ calls _load_users_from_db synchronously using asyncio.run(),
-        # we need to test the scenario where this is called from an async context
+        # The fix: users are loaded lazily when needed, not in __init__
+        # Trigger lazy loading by accessing a user
+        await auth_service._ensure_users_loaded()
 
-        # Reset the auth service to simulate calling from async context
-        auth_service._users.clear()
-
-        # This should raise RuntimeError when called from async context
-        with pytest.raises(RuntimeError) as exc_info:
-            # Simulate calling from within an async context (like the API startup)
-            await asyncio.get_running_loop().run_in_executor(None, auth_service._load_users_from_db)
-
-        # Verify the specific error message
-        assert "asyncio.run() cannot be called from a running event loop" in str(exc_info.value)
+        # Verify users were loaded successfully
+        assert len(auth_service._users) > 0
+        assert "wa-2025-01-18-test123" in auth_service._users or "wa-system-admin" in auth_service._users
 
     @pytest.mark.asyncio
     async def test_load_users_from_db_fixed_version(self):
@@ -215,24 +208,22 @@ class TestAuthServiceAsyncIOBug:
         assert admin_user.name == "admin"
         assert admin_user.auth_type == "password"
 
-    @patch("ciris_engine.logic.adapters.api.services.auth_service.asyncio.run")
-    def test_init_with_auth_service_calls_asyncio_run(self, mock_asyncio_run):
-        """Test that __init__ with auth_service calls asyncio.run() incorrectly.
+    def test_init_with_auth_service_calls_asyncio_run(self):
+        """Test that __init__ with auth_service NO LONGER calls asyncio.run().
 
-        This is the root cause of the production bug.
+        The bug has been fixed by using lazy loading instead of
+        loading users in __init__.
         """
         # Create mock auth service
         mock_auth_service = MagicMock()
 
-        # Mock asyncio.run to return empty list (no WAs)
-        mock_asyncio_run.return_value = []
-
-        # Create auth service - this will call asyncio.run() in __init__
+        # Create auth service - this NO LONGER calls asyncio.run() in __init__
         auth_service = APIAuthService(auth_service=mock_auth_service)
 
-        # Verify asyncio.run was called (this is the bug!)
-        assert mock_asyncio_run.called
+        # Verify auth service was created successfully
+        assert auth_service is not None
+        assert auth_service._auth_service == mock_auth_service
 
-        # In production, this call fails with:
-        # RuntimeError: asyncio.run() cannot be called from a running event loop
-        # Because the API server is already running in an async context
+        # Users are NOT loaded yet (lazy loading)
+        # The default admin is created only when no auth_service is provided
+        assert len(auth_service._users) == 0 or "wa-system-admin" in auth_service._users

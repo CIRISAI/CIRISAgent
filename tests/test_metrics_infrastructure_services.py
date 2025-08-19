@@ -480,11 +480,14 @@ class TestDatabaseMaintenanceServiceMetrics(BaseMetricsTest):
         mock_config_service = Mock()
         mock_config_service.essential_config = EssentialConfig()
 
-        # Mock the ServiceRegistry to return our config service
-        with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry:
+        # Mock both ServiceRegistry patterns (class and get_global_registry)
+        with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry, patch(
+            "ciris_engine.logic.registries.base.get_global_registry"
+        ) as mock_get_global:
             mock_registry = Mock()
             mock_registry.get_services_by_type.return_value = [mock_config_service]
             MockRegistry.return_value = mock_registry
+            mock_get_global.return_value = mock_registry
 
             metrics = db_maintenance_service._collect_metrics()
 
@@ -517,11 +520,14 @@ class TestDatabaseMaintenanceServiceMetrics(BaseMetricsTest):
         mock_config_service = Mock()
         mock_config_service.essential_config = EssentialConfig()
 
-        # Mock the ServiceRegistry to return our config service
-        with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry:
+        # Mock both ServiceRegistry patterns (class and get_global_registry)
+        with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry, patch(
+            "ciris_engine.logic.registries.base.get_global_registry"
+        ) as mock_get_global:
             mock_registry = Mock()
             mock_registry.get_services_by_type.return_value = [mock_config_service]
             MockRegistry.return_value = mock_registry
+            mock_get_global.return_value = mock_registry
 
             metrics = db_maintenance_service._collect_metrics()
 
@@ -696,10 +702,13 @@ class TestInfrastructureServicesIntegration(BaseMetricsTest):
 
                 # Test that each service provides base metrics
                 # Mock the ServiceRegistry for DatabaseMaintenanceService
-                with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry:
+                with patch("ciris_engine.logic.registries.base.ServiceRegistry") as MockRegistry, patch(
+                    "ciris_engine.logic.registries.base.get_global_registry"
+                ) as mock_get_global:
                     mock_registry = Mock()
                     mock_registry.get_services_by_type.return_value = [mock_config_service]
                     MockRegistry.return_value = mock_registry
+                    mock_get_global.return_value = mock_registry
 
                     for service in services:
                         metrics = service._collect_metrics()

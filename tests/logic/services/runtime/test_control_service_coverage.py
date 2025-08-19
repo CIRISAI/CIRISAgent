@@ -58,7 +58,7 @@ class TestRuntimeControlServiceCoverage:
         """Create a mock time service."""
         mock = Mock(spec=TimeServiceProtocol)
         mock.now.return_value = datetime.now(timezone.utc)
-        mock.uptime.return_value = 100.0
+        mock.uptime = Mock(return_value=100.0)
         return mock
 
     @pytest.fixture

@@ -1528,6 +1528,9 @@ class CIRISRuntime:
 
         # Mark shutdown as truly complete
         self._shutdown_complete = True
+        # If there's a shutdown event, set it to signal completion
+        if hasattr(self, "_shutdown_event"):
+            self._shutdown_event.set()
         logger.debug("Shutdown method returning")
 
     async def _preserve_shutdown_consciousness(self) -> None:

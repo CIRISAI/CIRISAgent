@@ -407,12 +407,15 @@ def main(
         # For CLI adapter, create a monitor task that forces exit when shutdown completes
         monitor_task = None
         if "cli" in selected_adapter_types:
+            # Create an event for signaling shutdown completion
+            shutdown_event = asyncio.Event()
+            # Store the event on the runtime so shutdown() can set it
+            runtime._shutdown_event = shutdown_event
 
             async def monitor_shutdown():
                 """Monitor for shutdown completion and force exit for CLI mode."""
-                # Wait for the shutdown flag to be set by the shutdown() method
-                while not getattr(runtime, "_shutdown_complete", False):
-                    await asyncio.sleep(0.1)
+                # Wait for the shutdown event to be set by the shutdown() method
+                await shutdown_event.wait()
 
                 # Shutdown is truly complete, give a moment for final logs
                 logger.info("CLI runtime shutdown complete, preparing clean exit")

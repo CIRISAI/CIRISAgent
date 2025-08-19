@@ -324,6 +324,33 @@ class CIRISRuntime:
         logger.info("Initializing CIRIS Runtime...")
 
         try:
+            # CRITICAL: Ensure all directories exist with correct permissions BEFORE anything else
+            from ciris_engine.logic.utils.directory_setup import (
+                DirectorySetupError,
+                setup_application_directories,
+                validate_directories,
+            )
+
+            try:
+                # In production (when running in container), validate only
+                # In development, create directories if needed
+                import os
+
+                is_production = os.environ.get("CIRIS_ENV", "dev").lower() == "prod"
+
+                if is_production:
+                    logger.info("Production environment detected - validating directories...")
+                    validate_directories()
+                else:
+                    logger.info("Development environment - setting up directories...")
+                    setup_application_directories()
+
+            except DirectorySetupError as e:
+                logger.critical(f"DIRECTORY SETUP FAILED: {e}")
+                # This will already have printed clear error messages to stderr
+                # and potentially exited the process
+                raise RuntimeError(f"Cannot start: Directory setup failed - {e}")
+
             # First initialize infrastructure services to get the InitializationService instance
             logger.info("[initialize] Initializing infrastructure services...")
             await self.service_initializer.initialize_infrastructure_services()

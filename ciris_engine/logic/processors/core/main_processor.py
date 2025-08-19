@@ -741,30 +741,40 @@ class AgentProcessor:
         Safe to call even if already paused.
 
         Returns:
-            True if successfully paused or already paused
+            True if successfully paused, False if already paused or error occurred
         """
         if self._is_paused:
             logger.info("AgentProcessor already paused")
-            return True
+            return False  # Already paused, no action taken
 
-        logger.info("Pausing AgentProcessor")
-        self._is_paused = True
+        try:
+            logger.info("Pausing AgentProcessor")
+            self._is_paused = True
 
-        # Create pause event if needed
-        if self._pause_event is None:
-            self._pause_event = asyncio.Event()
+            # Create pause event if needed
+            if self._pause_event is None:
+                self._pause_event = asyncio.Event()
 
-        # Create pipeline controller for single-stepping
-        if self._pipeline_controller is None:
-            from ciris_engine.protocols.pipeline_control import PipelineController
+            # Create pipeline controller for single-stepping
+            if self._pipeline_controller is None:
+                from ciris_engine.protocols.pipeline_control import PipelineController
 
-            self._pipeline_controller = PipelineController(is_paused=True)
+                self._pipeline_controller = PipelineController(is_paused=True)
 
-        # Inject pipeline controller into thought processor
-        if hasattr(self.thought_processor, "set_pipeline_controller"):
-            self.thought_processor.set_pipeline_controller(self._pipeline_controller)
+            # Inject pipeline controller into thought processor
+            if hasattr(self.thought_processor, "set_pipeline_controller"):
+                self.thought_processor.set_pipeline_controller(self._pipeline_controller)
+            else:
+                logger.warning("Thought processor does not support pipeline controller injection")
+                # Still return True as pause was successful even without controller
 
-        return True
+            return True  # Successfully paused
+
+        except Exception as e:
+            logger.error(f"Failed to pause processing: {e}")
+            # Rollback pause state on error
+            self._is_paused = False
+            return False  # Failed to pause
 
     async def resume_processing(self) -> bool:
         """

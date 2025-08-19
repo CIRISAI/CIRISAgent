@@ -223,7 +223,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             await self._record_event("processor_control", "pause", success=success)
 
             return ProcessorControlResponse(
-                success=True, processor_name="agent", operation="pause", new_status=self._processor_status, error=None
+                success=success,
+                processor_name="agent",
+                operation="pause",
+                new_status=self._processor_status,
+                error=None if success else "Failed to pause processor",
             )
 
         except Exception as e:

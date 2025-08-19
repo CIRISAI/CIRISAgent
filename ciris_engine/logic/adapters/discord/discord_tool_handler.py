@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import discord
 
@@ -71,7 +71,9 @@ class DiscordToolHandler:
         """
         self.tool_registry = tool_registry
 
-    async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> ToolExecutionResult:
+    async def execute_tool(
+        self, tool_name: str, tool_args: Union[Dict[str, Any], ToolExecutionArgs]
+    ) -> ToolExecutionResult:
         """Execute a registered Discord tool via the tool registry.
 
         Args:
@@ -105,19 +107,22 @@ class DiscordToolHandler:
                 correlation_id=str(uuid.uuid4()),
             )
 
-        # Convert dict to typed args
-        typed_args = ToolExecutionArgs(
-            correlation_id=tool_args.get("correlation_id", str(uuid.uuid4())),
-            thought_id=tool_args.get("thought_id"),
-            task_id=tool_args.get("task_id"),
-            channel_id=tool_args.get("channel_id"),
-            timeout_seconds=tool_args.get("timeout_seconds", 30.0),
-            tool_specific_params={
-                k: v
-                for k, v in tool_args.items()
-                if k not in ["correlation_id", "thought_id", "task_id", "channel_id", "timeout_seconds"]
-            },
-        )
+        # Convert dict to typed args if needed
+        if isinstance(tool_args, dict):
+            typed_args = ToolExecutionArgs(
+                correlation_id=tool_args.get("correlation_id", str(uuid.uuid4())),
+                thought_id=tool_args.get("thought_id"),
+                task_id=tool_args.get("task_id"),
+                channel_id=tool_args.get("channel_id"),
+                timeout_seconds=tool_args.get("timeout_seconds", 30.0),
+                tool_specific_params={
+                    k: v
+                    for k, v in tool_args.items()
+                    if k not in ["correlation_id", "thought_id", "task_id", "channel_id", "timeout_seconds"]
+                },
+            )
+        else:
+            typed_args = tool_args
 
         correlation_id = str(typed_args.correlation_id or uuid.uuid4())
 
@@ -337,7 +342,7 @@ class DiscordToolHandler:
                 tools.append(tool_info)
         return tools
 
-    def validate_tool_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    def validate_tool_parameters(self, tool_name: str, parameters: Union[Dict[str, Any], ToolExecutionArgs]) -> bool:
         """Basic parameter validation using tool registry schemas.
 
         Args:
@@ -351,11 +356,22 @@ class DiscordToolHandler:
             return False
 
         try:
+            # Convert to dict if it's ToolExecutionArgs
+            if isinstance(parameters, ToolExecutionArgs):
+                param_dict = parameters.get_all_params()
+            else:
+                param_dict = parameters
+
             schema = self.tool_registry.get_schema(tool_name)
             if not schema:
                 return False
 
-            return all(k in parameters for k in schema.keys())
+            # Check if all required keys are present
+            if hasattr(schema, "required"):
+                return all(k in param_dict for k in schema.required)
+            else:
+                # Legacy support for dict schemas
+                return all(k in param_dict for k in schema.keys())
 
         except Exception as e:
             logger.warning(f"Parameter validation failed for {tool_name}: {e}")

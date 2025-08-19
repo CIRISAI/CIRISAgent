@@ -176,7 +176,43 @@ def setup_application_directories(
                 sys.exit(1)
             raise DirectorySetupError(error_msg)
 
-    print("✓ All directories successfully configured")
+    # Check critical files that must be writable
+    critical_files = [
+        base_dir / "audit_logs.jsonl",  # Audit service export file
+    ]
+
+    for file_path in critical_files:
+        if file_path.exists():
+            # Check if we can write to it
+            try:
+                # Try to open in append mode (won't truncate)
+                with open(file_path, "a"):
+                    pass
+                print(f"✓ Write access verified for {file_path}")
+            except (PermissionError, IOError) as e:
+                # Get file stats for debugging
+                stat = file_path.stat()
+                import grp
+                import pwd
+
+                try:
+                    owner = pwd.getpwuid(stat.st_uid).pw_name
+                    group = grp.getgrgid(stat.st_gid).gr_name
+                except:
+                    owner = str(stat.st_uid)
+                    group = str(stat.st_gid)
+
+                error_msg = f"CANNOT WRITE TO CRITICAL FILE {file_path}"
+                print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+                print(f"  Owner: {owner}:{group} (uid={stat.st_uid}, gid={stat.st_gid})", file=sys.stderr)
+                print(f"  Permissions: {oct(stat.st_mode & 0o777)}", file=sys.stderr)
+                print(f"  Current user: uid={user_id}, gid={group_id}", file=sys.stderr)
+                print(f"  FIX: sudo chown {user_id}:{group_id} {file_path}", file=sys.stderr)
+                if fail_fast:
+                    sys.exit(1)
+                raise PermissionError(error_msg)
+
+    print("✓ All directories and critical files successfully configured")
 
 
 def validate_directories(base_dir: Optional[Path] = None) -> bool:
@@ -233,7 +269,42 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
             print(f"  Error: {e}", file=sys.stderr)
             raise PermissionError(error_msg)
 
-    print("✓ All directories validated successfully")
+    # Check critical files if they exist
+    critical_files = [
+        base_dir / "audit_logs.jsonl",  # Audit service export file
+    ]
+
+    for file_path in critical_files:
+        if file_path.exists():
+            # Check if we can write to it
+            try:
+                with open(file_path, "a"):
+                    pass
+            except (PermissionError, IOError):
+                # Get file stats for debugging
+                stat = file_path.stat()
+                import grp
+                import pwd
+
+                try:
+                    owner = pwd.getpwuid(stat.st_uid).pw_name
+                    group = grp.getgrgid(stat.st_gid).gr_name
+                except:
+                    owner = str(stat.st_uid)
+                    group = str(stat.st_gid)
+
+                current_uid = os.getuid()
+                current_gid = os.getgid()
+
+                error_msg = f"CANNOT WRITE TO CRITICAL FILE: {file_path}"
+                print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+                print(f"  Owner: {owner}:{group} (uid={stat.st_uid}, gid={stat.st_gid})", file=sys.stderr)
+                print(f"  Permissions: {oct(stat.st_mode & 0o777)}", file=sys.stderr)
+                print(f"  Current user: uid={current_uid}, gid={current_gid}", file=sys.stderr)
+                print(f"  FIX: sudo chown {current_uid}:{current_gid} {file_path}", file=sys.stderr)
+                raise PermissionError(error_msg)
+
+    print("✓ All directories and critical files validated successfully")
     return True
 
 

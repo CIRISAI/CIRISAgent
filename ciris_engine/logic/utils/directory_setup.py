@@ -57,6 +57,81 @@ def check_disk_space(path: Path, required_mb: int = 100) -> Tuple[bool, float]:
         return False, 0.0
 
 
+def _check_disk_space_or_fail(base_dir: Path, fail_fast: bool) -> None:
+    """Check disk space and fail if insufficient."""
+    has_space, available_mb = check_disk_space(base_dir)
+    if not has_space:
+        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 100MB REQUIRED - EXITING"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        if fail_fast:
+            sys.exit(1)
+        raise DiskSpaceError(error_msg)
+
+
+def _create_directory(dir_path: Path, mode: int, fail_fast: bool) -> None:
+    """Create a single directory with specified permissions."""
+    if not dir_path.exists():
+        dir_path.mkdir(parents=True, mode=mode)
+        print(f"✓ Created directory: {dir_path} with mode {oct(mode)}")
+
+        # Verify creation
+        if not dir_path.exists():
+            error_msg = f"UNABLE TO CREATE DIRECTORY {dir_path} - CHECK FILESYSTEM"
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+            if fail_fast:
+                sys.exit(1)
+            raise DirectoryCreationError(error_msg)
+
+
+def _fix_directory_permissions(dir_path: Path, mode: int, fail_fast: bool) -> None:
+    """Fix permissions on existing directory."""
+    current_mode = dir_path.stat().st_mode & 0o777
+    if current_mode != mode:
+        try:
+            dir_path.chmod(mode)
+            print(f"✓ Fixed permissions for {dir_path}: {oct(current_mode)} -> {oct(mode)}")
+        except Exception as perm_error:
+            error_msg = f"WRONG PERMS on {dir_path}: Has {oct(current_mode)}, needs {oct(mode)} - CANNOT FIX - EXITING"
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+            print(f"  Details: {perm_error}", file=sys.stderr)
+            if fail_fast:
+                sys.exit(1)
+            raise PermissionError(error_msg)
+
+
+def _check_directory_ownership(dir_path: Path, user_id: int, group_id: int, fail_fast: bool) -> None:
+    """Check and fix directory ownership."""
+    stat = dir_path.stat()
+    if stat.st_uid != user_id or stat.st_gid != group_id:
+        try:
+            os.chown(dir_path, user_id, group_id)
+            print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+        except Exception as own_error:
+            error_msg = (
+                f"WRONG OWNER on {dir_path}: Has {stat.st_uid}:{stat.st_gid}, needs {user_id}:{group_id} - CANNOT FIX"
+            )
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+            print(f"  Try: sudo chown {user_id}:{group_id} {dir_path}", file=sys.stderr)
+            if fail_fast:
+                sys.exit(1)
+            raise OwnershipError(error_msg)
+
+
+def _check_directory_writability(dir_path: Path, fail_fast: bool) -> None:
+    """Test if directory is writable."""
+    test_file = dir_path / ".write_test"
+    try:
+        test_file.touch()
+        test_file.unlink()
+    except Exception as write_error:
+        error_msg = f"CANNOT WRITE TO {dir_path} - CHECK PERMISSIONS AND FILESYSTEM"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        print(f"  Error: {write_error}", file=sys.stderr)
+        if fail_fast:
+            sys.exit(1)
+        raise WriteTestError(error_msg)
+
+
 def setup_application_directories(
     base_dir: Optional[Path] = None,
     user_id: Optional[int] = None,
@@ -88,13 +163,7 @@ def setup_application_directories(
         group_id = os.getgid()
 
     # First, check disk space
-    has_space, available_mb = check_disk_space(base_dir)
-    if not has_space:
-        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 100MB REQUIRED - EXITING"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        if fail_fast:
-            sys.exit(1)
-        raise DiskSpaceError(error_msg)
+    _check_disk_space_or_fail(base_dir, fail_fast)
 
     # Define directories and their required permissions
     # 0o755 = rwxr-xr-x (readable by all, writable by owner)
@@ -112,60 +181,22 @@ def setup_application_directories(
         dir_path = base_dir / dir_name
 
         try:
-            # Create directory if it doesn't exist
-            if not dir_path.exists():
-                dir_path.mkdir(parents=True, mode=mode)
-                print(f"✓ Created directory: {dir_path} with mode {oct(mode)}")
+            # Create or verify directory
+            _create_directory(dir_path, mode, fail_fast)
 
-                # Verify creation
-                if not dir_path.exists():
-                    error_msg = f"UNABLE TO CREATE DIRECTORY {dir_path} - CHECK FILESYSTEM"
-                    print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-                    if fail_fast:
-                        sys.exit(1)
-                    raise DirectoryCreationError(error_msg)
-            else:
-                # Directory exists, check permissions
-                current_mode = dir_path.stat().st_mode & 0o777
-                if current_mode != mode:
-                    try:
-                        dir_path.chmod(mode)
-                        print(f"✓ Fixed permissions for {dir_path}: {oct(current_mode)} -> {oct(mode)}")
-                    except Exception as perm_error:
-                        error_msg = f"WRONG PERMS on {dir_path}: Has {oct(current_mode)}, needs {oct(mode)} - CANNOT FIX - EXITING"
-                        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-                        print(f"  Details: {perm_error}", file=sys.stderr)
-                        if fail_fast:
-                            sys.exit(1)
-                        raise PermissionError(error_msg)
+            # Check and fix permissions if directory exists
+            if dir_path.exists():
+                _fix_directory_permissions(dir_path, mode, fail_fast)
 
             # Test write access
-            test_file = dir_path / ".write_test"
-            try:
-                test_file.touch()
-                test_file.unlink()
-            except Exception as write_error:
-                error_msg = f"CANNOT WRITE TO {dir_path} - CHECK OWNERSHIP AND PERMISSIONS"
-                print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-                print(f"  Current owner: uid={dir_path.stat().st_uid}, gid={dir_path.stat().st_gid}", file=sys.stderr)
-                print(f"  Current perms: {oct(dir_path.stat().st_mode & 0o777)}", file=sys.stderr)
-                print(f"  Running as: uid={user_id}, gid={group_id}", file=sys.stderr)
-                print(f"  Error: {write_error}", file=sys.stderr)
-                if fail_fast:
-                    sys.exit(1)
-                raise PermissionError(error_msg)
+            _check_directory_writability(dir_path, fail_fast)
 
-            # Try to fix ownership if needed (will fail gracefully if not root)
-            current_stat = dir_path.stat()
-            if current_stat.st_uid != user_id or current_stat.st_gid != group_id:
-                try:
-                    os.chown(dir_path, user_id, group_id)
-                    print(
-                        f"✓ Fixed ownership for {dir_path}: {current_stat.st_uid}:{current_stat.st_gid} -> {user_id}:{group_id}"
-                    )
-                except Exception:
-                    # Not fatal if we can't change ownership as long as we can write
-                    print(f"  Warning: Cannot change ownership of {dir_path} (need root), but write access confirmed")
+            # Try to fix ownership (non-fatal if fails)
+            try:
+                _check_directory_ownership(dir_path, user_id, group_id, False)
+            except (OwnershipError, SystemExit):
+                # Not fatal if we can't change ownership as long as we can write
+                print(f"  Warning: Cannot change ownership of {dir_path} (need root), but write access confirmed")
 
         except (DirectorySetupError, SystemExit):
             raise  # Re-raise our own exceptions and exits
@@ -187,6 +218,7 @@ def setup_application_directories(
             try:
                 # Try to open in append mode (won't truncate)
                 with open(file_path, "a"):
+                    # Successfully opened for writing
                     pass
                 print(f"✓ Write access verified for {file_path}")
             except (PermissionError, IOError) as e:
@@ -198,7 +230,7 @@ def setup_application_directories(
                 try:
                     owner = pwd.getpwuid(stat.st_uid).pw_name
                     group = grp.getgrgid(stat.st_gid).gr_name
-                except:
+                except (KeyError, OSError):
                     owner = str(stat.st_uid)
                     group = str(stat.st_gid)
 
@@ -213,6 +245,64 @@ def setup_application_directories(
                 raise PermissionError(error_msg)
 
     print("✓ All directories and critical files successfully configured")
+
+
+def _validate_directory(dir_path: Path) -> None:
+    """Validate a single directory exists and is writable."""
+    if not dir_path.exists():
+        error_msg = f"REQUIRED DIRECTORY MISSING: {dir_path} - EXITING"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        raise DirectoryCreationError(error_msg)
+
+    if not dir_path.is_dir():
+        error_msg = f"PATH EXISTS BUT IS NOT A DIRECTORY: {dir_path} - EXITING"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        raise DirectorySetupError(error_msg)
+
+    # Check write access
+    test_file = dir_path / ".write_test"
+    try:
+        test_file.touch()
+        test_file.unlink()
+    except Exception as e:
+        error_msg = f"CANNOT WRITE TO DIRECTORY: {dir_path} - CHECK PERMISSIONS"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        print(f"  Error: {e}", file=sys.stderr)
+        raise PermissionError(error_msg)
+
+
+def _validate_file_permissions(file_path: Path) -> None:
+    """Validate a file is writable if it exists."""
+    if not file_path.exists():
+        return  # File doesn't exist, that's OK
+
+    try:
+        with open(file_path, "a"):
+            # File is writable
+            pass
+    except (PermissionError, IOError):
+        # Get file stats for debugging
+        stat = file_path.stat()
+        import grp
+        import pwd
+
+        try:
+            owner = pwd.getpwuid(stat.st_uid).pw_name
+            group = grp.getgrgid(stat.st_gid).gr_name
+        except (KeyError, OSError):
+            owner = str(stat.st_uid)
+            group = str(stat.st_gid)
+
+        current_uid = os.getuid()
+        current_gid = os.getgid()
+
+        error_msg = f"CANNOT WRITE TO CRITICAL FILE {file_path}"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        print(f"  Owner: {owner}:{group} (uid={stat.st_uid}, gid={stat.st_gid})", file=sys.stderr)
+        print(f"  Permissions: {oct(stat.st_mode & 0o777)}", file=sys.stderr)
+        print(f"  Current user: uid={current_uid}, gid={current_gid}", file=sys.stderr)
+        print(f"  FIX: sudo chown {current_uid}:{current_gid} {file_path}", file=sys.stderr)
+        raise PermissionError(error_msg)
 
 
 def validate_directories(base_dir: Optional[Path] = None) -> bool:
@@ -235,39 +325,13 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
         base_dir = Path.cwd()
 
     # Check disk space first
-    has_space, available_mb = check_disk_space(base_dir)
-    if not has_space:
-        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 100MB REQUIRED - EXITING"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        raise DiskSpaceError(error_msg)
+    _check_disk_space_or_fail(base_dir, True)
 
     required_dirs = ["data", "data_archive", "logs", "audit_keys", "config"]
 
     for dir_name in required_dirs:
         dir_path = base_dir / dir_name
-
-        # Check existence
-        if not dir_path.exists():
-            error_msg = f"REQUIRED DIRECTORY MISSING: {dir_path} - EXITING"
-            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-            raise DirectoryCreationError(error_msg)
-
-        # Check if it's actually a directory
-        if not dir_path.is_dir():
-            error_msg = f"PATH EXISTS BUT IS NOT A DIRECTORY: {dir_path} - EXITING"
-            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-            raise DirectorySetupError(error_msg)
-
-        # Check write access
-        test_file = dir_path / ".write_test"
-        try:
-            test_file.touch()
-            test_file.unlink()
-        except Exception as e:
-            error_msg = f"CANNOT WRITE TO DIRECTORY: {dir_path} - CHECK PERMISSIONS"
-            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-            print(f"  Error: {e}", file=sys.stderr)
-            raise PermissionError(error_msg)
+        _validate_directory(dir_path)
 
     # Check critical files if they exist
     critical_files = [
@@ -279,6 +343,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
             # Check if we can write to it
             try:
                 with open(file_path, "a"):
+                    # File is writable
                     pass
             except (PermissionError, IOError):
                 # Get file stats for debugging
@@ -289,7 +354,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
                 try:
                     owner = pwd.getpwuid(stat.st_uid).pw_name
                     group = grp.getgrgid(stat.st_gid).gr_name
-                except:
+                except (KeyError, OSError):
                     owner = str(stat.st_uid)
                     group = str(stat.st_gid)
 

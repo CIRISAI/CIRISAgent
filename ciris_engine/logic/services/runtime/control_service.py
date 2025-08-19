@@ -267,7 +267,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             await self._record_event("processor_control", "resume", success=success)
 
             return ProcessorControlResponse(
-                success=True, processor_name="agent", operation="resume", new_status=self._processor_status, error=None
+                success=success,
+                processor_name="agent",
+                operation="resume",
+                new_status=self._processor_status,
+                error=None if success else "Failed to resume processor",
             )
 
         except Exception as e:
@@ -746,7 +750,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return None
 
         info = await self.adapter_manager.get_adapter_info(adapter_id)
-        if "error" in info:
+        if info is None or "error" in info:
             return None
 
         # Map the status string to AdapterStatus enum

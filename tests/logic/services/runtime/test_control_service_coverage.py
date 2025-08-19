@@ -17,10 +17,16 @@ import pytest
 from ciris_engine.logic.runtime.adapter_manager import AdapterInstance, RuntimeAdapterManager
 from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterOperationResult, AdapterStatus
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterOperationResult
+from ciris_engine.schemas.runtime.adapter_management import AdapterStatus as AdapterStatusModel
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
-from ciris_engine.schemas.services.core.runtime import ProcessorControlResponse, ProcessorStatus
+from ciris_engine.schemas.services.core.runtime import (
+    AdapterInfo,
+    AdapterStatus,
+    ProcessorControlResponse,
+    ProcessorStatus,
+)
 
 
 class TestRuntimeControlServiceCoverage:
@@ -89,6 +95,7 @@ class TestRuntimeControlServiceCoverage:
         )
         manager.list_adapters = AsyncMock(return_value=[])
         manager.loaded_adapters = {}
+        manager.active_adapters = []  # Add this for metrics
         return manager
 
     @pytest.fixture
@@ -283,7 +290,7 @@ class TestRuntimeControlServiceCoverage:
         """Test list_adapters method."""
         mock_adapter_manager.list_adapters = AsyncMock(
             return_value=[
-                AdapterStatus(
+                AdapterStatusModel(
                     adapter_id="test1",
                     adapter_type="cli",
                     is_running=True,
@@ -312,21 +319,32 @@ class TestRuntimeControlServiceCoverage:
             loaded_at=datetime.now(timezone.utc),
             is_running=True,
         )
+        # Use a real dict for loaded_adapters so 'in' operator works
         mock_adapter_manager.loaded_adapters = {"test_id": mock_instance}
-        mock_adapter_manager.get_adapter_info = AsyncMock(
-            return_value=Mock(adapter_id="test_id", adapter_type="cli", status="running")
-        )
+        # Control service expects adapter_manager.get_adapter_info to return a dict
+        # that gets converted to AdapterInfo
+        mock_info = {
+            "adapter_id": "test_id",
+            "adapter_type": "cli",
+            "status": "running",
+            "loaded_at": datetime.now(timezone.utc).isoformat(),
+            "services_registered": [],
+            "lifecycle_tasks": [],
+            "metrics": {},
+        }
+        mock_adapter_manager.get_adapter_info = AsyncMock(return_value=mock_info)
 
         info = await control_service.get_adapter_info("test_id")
 
         assert info is not None
         assert info.adapter_id == "test_id"
         assert info.adapter_type == "cli"
-        assert info.status == "running"
+        assert info.status == AdapterStatus.RUNNING
 
     @pytest.mark.asyncio
     async def test_get_adapter_info_not_found(self, control_service, mock_adapter_manager):
         """Test get_adapter_info when adapter not found."""
+        # Use a real dict for loaded_adapters so 'in' operator works
         mock_adapter_manager.loaded_adapters = {}
         mock_adapter_manager.get_adapter_info = AsyncMock(return_value=None)
 
@@ -344,17 +362,17 @@ class TestRuntimeControlServiceCoverage:
     async def test_processor_control_with_errors(self, control_service, mock_runtime):
         """Test processor control operations with errors."""
         # Test pause returning false (failure)
-        mock_runtime.agent_processor.pause_processing.return_value = False
+        mock_runtime.agent_processor.pause_processing = AsyncMock(return_value=False)
 
         response = await control_service.pause_processing()
         assert response.success is False
         assert response.error == "Failed to pause processor"
 
         # Reset for resume test
-        mock_runtime.agent_processor.pause_processing.return_value = True
+        mock_runtime.agent_processor.pause_processing = AsyncMock(return_value=True)
         control_service._processor_status = ProcessorStatus.PAUSED
         mock_runtime.agent_processor.is_paused.return_value = True
-        mock_runtime.agent_processor.resume_processing.return_value = False
+        mock_runtime.agent_processor.resume_processing = AsyncMock(return_value=False)
 
         response = await control_service.resume_processing()
         assert response.success is False
@@ -384,8 +402,11 @@ class TestRuntimeControlServiceCoverage:
         assert control_service.get_service_type() == ServiceType.RUNTIME_CONTROL
 
     @pytest.mark.asyncio
-    async def test_runtime_control_metrics(self, control_service):
+    async def test_runtime_control_metrics(self, control_service, mock_adapter_manager):
         """Test that metrics are properly tracked."""
+        # Add active_adapters attribute to mock adapter manager
+        mock_adapter_manager.active_adapters = []
+
         # Perform some operations
         await control_service.pause_processing()
         control_service._processor_status = ProcessorStatus.PAUSED

@@ -11,8 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
-from ciris_engine.schemas.services.authority.wise_authority import WACertificate
-from ciris_engine.schemas.services.authority_core import WARole
+from ciris_engine.schemas.services.authority_core import WACertificate, WARole
 
 
 class TestAuthServiceAsyncIOBug:

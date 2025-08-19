@@ -111,28 +111,30 @@ class TestDiscordThreadHandling:
                 if thread_id not in platform_instance.discord_observer.monitored_channel_ids:
                     platform_instance.discord_observer.monitored_channel_ids.append(thread_id)
 
-                    # Store correlation
-                    from ciris_engine.schemas.persistence.core import Correlation
+                    # Store correlation using the actual ServiceCorrelation schema
+                    from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation
 
-                    correlation = Correlation(
-                        correlation_type="discord_thread",
+                    correlation = ServiceCorrelation(
+                        correlation_id=f"thread_{thread_id}",
+                        correlation_type=CorrelationType.SERVICE_INTERACTION,
                         source_id=thread_id,
                         target_id=parent_id,
-                        metadata={"monitored": True, "thread_name": thread.name},
-                        created_at=datetime.now(timezone.utc).isoformat(),
-                        updated_at=datetime.now(timezone.utc).isoformat(),
                         timestamp=datetime.now(timezone.utc).isoformat(),
+                        metadata={"monitored": True, "thread_name": thread.name, "thread_type": "discord_thread"},
                     )
-                    mock_add_correlation(correlation, None)
+                    mock_add_correlation(correlation)
 
             # Verify correlation was stored
             mock_add_correlation.assert_called_once()
             correlation = mock_add_correlation.call_args[0][0]
-            assert correlation.correlation_type == "discord_thread"
+            from ciris_engine.schemas.telemetry.core import CorrelationType
+
+            assert correlation.correlation_type == CorrelationType.SERVICE_INTERACTION
             assert correlation.source_id == "777777777"
             assert correlation.target_id == "123456789"
             assert correlation.metadata["monitored"] is True
             assert correlation.metadata["thread_name"] == "Persistent Thread"
+            assert correlation.metadata["thread_type"] == "discord_thread"
 
     @pytest.mark.asyncio
     async def test_on_thread_delete_removes_from_monitoring(self, mock_platform):
@@ -183,7 +185,9 @@ class TestDiscordThreadHandling:
     @pytest.mark.asyncio
     async def test_fetch_threads_in_monitored_channels(self, mock_platform):
         """Test _fetch_threads_in_monitored_channels on startup."""
-        with patch("ciris_engine.logic.persistence.get_correlations_by_type") as mock_get_correlations:
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations.get_correlations_by_type_and_time"
+        ) as mock_get_correlations:
             with patch("ciris_engine.logic.persistence.add_correlation") as mock_add_correlation:
                 # No existing correlations
                 mock_get_correlations.return_value = []
@@ -219,7 +223,9 @@ class TestDiscordThreadHandling:
     @pytest.mark.asyncio
     async def test_fetch_threads_handles_existing_correlations(self, mock_platform):
         """Test that existing thread correlations are respected."""
-        with patch("ciris_engine.logic.persistence.get_correlations_by_type") as mock_get_correlations:
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations.get_correlations_by_type_and_time"
+        ) as mock_get_correlations:
             # Mock existing correlation
             existing_correlation = Mock()
             existing_correlation.source_id = "555555555"

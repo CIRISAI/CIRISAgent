@@ -741,11 +741,11 @@ class AgentProcessor:
         Safe to call even if already paused.
 
         Returns:
-            True if successfully paused, False if already paused or error occurred
+            True if successfully paused (or already paused), False if error occurred
         """
         if self._is_paused:
             logger.info("AgentProcessor already paused")
-            return False  # Already paused, no action taken
+            return True  # Already paused, still in desired state
 
         try:
             logger.info("Pausing AgentProcessor")

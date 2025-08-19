@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 191,
-    "files_affected": 80,
+    "occurrences": 190,
+    "files_affected": 79,
     "categories": {
-      "generic_data": 169,
+      "generic_data": 168,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
@@ -1415,14 +1415,6 @@
         "file": "ciris_engine/schemas/runtime/manifest.py",
         "line": 100,
         "class": "ServiceManifest",
-        "function": null,
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/schemas/runtime/adapter_management.py",
-        "line": 52,
-        "class": "AdapterStatus",
         "function": null,
         "context": "other",
         "usage_hint": "generic_data"
@@ -2856,7 +2848,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 354,
-    "files_affected": 114
+    "occurrences": 353,
+    "files_affected": 113
   }
 }

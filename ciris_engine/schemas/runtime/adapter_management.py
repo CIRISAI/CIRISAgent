@@ -5,7 +5,7 @@ These replace all Dict[str, Any] usage in adapter_manager.py.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,9 @@ class AdapterConfig(BaseModel):
 
     adapter_type: str = Field(..., description="Type of adapter (cli, api, discord, etc.)")
     enabled: bool = Field(True, description="Whether adapter is enabled")
-    settings: dict = Field(default_factory=dict, description="Adapter-specific settings")
+    settings: Dict[str, Optional[Union[str, int, float, bool, List[str]]]] = Field(
+        default_factory=dict, description="Adapter-specific settings"
+    )
 
 
 class AdapterLoadRequest(BaseModel):
@@ -23,7 +25,7 @@ class AdapterLoadRequest(BaseModel):
 
     adapter_type: str = Field(..., description="Type of adapter to load")
     adapter_id: str = Field(..., description="Unique ID for the adapter instance")
-    config: Optional[dict] = Field(default_factory=dict, description="Configuration parameters")
+    config: Optional[AdapterConfig] = Field(None, description="Configuration parameters")
     auto_start: bool = Field(True, description="Whether to auto-start the adapter")
 
 
@@ -35,7 +37,7 @@ class AdapterOperationResult(BaseModel):
     adapter_type: Optional[str] = Field(None, description="Adapter type")
     message: Optional[str] = Field(None, description="Operation message")
     error: Optional[str] = Field(None, description="Error message if failed")
-    details: Optional[dict] = Field(None, description="Additional details")
+    details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional details")
 
 
 class AdapterStatus(BaseModel):
@@ -47,9 +49,9 @@ class AdapterStatus(BaseModel):
     loaded_at: datetime = Field(..., description="When adapter was loaded")
     services_registered: List[str] = Field(default_factory=list, description="Services registered by adapter")
     config_params: AdapterConfig = Field(..., description="Adapter configuration")
-    metrics: Optional[dict] = Field(None, description="Adapter metrics")
+    metrics: Optional[AdapterMetrics] = Field(None, description="Adapter metrics")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
-    tools: Optional[List[Dict[str, Any]]] = Field(None, description="Tools provided by adapter")
+    tools: Optional[List[str]] = Field(None, description="Tool names provided by adapter")
 
 
 class AdapterListResponse(BaseModel):
@@ -77,3 +79,31 @@ class AdapterMetrics(BaseModel):
     uptime_seconds: float = Field(0.0, description="Adapter uptime in seconds")
     last_error: Optional[str] = Field(None, description="Last error message")
     last_error_time: Optional[datetime] = Field(None, description="Last error timestamp")
+
+
+class AdapterInfo(BaseModel):
+    """Detailed information about an adapter."""
+
+    adapter_id: str = Field(..., description="Adapter ID")
+    adapter_type: str = Field(..., description="Adapter type")
+    config: AdapterConfig = Field(..., description="Adapter configuration")
+    load_time: str = Field(..., description="ISO timestamp when loaded")
+    is_running: bool = Field(..., description="Whether adapter is running")
+
+
+class CommunicationAdapterInfo(BaseModel):
+    """Information about a communication adapter."""
+
+    adapter_id: str = Field(..., description="Adapter ID")
+    adapter_type: str = Field(..., description="Adapter type")
+    is_running: bool = Field(..., description="Whether adapter is running")
+
+
+class CommunicationAdapterStatus(BaseModel):
+    """Status of all communication adapters."""
+
+    total_communication_adapters: int = Field(..., description="Total count")
+    running_communication_adapters: int = Field(..., description="Running count")
+    communication_adapters: List[CommunicationAdapterInfo] = Field(..., description="List of adapters")
+    safe_to_unload: bool = Field(..., description="Whether safe to unload")
+    warning_message: Optional[str] = Field(None, description="Warning message")

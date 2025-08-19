@@ -515,6 +515,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self.telemetry_service = GraphTelemetryService(
                 memory_bus=self.bus_manager.memory, time_service=self.time_service  # Now we have the memory bus
             )
+            # Set service registry so it can initialize the aggregator
+            if self.service_registry:
+                self.telemetry_service._set_service_registry(self.service_registry)
             await self.telemetry_service.start()
             self._services_started_count += 1
             logger.info("GraphTelemetryService initialized")

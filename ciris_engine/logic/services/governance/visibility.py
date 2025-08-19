@@ -133,6 +133,46 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
             reasoning_depth=reasoning_depth,
         )
 
+    async def get_task_history(self, limit: int = 10) -> List[Task]:
+        """
+        Get recent task history for the agent.
+
+        Args:
+            limit: Maximum number of tasks to return (default 10)
+
+        Returns:
+            List of recent tasks, ordered by most recent first
+        """
+        self._transparency_requests += 1
+
+        # Get recent tasks from persistence
+        tasks = []
+
+        # First try to get completed tasks
+        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED, db_path=self._db_path)
+        if completed_tasks:
+            # Sort by updated_at timestamp (most recent first)
+            completed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
+            tasks.extend(completed_tasks[:limit])
+
+        # If we need more tasks, add active ones
+        if len(tasks) < limit:
+            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self._db_path)
+            if active_tasks:
+                active_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
+                remaining = limit - len(tasks)
+                tasks.extend(active_tasks[:remaining])
+
+        # If still need more, add pending
+        if len(tasks) < limit:
+            pending_tasks = get_tasks_by_status(TaskStatus.PENDING, db_path=self._db_path)
+            if pending_tasks:
+                pending_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
+                remaining = limit - len(tasks)
+                tasks.extend(pending_tasks[:remaining])
+
+        return tasks
+
     async def get_reasoning_trace(self, task_id: str) -> ReasoningTrace:
         """Get reasoning trace for a task."""
         self._transparency_requests += 1

@@ -124,7 +124,7 @@ class TelemetryAggregator:
         self.cache: Dict[str, Tuple[datetime, Dict]] = {}
         self.cache_ttl = timedelta(seconds=30)
 
-    async def collect_all_parallel(self) -> dict[str, ServiceTelemetryData]:
+    async def collect_all_parallel(self) -> Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]:
         """
         Collect telemetry from all services in parallel.
 
@@ -160,7 +160,10 @@ class TelemetryAggregator:
                         telemetry[category][service_name] = result
                     except Exception as e:
                         logger.warning(f"Failed to collect from {service_name}: {e}")
-                        telemetry[category][service_name] = {}  # NO FALLBACKS
+                        # Return empty telemetry data instead of empty dict
+                        telemetry[category][service_name] = ServiceTelemetryData(
+                            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                        )  # NO FALLBACKS
                 else:
                     # Task timed out
                     telemetry[category][service_name] = self.get_fallback_metrics(service_name)
@@ -186,7 +189,12 @@ class TelemetryAggregator:
 
             # Try different collection methods
             metrics = await self._try_collect_metrics(service)
-            return metrics if metrics is not None else {}  # NO FALLBACKS
+            if metrics is not None:
+                return metrics
+            # Return empty telemetry data instead of empty dict
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+            )  # NO FALLBACKS
 
         except Exception as e:
             logger.error(f"Failed to collect from {service_name}: {e}")
@@ -221,12 +229,38 @@ class TelemetryAggregator:
         # Try get_metrics first
         if hasattr(service, "get_metrics"):
             metrics = await service.get_metrics()
-            return metrics if isinstance(metrics, dict) else {}
+            if isinstance(metrics, ServiceTelemetryData):
+                return metrics
+            elif isinstance(metrics, dict):
+                # Convert dict to ServiceTelemetryData
+                return ServiceTelemetryData(
+                    healthy=metrics.get("healthy", False),
+                    uptime_seconds=metrics.get("uptime_seconds"),
+                    error_count=metrics.get("error_count"),
+                    requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
+                    error_rate=metrics.get("error_rate"),
+                    memory_mb=metrics.get("memory_mb"),
+                    custom_metrics=metrics.get("custom_metrics"),
+                )
+            return None
 
         # Try _collect_metrics
         if hasattr(service, "_collect_metrics"):
             metrics = service._collect_metrics()
-            return metrics if isinstance(metrics, dict) else {}
+            if isinstance(metrics, ServiceTelemetryData):
+                return metrics
+            elif isinstance(metrics, dict):
+                # Convert dict to ServiceTelemetryData
+                return ServiceTelemetryData(
+                    healthy=metrics.get("healthy", False),
+                    uptime_seconds=metrics.get("uptime_seconds"),
+                    error_count=metrics.get("error_count"),
+                    requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
+                    error_rate=metrics.get("error_rate"),
+                    memory_mb=metrics.get("memory_mb"),
+                    custom_metrics=metrics.get("custom_metrics"),
+                )
+            return None
 
         # Try get_status
         if hasattr(service, "get_status"):
@@ -328,17 +362,26 @@ class TelemetryAggregator:
         else:
             return {"status": str(status)}
 
-    def _process_service_metrics(self, service_data: Dict) -> tuple:
+    def _process_service_metrics(self, service_data: Union[ServiceTelemetryData, Dict]) -> tuple:
         """Process metrics for a single service."""
-        is_healthy = service_data.get("healthy", False) or service_data.get("available", False)
-        errors = service_data.get("error_count", 0)
-        requests = service_data.get("request_count", 0)
-        error_rate = service_data.get("error_rate", 0.0)
-        uptime = service_data.get("uptime_seconds", 0)
+        # Handle both ServiceTelemetryData objects and legacy dicts
+        if isinstance(service_data, ServiceTelemetryData):
+            is_healthy = service_data.healthy
+            errors = service_data.error_count or 0
+            requests = service_data.requests_handled or 0
+            error_rate = service_data.error_rate or 0.0
+            uptime = service_data.uptime_seconds or 0
+        else:
+            # Legacy dict handling (for backwards compatibility during migration)
+            is_healthy = service_data.get("healthy", False) or service_data.get("available", False)
+            errors = service_data.get("error_count", 0)
+            requests = service_data.get("request_count", 0)
+            error_rate = service_data.get("error_rate", 0.0)
+            uptime = service_data.get("uptime_seconds", 0)
 
         return is_healthy, errors, requests, error_rate, uptime
 
-    def _aggregate_service_metrics(self, telemetry: dict[str, ServiceTelemetryData]) -> tuple:
+    def _aggregate_service_metrics(self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]) -> tuple:
         """Aggregate metrics from all services."""
         total_services = 0
         healthy_services = 0
@@ -370,7 +413,9 @@ class TelemetryAggregator:
 
         return total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates
 
-    def compute_covenant_metrics(self, telemetry: dict[str, ServiceTelemetryData]) -> dict[str, Union[float, int, str]]:
+    def compute_covenant_metrics(
+        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]
+    ) -> Dict[str, Union[float, int, str]]:
         """
         Compute covenant/ethics metrics from governance services.
 
@@ -389,23 +434,50 @@ class TelemetryAggregator:
             # Extract from WiseAuthority metrics
             if "governance" in telemetry and "wise_authority" in telemetry["governance"]:
                 wa_metrics = telemetry["governance"]["wise_authority"]
-                covenant_metrics["wise_authority_deferrals"] = wa_metrics.get("deferral_count", 0)
-                covenant_metrics["ethical_decisions"] = wa_metrics.get("guidance_requests", 0)
+                if isinstance(wa_metrics, ServiceTelemetryData):
+                    # Extract from custom_metrics if available
+                    if wa_metrics.custom_metrics:
+                        covenant_metrics["wise_authority_deferrals"] = wa_metrics.custom_metrics.get(
+                            "deferral_count", 0
+                        )
+                        covenant_metrics["ethical_decisions"] = wa_metrics.custom_metrics.get("guidance_requests", 0)
+                else:
+                    # Legacy dict handling
+                    covenant_metrics["wise_authority_deferrals"] = wa_metrics.get("deferral_count", 0)
+                    covenant_metrics["ethical_decisions"] = wa_metrics.get("guidance_requests", 0)
 
             # Extract from AdaptiveFilter metrics
             if "governance" in telemetry and "adaptive_filter" in telemetry["governance"]:
                 filter_metrics = telemetry["governance"]["adaptive_filter"]
-                covenant_metrics["filter_interventions"] = filter_metrics.get("filter_actions", 0)
+                if isinstance(filter_metrics, ServiceTelemetryData):
+                    if filter_metrics.custom_metrics:
+                        covenant_metrics["filter_interventions"] = filter_metrics.custom_metrics.get(
+                            "filter_actions", 0
+                        )
+                else:
+                    covenant_metrics["filter_interventions"] = filter_metrics.get("filter_actions", 0)
 
             # Extract from Visibility metrics
             if "governance" in telemetry and "visibility" in telemetry["governance"]:
                 vis_metrics = telemetry["governance"]["visibility"]
-                covenant_metrics["transparency_score"] = vis_metrics.get("transparency_index", 0.0)
+                if isinstance(vis_metrics, ServiceTelemetryData):
+                    if vis_metrics.custom_metrics:
+                        covenant_metrics["transparency_score"] = vis_metrics.custom_metrics.get(
+                            "transparency_index", 0.0
+                        )
+                else:
+                    covenant_metrics["transparency_score"] = vis_metrics.get("transparency_index", 0.0)
 
             # Extract from SelfObservation metrics
             if "governance" in telemetry and "self_observation" in telemetry["governance"]:
                 so_metrics = telemetry["governance"]["self_observation"]
-                covenant_metrics["self_observation_insights"] = so_metrics.get("insights_generated", 0)
+                if isinstance(so_metrics, ServiceTelemetryData):
+                    if so_metrics.custom_metrics:
+                        covenant_metrics["self_observation_insights"] = so_metrics.custom_metrics.get(
+                            "insights_generated", 0
+                        )
+                else:
+                    covenant_metrics["self_observation_insights"] = so_metrics.get("insights_generated", 0)
 
             # Calculate compliance rate (simplified - ratio of deferrals to decisions)
             if covenant_metrics["ethical_decisions"] > 0:
@@ -419,8 +491,8 @@ class TelemetryAggregator:
         return covenant_metrics
 
     def calculate_aggregates(
-        self, telemetry: dict[str, ServiceTelemetryData]
-    ) -> dict[str, Union[bool, int, float, str]]:
+        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]
+    ) -> Dict[str, Union[bool, int, float, str]]:
         """Calculate system-wide aggregate metrics."""
         # Get aggregated metrics
         total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates = (

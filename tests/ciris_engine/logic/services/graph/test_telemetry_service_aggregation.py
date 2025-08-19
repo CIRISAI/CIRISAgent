@@ -105,14 +105,38 @@ class TestGraphTelemetryServiceAggregation:
             service_registry=mock_service_registry, time_service=telemetry_service._time_service
         )
 
-        # Pre-populate cache
-        cached_data = {"system_healthy": True, "services_online": 5, "cached": True}
-        aggregator.cache["aggregated_telemetry"] = (datetime.now(timezone.utc), cached_data.copy())
+        # Import the response types
+        from ciris_engine.schemas.services.graph.telemetry import (
+            AggregatedTelemetryMetadata,
+            AggregatedTelemetryResponse,
+        )
+
+        # Pre-populate cache with typed response
+        cached_response = AggregatedTelemetryResponse(
+            system_healthy=True,
+            services_online=5,
+            services_total=5,
+            overall_error_rate=0.0,
+            overall_uptime_seconds=100,
+            total_errors=0,
+            total_requests=100,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            services={},
+            metadata=AggregatedTelemetryMetadata(
+                collection_method="parallel",
+                cache_ttl_seconds=30,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                cache_hit=False,  # Will be set to True when retrieved
+            ),
+        )
+        aggregator.cache["aggregated_telemetry"] = (datetime.now(timezone.utc), cached_response)
 
         telemetry_service._telemetry_aggregator = aggregator
 
         result = await telemetry_service.get_aggregated_telemetry()
 
+        # Check that metadata exists and cache_hit is True
+        assert result.metadata is not None
         assert result.metadata.cache_hit is True
         assert result.system_healthy is True
         assert result.services_online == 5

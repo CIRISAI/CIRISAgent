@@ -95,10 +95,24 @@ class TestRuntimeControlServiceCoverage:
         """Create a mock adapter manager."""
         manager = RuntimeAdapterManager(mock_runtime, mock_time_service)
         manager.load_adapter = AsyncMock(
-            return_value=AdapterOperationResult(success=True, adapter_id="test_adapter", message="Adapter loaded")
+            return_value=AdapterOperationResult(
+                success=True,
+                adapter_id="test_adapter",
+                adapter_type="cli",
+                message="Adapter loaded",
+                error=None,
+                details={},
+            )
         )
         manager.unload_adapter = AsyncMock(
-            return_value=AdapterOperationResult(success=True, adapter_id="test_adapter", message="Adapter unloaded")
+            return_value=AdapterOperationResult(
+                success=True,
+                adapter_id="test_adapter",
+                adapter_type="cli",
+                message="Adapter unloaded",
+                error=None,
+                details={},
+            )
         )
         manager.list_adapters = AsyncMock(return_value=[])
         return manager
@@ -261,8 +275,10 @@ class TestRuntimeControlServiceCoverage:
             AdapterStatus(
                 adapter_id="test1",
                 adapter_type="cli",
-                status="running",
+                is_running=True,
                 loaded_at=datetime.now(timezone.utc),
+                services_registered=[],
+                config_params=AdapterConfig(adapter_type="cli"),
                 metrics=None,
             )
         ]
@@ -531,3 +547,149 @@ class TestRuntimeControlServiceCoverage:
         assert response.success is False
         assert "error" in response.message.lower()
         assert control_service._runtime_errors == 1
+
+    @pytest.mark.asyncio
+    async def test_service_capabilities(self, control_service):
+        """Test get_service_capabilities method."""
+        capabilities = control_service.get_service_capabilities()
+
+        assert isinstance(capabilities, ServiceCapabilities)
+        assert "processor_control" in capabilities.capabilities
+        assert "adapter_management" in capabilities.capabilities
+        assert "config_management" in capabilities.capabilities
+
+    @pytest.mark.asyncio
+    async def test_get_service_type(self, control_service):
+        """Test get_service_type method."""
+        service_type = control_service.get_service_type()
+        assert service_type == ServiceType.RUNTIME_CONTROL
+
+    @pytest.mark.asyncio
+    async def test_processor_status_tracking(self, control_service, mock_runtime):
+        """Test that processor status is tracked correctly."""
+        # Initial state
+        assert control_service._processor_status == ProcessorStatus.RUNNING
+
+        # Pause
+        await control_service.pause_processing()
+        assert control_service._processor_status == ProcessorStatus.PAUSED
+
+        # Resume
+        control_service._processor_status = ProcessorStatus.PAUSED
+        mock_runtime.agent_processor.is_paused = True
+        await control_service.resume_processing()
+        assert control_service._processor_status == ProcessorStatus.RUNNING
+
+        # Shutdown
+        await control_service.shutdown_runtime("test")
+        assert control_service._processor_status == ProcessorStatus.SHUTDOWN
+
+    @pytest.mark.asyncio
+    async def test_adapter_operations_with_error_handling(self, control_service, mock_adapter_manager):
+        """Test adapter operations with error conditions."""
+        # Test load failure
+        mock_adapter_manager.load_adapter.return_value = AdapterOperationResult(
+            success=False,
+            adapter_id="failed",
+            adapter_type="cli",
+            message="Load failed",
+            error="Test error",
+            details={},
+        )
+
+        config = AdapterConfig(adapter_type="cli", settings={})
+        response = await control_service.load_adapter("cli", "failed", config)
+        assert response.success is False
+        assert "failed" in response.message.lower()
+
+        # Test unload failure
+        mock_adapter_manager.unload_adapter.return_value = AdapterOperationResult(
+            success=False,
+            adapter_id="failed",
+            adapter_type="cli",
+            message="Unload failed",
+            error="Test error",
+            details={},
+        )
+
+        response = await control_service.unload_adapter("failed")
+        assert response.success is False
+
+    @pytest.mark.asyncio
+    async def test_config_operations_with_errors(self, control_service, mock_config_manager):
+        """Test config operations with error conditions."""
+        # Test validation failure
+        mock_config_manager.validate_config.return_value = (False, ["Invalid config"])
+
+        response = await control_service.validate_config({"bad": "config"})
+        assert response.valid is False
+        assert len(response.issues) > 0
+
+        # Test backup failure
+        mock_config_manager.backup_config.side_effect = Exception("Backup failed")
+
+        response = await control_service.backup_config("test")
+        assert response.success is False
+
+        # Test restore failure
+        mock_config_manager.restore_config.return_value = False
+
+        response = await control_service.restore_config("test")
+        assert response.success is False
+
+    @pytest.mark.asyncio
+    async def test_event_history_limit(self, control_service):
+        """Test that event history is limited."""
+        # Add many events
+        for i in range(150):
+            await control_service._record_event(f"event_{i}", {"index": i})
+
+        # Should be limited to 100 most recent
+        assert len(control_service._events_history) == 100
+        # First event should be event_50
+        assert control_service._events_history[0].event_type == "event_50"
+        # Last event should be event_149
+        assert control_service._events_history[-1].event_type == "event_149"
+
+    @pytest.mark.asyncio
+    async def test_processing_metrics_update(self, control_service, mock_runtime):
+        """Test that processing metrics are updated correctly."""
+        # Set up mock return values
+        mock_runtime.agent_processor.get_metrics.return_value = {
+            "thoughts_processed": 200,
+            "thoughts_pending": 10,
+            "average_thought_time_ms": 75.0,
+        }
+
+        # Trigger metric update (this would normally happen in background)
+        control_service._thoughts_processed = 200
+        control_service._thoughts_pending = 10
+        control_service._average_thought_time_ms = 75.0
+
+        metrics = await control_service.get_metrics()
+
+        assert metrics["thoughts_processed"] == 200
+        assert metrics["thoughts_pending"] == 10
+        assert metrics["average_thought_time_ms"] == 75.0
+
+    @pytest.mark.asyncio
+    async def test_runtime_not_available_scenarios(self, control_service):
+        """Test scenarios where runtime is not available."""
+        control_service.runtime = None
+
+        # Test processor operations
+        response = await control_service.pause_processing()
+        assert response.success is False
+
+        response = await control_service.resume_processing()
+        assert response.success is False
+
+        response = await control_service.single_step()
+        assert response.success is False
+
+        # Test status operations
+        status = await control_service.get_runtime_status()
+        assert status.processor_status == ProcessorStatus.UNKNOWN
+
+        health = await control_service.get_service_health_status()
+        assert health.overall_health == "critical"

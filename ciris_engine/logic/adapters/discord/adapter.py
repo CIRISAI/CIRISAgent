@@ -109,6 +109,72 @@ class DiscordPlatform(Service):
                     if conn_mgr and hasattr(conn_mgr, "_handle_connected"):
                         await conn_mgr._handle_connected()
 
+                # Fetch and monitor threads in monitored channels
+                await self._fetch_threads_in_monitored_channels()
+
+            async def _fetch_threads_in_monitored_channels(self):
+                """Fetch all threads in monitored channels and add them to monitoring."""
+                if not (hasattr(self.platform, "config") and self.platform.config):
+                    return
+
+                logger.info("Fetching threads in monitored channels...")
+                threads_added = 0
+
+                # Load existing thread correlations from persistence
+                try:
+                    from ciris_engine.logic.persistence import get_correlations_by_type
+
+                    existing_threads = get_correlations_by_type("discord_thread", None)
+                    existing_thread_ids = {c.source_id for c in existing_threads if c.metadata.get("monitored")}
+                except Exception as e:
+                    logger.warning(f"Could not load existing thread correlations: {e}")
+                    existing_thread_ids = set()
+
+                for channel_id in self.platform.config.monitored_channel_ids:
+                    try:
+                        channel = self.get_channel(int(channel_id))
+                        if channel and isinstance(channel, discord.TextChannel):
+                            # Get active threads in this channel
+                            for thread in channel.threads:
+                                thread_id = str(thread.id)
+                                if thread_id not in existing_thread_ids:
+                                    # Add to observer if it exists
+                                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
+                                        if thread_id not in self.platform.discord_observer.monitored_channel_ids:
+                                            self.platform.discord_observer.monitored_channel_ids.append(thread_id)
+                                            threads_added += 1
+
+                                            # Store correlation
+                                            try:
+                                                from datetime import datetime, timezone
+
+                                                from ciris_engine.logic.persistence import add_correlation
+                                                from ciris_engine.schemas.persistence.core import Correlation
+
+                                                correlation = Correlation(
+                                                    correlation_type="discord_thread",
+                                                    source_id=thread_id,
+                                                    target_id=channel_id,
+                                                    metadata={"monitored": True, "thread_name": thread.name},
+                                                    created_at=datetime.now(timezone.utc).isoformat(),
+                                                    updated_at=datetime.now(timezone.utc).isoformat(),
+                                                    timestamp=datetime.now(timezone.utc).isoformat(),
+                                                )
+                                                add_correlation(correlation, None)
+                                            except Exception as e:
+                                                logger.warning(f"Failed to store thread correlation: {e}")
+                                else:
+                                    # Thread already known, just add to observer
+                                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
+                                        if thread_id not in self.platform.discord_observer.monitored_channel_ids:
+                                            self.platform.discord_observer.monitored_channel_ids.append(thread_id)
+                                            threads_added += 1
+                    except Exception as e:
+                        logger.warning(f"Could not fetch threads for channel {channel_id}: {e}")
+
+                if threads_added > 0:
+                    logger.info(f"Added {threads_added} threads to monitoring")
+
             async def on_disconnect(self):
                 """Called when the client disconnects."""
                 logger.warning("Discord client on_disconnect event")
@@ -131,6 +197,63 @@ class DiscordPlatform(Service):
                 # Let the discord adapter handle it
                 if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
                     await self.platform.discord_adapter.on_raw_reaction_add(payload)
+
+            async def on_thread_create(self, thread: discord.Thread):
+                """Called when a thread is created."""
+                logger.info(f"Thread created: {thread.name} (ID: {thread.id}) in parent {thread.parent_id}")
+                # Check if parent channel is monitored
+                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
+                    adapter = self.platform.discord_adapter
+                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
+                        observer = self.platform.discord_observer
+                        if hasattr(self.platform, "config") and self.platform.config:
+                            parent_id = str(thread.parent_id)
+                            if parent_id in self.platform.config.monitored_channel_ids:
+                                # Add thread to monitored channels
+                                thread_id = str(thread.id)
+                                if thread_id not in observer.monitored_channel_ids:
+                                    observer.monitored_channel_ids.append(thread_id)
+                                    logger.info(
+                                        f"Added thread {thread_id} to monitored channels (parent {parent_id} is monitored)"
+                                    )
+
+                                    # Store correlation for persistence
+                                    try:
+                                        from datetime import datetime, timezone
+
+                                        from ciris_engine.logic.persistence import add_correlation
+                                        from ciris_engine.schemas.persistence.core import Correlation
+
+                                        correlation = Correlation(
+                                            correlation_type="discord_thread",
+                                            source_id=thread_id,
+                                            target_id=parent_id,
+                                            metadata={"monitored": True, "thread_name": thread.name},
+                                            created_at=datetime.now(timezone.utc).isoformat(),
+                                            updated_at=datetime.now(timezone.utc).isoformat(),
+                                            timestamp=datetime.now(timezone.utc).isoformat(),
+                                        )
+                                        add_correlation(correlation, None)
+                                        logger.debug(f"Stored thread correlation for {thread_id}")
+                                    except Exception as e:
+                                        logger.warning(f"Failed to store thread correlation: {e}")
+
+            async def on_thread_join(self, thread: discord.Thread):
+                """Called when the bot joins a thread."""
+                logger.info(f"Bot joined thread: {thread.name} (ID: {thread.id})")
+                # Use same logic as on_thread_create
+                await self.on_thread_create(thread)
+
+            async def on_thread_delete(self, thread: discord.Thread):
+                """Called when a thread is deleted."""
+                logger.info(f"Thread deleted: {thread.name} (ID: {thread.id})")
+                # Remove from monitored channels if present
+                if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
+                    observer = self.platform.discord_observer
+                    thread_id = str(thread.id)
+                    if thread_id in observer.monitored_channel_ids:
+                        observer.monitored_channel_ids.remove(thread_id)
+                        logger.info(f"Removed deleted thread {thread_id} from monitored channels")
 
         # Create Discord client without explicit loop (discord.py will manage it)
         self.client = CIRISDiscordClient(platform=self, intents=intents)

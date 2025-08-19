@@ -1,14 +1,14 @@
 {
   "production": {
-    "occurrences": 199,
-    "files_affected": 82,
+    "occurrences": 193,
+    "files_affected": 81,
     "categories": {
-      "generic_data": 176,
+      "generic_data": 171,
       "parameters": 6,
       "configuration": 3,
       "api_request": 1,
       "api_response": 5,
-      "context_data": 8
+      "context_data": 7
     },
     "findings": [
       {
@@ -657,54 +657,6 @@
         "class": "DiscordAuditLogger",
         "function": "log_tool_execution",
         "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 48,
-        "class": "DiscordThreadManager",
-        "function": "__init__",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 73,
-        "class": "DiscordThreadManager",
-        "function": "create_thread",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 140,
-        "class": "DiscordThreadManager",
-        "function": "get_or_create_thread",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 203,
-        "class": "DiscordThreadManager",
-        "function": "create_guidance_thread",
-        "context": "function_parameter",
-        "usage_hint": "context_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 232,
-        "class": "DiscordThreadManager",
-        "function": "create_task_thread",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 305,
-        "class": "DiscordThreadManager",
-        "function": "get_thread_info",
-        "context": "other",
         "usage_hint": "generic_data"
       },
       {
@@ -2920,7 +2872,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 362,
-    "files_affected": 116
+    "occurrences": 356,
+    "files_affected": 115
   }
 }

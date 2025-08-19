@@ -40,6 +40,16 @@ class AdapterOperationResult(BaseModel):
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional details")
 
 
+class AdapterMetrics(BaseModel):
+    """Metrics for an adapter."""
+
+    messages_processed: int = Field(0, description="Total messages processed")
+    errors_count: int = Field(0, description="Total errors")
+    uptime_seconds: float = Field(0.0, description="Adapter uptime in seconds")
+    last_error: Optional[str] = Field(None, description="Last error message")
+    last_error_time: Optional[datetime] = Field(None, description="Last error timestamp")
+
+
 class AdapterStatus(BaseModel):
     """Status of a single adapter."""
 
@@ -69,16 +79,6 @@ class ServiceRegistrationInfo(BaseModel):
     provider_name: str = Field(..., description="Provider name")
     priority: str = Field(..., description="Registration priority")
     capabilities: List[str] = Field(..., description="Service capabilities")
-
-
-class AdapterMetrics(BaseModel):
-    """Metrics for an adapter."""
-
-    messages_processed: int = Field(0, description="Total messages processed")
-    errors_count: int = Field(0, description="Total errors")
-    uptime_seconds: float = Field(0.0, description="Adapter uptime in seconds")
-    last_error: Optional[str] = Field(None, description="Last error message")
-    last_error_time: Optional[datetime] = Field(None, description="Last error timestamp")
 
 
 class AdapterInfo(BaseModel):

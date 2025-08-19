@@ -9,6 +9,11 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+# Constants for field descriptions to avoid duplication
+ADAPTER_ID_DESC = "Adapter ID"
+ADAPTER_TYPE_DESC = "Adapter type"
+IS_RUNNING_DESC = "Whether adapter is running"
+
 
 class AdapterConfig(BaseModel):
     """Configuration for an adapter."""
@@ -33,8 +38,8 @@ class AdapterOperationResult(BaseModel):
     """Result of an adapter operation."""
 
     success: bool = Field(..., description="Whether operation succeeded")
-    adapter_id: str = Field(..., description="Adapter ID")
-    adapter_type: Optional[str] = Field(None, description="Adapter type")
+    adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
+    adapter_type: Optional[str] = Field(None, description=ADAPTER_TYPE_DESC)
     message: Optional[str] = Field(None, description="Operation message")
     error: Optional[str] = Field(None, description="Error message if failed")
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional details")
@@ -53,9 +58,9 @@ class AdapterMetrics(BaseModel):
 class AdapterStatus(BaseModel):
     """Status of a single adapter."""
 
-    adapter_id: str = Field(..., description="Unique adapter ID")
+    adapter_id: str = Field(..., description="Unique " + ADAPTER_ID_DESC)
     adapter_type: str = Field(..., description="Type of adapter")
-    is_running: bool = Field(..., description="Whether adapter is running")
+    is_running: bool = Field(..., description=IS_RUNNING_DESC)
     loaded_at: datetime = Field(..., description="When adapter was loaded")
     services_registered: List[str] = Field(default_factory=list, description="Services registered by adapter")
     config_params: AdapterConfig = Field(..., description="Adapter configuration")
@@ -84,19 +89,19 @@ class ServiceRegistrationInfo(BaseModel):
 class AdapterInfo(BaseModel):
     """Detailed information about an adapter."""
 
-    adapter_id: str = Field(..., description="Adapter ID")
-    adapter_type: str = Field(..., description="Adapter type")
+    adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
+    adapter_type: str = Field(..., description=ADAPTER_TYPE_DESC)
     config: AdapterConfig = Field(..., description="Adapter configuration")
     load_time: str = Field(..., description="ISO timestamp when loaded")
-    is_running: bool = Field(..., description="Whether adapter is running")
+    is_running: bool = Field(..., description=IS_RUNNING_DESC)
 
 
 class CommunicationAdapterInfo(BaseModel):
     """Information about a communication adapter."""
 
-    adapter_id: str = Field(..., description="Adapter ID")
-    adapter_type: str = Field(..., description="Adapter type")
-    is_running: bool = Field(..., description="Whether adapter is running")
+    adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
+    adapter_type: str = Field(..., description=ADAPTER_TYPE_DESC)
+    is_running: bool = Field(..., description=IS_RUNNING_DESC)
 
 
 class CommunicationAdapterStatus(BaseModel):

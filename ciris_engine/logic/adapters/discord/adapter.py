@@ -203,7 +203,6 @@ class DiscordPlatform(Service):
                 logger.info(f"Thread created: {thread.name} (ID: {thread.id}) in parent {thread.parent_id}")
                 # Check if parent channel is monitored
                 if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    adapter = self.platform.discord_adapter
                     if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
                         observer = self.platform.discord_observer
                         if hasattr(self.platform, "config") and self.platform.config:

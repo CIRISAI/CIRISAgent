@@ -289,7 +289,7 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {bus_name}: {e}")
             return self.get_fallback_metrics(bus_name, healthy=False)
 
-    async def collect_from_adapter_instances(self, adapter_type: str) -> ServiceTelemetryData:
+    async def collect_from_adapter_instances(self, adapter_type: str) -> dict:
         """
         Collect telemetry from all instances of an adapter type.
 
@@ -342,10 +342,10 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {adapter_type} instances: {e}")
             return aggregated
 
-    def get_fallback_metrics(self, *args, **kwargs) -> ServiceTelemetryData:
+    def get_fallback_metrics(self, service_name: Optional[str] = None, healthy: bool = False) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.
 
-        Args are accepted for compatibility but ignored - no fake metrics.
+        Parameters are accepted for compatibility but ignored - no fake metrics.
         """
         # NO FAKE METRICS. Services must implement get_metrics() or they get nothing.
         # Return empty telemetry data instead of empty dict
@@ -353,7 +353,7 @@ class TelemetryAggregator:
             healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
         )
 
-    def status_to_telemetry(self, status: Any) -> ServiceTelemetryData:
+    def status_to_telemetry(self, status: Any) -> dict:
         """Convert ServiceStatus to telemetry dict."""
         if hasattr(status, "model_dump"):
             return status.model_dump()
@@ -362,7 +362,7 @@ class TelemetryAggregator:
         else:
             return {"status": str(status)}
 
-    def _process_service_metrics(self, service_data: Union[ServiceTelemetryData, Dict]) -> tuple:
+    def _process_service_metrics(self, service_data: ServiceTelemetryData | Dict) -> tuple:
         """Process metrics for a single service."""
         # Handle both ServiceTelemetryData objects and legacy dicts
         if isinstance(service_data, ServiceTelemetryData):
@@ -868,10 +868,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                     last_health_check=None,
                 )
             else:
-                # Return empty telemetry data instead of empty dict
-                return ServiceTelemetryData(
-                    healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-                )
+                # Return empty dict for all services case
+                return {}
 
     def _get_resource_limits(self) -> ResourceLimits:
         """Get resource limits configuration (internal method)."""

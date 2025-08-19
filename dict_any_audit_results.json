@@ -733,7 +733,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
-        "line": 215,
+        "line": 263,
         "class": null,
         "function": "get_system_status",
         "context": "return_type",

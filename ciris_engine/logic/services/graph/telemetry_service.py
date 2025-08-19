@@ -36,8 +36,11 @@ from ciris_engine.schemas.runtime.system_context import ChannelContext as System
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot, TelemetrySummary, UserProfile
 from ciris_engine.schemas.services.core import ServiceStatus
 from ciris_engine.schemas.services.graph.telemetry import (
+    AggregatedTelemetryMetadata,
+    AggregatedTelemetryResponse,
     BehavioralData,
     ResourceData,
+    ServiceTelemetryData,
     TelemetryData,
     TelemetrySnapshotResult,
 )
@@ -121,7 +124,7 @@ class TelemetryAggregator:
         self.cache: Dict[str, Tuple[datetime, Dict]] = {}
         self.cache_ttl = timedelta(seconds=30)
 
-    async def collect_all_parallel(self) -> Dict[str, Any]:
+    async def collect_all_parallel(self) -> dict[str, ServiceTelemetryData]:
         """
         Collect telemetry from all services in parallel.
 
@@ -167,7 +170,7 @@ class TelemetryAggregator:
 
         return telemetry
 
-    async def collect_service(self, service_name: str) -> Dict[str, Any]:
+    async def collect_service(self, service_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a single service."""
         try:
             # Special handling for buses
@@ -187,7 +190,10 @@ class TelemetryAggregator:
 
         except Exception as e:
             logger.error(f"Failed to collect from {service_name}: {e}")
-            return {}  # NO FALLBACKS - service failed
+            # Return empty telemetry data instead of empty dict
+        return ServiceTelemetryData(
+            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+        )  # NO FALLBACKS - service failed
 
     def _get_service_from_registry(self, service_name: str):
         """Get service from registry by name."""
@@ -207,7 +213,7 @@ class TelemetryAggregator:
         services = self.service_registry.get_services_by_type(service_type)
         return services[0] if services else None
 
-    async def _try_collect_metrics(self, service) -> Optional[Dict[str, Any]]:
+    async def _try_collect_metrics(self, service) -> Optional[ServiceTelemetryData]:
         """Try different methods to collect metrics from service."""
         if not service:
             return None
@@ -231,7 +237,7 @@ class TelemetryAggregator:
 
         return None
 
-    async def collect_from_bus(self, bus_name: str) -> Dict[str, Any]:
+    async def collect_from_bus(self, bus_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a message bus."""
         try:
             # Get the bus from agent/registry
@@ -249,7 +255,7 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {bus_name}: {e}")
             return self.get_fallback_metrics(bus_name, healthy=False)
 
-    async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, Any]:
+    async def collect_from_adapter_instances(self, adapter_type: str) -> ServiceTelemetryData:
         """
         Collect telemetry from all instances of an adapter type.
 
@@ -302,15 +308,18 @@ class TelemetryAggregator:
             logger.error(f"Failed to collect from {adapter_type} instances: {e}")
             return aggregated
 
-    def get_fallback_metrics(self, *args, **kwargs) -> Dict[str, Any]:
+    def get_fallback_metrics(self, *args, **kwargs) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.
 
         Args are accepted for compatibility but ignored - no fake metrics.
         """
         # NO FAKE METRICS. Services must implement get_metrics() or they get nothing.
-        return {}
+        # Return empty telemetry data instead of empty dict
+        return ServiceTelemetryData(
+            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+        )
 
-    def status_to_telemetry(self, status: Any) -> Dict[str, Any]:
+    def status_to_telemetry(self, status: Any) -> ServiceTelemetryData:
         """Convert ServiceStatus to telemetry dict."""
         if hasattr(status, "model_dump"):
             return status.model_dump()
@@ -329,7 +338,7 @@ class TelemetryAggregator:
 
         return is_healthy, errors, requests, error_rate, uptime
 
-    def _aggregate_service_metrics(self, telemetry: Dict[str, Any]) -> tuple:
+    def _aggregate_service_metrics(self, telemetry: dict[str, ServiceTelemetryData]) -> tuple:
         """Aggregate metrics from all services."""
         total_services = 0
         healthy_services = 0
@@ -361,7 +370,7 @@ class TelemetryAggregator:
 
         return total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates
 
-    def compute_covenant_metrics(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
+    def compute_covenant_metrics(self, telemetry: dict[str, ServiceTelemetryData]) -> dict[str, Union[float, int, str]]:
         """
         Compute covenant/ethics metrics from governance services.
 
@@ -409,7 +418,9 @@ class TelemetryAggregator:
 
         return covenant_metrics
 
-    def calculate_aggregates(self, telemetry: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_aggregates(
+        self, telemetry: dict[str, ServiceTelemetryData]
+    ) -> dict[str, Union[bool, int, float, str]]:
         """Calculate system-wide aggregate metrics."""
         # Get aggregated metrics
         total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates = (
@@ -460,11 +471,11 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             max_concurrent_operations=50,
         )
         # Cache for recent metrics (for quick status queries)
-        self._recent_metrics: Dict[str, List[MetricDataPoint]] = {}
+        self._recent_metrics: dict[str, list[MetricDataPoint]] = {}
         self._max_cached_metrics = 100
 
         # Cache for telemetry summaries to avoid slamming persistence
-        self._summary_cache: Dict[str, Tuple[datetime, TelemetrySummary]] = {}
+        self._summary_cache: dict[str, tuple[datetime, TelemetrySummary]] = {}
         self._summary_cache_ttl_seconds = 60  # Cache for 1 minute
 
         # Memory tracking
@@ -785,7 +796,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                     last_health_check=None,
                 )
             else:
-                return {}
+                # Return empty telemetry data instead of empty dict
+                return ServiceTelemetryData(
+                    healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                )
 
     def _get_resource_limits(self) -> ResourceLimits:
         """Get resource limits configuration (internal method)."""
@@ -1453,7 +1467,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         """Get the service type."""
         return ServiceType.TELEMETRY
 
-    async def get_aggregated_telemetry(self) -> Dict[str, Any]:
+    async def get_aggregated_telemetry(self) -> AggregatedTelemetryResponse:
         """
         Get aggregated telemetry from all services using parallel collection.
 
@@ -1467,10 +1481,17 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         if not self._telemetry_aggregator:
             logger.warning("No telemetry aggregator available")
-            return {
-                "error": "Telemetry aggregator not initialized",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+            return AggregatedTelemetryResponse(
+                system_healthy=False,
+                services_online=0,
+                services_total=0,
+                overall_error_rate=0.0,
+                overall_uptime_seconds=0,
+                total_errors=0,
+                total_requests=0,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                error="Telemetry aggregator not initialized",
+            )
 
         # Check cache first
         cache_key = "aggregated_telemetry"
@@ -1488,12 +1509,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         # Calculate aggregates
         aggregates = self._telemetry_aggregator.calculate_aggregates(telemetry)
 
-        # Combine telemetry and aggregates
-        result = {
-            **aggregates,
-            "services": telemetry,
-            "_metadata": {"collection_method": "parallel", "cache_ttl_seconds": 30, "timestamp": now.isoformat()},
-        }
+        # Combine telemetry and aggregates into typed response
+        result = AggregatedTelemetryResponse(
+            system_healthy=aggregates.get("system_healthy", False),
+            services_online=aggregates.get("services_online", 0),
+            services_total=aggregates.get("services_total", 0),
+            overall_error_rate=aggregates.get("overall_error_rate", 0.0),
+            overall_uptime_seconds=aggregates.get("overall_uptime_seconds", 0),
+            total_errors=aggregates.get("total_errors", 0),
+            total_requests=aggregates.get("total_requests", 0),
+            timestamp=aggregates.get("timestamp", now.isoformat()),
+            services=telemetry,
+            metadata=AggregatedTelemetryMetadata(
+                collection_method="parallel", cache_ttl_seconds=30, timestamp=now.isoformat()
+            ),
+        )
 
         # Cache the result
         self._telemetry_aggregator.cache[cache_key] = (now, result)

@@ -125,6 +125,50 @@ class TelemetryKwargs(BaseModel):
     metadata: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional metadata")
 
 
+class ServiceTelemetryData(BaseModel):
+    """Telemetry data for a single service."""
+
+    healthy: bool = Field(..., description="Whether service is healthy")
+    uptime_seconds: Optional[float] = Field(None, description="Service uptime in seconds")
+    error_count: Optional[int] = Field(None, description="Number of errors")
+    requests_handled: Optional[int] = Field(None, description="Total requests handled")
+    error_rate: Optional[float] = Field(None, description="Error rate percentage")
+    memory_mb: Optional[float] = Field(None, description="Memory usage in MB")
+    custom_metrics: Optional[Dict[str, Union[int, float, str]]] = Field(None, description="Service-specific metrics")
+
+
+class AggregatedTelemetryMetadata(BaseModel):
+    """Metadata for aggregated telemetry response."""
+
+    collection_method: str = Field("parallel", description="How data was collected")
+    cache_ttl_seconds: int = Field(30, description="Cache TTL in seconds")
+    timestamp: str = Field(..., description="Collection timestamp")
+    cache_hit: Optional[bool] = Field(None, description="Whether this was a cache hit")
+
+
+class AggregatedTelemetryResponse(BaseModel):
+    """Response from get_aggregated_telemetry() - replaces Dict[str, Any]."""
+
+    # System-wide aggregates
+    system_healthy: bool = Field(..., description="Overall system health")
+    services_online: int = Field(..., description="Number of healthy services")
+    services_total: int = Field(..., description="Total number of services")
+    overall_error_rate: float = Field(..., description="System-wide error rate")
+    overall_uptime_seconds: int = Field(..., description="Minimum uptime across services")
+    total_errors: int = Field(..., description="Total errors across all services")
+    total_requests: int = Field(..., description="Total requests handled")
+    timestamp: str = Field(..., description="Response timestamp")
+
+    # Per-service telemetry data
+    services: Dict[str, ServiceTelemetryData] = Field(default_factory=dict, description="Per-service telemetry")
+
+    # Metadata
+    metadata: Optional[AggregatedTelemetryMetadata] = Field(None, description="Response metadata")
+
+    # Optional error info if aggregation failed
+    error: Optional[str] = Field(None, description="Error message if collection failed")
+
+
 __all__ = [
     "TelemetrySnapshotResult",
     "TelemetryData",
@@ -137,4 +181,7 @@ __all__ = [
     "LLMUsageData",
     "TelemetryKwargs",
     "CustomMetrics",
+    "ServiceTelemetryData",
+    "AggregatedTelemetryMetadata",
+    "AggregatedTelemetryResponse",
 ]

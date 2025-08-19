@@ -325,7 +325,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
         base_dir = Path.cwd()
 
     # Check disk space first
-    _check_disk_space_or_fail(base_dir, True)
+    _check_disk_space_or_fail(base_dir, False)
 
     required_dirs = ["data", "data_archive", "logs", "audit_keys", "config"]
 

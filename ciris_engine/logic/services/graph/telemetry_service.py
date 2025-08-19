@@ -1500,7 +1500,12 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         if cache_key in self._telemetry_aggregator.cache:
             cached_time, cached_data = self._telemetry_aggregator.cache[cache_key]
             if now - cached_time < self._telemetry_aggregator.cache_ttl:
-                cached_data["_cache_hit"] = True
+                # If cached data is already a response object, update its metadata
+                if isinstance(cached_data, AggregatedTelemetryResponse):
+                    if cached_data.metadata:
+                        cached_data.metadata.cache_hit = True
+                    return cached_data
+                # Legacy dict format (should not happen with new code)
                 return cached_data
 
         # Collect from all services in parallel
@@ -1508,6 +1513,22 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         # Calculate aggregates
         aggregates = self._telemetry_aggregator.calculate_aggregates(telemetry)
+
+        # Convert nested telemetry dict to flat service dict with ServiceTelemetryData objects
+        services_data = {}
+        for category, services in telemetry.items():
+            if isinstance(services, dict):
+                for service_name, service_info in services.items():
+                    if isinstance(service_info, dict):
+                        services_data[service_name] = ServiceTelemetryData(
+                            healthy=service_info.get("healthy", False),
+                            uptime_seconds=service_info.get("uptime_seconds"),
+                            error_count=service_info.get("error_count"),
+                            requests_handled=service_info.get("request_count"),
+                            error_rate=service_info.get("error_rate"),
+                            memory_mb=service_info.get("memory_mb"),
+                            custom_metrics=service_info.get("custom_metrics"),
+                        )
 
         # Combine telemetry and aggregates into typed response
         result = AggregatedTelemetryResponse(
@@ -1519,7 +1540,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             total_errors=aggregates.get("total_errors", 0),
             total_requests=aggregates.get("total_requests", 0),
             timestamp=aggregates.get("timestamp", now.isoformat()),
-            services=telemetry,
+            services=services_data,
             metadata=AggregatedTelemetryMetadata(
                 collection_method="parallel", cache_ttl_seconds=30, timestamp=now.isoformat()
             ),

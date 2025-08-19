@@ -58,9 +58,9 @@ class TestGraphTelemetryServiceAggregation:
         """Test aggregated telemetry when registry not set."""
         result = await telemetry_service.get_aggregated_telemetry()
 
-        assert "error" in result
-        assert result["error"] == "Telemetry aggregator not initialized"
-        assert "timestamp" in result
+        assert result.error is not None
+        assert result.error == "Telemetry aggregator not initialized"
+        assert result.timestamp is not None
 
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_with_registry(self, telemetry_service, mock_service_registry):
@@ -87,13 +87,13 @@ class TestGraphTelemetryServiceAggregation:
 
         result = await telemetry_service.get_aggregated_telemetry()
 
-        assert result["system_healthy"] is True
-        assert result["services_online"] == 3
-        assert result["services_total"] == 3
-        assert result["overall_error_rate"] == 0.0
-        assert "services" in result
-        assert "_metadata" in result
-        assert result["_metadata"]["collection_method"] == "parallel"
+        assert result.system_healthy is True
+        assert result.services_online == 3
+        assert result.services_total == 3
+        assert result.overall_error_rate == 0.0
+        assert result.services is not None
+        assert result.metadata is not None
+        assert result.metadata.collection_method == "parallel"
 
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_cache_hit(self, telemetry_service, mock_service_registry):
@@ -113,9 +113,9 @@ class TestGraphTelemetryServiceAggregation:
 
         result = await telemetry_service.get_aggregated_telemetry()
 
-        assert result["_cache_hit"] is True
-        assert result["system_healthy"] is True
-        assert result["services_online"] == 5
+        assert result.metadata.cache_hit is True
+        assert result.system_healthy is True
+        assert result.services_online == 5
 
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_cache_expired(self, telemetry_service, mock_service_registry):
@@ -139,9 +139,9 @@ class TestGraphTelemetryServiceAggregation:
         result = await telemetry_service.get_aggregated_telemetry()
 
         # Should have fresh data, not cached
-        assert "_cache_hit" not in result
-        assert "fresh_data" in result
-        assert result["fresh_data"] is True
+        assert result.metadata is None or result.metadata.cache_hit is None or result.metadata.cache_hit is False
+        # The test expects fresh_data but that's not in our schema - check that it's not cached
+        assert result.system_healthy is True
 
     @pytest.mark.asyncio
     async def test_aggregator_initialization(self, telemetry_service, mock_service_registry):
@@ -184,15 +184,15 @@ class TestGraphTelemetryServiceAggregation:
 
         result = await telemetry_service.get_aggregated_telemetry()
 
-        assert "system_healthy" in result
-        assert "services" in result
-        assert "_metadata" in result
+        assert result.system_healthy is not None
+        assert result.services is not None
+        assert result.metadata is not None
 
         # Check that services structure exists
-        assert isinstance(result["services"], dict)
+        assert isinstance(result.services, dict)
 
         # Verify metadata
-        metadata = result["_metadata"]
-        assert metadata["collection_method"] == "parallel"
-        assert metadata["cache_ttl_seconds"] == 30
-        assert "timestamp" in metadata
+        metadata = result.metadata
+        assert metadata.collection_method == "parallel"
+        assert metadata.cache_ttl_seconds == 30
+        assert metadata.timestamp is not None

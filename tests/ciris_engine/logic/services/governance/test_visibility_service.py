@@ -390,3 +390,72 @@ async def test_explain_action_no_final_action(visibility_service):
         explanation = await visibility_service.explain_action("thought-123")
 
     assert "did not result in an action" in explanation
+
+
+@pytest.mark.asyncio
+async def test_get_task_history(visibility_service):
+    """Test getting recent task history."""
+    await visibility_service.start()
+
+    # Create test tasks with different statuses and timestamps
+    now = datetime.now(timezone.utc)
+    completed_tasks = [
+        create_test_task("task-1", TaskStatus.COMPLETED),
+        create_test_task("task-2", TaskStatus.COMPLETED),
+        create_test_task("task-3", TaskStatus.COMPLETED),
+    ]
+    # Set different updated times
+    from datetime import timedelta
+
+    for i, task in enumerate(completed_tasks):
+        task.updated_at = (now - timedelta(hours=i)).isoformat()
+
+    failed_tasks = [
+        create_test_task("task-4", TaskStatus.FAILED),
+        create_test_task("task-5", TaskStatus.FAILED),
+    ]
+    # Set different updated times
+    for i, task in enumerate(failed_tasks):
+        task.updated_at = (now - timedelta(hours=(i + 3))).isoformat()
+
+    # Mock persistence
+    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status") as mock_get_tasks:
+
+        def side_effect(status, db_path):
+            if status == TaskStatus.COMPLETED:
+                return completed_tasks
+            elif status == TaskStatus.FAILED:
+                return failed_tasks
+            return []
+
+        mock_get_tasks.side_effect = side_effect
+
+        # Get task history with default limit
+        history = await visibility_service.get_task_history(limit=10)
+
+    assert isinstance(history, list)
+    assert len(history) == 5  # Should return all 5 tasks
+    assert all(isinstance(task, Task) for task in history)
+
+    # Check ordering - most recent first
+    assert history[0].task_id == "task-1"  # Most recent completed task
+
+    # Test with smaller limit
+    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status") as mock_get_tasks:
+        mock_get_tasks.side_effect = side_effect
+        history_limited = await visibility_service.get_task_history(limit=2)
+
+    assert len(history_limited) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_task_history_empty(visibility_service):
+    """Test getting task history when no tasks exist."""
+    await visibility_service.start()
+
+    # Mock persistence to return empty lists
+    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[]):
+        history = await visibility_service.get_task_history()
+
+    assert isinstance(history, list)
+    assert len(history) == 0

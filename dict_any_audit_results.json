@@ -1,13 +1,13 @@
 {
   "production": {
-    "occurrences": 190,
+    "occurrences": 192,
     "files_affected": 79,
     "categories": {
-      "generic_data": 169,
+      "generic_data": 170,
       "parameters": 5,
       "configuration": 3,
       "api_request": 1,
-      "api_response": 5,
+      "api_response": 6,
       "context_data": 7
     },
     "findings": [
@@ -685,7 +685,23 @@
       },
       {
         "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
-        "line": 75,
+        "line": 118,
+        "class": "DiscordToolHandler",
+        "function": "_process_tool_result",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 230,
+        "class": "DiscordToolHandler",
+        "function": "_convert_to_typed_args",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 256,
         "class": "DiscordToolHandler",
         "function": "execute_tool",
         "context": "other",
@@ -693,7 +709,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
-        "line": 345,
+        "line": 404,
         "class": "DiscordToolHandler",
         "function": "validate_tool_parameters",
         "context": "other",
@@ -2848,7 +2864,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 353,
+    "occurrences": 355,
     "files_affected": 113
   }
 }

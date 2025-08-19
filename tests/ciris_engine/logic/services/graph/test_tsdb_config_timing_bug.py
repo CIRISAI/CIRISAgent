@@ -57,33 +57,58 @@ class TestTSDBConfigTimingBug:
         return mock
 
     def test_bug_reproduction_without_fix(self, mock_memory_bus, mock_time_service, temp_db_path):
-        """Verify the fix: get_db_connection() is now called WITH db_path.
+        """Verify the fix: Service works correctly with db_path and doesn't need ServiceRegistry.
 
         This test verifies the fix:
         1. TSDBConsolidationService is created with a db_path
-        2. QueryManager is created WITH the db_path (FIXED)
-        3. When start() is called, _consolidate_missed_windows() runs immediately
-        4. This calls QueryManager methods which call get_db_connection() WITH db_path
-        5. get_db_connection() uses the provided db_path, not ServiceRegistry
+        2. Service starts successfully without any config service in registry
+        3. Service uses the provided db_path, not ServiceRegistry
         """
-        # Track calls to get_db_connection
-        get_db_calls = []
+        # Initialize the database with required tables
+        import sqlite3
 
-        def track_get_db_connection(db_path=None, **kwargs):
-            """Track calls to get_db_connection."""
-            get_db_calls.append({"db_path": db_path})
-            # Return a working connection
-            conn = Mock()
-            conn.cursor = Mock(return_value=Mock(fetchall=Mock(return_value=[]), fetchone=Mock(return_value=None)))
-            conn.__enter__ = Mock(return_value=conn)
-            conn.__exit__ = Mock(return_value=None)
-            return conn
+        conn = sqlite3.connect(temp_db_path)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS graph_nodes (
+                node_id TEXT PRIMARY KEY,
+                node_type TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                attributes_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                updated_by TEXT,
+                version INTEGER DEFAULT 1
+            );
 
-        # Patch get_db_connection to track calls
-        with patch(
-            "ciris_engine.logic.services.graph.tsdb_consolidation.query_manager.get_db_connection",
-            side_effect=track_get_db_connection,
-        ):
+            CREATE TABLE IF NOT EXISTS service_correlations (
+                correlation_id TEXT PRIMARY KEY,
+                service_type TEXT NOT NULL,
+                handler_name TEXT,
+                action_type TEXT,
+                request_data TEXT,
+                response_data TEXT,
+                status TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                correlation_type TEXT,
+                timestamp TEXT,
+                metric_name TEXT,
+                metric_value REAL,
+                trace_id TEXT,
+                span_id TEXT,
+                parent_span_id TEXT,
+                tags TEXT
+            );
+        """
+        )
+        conn.commit()
+        conn.close()
+
+        # Ensure NO config service is available in registry
+        with patch("ciris_engine.logic.registries.base.get_global_registry") as mock_registry:
+            mock_registry.return_value.get_services_by_type.return_value = []
+
             # Create service WITH db_path
             service = TSDBConsolidationService(
                 memory_bus=mock_memory_bus,
@@ -91,18 +116,19 @@ class TestTSDBConfigTimingBug:
                 db_path=temp_db_path,  # <-- db_path provided here
             )
 
-            # Start service - now works correctly
+            # Verify the fix: Service has db_path and uses it
+            assert service.db_path == temp_db_path
+            assert service._query_manager._db_path == temp_db_path
+            assert service._edge_manager._db_path == temp_db_path
+
+            # Start service - should work without config service because we have db_path
             asyncio.run(service.start())
 
-            # Verify that get_db_connection was called WITH db_path (FIXED!)
-            assert len(get_db_calls) > 0, "get_db_connection should have been called"
+            # Service started successfully
+            assert service._running is True
 
-            # All calls should have the db_path provided (the fix works!)
-            for call in get_db_calls:
-                assert call["db_path"] == temp_db_path, (
-                    f"FIXED: get_db_connection called WITH db_path={call['db_path']}! "
-                    f"This means it uses the provided path, not ServiceRegistry."
-                )
+            # Stop service
+            asyncio.run(service.stop())
 
     def test_config_service_not_available_error(self, mock_memory_bus, mock_time_service):
         """Test that the service works correctly even without config when db_path is provided."""

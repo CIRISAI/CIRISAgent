@@ -31,18 +31,17 @@ class TestAuthServiceAsyncIOBug:
         # Mock list_was to return some WA certificates
         mock_was = [
             WACertificate(
-                wa_id="wa-2025-01-18-test123",
+                wa_id="wa-2025-01-18-TEST01",  # Fixed format
                 name="test_user",
-                email="test@example.com",
                 role=WARole.OBSERVER,
-                scopes=["test"],
-                created_at=datetime.now(timezone.utc),
-                expires_at=None,
+                pubkey="test_pubkey_base64",  # Required field
+                jwt_kid="test_kid",  # Required field
+                scopes_json='["test"]',  # Required field as JSON string
+                created_at=datetime.now(timezone.utc).isoformat(),
                 parent_wa_id=None,
                 auto_minted=False,
                 last_auth=None,
                 password_hash="$2b$12$test_hash",
-                custom_permissions=None,
             )
         ]
         mock_auth_service.list_was.return_value = mock_was
@@ -56,7 +55,7 @@ class TestAuthServiceAsyncIOBug:
 
         # Verify users were loaded successfully
         assert len(auth_service._users) > 0
-        assert "wa-2025-01-18-test123" in auth_service._users or "wa-system-admin" in auth_service._users
+        assert "wa-2025-01-18-TEST01" in auth_service._users or "wa-system-admin" in auth_service._users
 
     @pytest.mark.asyncio
     async def test_load_users_from_db_fixed_version(self):
@@ -71,18 +70,17 @@ class TestAuthServiceAsyncIOBug:
         # Mock list_was to return some WA certificates
         mock_was = [
             WACertificate(
-                wa_id="wa-2025-01-18-test123",
+                wa_id="wa-2025-01-18-TEST01",  # Fixed format
                 name="test_user",
-                email="test@example.com",
                 role=WARole.OBSERVER,
-                scopes=["test"],
-                created_at=datetime.now(timezone.utc),
-                expires_at=None,
+                pubkey="test_pubkey_base64",  # Required field
+                jwt_kid="test_kid",  # Required field
+                scopes_json='["test"]',  # Required field as JSON string
+                created_at=datetime.now(timezone.utc).isoformat(),
                 parent_wa_id=None,
                 auto_minted=False,
                 last_auth=None,
                 password_hash="$2b$12$test_hash",
-                custom_permissions=None,
             )
         ]
         mock_auth_service.list_was.return_value = mock_was
@@ -135,10 +133,10 @@ class TestAuthServiceAsyncIOBug:
         # Call the fixed async version
         await load_users_from_db_async(auth_service)
 
-        # Verify users were loaded successfully
-        assert len(auth_service._users) == 1
-        assert "wa-2025-01-18-test123" in auth_service._users
-        user = auth_service._users["wa-2025-01-18-test123"]
+        # Verify users were loaded successfully (may include default admin)
+        assert len(auth_service._users) >= 1
+        assert "wa-2025-01-18-TEST01" in auth_service._users
+        user = auth_service._users["wa-2025-01-18-TEST01"]
         assert user.name == "test_user"
         assert user.auth_type == "password"
 
@@ -164,7 +162,7 @@ class TestAuthServiceAsyncIOBug:
         from ciris_engine.schemas.runtime.api import APIRole
 
         test_user = User(
-            wa_id="wa-2025-01-18-test123",
+            wa_id="wa-2025-01-18-TEST01",
             name="test_user",
             auth_type="password",
             api_role=APIRole.OBSERVER,

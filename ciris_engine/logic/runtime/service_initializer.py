@@ -353,11 +353,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("AuthenticationService initialized")
 
         # Initialize WA authentication system with TimeService and AuthService
-        # Use the same directory as main database, but different file
+        # Use the main database path - WiseAuthority needs access to tasks table
         main_db_path = get_sqlite_db_full_path(self.essential_config)
-        wa_db_path = main_db_path.replace(".db", "_wa.db")
         self.wa_auth_system = WiseAuthorityService(
-            time_service=self.time_service, auth_service=self.auth_service, db_path=wa_db_path
+            time_service=self.time_service, auth_service=self.auth_service, db_path=main_db_path
         )
         await self.wa_auth_system.start()
         self._services_started_count += 1

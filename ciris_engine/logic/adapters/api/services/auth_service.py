@@ -107,10 +107,12 @@ class APIAuthService:
         # Store reference to the actual authentication service
         self._auth_service = auth_service
 
-        # Load existing users from database on startup
-        if self._auth_service:
-            self._load_users_from_db()
-        else:
+        # Flag to track if we've loaded users from DB
+        self._users_loaded = False
+
+        # Don't load from DB in __init__ - this causes asyncio.run() errors
+        # Instead, we'll load lazily on first access
+        if not self._auth_service:
             # Fallback: Initialize with system admin user if no auth service
             now = datetime.now(timezone.utc)
             admin_user = User(
@@ -124,17 +126,24 @@ class APIAuthService:
                 password_hash=self._hash_password("ciris_admin_password"),
             )
             self._users[admin_user.wa_id] = admin_user
+            self._users_loaded = True
 
-    def _load_users_from_db(self) -> None:
+    async def _ensure_users_loaded(self) -> None:
+        """Ensure users are loaded from database (lazy loading)."""
+        if self._users_loaded:
+            return
+
+        await self._load_users_from_db()
+        self._users_loaded = True
+
+    async def _load_users_from_db(self) -> None:
         """Load existing users from the database."""
-        import asyncio
-
         if not self._auth_service:
             return
 
         try:
-            # Get all WA certificates from the database
-            was = asyncio.run(self._auth_service.list_was(active_only=False))
+            # Use await instead of asyncio.run() - we're already in an async context
+            was = await self._auth_service.list_was(active_only=False)
 
             for wa in was:
                 # Convert WA certificate to User
@@ -156,7 +165,7 @@ class APIAuthService:
 
             # If no admin user exists, create the default one
             if not any(u.name == "admin" for u in self._users.values()):
-                asyncio.run(self._create_default_admin())
+                await self._create_default_admin()
 
         except Exception as e:
             print(f"Error loading users from database: {e}")
@@ -348,6 +357,9 @@ class APIAuthService:
 
     async def verify_user_password(self, username: str, password: str) -> Optional[User]:
         """Verify a user's password and return the user if valid."""
+        # Ensure users are loaded from database
+        await self._ensure_users_loaded()
+
         user = self.get_user_by_username(username)
         if not user:
             return None
@@ -621,10 +633,9 @@ class APIAuthService:
         # Also update in database if we have auth service
         if self._auth_service:
             try:
-                import asyncio
-
-                asyncio.run(
-                    self._auth_service.update_wa(user_id, updates=None, password_hash=self._hash_password(new_password))
+                # Use await instead of asyncio.run() - we're already in an async context
+                await self._auth_service.update_wa(
+                    user_id, updates=None, password_hash=self._hash_password(new_password)
                 )
             except Exception as e:
                 print(f"Error updating password in database: {e}")

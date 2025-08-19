@@ -134,20 +134,28 @@ def tsdb_service(mock_memory_bus, mock_time_service):
 
     # Monkey patch get_db_connection to use our test database
     import ciris_engine.logic.persistence.db.core
+    import ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager
     import ciris_engine.logic.services.graph.tsdb_consolidation.query_manager
 
     original_get_db = ciris_engine.logic.persistence.db.core.get_db_connection
 
-    def get_test_db_connection():
-        conn = sqlite3.connect(db_path)
+    test_db_path = db_path  # Capture from closure above
+
+    def get_test_db_connection(db_path=None, **kwargs):
+        # Use provided db_path if given, otherwise use test db
+        use_path = db_path if db_path else test_db_path
+        conn = sqlite3.connect(use_path)
         conn.row_factory = sqlite3.Row
         return conn
 
-    # Patch in both places
+    # Patch in all places
     ciris_engine.logic.persistence.db.core.get_db_connection = get_test_db_connection
     ciris_engine.logic.services.graph.tsdb_consolidation.query_manager.get_db_connection = get_test_db_connection
+    ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection = get_test_db_connection
 
-    service = TSDBConsolidationService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+    service = TSDBConsolidationService(
+        memory_bus=mock_memory_bus, time_service=mock_time_service, db_path=test_db_path  # Pass the test database path
+    )
 
     yield service
 

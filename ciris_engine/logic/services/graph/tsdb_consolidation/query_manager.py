@@ -25,14 +25,16 @@ logger = logging.getLogger(__name__)
 class QueryManager:
     """Manages querying data for consolidation."""
 
-    def __init__(self, memory_bus: Optional[MemoryBus] = None):
+    def __init__(self, memory_bus: Optional[MemoryBus] = None, db_path: Optional[str] = None):
         """
         Initialize query manager.
 
         Args:
             memory_bus: Memory bus for graph operations
+            db_path: Database path to use (if not provided, uses default)
         """
         self._memory_bus = memory_bus
+        self._db_path = db_path
 
     def query_all_nodes_in_period(self, period_start: datetime, period_end: datetime) -> Dict[str, TSDBNodeQueryResult]:
         """
@@ -52,7 +54,7 @@ class QueryManager:
 
         try:
             # Direct database query for efficiency
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Query all LOCAL nodes CREATED in this period
@@ -131,7 +133,7 @@ class QueryManager:
         nodes = []
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Query TSDB_DATA nodes
@@ -202,7 +204,7 @@ class QueryManager:
         task_correlations = []
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Build query
@@ -327,7 +329,7 @@ class QueryManager:
         task_correlations = []
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Query tasks (excluding deferred ones)
@@ -442,7 +444,7 @@ class QueryManager:
         try:
             # Query the database directly to check for ANY tsdb_summary nodes for this period
             # This prevents duplicates from test runs or other sources
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Check for any tsdb_summary nodes with matching period_start

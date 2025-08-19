@@ -82,8 +82,8 @@ class TSDBConsolidationService(BaseGraphService):
 
         # Initialize components
         self._period_manager = PeriodManager(consolidation_interval_hours)
-        self._query_manager = QueryManager(memory_bus)
-        self._edge_manager = EdgeManager()
+        self._query_manager = QueryManager(memory_bus, db_path=db_path)
+        self._edge_manager = EdgeManager(db_path=db_path)
 
         # Initialize all consolidators
         self._metrics_consolidator = MetricsConsolidator(memory_bus)
@@ -1018,7 +1018,7 @@ class TSDBConsolidationService(BaseGraphService):
             # Use direct DB query since MemoryQuery doesn't support field conditions
             from ciris_engine.logic.persistence.db.core import get_db_connection
 
-            conn = get_db_connection()
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Query for TSDB summaries with matching period
@@ -1174,7 +1174,7 @@ class TSDBConsolidationService(BaseGraphService):
             # Use direct DB query since MemoryQuery doesn't support field conditions
             from ciris_engine.logic.persistence.db.core import get_db_connection
 
-            conn = get_db_connection()
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Query for TSDB summaries with matching period

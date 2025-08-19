@@ -249,7 +249,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("Memory service initialized")
 
         # Initialize GraphConfigService now that memory service is ready
+        from ciris_engine.logic.registries.base import Priority, get_global_registry
         from ciris_engine.logic.services.graph.config_service import GraphConfigService
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before GraphConfigService")
@@ -257,6 +259,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
         await self.config_service.start()
         self._services_started_count += 1
         logger.info("GraphConfigService initialized")
+
+        # Register config service immediately so it's available for persistence operations
+        registry = get_global_registry()
+        # Store essential config on the service so db_paths can find it
+        self.config_service.essential_config = self.essential_config
+        registry.register_service(
+            service_type=ServiceType.CONFIG,
+            provider=self.config_service,
+            priority=Priority.HIGH,
+            capabilities=["get_config", "set_config", "list_configs"],
+            metadata={"backend": "graph", "type": "essential"},
+        )
+        logger.info("Config service registered early in ServiceRegistry for persistence access")
 
         # Create config accessor with graph service
         self.config_accessor = ConfigAccessor(self.config_service, self.essential_config)
@@ -377,7 +392,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         modules_to_load: Optional[List[str]] = None,
     ) -> None:
         """Initialize all remaining core services."""
-        self.service_registry = ServiceRegistry()
+        from ciris_engine.logic.registries.base import get_global_registry
+
+        self.service_registry = get_global_registry()
 
         # Register TimeService now that we have a registry
         if self.time_service:
@@ -430,6 +447,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Register previously initialized services in the registry
         # Register previously initialized services in the registry as per CLAUDE.md
+
+        # Config service was already registered early in initialize_memory_service
+        # to ensure it's available for persistence operations
 
         # Memory service was initialized in Phase 2, register it now
         if self.memory_service:

@@ -22,9 +22,13 @@ logger = logging.getLogger(__name__)
 class EdgeManager:
     """Manages proper edge creation in the graph."""
 
-    def __init__(self) -> None:
-        """Initialize edge manager."""
-        pass
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        """Initialize edge manager.
+
+        Args:
+            db_path: Database path to use (if not provided, uses default)
+        """
+        self._db_path = db_path
 
     def create_summary_to_nodes_edges(
         self,
@@ -53,7 +57,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # First, ensure the summary node exists
@@ -191,7 +195,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 edge_data = []
@@ -258,7 +262,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Step 1: Create TEMPORAL_NEXT from current to itself (marking as latest)
@@ -371,7 +375,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 edge_data = []
@@ -426,7 +430,7 @@ class EdgeManager:
             Node ID if found, None otherwise
         """
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Look for summary node with matching ID pattern
@@ -498,7 +502,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 edge_data = []
@@ -612,7 +616,7 @@ class EdgeManager:
             Number of edges deleted
         """
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Delete edges with missing nodes
@@ -652,7 +656,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 edge_data = []
@@ -827,7 +831,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
                 # Calculate next period

@@ -27,11 +27,11 @@ def get_sqlite_db_full_path(config: Optional[EssentialConfig] = None) -> str:
     if config is None:
         # Try to get config from the service registry
         try:
-            from ciris_engine.logic.registries.base import ServiceRegistry
+            from ciris_engine.logic.registries.base import get_global_registry
             from ciris_engine.schemas.runtime.enums import ServiceType
 
-            # ServiceRegistry is a singleton pattern (no get_instance method)
-            registry = ServiceRegistry()
+            # Use the global registry singleton
+            registry = get_global_registry()
             config_services = registry.get_services_by_type(ServiceType.CONFIG)
 
             if config_services:
@@ -75,7 +75,7 @@ def get_secrets_db_full_path(config: Optional[EssentialConfig] = None) -> str:
             from ciris_engine.logic.registries.base import ServiceRegistry
             from ciris_engine.schemas.runtime.enums import ServiceType
 
-            registry = ServiceRegistry.get_instance()
+            registry = ServiceRegistry()
             config_services = registry.get_services_by_type(ServiceType.CONFIG)
 
             if config_services:
@@ -114,7 +114,7 @@ def get_audit_db_full_path(config: Optional[EssentialConfig] = None) -> str:
             from ciris_engine.logic.registries.base import ServiceRegistry
             from ciris_engine.schemas.runtime.enums import ServiceType
 
-            registry = ServiceRegistry.get_instance()
+            registry = ServiceRegistry()
             config_services = registry.get_services_by_type(ServiceType.CONFIG)
 
             if config_services:

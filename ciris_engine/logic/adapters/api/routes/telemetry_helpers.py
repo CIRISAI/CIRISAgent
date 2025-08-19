@@ -31,6 +31,12 @@ async def get_telemetry_from_service(
         # Fallback if signature inspection fails
         result = await telemetry_service.get_aggregated_telemetry()
 
+    # Convert Pydantic model to dict if needed
+    from pydantic import BaseModel
+
+    if isinstance(result, BaseModel):
+        result = result.model_dump()
+
     # Ensure the view is included in the result (for backward compatibility)
     if "view" not in result:
         result["view"] = view

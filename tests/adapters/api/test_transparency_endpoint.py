@@ -3,8 +3,8 @@ Tests for transparency feed endpoint.
 """
 
 import json
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import status
@@ -15,8 +15,56 @@ from ciris_engine.logic.adapters.api.app import create_app
 
 @pytest.fixture
 def client():
-    """Create test client."""
+    """Create test client with mocked audit service."""
     app = create_app()
+
+    # Mock the audit service to provide real-looking data
+    mock_audit = AsyncMock()
+
+    # Mock query_events to return realistic audit events
+    async def mock_query_events(start_time=None, end_time=None, event_types=None):
+        """Return mock audit events based on event types."""
+        events = []
+
+        if event_types and "handler_action" in event_types:
+            # Return simple dict events that match what the transparency endpoint expects
+            events.extend(
+                [
+                    type("Event", (), {"event_type": "handler_action", "data": {"action": "SPEAK", "duration_ms": 45}}),
+                    type(
+                        "Event",
+                        (),
+                        {
+                            "event_type": "handler_action",
+                            "data": {"action": "DEFER", "reason": "uncertainty", "duration_ms": 30},
+                        },
+                    ),
+                    type("Event", (), {"event_type": "handler_action", "data": {"action": "SPEAK", "duration_ms": 50}}),
+                    type(
+                        "Event",
+                        (),
+                        {
+                            "event_type": "handler_action",
+                            "data": {"action": "REJECT", "harmful": True, "duration_ms": 20},
+                        },
+                    ),
+                ]
+            )
+
+        if event_types and "dsar_request" in event_types:
+            # Add some DSAR events
+            events.extend(
+                [
+                    type("Event", (), {"event_type": "dsar_request", "data": {}}),
+                    type("Event", (), {"event_type": "dsar_completed", "data": {}}),
+                ]
+            )
+
+        return events
+
+    mock_audit.query_events = mock_query_events
+    app.state.audit_service = mock_audit
+
     return TestClient(app)
 
 
@@ -189,3 +237,17 @@ class TestTransparencyEndpoint:
 
         # Period end should be close to mocked time
         assert abs((period_end - mock_now).total_seconds()) < 60
+
+    def test_transparency_feed_no_audit_service(self):
+        """Test that transparency feed fails gracefully without audit service."""
+        # Create app without audit service
+        app = create_app()
+        app.state.audit_service = None
+        client = TestClient(app)
+
+        response = client.get("/v1/transparency/feed")
+
+        # Should return 503 Service Unavailable
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        data = response.json()
+        assert "audit service not available" in data["detail"].lower()

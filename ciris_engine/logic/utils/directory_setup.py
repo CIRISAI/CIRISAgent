@@ -36,6 +36,18 @@ class DirectoryCreationError(DirectorySetupError):
     pass
 
 
+class OwnershipError(DirectorySetupError):
+    """Raised when ownership cannot be fixed."""
+
+    pass
+
+
+class WriteTestError(DirectorySetupError):
+    """Raised when write test fails."""
+
+    pass
+
+
 def check_disk_space(path: Path, required_mb: int = 100) -> Tuple[bool, float]:
     """
     Check if sufficient disk space is available.

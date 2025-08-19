@@ -256,6 +256,19 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
+            # First check if tasks table exists
+            cursor.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='tasks'
+                """
+            )
+            if not cursor.fetchone():
+                logger.warning("Tasks table does not exist in database - cannot store deferral")
+                conn.close()
+                # Still return the deferral_id even if we can't persist it
+                return deferral_id
+
             # Get existing task to preserve context
             cursor.execute(
                 """
@@ -321,6 +334,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             # Query deferred tasks from database
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+
+            # First check if tasks table exists
+            cursor.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='tasks'
+                """
+            )
+            if not cursor.fetchone():
+                logger.warning("Tasks table does not exist in database - returning empty deferrals list")
+                conn.close()
+                return []
 
             # Get all deferred tasks with their deferral data
             cursor.execute(
@@ -396,6 +421,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+
+            # First check if tasks table exists
+            cursor.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='tasks'
+                """
+            )
+            if not cursor.fetchone():
+                logger.warning("Tasks table does not exist in database - cannot resolve deferral")
+                conn.close()
+                return False
 
             # Extract task_id from deferral_id
             # Format can be either defer_{task_id} or defer_{task_id}_{timestamp}

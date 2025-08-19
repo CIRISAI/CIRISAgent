@@ -100,7 +100,12 @@ def get_node_size(node: GraphNode) -> int:
 
     # Adjust based on number of attributes
     if node.attributes:
-        base_size += min(len(node.attributes), 4)
+        # Handle both GraphNodeAttributes and Dict[str, Any]
+        if isinstance(node.attributes, dict):
+            base_size += min(len(node.attributes), 4)
+        else:
+            # For GraphNodeAttributes, use the number of tags as a proxy for complexity
+            base_size += min(len(node.attributes.tags), 4)
 
     return min(base_size, 20)  # Cap at 20
 

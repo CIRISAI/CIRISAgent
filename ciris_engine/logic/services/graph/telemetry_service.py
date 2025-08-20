@@ -354,7 +354,7 @@ class TelemetryAggregator:
                     )
             except Exception as e:
                 logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
-            return None
+                # Don't return None here - continue to try other methods
         else:
             logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
 

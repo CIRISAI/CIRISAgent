@@ -176,10 +176,11 @@ class TelemetryAggregator:
 
     async def collect_service(self, service_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a single service."""
+        logger.info(f"[TELEMETRY] Starting collection for service: {service_name}")
         try:
             # Special handling for buses
             if service_name.endswith("_bus"):
-                logger.info(f"[TELEMETRY] Collecting from bus: {service_name}")
+                logger.debug(f"[TELEMETRY] Collecting from bus: {service_name}")
                 return await self.collect_from_bus(service_name)
 
             # Special handling for adapters - collect from ALL instances
@@ -220,6 +221,7 @@ class TelemetryAggregator:
     def _get_service_from_runtime(self, service_name: str):
         """Get service directly from runtime attributes."""
         if not self.runtime:
+            logger.debug(f"[TELEMETRY] No runtime available for service {service_name}")
             return None
 
         # Map service names to runtime attributes
@@ -1739,6 +1741,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         if not self._telemetry_aggregator and self._service_registry:
             logger.info(f"[TELEMETRY] Creating TelemetryAggregator with registry {id(self._service_registry)}")
             logger.info(f"[TELEMETRY] Registry has {len(self._service_registry.get_all_services())} services")
+            logger.info(f"[TELEMETRY] Runtime available: {self._runtime is not None}")
+            if self._runtime:
+                logger.info(f"[TELEMETRY] Runtime has bus_manager: {hasattr(self._runtime, 'bus_manager')}")
+                logger.info(f"[TELEMETRY] Runtime has memory_service: {hasattr(self._runtime, 'memory_service')}")
             service_names = [s.__class__.__name__ for s in self._service_registry.get_all_services()]
             logger.info(f"[TELEMETRY] Services in registry: {service_names}")
             self._telemetry_aggregator = TelemetryAggregator(
@@ -1785,7 +1791,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         for category, services in telemetry.items():
             if isinstance(services, dict):
                 for service_name, service_info in services.items():
-                    if isinstance(service_info, dict):
+                    # Check if it's already a ServiceTelemetryData object
+                    if isinstance(service_info, ServiceTelemetryData):
+                        services_data[service_name] = service_info
+                    elif isinstance(service_info, dict):
                         services_data[service_name] = ServiceTelemetryData(
                             healthy=service_info.get("healthy", False),
                             uptime_seconds=service_info.get("uptime_seconds"),

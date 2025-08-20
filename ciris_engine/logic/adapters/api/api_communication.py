@@ -291,7 +291,9 @@ class APICommunicationService(CommunicationServiceProtocol):
                 "error_count": float(self._error_count),
                 "avg_response_time_ms": avg_response_time,
                 "queued_responses": float(self._response_queue.qsize()),
-                "websocket_clients": float(len(self._websocket_clients)),
+                "websocket_clients": float(
+                    len(self._websocket_clients) if hasattr(self._websocket_clients, "__len__") else 0
+                ),
             },
         )
 

@@ -414,7 +414,12 @@ class ApiPlatform(Service):
             comm_metrics = comm_status.metrics if hasattr(comm_status, "metrics") else {}
 
             # Get active WebSocket connections count
-            active_connections = len(self.communication._websocket_clients)
+            active_connections = 0
+            if hasattr(self.communication, "_websocket_clients"):
+                try:
+                    active_connections = len(self.communication._websocket_clients)
+                except (TypeError, AttributeError):
+                    active_connections = 0
 
             # Extract values with defaults
             requests_total = float(comm_metrics.get("requests_handled", 0))

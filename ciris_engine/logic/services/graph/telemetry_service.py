@@ -117,10 +117,11 @@ class TelemetryAggregator:
         "covenant": [],  # Will be computed from governance services
     }
 
-    def __init__(self, service_registry: Any, time_service: Any):
-        """Initialize the aggregator with service registry and time service."""
+    def __init__(self, service_registry: Any, time_service: Any, runtime: Any = None):
+        """Initialize the aggregator with service registry, time service, and optional runtime."""
         self.service_registry = service_registry
         self.time_service = time_service
+        self.runtime = runtime  # Direct access to runtime for core services
         self.cache: Dict[str, Tuple[datetime, Dict]] = {}
         self.cache_ttl = timedelta(seconds=30)
 
@@ -178,11 +179,24 @@ class TelemetryAggregator:
         try:
             # Special handling for buses
             if service_name.endswith("_bus"):
+                logger.info(f"[TELEMETRY] Collecting from bus: {service_name}")
                 return await self.collect_from_bus(service_name)
 
             # Special handling for adapters - collect from ALL instances
             if service_name in ["api", "discord", "cli"]:
+                logger.info(f"[TELEMETRY] Collecting from adapter: {service_name}")
                 return await self.collect_from_adapter_instances(service_name)
+
+            # Special handling for components
+            if service_name in [
+                "circuit_breaker",
+                "processing_queue",
+                "service_registry",
+                "service_initializer",
+                "agent_processor",
+            ]:
+                logger.debug(f"[TELEMETRY] Collecting from component: {service_name}")
+                return await self.collect_from_component(service_name)
 
             # Get service from registry
             service = self._get_service_from_registry(service_name)
@@ -203,46 +217,144 @@ class TelemetryAggregator:
             healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
         )  # NO FALLBACKS - service failed
 
-    def _get_service_from_registry(self, service_name: str):
-        """Get service from registry by name."""
-        service_type_map = {
-            "memory": ServiceType.MEMORY,
-            "config": ServiceType.CONFIG,
-            "telemetry": ServiceType.TELEMETRY,
-            "audit": ServiceType.AUDIT,
-            "llm": ServiceType.LLM,
-            "wise_authority": ServiceType.WISE_AUTHORITY,
-        }
-
-        if service_name not in service_type_map:
+    def _get_service_from_runtime(self, service_name: str):
+        """Get service directly from runtime attributes."""
+        if not self.runtime:
             return None
 
-        service_type = service_type_map[service_name]
-        services = self.service_registry.get_services_by_type(service_type)
-        return services[0] if services else None
+        # Map service names to runtime attributes
+        runtime_attrs = {
+            # Graph services
+            "memory": "memory_service",
+            "config": "config_service",
+            "telemetry": "telemetry_service",
+            "audit": "audit_service",
+            "incident_management": "incident_management_service",
+            "tsdb_consolidation": "tsdb_consolidation_service",
+            # Infrastructure services
+            "time": "time_service",
+            "shutdown": "shutdown_service",
+            "initialization": "initialization_service",
+            "authentication": "auth_service",
+            "resource_monitor": "resource_monitor_service",
+            "database_maintenance": "maintenance_service",
+            "secrets": "secrets_service",
+            # Governance services
+            "wise_authority": "wa_auth_system",
+            "adaptive_filter": "adaptive_filter_service",
+            "visibility": "visibility_service",
+            "self_observation": "self_observation_service",
+            # Runtime services
+            "llm": "llm_service",
+            "runtime_control": "runtime_control_service",
+            "task_scheduler": "task_scheduler_service",
+            # Tool services
+            "secrets_tool": "core_tool_service",
+        }
+
+        attr_name = runtime_attrs.get(service_name)
+        if attr_name:
+            service = getattr(self.runtime, attr_name, None)
+            if service:
+                logger.debug(f"Found {service_name} as runtime.{attr_name}")
+                return service
+        return None
+
+    def _get_service_from_registry(self, service_name: str):
+        """Get service from runtime first, then registry by name."""
+        # First try to get service directly from runtime
+        if self.runtime:
+            runtime_service = self._get_service_from_runtime(service_name)
+            if runtime_service:
+                logger.debug(f"Found {service_name} directly from runtime")
+                return runtime_service
+
+        # Fall back to registry lookup
+        all_services = self.service_registry.get_all_services() if self.service_registry else []
+        logger.debug(f"[TELEMETRY] Looking for {service_name} in {len(all_services)} registered services")
+
+        # Map expected names to actual registered class names
+        name_map = {
+            # Graph services
+            "memory": ["memoryservice", "localgraphmemoryservice"],
+            "config": ["configservice", "graphconfigservice"],
+            "telemetry": ["telemetryservice", "graphtelemetryservice"],
+            "audit": ["auditservice"],
+            "incident_management": ["incidentmanagementservice"],
+            "tsdb_consolidation": ["tsdbconsolidationservice"],
+            # Infrastructure services
+            "time": ["timeservice"],
+            "shutdown": ["shutdownservice"],
+            "initialization": ["initializationservice"],
+            "authentication": ["authenticationservice"],
+            "resource_monitor": ["resourcemonitorservice"],
+            "database_maintenance": ["databasemaintenanceservice"],
+            "secrets": ["secretsservice"],
+            # Governance services
+            "wise_authority": ["wiseauthorityservice"],
+            "adaptive_filter": ["adaptivefilterservice"],
+            "visibility": ["visibilityservice"],
+            "self_observation": ["selfobservationservice"],
+            # Runtime services
+            "llm": ["llmservice", "mockllmservice"],
+            "runtime_control": ["runtimecontrolservice", "apiruntimecontrolservice"],
+            "task_scheduler": ["taskschedulerservice"],
+            # Tool services
+            "secrets_tool": ["secretstoolservice"],
+        }
+
+        if service_name not in name_map:
+            logger.debug(f"Service {service_name} not in name_map")
+            return None
+
+        # Check each service in registry
+        for service in all_services:
+            if hasattr(service, "__class__"):
+                class_name = service.__class__.__name__.lower()
+                # Check if class name matches any expected variant
+                for variant in name_map[service_name]:
+                    if class_name == variant:
+                        logger.debug(f"Found service {service_name} as {service.__class__.__name__}")
+                        return service
+
+        logger.debug(f"Service {service_name} not found in {len(all_services)} services")
+        return None
 
     async def _try_collect_metrics(self, service) -> Optional[ServiceTelemetryData]:
         """Try different methods to collect metrics from service."""
         if not service:
+            logger.info("[TELEMETRY] Service is None, cannot collect metrics")
             return None
 
         # Try get_metrics first
         if hasattr(service, "get_metrics"):
-            metrics = await service.get_metrics()
-            if isinstance(metrics, ServiceTelemetryData):
-                return metrics
-            elif isinstance(metrics, dict):
-                # Convert dict to ServiceTelemetryData
-                return ServiceTelemetryData(
-                    healthy=metrics.get("healthy", False),
-                    uptime_seconds=metrics.get("uptime_seconds"),
-                    error_count=metrics.get("error_count"),
-                    requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
-                    error_rate=metrics.get("error_rate"),
-                    memory_mb=metrics.get("memory_mb"),
-                    custom_metrics=metrics.get("custom_metrics"),
-                )
+            logger.info(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
+            try:
+                # Check if get_metrics is async or sync
+                if asyncio.iscoroutinefunction(service.get_metrics):
+                    metrics = await service.get_metrics()
+                else:
+                    metrics = service.get_metrics()
+                logger.info(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
+                if isinstance(metrics, ServiceTelemetryData):
+                    return metrics
+                elif isinstance(metrics, dict):
+                    # Convert dict to ServiceTelemetryData
+                    logger.debug(f"Converting dict metrics to ServiceTelemetryData: {metrics}")
+                    return ServiceTelemetryData(
+                        healthy=metrics.get("healthy", False),
+                        uptime_seconds=metrics.get("uptime_seconds"),
+                        error_count=metrics.get("error_count"),
+                        requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
+                        error_rate=metrics.get("error_rate"),
+                        memory_mb=metrics.get("memory_mb"),
+                        custom_metrics=metrics.get("custom_metrics"),
+                    )
+            except Exception as e:
+                logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
             return None
+        else:
+            logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
 
         # Try _collect_metrics
         if hasattr(service, "_collect_metrics"):
@@ -274,9 +386,30 @@ class TelemetryAggregator:
     async def collect_from_bus(self, bus_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a message bus."""
         try:
-            # Get the bus from agent/registry
+            # Get the bus from runtime first, then agent/registry
             bus = None
-            if hasattr(self.service_registry, "_agent"):
+
+            # Try runtime.bus_manager first
+            if self.runtime:
+                bus_manager = getattr(self.runtime, "bus_manager", None)
+                if bus_manager:
+                    # Map bus names to bus_manager attributes
+                    bus_attr_map = {
+                        "llm_bus": "llm",
+                        "memory_bus": "memory",
+                        "communication_bus": "communication",
+                        "wise_bus": "wise",
+                        "tool_bus": "tool",
+                        "runtime_control_bus": "runtime_control",
+                    }
+                    attr_name = bus_attr_map.get(bus_name)
+                    if attr_name:
+                        bus = getattr(bus_manager, attr_name, None)
+                        if bus:
+                            logger.debug(f"Found {bus_name} from runtime.bus_manager.{attr_name}")
+
+            # Fall back to registry
+            if not bus and hasattr(self.service_registry, "_agent"):
                 agent = self.service_registry._agent
                 bus = getattr(agent, bus_name, None)
 
@@ -288,6 +421,55 @@ class TelemetryAggregator:
         except Exception as e:
             logger.error(f"Failed to collect from {bus_name}: {e}")
             return self.get_fallback_metrics(bus_name, healthy=False)
+
+    async def collect_from_component(self, component_name: str) -> ServiceTelemetryData:
+        """Collect telemetry from runtime components."""
+        try:
+            component = None
+
+            # Map component names to runtime locations
+            if self.runtime:
+                if component_name == "service_registry":
+                    component = getattr(self.runtime, "service_registry", None)
+                elif component_name == "service_initializer":
+                    component = getattr(self.runtime, "service_initializer", None)
+                elif component_name == "agent_processor":
+                    component = getattr(self.runtime, "processor", None)
+                elif component_name == "processing_queue":
+                    # Queue is on the processor
+                    processor = getattr(self.runtime, "processor", None)
+                    if processor:
+                        component = getattr(processor, "processing_queue", None)
+                elif component_name == "circuit_breaker":
+                    # Circuit breakers are in the registry
+                    registry = getattr(self.runtime, "service_registry", None)
+                    if registry and hasattr(registry, "get_circuit_breakers"):
+                        # Return aggregated circuit breaker metrics
+                        breakers = registry.get_circuit_breakers()
+                        return ServiceTelemetryData(
+                            healthy=True,
+                            uptime_seconds=0.0,
+                            error_count=sum(b.failure_count for b in breakers.values()),
+                            requests_handled=sum(b.success_count + b.failure_count for b in breakers.values()),
+                            error_rate=0.0,
+                        )
+
+            # Try to get metrics from component
+            if component:
+                metrics = await self._try_collect_metrics(component)
+                if metrics:
+                    return metrics
+
+            # Return empty telemetry data
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to collect from component {component_name}: {e}")
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+            )
 
     async def collect_from_adapter_instances(self, adapter_type: str) -> dict:
         """
@@ -557,6 +739,16 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         # Enterprise telemetry aggregator
         self._telemetry_aggregator: Optional[TelemetryAggregator] = None
+        self._runtime: Optional[Any] = None  # Store runtime reference for aggregator
+
+    def _set_runtime(self, runtime: object) -> None:
+        """Set the runtime reference for accessing core services directly (internal method)."""
+        self._runtime = runtime
+        # Re-create aggregator if it exists to include runtime
+        if self._telemetry_aggregator and self._service_registry:
+            self._telemetry_aggregator = TelemetryAggregator(
+                service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
+            )
 
     def _set_service_registry(self, registry: object) -> None:
         """Set the service registry for accessing memory bus and time service (internal method)."""
@@ -1545,8 +1737,12 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         """
         # Initialize aggregator if needed
         if not self._telemetry_aggregator and self._service_registry:
+            logger.info(f"[TELEMETRY] Creating TelemetryAggregator with registry {id(self._service_registry)}")
+            logger.info(f"[TELEMETRY] Registry has {len(self._service_registry.get_all_services())} services")
+            service_names = [s.__class__.__name__ for s in self._service_registry.get_all_services()]
+            logger.info(f"[TELEMETRY] Services in registry: {service_names}")
             self._telemetry_aggregator = TelemetryAggregator(
-                service_registry=self._service_registry, time_service=self._time_service
+                service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )
 
         if not self._telemetry_aggregator:

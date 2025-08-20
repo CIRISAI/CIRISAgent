@@ -263,5 +263,5 @@ class APIToolService(ToolService):
             uptime_seconds=0,  # Not tracked
             last_error=None,
             metrics={"tools_count": len(self._tools)},
-            custom_metrics={"tools": list(self._tools.keys())},
+            custom_metrics={"tools_count": float(len(self._tools))},
         )

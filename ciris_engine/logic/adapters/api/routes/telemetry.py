@@ -1340,11 +1340,13 @@ async def get_unified_telemetry(
         if not telemetry_service:
             raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
 
-        # Get telemetry data
-        if hasattr(telemetry_service, "get_aggregated_telemetry"):
-            result = await get_telemetry_from_service(telemetry_service, view, category, format, live)
-        else:
-            result = await get_telemetry_fallback(request.app.state, view, category)
+        # Get telemetry data - NO FALLBACKS, fail FAST and LOUD per CIRIS philosophy
+        if not hasattr(telemetry_service, "get_aggregated_telemetry"):
+            raise HTTPException(
+                status_code=503,
+                detail="CRITICAL: Telemetry service does not have get_aggregated_telemetry method - NO FALLBACKS!",
+            )
+        result = await get_telemetry_from_service(telemetry_service, view, category, format, live)
 
         # Handle export formats
         if format == "prometheus":

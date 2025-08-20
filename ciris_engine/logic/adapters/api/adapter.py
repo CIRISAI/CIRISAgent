@@ -188,7 +188,15 @@ class ApiPlatform(Service):
             if handler:
                 handler(service)
 
-            logger.info(f"Injected {runtime_attr}")
+            # Special logging for service_registry
+            if runtime_attr == "service_registry":
+                logger.info(
+                    f"[API] Injected service_registry {id(service)} with {len(service.get_all_services())} services"
+                )
+                service_names = [s.__class__.__name__ for s in service.get_all_services()]
+                logger.info(f"[API] Services in injected registry: {service_names}")
+            else:
+                logger.info(f"Injected {runtime_attr}")
 
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""

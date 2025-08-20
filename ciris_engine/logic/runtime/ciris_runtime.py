@@ -624,6 +624,12 @@ class CIRISRuntime:
                 self.runtime_control_service.runtime = self
             logger.info("Updated runtime control service with runtime reference")
 
+        # Update telemetry service with runtime reference for aggregator
+        if self.telemetry_service:
+            if hasattr(self.telemetry_service, "_set_runtime"):
+                self.telemetry_service._set_runtime(self)
+                logger.info("Updated telemetry service with runtime reference for aggregator")
+
     async def _verify_core_services(self) -> bool:
         """Verify all core services are operational."""
         return self.service_initializer.verify_core_services()

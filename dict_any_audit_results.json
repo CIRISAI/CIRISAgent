@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 192,
+    "occurrences": 193,
     "files_affected": 79,
     "categories": {
-      "generic_data": 170,
+      "generic_data": 171,
       "parameters": 5,
       "configuration": 3,
       "api_request": 1,
@@ -961,6 +961,14 @@
         "class": "ServiceRegistry",
         "function": "register_service",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/registries/base.py",
+        "line": 299,
+        "class": "ServiceRegistry",
+        "function": "get_circuit_breaker_details",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -2864,7 +2872,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 355,
+    "occurrences": 356,
     "files_affected": 113
   }
 }

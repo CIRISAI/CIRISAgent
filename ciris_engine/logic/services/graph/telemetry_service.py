@@ -107,10 +107,7 @@ class TelemetryAggregator:
         "tools": ["secrets_tool"],  # Separated from runtime for clarity
         "adapters": ["api", "discord", "cli"],  # Each can spawn multiple instances
         "components": [
-            "circuit_breaker",
-            "processing_queue",
             "service_registry",
-            "service_initializer",
             "agent_processor",  # Has get_metrics() now
         ],
         # New v1.4.3: Covenant/Ethics metrics (computed, not from services)
@@ -190,10 +187,7 @@ class TelemetryAggregator:
 
             # Special handling for components
             if service_name in [
-                "circuit_breaker",
-                "processing_queue",
                 "service_registry",
-                "service_initializer",
                 "agent_processor",
             ]:
                 logger.info(f"[TELEMETRY] Collecting from component: {service_name}")
@@ -485,37 +479,11 @@ class TelemetryAggregator:
                     logger.info(
                         f"[TELEMETRY] Got service_registry: {component.__class__.__name__ if component else 'None'}"
                     )
-                elif component_name == "service_initializer":
-                    component = getattr(self.runtime, "service_initializer", None)
-                    logger.info(
-                        f"[TELEMETRY] Got service_initializer: {component.__class__.__name__ if component else 'None'}"
-                    )
                 elif component_name == "agent_processor":
-                    component = getattr(self.runtime, "processor", None)
-                    logger.info(f"[TELEMETRY] Got processor: {component.__class__.__name__ if component else 'None'}")
-                elif component_name == "processing_queue":
-                    # Queue is on the processor
-                    processor = getattr(self.runtime, "processor", None)
-                    if processor:
-                        component = getattr(processor, "processing_queue", None)
-                        logger.info(
-                            f"[TELEMETRY] Got processing_queue from processor: {component.__class__.__name__ if component else 'None'}"
-                        )
-                    else:
-                        logger.info(f"[TELEMETRY] No processor found for processing_queue")
-                elif component_name == "circuit_breaker":
-                    # Circuit breakers are in the registry
-                    registry = getattr(self.runtime, "service_registry", None)
-                    if registry and hasattr(registry, "get_circuit_breakers"):
-                        # Return aggregated circuit breaker metrics
-                        breakers = registry.get_circuit_breakers()
-                        return ServiceTelemetryData(
-                            healthy=True,
-                            uptime_seconds=0.0,
-                            error_count=sum(b.failure_count for b in breakers.values()),
-                            requests_handled=sum(b.success_count + b.failure_count for b in breakers.values()),
-                            error_rate=0.0,
-                        )
+                    component = getattr(self.runtime, "agent_processor", None)
+                    logger.info(
+                        f"[TELEMETRY] Got agent_processor: {component.__class__.__name__ if component else 'None'}"
+                    )
 
             # Try to get metrics from component
             if component:

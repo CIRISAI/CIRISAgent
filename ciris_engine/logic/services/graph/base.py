@@ -6,10 +6,11 @@ All graph services use the MemoryBus for actual persistence operations.
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.runtime.base import GraphServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BaseGraphService(BaseService, GraphServiceProtocol):
+class BaseGraphService(ABC, GraphServiceProtocol):
     """Base class for all graph services providing common functionality.
 
     Graph services store their data through the MemoryBus, which provides:
@@ -41,9 +42,14 @@ class BaseGraphService(BaseService, GraphServiceProtocol):
             memory_bus: MemoryBus for graph persistence operations
             time_service: TimeService for consistent timestamps
         """
-        # Initialize BaseService for telemetry
-        BaseService.__init__(self, time_service=time_service, service_name=self.__class__.__name__)
+        self.service_name = self.__class__.__name__
         self._memory_bus = memory_bus
+        self._time_service = time_service
+        self._telemetry_service = None  # Will be set after instantiation if needed
+        self._request_count = 0
+        self._error_count = 0
+        self._total_response_time = 0.0
+        self._start_time: Optional[datetime] = None
 
     def _set_memory_bus(self, memory_bus: "MemoryBus") -> None:
         """Set the memory bus for graph operations."""
@@ -53,14 +59,27 @@ class BaseGraphService(BaseService, GraphServiceProtocol):
         """Set the time service for timestamps."""
         self._time_service = time_service
 
-    async def start(self) -> None:
+    def start(self) -> None:
         """Start the service."""
-        await BaseService.start(self)
+        # Initialize telemetry if available
+        if hasattr(self, "_telemetry_service") and self._telemetry_service:
+            from ciris_engine.schemas.telemetry import ServiceMetrics
+
+            metrics = ServiceMetrics(
+                service_name=self.service_name,
+                healthy=True,
+                uptime_seconds=0.0,
+                memory_usage_mb=0.0,
+                cpu_usage_percent=0.0,
+                request_count=0,
+                error_count=0,
+                avg_response_time_ms=0.0,
+            )
+            self._telemetry_service.update_service_metrics(metrics)
         logger.info(f"{self.service_name} started")
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """Stop the service."""
-        await BaseService.stop(self)
         logger.info(f"{self.service_name} stopped")
 
     def get_capabilities(self) -> ServiceCapabilities:
@@ -87,6 +106,50 @@ class BaseGraphService(BaseService, GraphServiceProtocol):
     def _get_actions(self) -> List[str]:
         """Get the list of actions this service supports."""
         return ["store_in_graph", "query_graph", self.get_node_type()]
+
+    def _track_request(self, response_time_ms: float) -> None:
+        """Track a successful request."""
+        self._request_count += 1
+        self._total_response_time += response_time_ms
+        if self._telemetry_service:
+            self._update_telemetry()
+
+    def _track_error(self) -> None:
+        """Track an error."""
+        self._error_count += 1
+        if self._telemetry_service:
+            self._update_telemetry()
+
+    def _update_telemetry(self) -> None:
+        """Update telemetry metrics."""
+        if not self._telemetry_service:
+            return
+
+        import psutil
+
+        from ciris_engine.schemas.telemetry import ServiceMetrics
+
+        # Get process info
+        process = psutil.Process()
+        memory_info = process.memory_info()
+
+        # Calculate uptime
+        uptime = (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
+
+        # Calculate average response time
+        avg_response_time = self._total_response_time / self._request_count if self._request_count > 0 else 0.0
+
+        metrics = ServiceMetrics(
+            service_name=self.service_name,
+            healthy=self._check_dependencies(),
+            uptime_seconds=uptime,
+            memory_usage_mb=memory_info.rss / 1024 / 1024,
+            cpu_usage_percent=process.cpu_percent(),
+            request_count=self._request_count,
+            error_count=self._error_count,
+            avg_response_time_ms=avg_response_time,
+        )
+        self._telemetry_service.update_service_metrics(metrics)
 
     async def store_in_graph(self, node: GraphNode) -> str:
         """Store a node in the graph using MemoryBus.

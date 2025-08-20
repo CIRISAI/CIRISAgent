@@ -8,7 +8,7 @@ This replaces the old config_manager_service and agent_config_service.
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from ciris_engine.logic.services.base_graph_service import BaseGraphService, GraphNodeConvertible
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService

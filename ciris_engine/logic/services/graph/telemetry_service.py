@@ -415,8 +415,36 @@ class TelemetryAggregator:
                 agent = self.service_registry._agent
                 bus = getattr(agent, bus_name, None)
 
-            if bus and hasattr(bus, "collect_telemetry"):
-                return await bus.collect_telemetry()
+            if bus:
+                # Try get_metrics first (all buses have this)
+                if hasattr(bus, "get_metrics"):
+                    try:
+                        metrics = bus.get_metrics()
+                        # Convert dict to ServiceTelemetryData
+                        # Buses with providers should report healthy
+                        is_healthy = True
+                        if hasattr(bus, "get_providers"):
+                            providers = bus.get_providers()
+                            is_healthy = len(providers) > 0
+                        elif hasattr(bus, "providers"):
+                            is_healthy = len(bus.providers) > 0
+
+                        return ServiceTelemetryData(
+                            healthy=is_healthy,
+                            uptime_seconds=metrics.get("uptime_seconds", 0.0),
+                            error_count=metrics.get("error_count", 0),
+                            requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
+                            error_rate=metrics.get("error_rate", 0.0),
+                            memory_mb=metrics.get("memory_mb"),
+                            custom_metrics=metrics,
+                        )
+                    except Exception as e:
+                        logger.error(f"Error getting metrics from {bus_name}: {e}")
+                        return self.get_fallback_metrics(bus_name)
+                elif hasattr(bus, "collect_telemetry"):
+                    return await bus.collect_telemetry()
+                else:
+                    return self.get_fallback_metrics(bus_name)
             else:
                 return self.get_fallback_metrics(bus_name)
 
@@ -473,58 +501,56 @@ class TelemetryAggregator:
                 healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
             )
 
-    async def collect_from_adapter_instances(self, adapter_type: str) -> dict:
+    async def collect_from_adapter_instances(self, adapter_type: str) -> ServiceTelemetryData:
         """
-        Collect telemetry from all instances of an adapter type.
+        Collect telemetry from ACTIVE adapter instances only.
 
-        Returns aggregated metrics with instance breakdowns.
-        Example: discord adapter might have discord_0567, discord_759F instances
+        Only the currently running adapter should report as healthy.
+        Non-running adapters return unhealthy status.
         """
-        aggregated = {
-            "type": adapter_type,
-            "total_instances": 0,
-            "instances": {},  # instance_id -> metrics
-            "aggregate": {
-                "total_requests": 0,
-                "total_errors": 0,
-                "total_connections": 0,
-            },
-        }
+        # Check if we have runtime access to get active adapters
+        if self.runtime and hasattr(self.runtime, "adapters"):
+            # Find the active adapter of this type
+            for adapter in self.runtime.adapters:
+                adapter_class_name = adapter.__class__.__name__.lower()
 
-        try:
-            # Get all adapter instances from registry
-            # Adapters register with instance IDs like "discord_0567"
-            if hasattr(self.service_registry, "get_adapter_instances"):
-                instances = self.service_registry.get_adapter_instances(adapter_type)
-
-                for instance_id, adapter in instances.items():
+                # Match adapter type (api, discord, cli)
+                if adapter_type in adapter_class_name:
+                    # This is the active adapter - get its metrics
                     if hasattr(adapter, "get_metrics"):
-                        instance_metrics = await adapter.get_metrics()
-                        aggregated["instances"][instance_id] = instance_metrics
-                        aggregated["total_instances"] += 1
+                        try:
+                            metrics = adapter.get_metrics()
+                            # Handle both async and sync get_metrics
+                            if asyncio.iscoroutinefunction(adapter.get_metrics):
+                                metrics = await adapter.get_metrics()
 
-                        # Aggregate key metrics
-                        aggregated["aggregate"]["total_requests"] += instance_metrics.get("request_count", 0)
-                        aggregated["aggregate"]["total_errors"] += instance_metrics.get("error_count", 0)
-                        aggregated["aggregate"]["total_connections"] += instance_metrics.get("active_connections", 0)
+                            # Convert dict to ServiceTelemetryData
+                            return ServiceTelemetryData(
+                                healthy=True,
+                                uptime_seconds=metrics.get("uptime_seconds", 0.0),
+                                error_count=metrics.get("error_count", 0),
+                                requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
+                                error_rate=metrics.get("error_rate", 0.0),
+                                memory_mb=metrics.get("memory_mb"),
+                                custom_metrics=metrics.get("custom_metrics"),
+                            )
+                        except Exception as e:
+                            logger.error(f"Error getting metrics from active {adapter_type} adapter: {e}")
+                            # Active adapter exists but has error - still unhealthy
+                            return ServiceTelemetryData(
+                                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                            )
+                    else:
+                        # Active adapter doesn't have get_metrics
+                        logger.warning(f"Active {adapter_type} adapter doesn't have get_metrics method")
+                        return ServiceTelemetryData(
+                            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                        )
 
-            # If no instance tracking available, fall back to single adapter
-            if aggregated["total_instances"] == 0:
-                # Try to get single adapter from registry
-                adapter = self._get_service_from_registry(adapter_type)
-                if adapter and hasattr(adapter, "get_metrics"):
-                    metrics = await adapter.get_metrics()
-                    aggregated["instances"]["default"] = metrics
-                    aggregated["total_instances"] = 1
-                    aggregated["aggregate"]["total_requests"] = metrics.get("request_count", 0)
-                    aggregated["aggregate"]["total_errors"] = metrics.get("error_count", 0)
-                    aggregated["aggregate"]["total_connections"] = metrics.get("active_connections", 0)
-
-            return aggregated
-
-        except Exception as e:
-            logger.error(f"Failed to collect from {adapter_type} instances: {e}")
-            return aggregated
+        # No active adapter of this type - return unhealthy (expected for non-running adapters)
+        return ServiceTelemetryData(
+            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+        )
 
     def get_fallback_metrics(self, service_name: Optional[str] = None, healthy: bool = False) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.

@@ -279,6 +279,11 @@ class ApiPlatform(Service):
         logger.info(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
         await super().start()
 
+        # Track start time for metrics
+        import time
+
+        self._start_time = time.time()
+
         # Start the communication service
         await self.communication.start()
         logger.info("Started API communication service")
@@ -393,8 +398,14 @@ class ApiPlatform(Service):
 
     def get_metrics(self) -> dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
+        # Initialize base metrics
+        import time
+
+        uptime = time.time() - self._start_time if hasattr(self, "_start_time") else 0.0
+        metrics = {
+            "uptime_seconds": uptime,
+            "healthy": self.is_healthy(),
+        }
 
         # Add v1.4.3 specific metrics
         try:

@@ -525,7 +525,7 @@
       },
       {
         "file": "ciris_modular_services/mock_llm/service.py",
-        "line": 144,
+        "line": 155,
         "class": "MockLLMService",
         "function": "get_capabilities",
         "context": "return_type",
@@ -533,7 +533,7 @@
       },
       {
         "file": "ciris_modular_services/mock_llm/service.py",
-        "line": 153,
+        "line": 164,
         "class": "MockLLMService",
         "function": "get_status",
         "context": "return_type",

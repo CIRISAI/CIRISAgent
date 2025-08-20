@@ -1867,13 +1867,19 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         # Initialize aggregator if needed
         if not self._telemetry_aggregator and self._service_registry:
             logger.debug(f"[TELEMETRY] Creating TelemetryAggregator with registry {id(self._service_registry)}")
-            logger.debug(f"[TELEMETRY] Registry has {len(self._service_registry.get_all_services())} services")
+            try:
+                all_services = self._service_registry.get_all_services()
+                service_count = len(all_services) if hasattr(all_services, "__len__") else 0
+                logger.debug(f"[TELEMETRY] Registry has {service_count} services")
+                service_names = [s.__class__.__name__ for s in all_services] if all_services else []
+                logger.debug(f"[TELEMETRY] Services in registry: {service_names}")
+            except (TypeError, AttributeError):
+                logger.debug(f"[TELEMETRY] Registry is mock/test mode")
+
             logger.debug(f"[TELEMETRY] Runtime available: {self._runtime is not None}")
             if self._runtime:
                 logger.debug(f"[TELEMETRY] Runtime has bus_manager: {hasattr(self._runtime, 'bus_manager')}")
                 logger.debug(f"[TELEMETRY] Runtime has memory_service: {hasattr(self._runtime, 'memory_service')}")
-            service_names = [s.__class__.__name__ for s in self._service_registry.get_all_services()]
-            logger.debug(f"[TELEMETRY] Services in registry: {service_names}")
             self._telemetry_aggregator = TelemetryAggregator(
                 service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )

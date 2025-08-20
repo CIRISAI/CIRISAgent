@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import instructor
 from pydantic import BaseModel
 
-from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as MockLLMServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
@@ -121,11 +121,12 @@ class MockLLMClient:
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
 
-class MockLLMService(Service, MockLLMServiceProtocol):
+class MockLLMService(BaseService, MockLLMServiceProtocol):
     """Mock LLM service used for offline testing."""
 
-    def __init__(self, *_: Any, **__: Any) -> None:
-        super().__init__()
+    def __init__(self, *_: Any, **kwargs: Any) -> None:
+        # Initialize BaseService with service name
+        super().__init__(service_name="MockLLMService", **kwargs)
         self._client: Optional[MockLLMClient] = None
         self.model_name = "mock-model"
 
@@ -140,6 +141,24 @@ class MockLLMService(Service, MockLLMServiceProtocol):
     def get_service_type(self) -> ServiceType:
         """Get the service type."""
         return ServiceType.LLM
+
+    def _get_actions(self) -> List[str]:
+        """Get list of actions this service provides."""
+        return ["call_llm_structured", "extract_json"]
+
+    def _check_dependencies(self) -> bool:
+        """Check if all required dependencies are available."""
+        return True  # Mock service has no external dependencies
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect service-specific metrics."""
+        return {
+            "total_requests": float(self._total_requests),
+            "total_errors": float(self._total_errors),
+            "total_input_tokens": float(self._total_input_tokens),
+            "total_output_tokens": float(self._total_output_tokens),
+            "total_cost_cents": self._total_cost_cents,
+        }
 
     async def start(self) -> None:
         await super().start()

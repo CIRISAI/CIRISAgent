@@ -595,6 +595,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
             "TSDB consolidation service initialized - consolidating missed windows and starting periodic consolidation"
         )
 
+        # Register TSDBConsolidationService in registry
+        self.service_registry.register_service(
+            service_type=ServiceType.TSDB_CONSOLIDATION,
+            provider=self.tsdb_consolidation_service,
+            priority=Priority.NORMAL,
+            capabilities=["consolidate_data", "get_summaries"],
+            metadata={"consolidation_interval": "6h", "type": "tsdb"},
+        )
+        logger.info("TSDBConsolidationService registered in ServiceRegistry")
+
         # Initialize maintenance service AFTER consolidation
         archive_dir = getattr(config, "data_archive_dir", "data_archive")
         archive_hours = getattr(config, "archive_older_than_hours", 24)

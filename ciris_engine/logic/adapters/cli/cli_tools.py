@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 import aiofiles
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.cli_tools import (
@@ -28,12 +29,13 @@ from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatu
 from ciris_engine.schemas.telemetry.core import ServiceCorrelation, ServiceCorrelationStatus
 
 
-class CLIToolService(ToolService):
+class CLIToolService(BaseService, ToolService):
     """Simple ToolService providing local filesystem browsing."""
 
     def __init__(self, time_service: TimeServiceProtocol) -> None:
-        super().__init__()
-        self._time_service = time_service
+        # Initialize BaseService with proper arguments
+        BaseService.__init__(self, time_service=time_service, service_name="CLIToolService")
+        # ToolService is a Protocol, no need to call its __init__
         self._results: Dict[str, ToolExecutionResult] = {}
         self._tools = {
             "list_files": self._list_files,
@@ -42,18 +44,23 @@ class CLIToolService(ToolService):
             "shell_command": self._shell_command,
             "search_text": self._search_text,
         }
+        # Track tool executions
+        self._tool_executions = 0
+        self._tool_failures = 0
 
     async def start(self) -> None:
         """Start the CLI tool service."""
-        # Don't call super() on abstract method
-        pass
+        await BaseService.start(self)
 
     async def stop(self) -> None:
         """Stop the CLI tool service."""
-        # Don't call super() on abstract method
-        pass
+        await BaseService.stop(self)
 
     async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+        # Track request for telemetry
+        self._track_request()
+        self._tool_executions += 1
+
         correlation_id = parameters.get("correlation_id", str(uuid.uuid4()))
         now = datetime.now(timezone.utc)
         corr = ServiceCorrelation(
@@ -80,6 +87,9 @@ class CLIToolService(ToolService):
                 success = result.get("error") is None
                 error_msg = result.get("error")
             except Exception as e:
+                # Track error for telemetry
+                self._track_error(e)
+                self._tool_failures += 1
                 result = {"error": str(e)}
                 success = False
                 error_msg = str(e)
@@ -371,12 +381,28 @@ class CLIToolService(ToolService):
             resource_limits={"max_concurrent_tools": 10},
         )
 
-    def get_status(self) -> ServiceStatus:
-        """Get current service status."""
-        return ServiceStatus(
-            service_name="CLIToolService",
-            service_type="adapter",
-            is_healthy=True,
-            uptime_seconds=0.0,
-            metrics={"total_tools_executed": len(self._results), "available_tools": len(self._tools)},
-        )
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect CLI tool service specific metrics."""
+        return {
+            "tools_count": float(len(self._tools)),
+            "tool_executions_total": float(self._tool_executions),
+            "tool_failures_total": float(self._tool_failures),
+            "tool_success_rate": float(self._tool_executions - self._tool_failures) / max(1, self._tool_executions),
+            "results_cached": float(len(self._results)),
+        }
+
+    def _get_actions(self) -> List[str]:
+        """Get the list of actions this service supports."""
+        return [
+            "execute_tool",
+            "get_available_tools",
+            "get_tool_result",
+            "validate_parameters",
+            "get_tool_info",
+            "get_all_tool_info",
+        ]
+
+    def _check_dependencies(self) -> bool:
+        """Check if all dependencies are satisfied."""
+        # CLIToolService has no hard dependencies
+        return True

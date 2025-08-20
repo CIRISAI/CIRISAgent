@@ -47,7 +47,12 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
     - Provide graceful degradation
     """
 
-    def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
+    def __init__(
+        self,
+        service_registry: "ServiceRegistry",
+        time_service: TimeServiceProtocol,
+        telemetry_service: Optional[Any] = None,
+    ):
         super().__init__(service_type=ServiceType.RUNTIME_CONTROL, service_registry=service_registry)
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None

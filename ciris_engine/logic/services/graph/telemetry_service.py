@@ -654,9 +654,20 @@ class TelemetryAggregator:
                         elif hasattr(bus, "providers"):
                             is_healthy = len(bus.providers) > 0
 
+                        # Map bus names to their specific uptime metric names
+                        uptime_metric_map = {
+                            "llm_bus": "llm_uptime_seconds",
+                            "memory_bus": "memory_uptime_seconds",
+                            "communication_bus": "communication_uptime_seconds",
+                            "wise_bus": "wise_uptime_seconds",
+                            "tool_bus": "tool_uptime_seconds",
+                            "runtime_control_bus": "runtime_control_uptime_seconds",
+                        }
+                        uptime_metric = uptime_metric_map.get(bus_name, "uptime_seconds")
+
                         return ServiceTelemetryData(
                             healthy=is_healthy,
-                            uptime_seconds=metrics.get("uptime_seconds", 0.0),
+                            uptime_seconds=metrics.get(uptime_metric, metrics.get("uptime_seconds", 0.0)),
                             error_count=metrics.get("error_count", 0),
                             requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
                             error_rate=metrics.get("error_rate", 0.0),

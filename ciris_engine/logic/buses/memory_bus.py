@@ -60,6 +60,7 @@ class MemoryBus(BaseBus[MemoryService]):
         service_registry: "ServiceRegistry",
         time_service: TimeServiceProtocol,
         audit_service: Optional[object] = None,
+        telemetry_service: Optional[object] = None,
     ):
         super().__init__(service_type=ServiceType.MEMORY, service_registry=service_registry)
         self._time_service = time_service

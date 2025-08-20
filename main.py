@@ -254,8 +254,15 @@ def main(
 
                 has_token = discord_bot_token or any(get_env_var(var) for var in token_vars)
                 if not has_token:
-                    click.echo(f"No Discord bot token found for {adapter_type}, falling back to CLI adapter type")
-                    validated_adapter_types.append("cli")
+                    click.echo(
+                        f"ERROR: No Discord bot token found for {adapter_type}. Discord adapter cannot start without a bot token.",
+                        err=True,
+                    )
+                    click.echo(
+                        f"Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True
+                    )
+                    # Still add Discord to attempt loading - it will fail properly
+                    validated_adapter_types.append(adapter_type)
                 else:
                     validated_adapter_types.append(adapter_type)
             else:

@@ -138,6 +138,11 @@ class TelemetryAggregator:
                 tasks.append(task)
                 service_info.append((category, service_name))
 
+        # Also collect from dynamic registry services
+        registry_tasks = await self.collect_from_registry_services()
+        tasks.extend(registry_tasks["tasks"])
+        service_info.extend(registry_tasks["info"])
+
         # Execute all collections in parallel with timeout
         done, pending = await asyncio.wait(tasks, timeout=5.0, return_when=asyncio.ALL_COMPLETED)
 
@@ -147,6 +152,8 @@ class TelemetryAggregator:
 
         # Organize results by category
         telemetry = {cat: {} for cat in self.CATEGORIES.keys()}
+        # Add registry category for dynamic services
+        telemetry["registry"] = {}
 
         for idx, task in enumerate(tasks):
             if idx < len(service_info):
@@ -177,6 +184,203 @@ class TelemetryAggregator:
         telemetry["covenant"] = self.compute_covenant_metrics(telemetry)
 
         return telemetry
+
+    def _generate_semantic_service_name(
+        self, service_type: str, provider_name: str, provider_metadata: dict = None
+    ) -> str:
+        """
+        Generate a semantic name for a dynamic service.
+
+        For adapters: {service_type}_{adapter_type}_{adapter_id_suffix}
+        For LLM providers: {service_type}_{provider_type}_{instance_id}
+        For others: {service_type}_{provider_name_cleaned}
+        """
+        # Clean up the provider name
+        provider_cleaned = provider_name.replace("Service", "").replace("Adapter", "")
+
+        # Handle adapter services (API-COMM, CLI-TOOL, etc.)
+        if "APICommunication" in provider_name:
+            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            suffix = adapter_id.split("_")[-1][:8] if adapter_id else str(id(provider_name))[-6:]
+            return f"{service_type}_api_{suffix}"
+        elif "CLIAdapter" in provider_name:
+            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            suffix = adapter_id.split("@")[-1][:8] if adapter_id and "@" in adapter_id else str(id(provider_name))[-6:]
+            return f"{service_type}_cli_{suffix}"
+        elif "DiscordAdapter" in provider_name or "Discord" in provider_name:
+            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            suffix = adapter_id.split("_")[-1][:8] if adapter_id else str(id(provider_name))[-6:]
+            return f"{service_type}_discord_{suffix}"
+        elif "APITool" in provider_name:
+            return f"{service_type}_api_tool"
+        elif "APIRuntime" in provider_name:
+            return f"{service_type}_api_runtime"
+        elif "SecretsToolService" in provider_name:
+            return f"{service_type}_secrets"
+        elif "MockLLM" in provider_name:
+            return f"{service_type}_mock"
+        elif "OpenAI" in provider_name or "Anthropic" in provider_name:
+            # For LLM providers, include provider type and instance
+            provider_type = "openai" if "OpenAI" in provider_name else "anthropic"
+            instance_id = str(id(provider_name))[-6:]
+            return f"{service_type}_{provider_type}_{instance_id}"
+        elif "LocalGraphMemory" in provider_name:
+            return f"{service_type}_local_graph"
+        elif "GraphConfig" in provider_name:
+            return f"{service_type}_graph"
+        elif "TimeService" in provider_name:
+            return f"{service_type}_time"
+        elif "WiseAuthority" in provider_name:
+            return f"{service_type}_wise_authority"
+        else:
+            # Default: use cleaned provider name with a short ID
+            short_id = str(id(provider_name))[-6:]
+            return f"{service_type}_{provider_cleaned.lower()}_{short_id}"
+
+    async def collect_from_registry_services(self) -> Dict[str, List]:
+        """
+        Collect telemetry from dynamic services registered in ServiceRegistry.
+
+        Returns dict with 'tasks' and 'info' lists for dynamic services.
+        """
+        tasks = []
+        service_info = []
+
+        if not self.service_registry:
+            return {"tasks": [], "info": []}
+
+        try:
+            # Get all services from registry
+            provider_info = self.service_registry.get_provider_info()
+
+            # Iterate through all service types and providers
+            for service_type, providers in provider_info.get("services", {}).items():
+                for provider in providers:
+                    provider_name = provider.get("name", "")
+                    provider_metadata = provider.get("metadata", {})
+
+                    # Skip if this provider is already in CATEGORIES
+                    # Check both the provider name and simplified versions
+                    already_collected = False
+
+                    # Map of known core service implementations to their category names
+                    core_service_mappings = {
+                        "LocalGraphMemoryService": "memory",
+                        "GraphConfigService": "config",
+                        "TimeService": "time",
+                        "WiseAuthorityService": "wise_authority",
+                        "ConfigService": "config",  # Alternative name
+                        "MemoryService": "memory",  # Alternative name
+                        # Note: APIRuntimeControlService is NOT in this list because it's a dynamic adapter service
+                        # MockLLMService is also NOT in this list because it's a dynamic mock service
+                    }
+
+                    # Check if this is a core service implementation
+                    if provider_name in core_service_mappings:
+                        already_collected = True
+                        logger.debug(
+                            f"[TELEMETRY] Skipping core service {provider_name} - already collected as {core_service_mappings[provider_name]}"
+                        )
+                    else:
+                        # Also check if provider name matches any service in CATEGORIES
+                        for cat_services in self.CATEGORIES.values():
+                            if provider_name.lower() in [s.lower() for s in cat_services]:
+                                already_collected = True
+                                break
+
+                    if not already_collected:
+                        # Generate semantic name for the service
+                        semantic_name = self._generate_semantic_service_name(
+                            service_type, provider_name, provider_metadata
+                        )
+
+                        # Create a collection task for this dynamic service
+                        task = asyncio.create_task(self.collect_from_registry_provider(service_type, provider_name))
+                        tasks.append(task)
+                        service_info.append(("registry", semantic_name))
+                        logger.debug(
+                            f"[TELEMETRY] Adding registry service: {semantic_name} (was: {service_type}.{provider_name})"
+                        )
+
+        except Exception as e:
+            logger.warning(f"Failed to collect registry services: {e}")
+
+        return {"tasks": tasks, "info": service_info}
+
+    async def collect_from_registry_provider(self, service_type: str, provider_name: str) -> ServiceTelemetryData:
+        """
+        Collect telemetry from a specific registry provider.
+
+        Returns ServiceTelemetryData for the provider.
+        """
+        try:
+            # Get the provider instance from registry
+            providers = self.service_registry.get_services_by_type(service_type)
+            target_provider = None
+
+            for provider in providers:
+                if hasattr(provider, "__class__") and provider.__class__.__name__ == provider_name:
+                    target_provider = provider
+                    break
+
+            if not target_provider:
+                logger.debug(f"[TELEMETRY] Provider {provider_name} not found in {service_type}")
+                return ServiceTelemetryData(
+                    healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                )
+
+            # Try to get metrics from the provider
+            if hasattr(target_provider, "get_metrics"):
+                metrics = (
+                    await target_provider.get_metrics()
+                    if asyncio.iscoroutinefunction(target_provider.get_metrics)
+                    else target_provider.get_metrics()
+                )
+
+                if isinstance(metrics, ServiceTelemetryData):
+                    logger.debug(f"[TELEMETRY] Got metrics from {provider_name}: healthy={metrics.healthy}")
+                    return metrics
+                elif isinstance(metrics, dict):
+                    # Convert dict to ServiceTelemetryData
+                    return ServiceTelemetryData(
+                        healthy=metrics.get("healthy", True),
+                        uptime_seconds=metrics.get("uptime_seconds", 0.0),
+                        error_count=metrics.get("error_count", 0),
+                        requests_handled=metrics.get("requests_handled", 0),
+                        error_rate=metrics.get("error_rate", 0.0),
+                        custom_metrics=metrics.get("custom_metrics"),
+                        last_health_check=metrics.get("last_health_check"),
+                    )
+
+            # If no get_metrics, check for is_healthy
+            if hasattr(target_provider, "is_healthy"):
+                is_healthy = (
+                    await target_provider.is_healthy()
+                    if asyncio.iscoroutinefunction(target_provider.is_healthy)
+                    else target_provider.is_healthy()
+                )
+                return ServiceTelemetryData(
+                    healthy=is_healthy,
+                    uptime_seconds=300.0,  # Default 5 minutes
+                    error_count=0,
+                    requests_handled=0,
+                    error_rate=0.0,
+                )
+
+            # Default to healthy if no health check available
+            return ServiceTelemetryData(
+                healthy=True,
+                uptime_seconds=300.0,
+                error_count=0,
+                requests_handled=0,
+                error_rate=0.0,
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to collect from registry provider {provider_name}: {e}")
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+            )
 
     async def collect_service(self, service_name: str) -> Union[ServiceTelemetryData, Dict[str, ServiceTelemetryData]]:
         """Collect telemetry from a single service or multiple adapter instances."""
@@ -605,7 +809,7 @@ class TelemetryAggregator:
                                 adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
                                     healthy=True,  # It's running, so consider it healthy
                                     uptime_seconds=(
-                                        (datetime.now() - adapter_info.started_at).total_seconds()
+                                        (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
                                         if hasattr(adapter_info, "started_at") and adapter_info.started_at
                                         else 0
                                     ),

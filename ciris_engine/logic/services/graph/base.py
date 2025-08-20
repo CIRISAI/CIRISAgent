@@ -7,8 +7,9 @@ All graph services use the MemoryBus for actual persistence operations.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.runtime.base import GraphServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BaseGraphService(ABC, GraphServiceProtocol):
+class BaseGraphService(BaseService, GraphServiceProtocol):
     """Base class for all graph services providing common functionality.
 
     Graph services store their data through the MemoryBus, which provides:
@@ -40,10 +41,9 @@ class BaseGraphService(ABC, GraphServiceProtocol):
             memory_bus: MemoryBus for graph persistence operations
             time_service: TimeService for consistent timestamps
         """
-        self._started = False
-        self.service_name = self.__class__.__name__
+        # Initialize BaseService for telemetry
+        BaseService.__init__(self, time_service=time_service, service_name=self.__class__.__name__)
         self._memory_bus = memory_bus
-        self._time_service = time_service
 
     def _set_memory_bus(self, memory_bus: "MemoryBus") -> None:
         """Set the memory bus for graph operations."""
@@ -53,14 +53,14 @@ class BaseGraphService(ABC, GraphServiceProtocol):
         """Set the time service for timestamps."""
         self._time_service = time_service
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the service."""
-        self._started = True
+        await BaseService.start(self)
         logger.info(f"{self.service_name} started")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the service."""
-        self._started = False
+        await BaseService.stop(self)
         logger.info(f"{self.service_name} stopped")
 
     def get_capabilities(self) -> ServiceCapabilities:
@@ -71,22 +71,22 @@ class BaseGraphService(ABC, GraphServiceProtocol):
             version="1.0.0",
         )
 
-    def get_status(self) -> ServiceStatus:
-        """Get current service status."""
-        return ServiceStatus(
-            service_name=self.service_name,
-            service_type=self.get_node_type(),
-            is_healthy=self._started and self._memory_bus is not None,
-            uptime_seconds=0.0,  # Would need to track start time for real uptime
-            metrics={
-                "memory_bus_available": 1.0 if self._memory_bus is not None else 0.0,
-                "time_service_available": 1.0 if self._time_service is not None else 0.0,
-            },
-        )
+    def _check_dependencies(self) -> bool:
+        """Check if all dependencies are satisfied."""
+        return self._memory_bus is not None
 
-    def is_healthy(self) -> bool:
-        """Check if service is healthy."""
-        return self._started and self._memory_bus is not None
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect graph service specific metrics."""
+        return {
+            "memory_bus_available": 1.0 if self._memory_bus else 0.0,
+            "time_service_available": 1.0 if self._time_service else 0.0,
+            "graph_operations_total": float(self._request_count),
+            "graph_errors_total": float(self._error_count),
+        }
+
+    def _get_actions(self) -> List[str]:
+        """Get the list of actions this service supports."""
+        return ["store_in_graph", "query_graph", self.get_node_type()]
 
     async def store_in_graph(self, node: GraphNode) -> str:
         """Store a node in the graph using MemoryBus.

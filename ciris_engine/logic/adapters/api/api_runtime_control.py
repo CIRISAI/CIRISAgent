@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 
@@ -16,12 +17,15 @@ from .constants import ERROR_ADAPTER_MANAGER_NOT_AVAILABLE, ERROR_TIME_SERVICE_N
 logger = logging.getLogger(__name__)
 
 
-class APIRuntimeControlService(Service):
+class APIRuntimeControlService(BaseService, Service):
     """Runtime control exposed through API."""
 
     def __init__(self, runtime: Any) -> None:
         """Initialize API runtime control."""
-        super().__init__()
+        # Initialize BaseService for telemetry
+        BaseService.__init__(self, time_service=None, service_name="APIRuntimeControlService")
+        Service.__init__(self)
+
         self.runtime = runtime
         self._paused = False
         self._pause_reason: Optional[str] = None
@@ -175,24 +179,32 @@ class APIRuntimeControlService(Service):
             },
         )
 
-    def get_status(self) -> ServiceStatus:
-        """Get current service status."""
-        return ServiceStatus(
-            service_name="APIRuntimeControlService",
-            service_type="RUNTIME_CONTROL",
-            is_healthy=True,
-            uptime_seconds=0.0,  # Would need to track start time
-            last_error=None,
-            metrics={
-                "paused": float(self._paused),
-                "pause_duration": float(
-                    (datetime.now(timezone.utc) - self._pause_time).total_seconds()
-                    if self._pause_time and self._paused
-                    else 0
-                ),
-            },
-            last_health_check=datetime.now(timezone.utc),
-        )
+    def _check_dependencies(self) -> bool:
+        """Check if all dependencies are satisfied."""
+        return self.runtime is not None
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect runtime control specific metrics."""
+        return {
+            "paused": float(self._paused),
+            "pause_duration": float(
+                (datetime.now(timezone.utc) - self._pause_time).total_seconds()
+                if self._pause_time and self._paused
+                else 0
+            ),
+            "adapter_manager_available": 1.0 if self.adapter_manager else 0.0,
+        }
+
+    def _get_actions(self) -> List[str]:
+        """Get the list of actions this service supports."""
+        return [
+            "pause_processing",
+            "resume_processing",
+            "emergency_shutdown",
+            "get_adapter_status",
+            "get_processor_status",
+            "get_processor_queue_status",
+        ]
 
     # Adapter Management Methods
 

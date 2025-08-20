@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
@@ -17,23 +18,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class APICommunicationService(CommunicationServiceProtocol):
+class APICommunicationService(BaseService, CommunicationServiceProtocol):
     """Communication service for API responses."""
 
     def __init__(self, config: Optional[Any] = None) -> None:
         """Initialize API communication service."""
+        # Initialize BaseService for telemetry
+        BaseService.__init__(self, time_service=None, service_name="APICommunicationService")
+
         self._response_queue: asyncio.Queue = asyncio.Queue()
         self._websocket_clients: Dict[str, Any] = {}
-        self._is_started = False
         self._config = config  # Store the API adapter config
 
         # Metrics tracking
-        self._requests_handled = 0
-        self._error_count = 0
         self._response_times: List[float] = []  # Track last N response times
         self._max_response_times = 100  # Keep last 100 response times
-        self._start_time: Optional[datetime] = None
-        self._time_service: Optional[Any] = None  # Will be injected from adapter
 
     async def send_message(self, channel_id: str, content: str) -> bool:
         """Send message through API response or WebSocket."""
@@ -117,7 +116,7 @@ class APICommunicationService(CommunicationServiceProtocol):
                     logger.debug(f"Could not notify interact response: {e}")
 
             # Track successful request
-            self._requests_handled += 1
+            self._track_request()
             elapsed_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
             self._response_times.append(elapsed_ms)
             if len(self._response_times) > self._max_response_times:
@@ -127,7 +126,7 @@ class APICommunicationService(CommunicationServiceProtocol):
 
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
-            self._error_count += 1
+            self._track_error(e)
             return False
 
     def register_websocket(self, client_id: str, websocket: Any) -> None:
@@ -226,24 +225,37 @@ class APICommunicationService(CommunicationServiceProtocol):
 
     async def start(self) -> None:
         """Start the communication service."""
-        self._is_started = True
-        self._start_time = datetime.now(timezone.utc) if not self._time_service else self._time_service.now()
+        await BaseService.start(self)
         logger.info("API communication service started")
 
     async def stop(self) -> None:
         """Stop the communication service."""
-        self._is_started = False
         # Clear any pending responses
         while not self._response_queue.empty():
             try:
                 self._response_queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
+        await BaseService.stop(self)
         logger.info("API communication service stopped")
 
-    async def is_healthy(self) -> bool:
-        """Check if the service is healthy."""
-        return self._is_started
+    def _check_dependencies(self) -> bool:
+        """Check if all dependencies are satisfied."""
+        return True  # No hard dependencies
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect API communication specific metrics."""
+        avg_response_time = sum(self._response_times) / len(self._response_times) if self._response_times else 0.0
+        return {
+            "websocket_clients": float(len(self._websocket_clients)),
+            "queue_size": float(self._response_queue.qsize()),
+            "avg_response_time_ms": avg_response_time,
+            "response_times_tracked": float(len(self._response_times)),
+        }
+
+    def _get_actions(self) -> List[str]:
+        """Get the list of actions this service supports."""
+        return ["send_message", "fetch_messages", "queue_response", "dequeue_response"]
 
     def get_service_type(self) -> ServiceType:
         """Get the type of this service."""

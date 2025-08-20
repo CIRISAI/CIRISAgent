@@ -1754,7 +1754,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             # Original metrics
             "events_count": float(len(self._events_history)),
             "processor_status": 1.0 if self._processor_status == ProcessorStatus.RUNNING else 0.0,
-            "adapters_loaded": float(len(self.adapter_manager.active_adapters)) if self.adapter_manager else 0.0,
+            "adapters_loaded": float(len(self.adapter_manager.loaded_adapters)) if self.adapter_manager else 0.0,
             # Enhanced metrics
             "queue_depth": float(queue_depth),
             "thoughts_processed": float(self._thoughts_processed),
@@ -1920,8 +1920,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             metrics={
                 "events_count": float(len(self._events_history)),
                 "adapters_loaded": float(
-                    len(self.adapter_manager.active_adapters)
-                    if self.adapter_manager and hasattr(self.adapter_manager, "active_adapters")
+                    len(self.adapter_manager.loaded_adapters)
+                    if self.adapter_manager and hasattr(self.adapter_manager, "loaded_adapters")
                     else 0
                 ),
             },

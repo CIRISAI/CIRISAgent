@@ -542,7 +542,17 @@ class TelemetryAggregator:
 
                     for adapter_info in all_adapters:
                         # Only collect from matching type and running adapters
-                        if adapter_info.adapter_type == adapter_type and adapter_info.is_running:
+                        # Check if adapter is running - handle both old and new AdapterInfo schemas
+                        is_running = False
+                        if hasattr(adapter_info, "is_running"):
+                            is_running = adapter_info.is_running
+                        elif hasattr(adapter_info, "status"):
+                            # AdapterStatus enum values that mean running
+                            from ciris_engine.schemas.services.core.runtime import AdapterStatus
+
+                            is_running = adapter_info.status in [AdapterStatus.ACTIVE, AdapterStatus.RUNNING]
+
+                        if adapter_info.adapter_type == adapter_type and is_running:
                             # Try to get the actual adapter instance
                             adapter_instance = None
 
@@ -573,7 +583,9 @@ class TelemetryAggregator:
                                             "adapter_id": adapter_info.adapter_id,
                                             "adapter_type": adapter_info.adapter_type,
                                             "start_time": (
-                                                adapter_info.start_time.isoformat() if adapter_info.start_time else None
+                                                adapter_info.started_at.isoformat()
+                                                if hasattr(adapter_info, "started_at") and adapter_info.started_at
+                                                else None
                                             ),
                                             **metrics.get("custom_metrics", {}),
                                         },
@@ -593,8 +605,8 @@ class TelemetryAggregator:
                                 adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
                                     healthy=True,  # It's running, so consider it healthy
                                     uptime_seconds=(
-                                        (datetime.now() - adapter_info.start_time).total_seconds()
-                                        if adapter_info.start_time
+                                        (datetime.now() - adapter_info.started_at).total_seconds()
+                                        if hasattr(adapter_info, "started_at") and adapter_info.started_at
                                         else 0
                                     ),
                                     error_count=0,

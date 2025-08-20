@@ -33,6 +33,10 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         # Metrics tracking
         self._response_times: List[float] = []  # Track last N response times
         self._max_response_times = 100  # Keep last 100 response times
+        self._requests_handled = 0
+        self._error_count = 0
+        self._start_time = None
+        self._time_service = None
 
     async def send_message(self, channel_id: str, content: str) -> bool:
         """Send message through API response or WebSocket."""

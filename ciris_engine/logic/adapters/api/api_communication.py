@@ -295,7 +295,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         return ServiceStatus(
             service_name="APICommunicationService",
             service_type="communication",
-            is_healthy=self._is_started,
+            is_healthy=self._started,
             uptime_seconds=uptime_seconds,
             last_error=None,  # Could track last error message
             metrics={

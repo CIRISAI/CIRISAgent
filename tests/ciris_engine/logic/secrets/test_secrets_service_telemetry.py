@@ -127,6 +127,8 @@ class TestSecretsServiceTelemetry:
     async def test_get_metrics_filter_disabled(self, secrets_service):
         """Test telemetry with filter disabled."""
         secrets_service.filter.enabled = False
+        # The actual check in _collect_custom_metrics looks at detection_config.enabled
+        secrets_service.filter.detection_config.enabled = False
 
         metrics = await secrets_service.get_metrics()
 

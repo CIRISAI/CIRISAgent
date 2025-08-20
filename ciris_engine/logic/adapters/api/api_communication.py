@@ -24,7 +24,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
     def __init__(self, config: Optional[Any] = None) -> None:
         """Initialize API communication service."""
         # Initialize BaseService for telemetry
-        BaseService.__init__(self, time_service=None, service_name="APICommunicationService")
+        super().__init__(time_service=None, service_name="APICommunicationService")
 
         self._response_queue: asyncio.Queue = asyncio.Queue()
         self._websocket_clients: Dict[str, Any] = {}

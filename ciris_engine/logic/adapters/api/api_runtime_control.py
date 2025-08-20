@@ -23,8 +23,7 @@ class APIRuntimeControlService(BaseService, Service):
     def __init__(self, runtime: Any) -> None:
         """Initialize API runtime control."""
         # Initialize BaseService for telemetry
-        BaseService.__init__(self, time_service=None, service_name="APIRuntimeControlService")
-        Service.__init__(self)
+        super().__init__(time_service=None, service_name="APIRuntimeControlService")
 
         self.runtime = runtime
         self._paused = False

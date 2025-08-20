@@ -34,7 +34,7 @@ class CLIToolService(BaseService, ToolService):
 
     def __init__(self, time_service: TimeServiceProtocol) -> None:
         # Initialize BaseService with proper arguments
-        BaseService.__init__(self, time_service=time_service, service_name="CLIToolService")
+        super().__init__(time_service=time_service, service_name="CLIToolService")
         # ToolService is a Protocol, no need to call its __init__
         self._results: Dict[str, ToolExecutionResult] = {}
         self._tools = {

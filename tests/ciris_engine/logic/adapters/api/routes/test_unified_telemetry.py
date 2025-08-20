@@ -201,55 +201,18 @@ class TestUnifiedTelemetryEndpoint:
         # Should have timestamp
         assert all(len(line.split()) == 3 for line in lines if line)
 
-    def test_unified_telemetry_fallback_aggregator(self, client, app):
-        """Test unified telemetry fallback when service doesn't have aggregator."""
-        # Remove get_aggregated_telemetry method
+    def test_unified_telemetry_no_fallback_philosophy(self, client, app):
+        """Test unified telemetry follows NO FALLBACKS philosophy when service lacks method."""
+        # Remove get_aggregated_telemetry method - service exists but lacks required method
         app.state.telemetry_service = Mock(spec=[])
 
-        # Mock TelemetryAggregator - patch it where it's imported in telemetry_helpers
-        with patch("ciris_engine.logic.adapters.api.routes.telemetry_helpers.TelemetryAggregator") as MockAggregator:
-            mock_aggregator = Mock()
-            mock_aggregator.collect_all_parallel = AsyncMock(
-                return_value={
-                    "buses": {"llm_bus": {"healthy": True}},
-                    "graph": {"memory": {"healthy": True}},
-                }
-            )
-            mock_aggregator.calculate_aggregates = Mock(
-                return_value={
-                    "system_healthy": True,
-                    "services_online": 2,
-                    "services_total": 2,
-                    "overall_error_rate": 0.0,
-                    "overall_uptime_seconds": 1000,
-                    "buses": {"llm_bus": {"healthy": True}},
-                    "graph_services": {"memory": {"healthy": True}},
-                    "performance": {},
-                    "alerts": [],
-                    "warnings": [],
-                }
-            )
-            mock_aggregator.apply_view_filter = Mock(
-                side_effect=lambda data, view: (
-                    data
-                    if view == "detailed"
-                    else {
-                        "system_healthy": data["system_healthy"],
-                        "services_online": data["services_online"],
-                        "services_total": data["services_total"],
-                    }
-                )
-            )
-            MockAggregator.return_value = mock_aggregator
+        response = client.get("/telemetry/unified?view=summary")
 
-            response = client.get("/telemetry/unified?view=summary")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert data["system_healthy"] is True
-            assert data["services_online"] == 2
-            assert data["services_total"] == 2
-            assert "_metadata" in data
+        # Should return 503 per NO FALLBACKS philosophy - fail fast and loud
+        assert response.status_code == 503
+        data = response.json()
+        assert "NO FALLBACKS" in data["detail"]
+        assert "get_aggregated_telemetry" in data["detail"]
 
     def test_unified_telemetry_service_unavailable(self, client, app):
         """Test unified telemetry when telemetry service is unavailable."""

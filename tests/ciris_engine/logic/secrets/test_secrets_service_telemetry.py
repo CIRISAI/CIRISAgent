@@ -70,6 +70,9 @@ class TestSecretsServiceTelemetry:
         """Create a mock secrets filter."""
         mock = Mock(spec=SecretsFilter)
         mock.enabled = True
+        # Add detection_config for filter_enabled check
+        mock.detection_config = Mock()
+        mock.detection_config.enabled = True
         mock.get_pattern_stats.return_value = PatternStats(total_patterns=15, default_patterns=10, custom_patterns=5)
         return mock
 

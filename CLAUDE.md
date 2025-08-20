@@ -372,6 +372,35 @@ python -m tools.quality_analyzer       # Find gaps
 python -m tools.sonar_tool analyze     # SonarCloud metrics
 ```
 
+### Testing API Locally
+
+```bash
+# 1. Start API server with mock LLM
+python main.py --adapter api --mock-llm --port 8000
+
+# 2. Get auth token (in another terminal)
+TOKEN=$(curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"ciris_admin_password"}' \
+  2>/dev/null | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+
+# 3. Check telemetry (should show 35/35 services when fully working)
+curl -X GET http://localhost:8000/v1/telemetry/unified \
+  -H "Authorization: Bearer $TOKEN" 2>/dev/null | \
+  python -c "import json,sys; d=json.load(sys.stdin); print(f'{d[\"services_online\"]}/{d[\"services_total\"]} services healthy')"
+
+# 4. List unhealthy services
+curl -X GET http://localhost:8000/v1/telemetry/unified \
+  -H "Authorization: Bearer $TOKEN" 2>/dev/null | \
+  python -c "import json,sys; d=json.load(sys.stdin); print('Unhealthy:', [k for k,v in d['services'].items() if not v['healthy']])"
+
+# 5. Interactive agent test
+curl -X POST http://localhost:8000/v1/agent/interact \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello, how are you?"}' 2>/dev/null | python -m json.tool
+```
+
 ### Version Management
 
 ```bash

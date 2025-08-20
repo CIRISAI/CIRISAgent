@@ -1167,6 +1167,22 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             metrics={"latency": latency_ms},
         )
 
+    def _collect_metrics(self) -> Dict[str, float]:
+        """Collect base metrics for the Discord adapter."""
+        uptime = 0.0
+        if self._start_time:
+            uptime = (datetime.now() - self._start_time).total_seconds()
+
+        is_running = self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready()
+
+        return {
+            "healthy": True if is_running else False,
+            "uptime_seconds": uptime,
+            "request_count": float(self._messages_processed),
+            "error_count": float(self._errors_total),
+            "error_rate": float(self._errors_total) / max(1, self._messages_processed),
+        }
+
     def get_metrics(self) -> Dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics

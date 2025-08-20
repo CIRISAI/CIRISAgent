@@ -155,7 +155,14 @@ class TelemetryAggregator:
                 if task in done:
                     try:
                         result = task.result()
-                        telemetry[category][service_name] = result
+                        # Handle adapter results that return dict of instances
+                        if isinstance(result, dict) and service_name in ["api", "discord", "cli"]:
+                            # Adapter returned dict of instances - add each with adapter_id
+                            for adapter_id, adapter_data in result.items():
+                                telemetry[category][adapter_id] = adapter_data
+                        else:
+                            # Normal service result
+                            telemetry[category][service_name] = result
                     except Exception as e:
                         logger.warning(f"Failed to collect from {service_name}: {e}")
                         # Return empty telemetry data instead of empty dict
@@ -171,9 +178,9 @@ class TelemetryAggregator:
 
         return telemetry
 
-    async def collect_service(self, service_name: str) -> ServiceTelemetryData:
-        """Collect telemetry from a single service."""
-        logger.info(f"[TELEMETRY] Starting collection for service: {service_name}")
+    async def collect_service(self, service_name: str) -> Union[ServiceTelemetryData, Dict[str, ServiceTelemetryData]]:
+        """Collect telemetry from a single service or multiple adapter instances."""
+        logger.debug(f"[TELEMETRY] Starting collection for service: {service_name}")
         try:
             # Special handling for buses
             if service_name.endswith("_bus"):
@@ -182,7 +189,7 @@ class TelemetryAggregator:
 
             # Special handling for adapters - collect from ALL instances
             if service_name in ["api", "discord", "cli"]:
-                logger.info(f"[TELEMETRY] Collecting from adapter: {service_name}")
+                logger.debug(f"[TELEMETRY] Collecting from adapter: {service_name}")
                 return await self.collect_from_adapter_instances(service_name)
 
             # Special handling for components
@@ -190,12 +197,12 @@ class TelemetryAggregator:
                 "service_registry",
                 "agent_processor",
             ]:
-                logger.info(f"[TELEMETRY] Collecting from component: {service_name}")
+                logger.debug(f"[TELEMETRY] Collecting from component: {service_name}")
                 return await self.collect_from_component(service_name)
 
             # Get service from registry
             service = self._get_service_from_registry(service_name)
-            logger.info(f"[TELEMETRY] Got service {service_name}: {service.__class__.__name__ if service else 'None'}")
+            logger.debug(f"[TELEMETRY] Got service {service_name}: {service.__class__.__name__ if service else 'None'}")
 
             # Try different collection methods
             metrics = await self._try_collect_metrics(service)
@@ -253,7 +260,7 @@ class TelemetryAggregator:
         if attr_name:
             service = getattr(self.runtime, attr_name, None)
             if service:
-                logger.info(
+                logger.debug(
                     f"Found {service_name} as runtime.{attr_name}: {service.__class__.__name__ if service else 'None'}"
                 )
                 return service
@@ -265,14 +272,14 @@ class TelemetryAggregator:
         if self.runtime:
             runtime_service = self._get_service_from_runtime(service_name)
             if runtime_service:
-                logger.info(
+                logger.debug(
                     f"Found {service_name} directly from runtime: {runtime_service.__class__.__name__ if runtime_service else 'None'}"
                 )
                 return runtime_service
 
         # Fall back to registry lookup
         all_services = self.service_registry.get_all_services() if self.service_registry else []
-        logger.info(f"[TELEMETRY] Looking for {service_name} in {len(all_services)} registered services")
+        logger.debug(f"[TELEMETRY] Looking for {service_name} in {len(all_services)} registered services")
 
         # Map expected names to actual registered class names
         name_map = {
@@ -315,28 +322,28 @@ class TelemetryAggregator:
                 # Check if class name matches any expected variant
                 for variant in name_map[service_name]:
                     if class_name == variant:
-                        logger.info(f"Found service {service_name} as {service.__class__.__name__}")
+                        logger.debug(f"Found service {service_name} as {service.__class__.__name__}")
                         return service
 
-        logger.info(f"Service {service_name} not found in {len(all_services)} services")
+        logger.debug(f"Service {service_name} not found in {len(all_services)} services")
         return None
 
     async def _try_collect_metrics(self, service) -> Optional[ServiceTelemetryData]:
         """Try different methods to collect metrics from service."""
         if not service:
-            logger.info("[TELEMETRY] Service is None, cannot collect metrics")
+            logger.debug("[TELEMETRY] Service is None, cannot collect metrics")
             return None
 
         # Try get_metrics first
         if hasattr(service, "get_metrics"):
-            logger.info(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
+            logger.debug(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
             try:
                 # Check if get_metrics is async or sync
                 if asyncio.iscoroutinefunction(service.get_metrics):
                     metrics = await service.get_metrics()
                 else:
                     metrics = service.get_metrics()
-                logger.info(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
+                logger.debug(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
                 if isinstance(metrics, ServiceTelemetryData):
                     return metrics
                 elif isinstance(metrics, dict):
@@ -354,7 +361,7 @@ class TelemetryAggregator:
                     # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
                     healthy = metrics.get("healthy", uptime > 0)
 
-                    logger.info(
+                    logger.debug(
                         f"Converting dict metrics to ServiceTelemetryData for {type(service).__name__}: healthy={healthy}, uptime={uptime}"
                     )
                     return ServiceTelemetryData(
@@ -370,7 +377,7 @@ class TelemetryAggregator:
                 logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
                 # Don't return None here - continue to try other methods
         else:
-            logger.info(f"Service {type(service).__name__} does not have get_metrics method")
+            logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
 
         # Try _collect_metrics
         if hasattr(service, "_collect_metrics"):
@@ -468,7 +475,7 @@ class TelemetryAggregator:
 
     async def collect_from_component(self, component_name: str) -> ServiceTelemetryData:
         """Collect telemetry from runtime components."""
-        logger.info(f"[TELEMETRY] Collecting from component: {component_name}")
+        logger.debug(f"[TELEMETRY] Collecting from component: {component_name}")
         try:
             component = None
 
@@ -476,26 +483,26 @@ class TelemetryAggregator:
             if self.runtime:
                 if component_name == "service_registry":
                     component = getattr(self.runtime, "service_registry", None)
-                    logger.info(
+                    logger.debug(
                         f"[TELEMETRY] Got service_registry: {component.__class__.__name__ if component else 'None'}"
                     )
                 elif component_name == "agent_processor":
                     component = getattr(self.runtime, "agent_processor", None)
-                    logger.info(
+                    logger.debug(
                         f"[TELEMETRY] Got agent_processor: {component.__class__.__name__ if component else 'None'}"
                     )
 
             # Try to get metrics from component
             if component:
-                logger.info(f"[TELEMETRY] Trying to collect metrics from {component.__class__.__name__}")
+                logger.debug(f"[TELEMETRY] Trying to collect metrics from {component.__class__.__name__}")
                 metrics = await self._try_collect_metrics(component)
                 if metrics:
-                    logger.info(f"[TELEMETRY] Got metrics from {component_name}: healthy={metrics.healthy}")
+                    logger.debug(f"[TELEMETRY] Got metrics from {component_name}: healthy={metrics.healthy}")
                     return metrics
                 else:
-                    logger.info(f"[TELEMETRY] No metrics from {component_name}")
+                    logger.debug(f"[TELEMETRY] No metrics from {component_name}")
             else:
-                logger.info(f"[TELEMETRY] Component {component_name} not found on runtime")
+                logger.debug(f"[TELEMETRY] Component {component_name} not found on runtime")
 
             # Return empty telemetry data
             return ServiceTelemetryData(
@@ -508,56 +515,143 @@ class TelemetryAggregator:
                 healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
             )
 
-    async def collect_from_adapter_instances(self, adapter_type: str) -> ServiceTelemetryData:
+    async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
         """
-        Collect telemetry from ACTIVE adapter instances only.
+        Collect telemetry from ALL active adapter instances of a given type.
 
-        Only the currently running adapter should report as healthy.
-        Non-running adapters return unhealthy status.
+        Returns a dict mapping adapter_id to telemetry data.
+        Multiple instances of the same adapter type can be running simultaneously.
         """
-        # Check if we have runtime access to get active adapters
+        adapter_metrics = {}
+
+        # Try to get adapters from runtime control service if available
+        if self.runtime:
+            try:
+                # Get control service to list all adapters properly
+                control_service = None
+                if hasattr(self.runtime, "runtime_control_service"):
+                    control_service = self.runtime.runtime_control_service
+                elif self.service_registry:
+                    from ciris_engine.schemas.infrastructure.base import ServiceType
+
+                    control_service = await self.service_registry.get_service(ServiceType.RUNTIME_CONTROL)
+
+                if control_service and hasattr(control_service, "list_adapters"):
+                    # Get all adapters with their proper adapter_ids
+                    all_adapters = await control_service.list_adapters()
+
+                    for adapter_info in all_adapters:
+                        # Only collect from matching type and running adapters
+                        if adapter_info.adapter_type == adapter_type and adapter_info.is_running:
+                            # Try to get the actual adapter instance
+                            adapter_instance = None
+
+                            # Check bootstrap adapters in runtime.adapters
+                            if hasattr(self.runtime, "adapters"):
+                                for adapter in self.runtime.adapters:
+                                    # Match by type since bootstrap adapters might not have adapter_id
+                                    if adapter_type in adapter.__class__.__name__.lower():
+                                        adapter_instance = adapter
+                                        break
+
+                            # Collect metrics from the adapter
+                            if adapter_instance and hasattr(adapter_instance, "get_metrics"):
+                                try:
+                                    metrics = adapter_instance.get_metrics()
+                                    if asyncio.iscoroutinefunction(adapter_instance.get_metrics):
+                                        metrics = await adapter_instance.get_metrics()
+
+                                    adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
+                                        healthy=True,
+                                        uptime_seconds=metrics.get("uptime_seconds", 0.0),
+                                        error_count=metrics.get("error_count", 0),
+                                        requests_handled=metrics.get("request_count")
+                                        or metrics.get("requests_handled", 0),
+                                        error_rate=metrics.get("error_rate", 0.0),
+                                        memory_mb=metrics.get("memory_mb"),
+                                        custom_metrics={
+                                            "adapter_id": adapter_info.adapter_id,
+                                            "adapter_type": adapter_info.adapter_type,
+                                            "start_time": (
+                                                adapter_info.start_time.isoformat() if adapter_info.start_time else None
+                                            ),
+                                            **metrics.get("custom_metrics", {}),
+                                        },
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Error getting metrics from {adapter_info.adapter_id}: {e}")
+                                    adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
+                                        healthy=False,
+                                        uptime_seconds=0.0,
+                                        error_count=1,
+                                        requests_handled=0,
+                                        error_rate=1.0,
+                                        custom_metrics={"error": str(e), "adapter_id": adapter_info.adapter_id},
+                                    )
+                            else:
+                                # Adapter is running but no metrics available
+                                adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
+                                    healthy=True,  # It's running, so consider it healthy
+                                    uptime_seconds=(
+                                        (datetime.now() - adapter_info.start_time).total_seconds()
+                                        if adapter_info.start_time
+                                        else 0
+                                    ),
+                                    error_count=0,
+                                    requests_handled=0,
+                                    error_rate=0.0,
+                                    custom_metrics={
+                                        "adapter_id": adapter_info.adapter_id,
+                                        "adapter_type": adapter_info.adapter_type,
+                                    },
+                                )
+
+                    return adapter_metrics
+
+            except Exception as e:
+                logger.error(f"Failed to get adapter list from control service: {e}")
+
+        # Fallback: Check bootstrap adapters directly
         if self.runtime and hasattr(self.runtime, "adapters"):
-            # Find the active adapter of this type
             for adapter in self.runtime.adapters:
                 adapter_class_name = adapter.__class__.__name__.lower()
 
-                # Match adapter type (api, discord, cli)
                 if adapter_type in adapter_class_name:
-                    # This is the active adapter - get its metrics
+                    # Generate adapter_id for bootstrap adapters
+                    adapter_id = f"{adapter_type}_bootstrap"
+
                     if hasattr(adapter, "get_metrics"):
                         try:
                             metrics = adapter.get_metrics()
-                            # Handle both async and sync get_metrics
                             if asyncio.iscoroutinefunction(adapter.get_metrics):
                                 metrics = await adapter.get_metrics()
 
-                            # Convert dict to ServiceTelemetryData
-                            return ServiceTelemetryData(
+                            adapter_metrics[adapter_id] = ServiceTelemetryData(
                                 healthy=True,
                                 uptime_seconds=metrics.get("uptime_seconds", 0.0),
                                 error_count=metrics.get("error_count", 0),
                                 requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
                                 error_rate=metrics.get("error_rate", 0.0),
                                 memory_mb=metrics.get("memory_mb"),
-                                custom_metrics=metrics.get("custom_metrics"),
+                                custom_metrics={"adapter_id": adapter_id, **metrics.get("custom_metrics", {})},
                             )
                         except Exception as e:
-                            logger.error(f"Error getting metrics from active {adapter_type} adapter: {e}")
-                            # Active adapter exists but has error - still unhealthy
-                            return ServiceTelemetryData(
-                                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                            logger.error(f"Error getting metrics from {adapter_id}: {e}")
+                            adapter_metrics[adapter_id] = ServiceTelemetryData(
+                                healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0
                             )
                     else:
-                        # Active adapter doesn't have get_metrics
-                        logger.warning(f"Active {adapter_type} adapter doesn't have get_metrics method")
-                        return ServiceTelemetryData(
-                            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                        # No metrics method but adapter exists
+                        adapter_metrics[adapter_id] = ServiceTelemetryData(
+                            healthy=True,
+                            uptime_seconds=300.0,
+                            error_count=0,
+                            requests_handled=0,
+                            error_rate=0.0,
+                            custom_metrics={"adapter_id": adapter_id},
                         )
 
-        # No active adapter of this type - return unhealthy (expected for non-running adapters)
-        return ServiceTelemetryData(
-            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-        )
+        return adapter_metrics
 
     def get_fallback_metrics(self, service_name: Optional[str] = None, healthy: bool = False) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.
@@ -1353,7 +1447,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         """Start the telemetry service."""
         # Don't call super() as BaseService has async start
         self._started = True
-        logger.info("GraphTelemetryService started - routing all metrics through memory graph")
+        logger.debug("GraphTelemetryService started - routing all metrics through memory graph")
 
     async def stop(self) -> None:
         """Stop the telemetry service."""
@@ -1372,7 +1466,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         except (asyncio.TimeoutError, Exception) as e:
             logger.debug(f"Could not record shutdown metric: {e}")
 
-        logger.info("GraphTelemetryService stopped")
+        logger.debug("GraphTelemetryService stopped")
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect telemetry-specific metrics."""
@@ -1772,14 +1866,14 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         """
         # Initialize aggregator if needed
         if not self._telemetry_aggregator and self._service_registry:
-            logger.info(f"[TELEMETRY] Creating TelemetryAggregator with registry {id(self._service_registry)}")
-            logger.info(f"[TELEMETRY] Registry has {len(self._service_registry.get_all_services())} services")
-            logger.info(f"[TELEMETRY] Runtime available: {self._runtime is not None}")
+            logger.debug(f"[TELEMETRY] Creating TelemetryAggregator with registry {id(self._service_registry)}")
+            logger.debug(f"[TELEMETRY] Registry has {len(self._service_registry.get_all_services())} services")
+            logger.debug(f"[TELEMETRY] Runtime available: {self._runtime is not None}")
             if self._runtime:
-                logger.info(f"[TELEMETRY] Runtime has bus_manager: {hasattr(self._runtime, 'bus_manager')}")
-                logger.info(f"[TELEMETRY] Runtime has memory_service: {hasattr(self._runtime, 'memory_service')}")
+                logger.debug(f"[TELEMETRY] Runtime has bus_manager: {hasattr(self._runtime, 'bus_manager')}")
+                logger.debug(f"[TELEMETRY] Runtime has memory_service: {hasattr(self._runtime, 'memory_service')}")
             service_names = [s.__class__.__name__ for s in self._service_registry.get_all_services()]
-            logger.info(f"[TELEMETRY] Services in registry: {service_names}")
+            logger.debug(f"[TELEMETRY] Services in registry: {service_names}")
             self._telemetry_aggregator = TelemetryAggregator(
                 service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )

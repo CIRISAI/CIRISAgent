@@ -8,8 +8,8 @@ The CIRIS telemetry system provides comprehensive observability for all system c
 
 **Service Architecture:**
 - **Core Services**: 33 services (21 core + 6 buses + 3 runtime objects + 3 bootstrap)
-- **Dynamic Services**: 3+ adapter services per adapter instance
-- **Total Range**: 33-50+ services depending on active adapters
+- **Adapter Services**: 3 services per adapter instance (9 total with all 3 adapters)
+- **Total with All Adapters**: 41 services (33 core + 9 adapter services with unique registrations)
 
 ## Telemetry Endpoints
 
@@ -119,10 +119,24 @@ Returns detailed system and service metrics:
 
 ### Dynamic Adapter Services
 
-Each adapter adds 3 services:
-- `ServiceType.TOOL_<adapter>_tool` - Tool service
-- `ServiceType.COMMUNICATION_<adapter>_<id>` - Communication service
-- `ServiceType.RUNTIME_CONTROL_<adapter>_runtime` - Runtime control service
+Each adapter type adds different services:
+
+**API Adapter (3 services):**
+- `ServiceType.TOOL_api_tool` - Tool service
+- `ServiceType.COMMUNICATION_api_<id>` - Communication service
+- `ServiceType.RUNTIME_CONTROL_api_runtime` - Runtime control service
+
+**CLI Adapter (3 services):**
+- `ServiceType.TOOL_cli_tool` - Tool service
+- `ServiceType.COMMUNICATION_cli_<id>` - Communication service
+- `ServiceType.WISE_AUTHORITY_cli_wise` - Wise authority service (not runtime control)
+
+**Discord Adapter (3 services):**
+- `ServiceType.TOOL_discord_tool` - Tool service
+- `ServiceType.COMMUNICATION_discord_<id>` - Communication service
+- `ServiceType.WISE_AUTHORITY_discord_wise` - Wise authority service (not runtime control)
+
+Note: CLI and Discord adapters provide WISE_AUTHORITY services instead of RUNTIME_CONTROL, as they focus on interactive wisdom/guidance rather than runtime management.
 
 ## Telemetry Collection Pipeline
 
@@ -255,8 +269,9 @@ All timestamps use UTC via TimeService:
 
 ✅ **Fully Operational:**
 - All 33 core services reporting healthy
+- With all 3 adapters: 41 total services registered and operational
 - Traces, logs, and metrics endpoints working
-- Prometheus export with 554 metrics
+- Prometheus export with 554+ metrics
 - Zero telemetry collection errors
 - API telemetry tool for comprehensive testing
 

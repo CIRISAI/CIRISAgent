@@ -16,7 +16,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
     AdapterMetrics,
     AdapterOperationResult,
-    AdapterStatus,
+    RuntimeAdapterStatus,
 )
 
 

@@ -160,9 +160,11 @@ class APITelemetryTester:
             return {}
 
     def test_prometheus(self) -> str:
-        """Test Prometheus metrics endpoint."""
+        """Test Prometheus metrics format."""
         try:
-            response = requests.get(f"{self.base_url}/v1/telemetry/prometheus", headers=self.headers, timeout=5)
+            response = requests.get(
+                f"{self.base_url}/v1/telemetry/unified?format=prometheus", headers=self.headers, timeout=5
+            )
             if response.status_code == 200:
                 metrics = response.text
                 console.print(f"\n[bold cyan]Prometheus Metrics:[/bold cyan]")

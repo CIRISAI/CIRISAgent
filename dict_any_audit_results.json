@@ -1927,7 +1927,7 @@
       },
       {
         "file": "tools/api_telemetry_tool.py",
-        "line": 195,
+        "line": 197,
         "class": "APITelemetryTester",
         "function": "test_service_health",
         "context": "return_type",

@@ -118,7 +118,7 @@ def _check_directory_ownership(dir_path: Path, user_id: int, group_id: int, fail
         try:
             os.chown(dir_path, user_id, group_id)
             print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
-        except Exception as own_error:
+        except Exception:
             error_msg = (
                 f"WRONG OWNER on {dir_path}: Has {stat.st_uid}:{stat.st_gid}, needs {user_id}:{group_id} - CANNOT FIX"
             )
@@ -206,7 +206,7 @@ def setup_application_directories(
             # Try to fix ownership (non-fatal if fails)
             try:
                 _check_directory_ownership(dir_path, user_id, group_id, False)
-            except (OwnershipError, SystemExit):
+            except (OwnershipError, SystemExit):  # noqa: S110
                 # Not fatal if we can't change ownership as long as we can write
                 print(f"  Warning: Cannot change ownership of {dir_path} (need root), but write access confirmed")
 

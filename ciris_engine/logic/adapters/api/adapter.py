@@ -196,8 +196,8 @@ class ApiPlatform(Service):
                     logger.info(f"[API] Injected service_registry {id(service)} with {service_count} services")
                     service_names = [s.__class__.__name__ for s in all_services] if all_services else []
                     logger.info(f"[API] Services in injected registry: {service_names}")
-                except (TypeError, AttributeError) as e:
-                    logger.info(f"[API] Injected service_registry (mock or test mode)")
+                except (TypeError, AttributeError):
+                    logger.info("[API] Injected service_registry (mock or test mode)")
             else:
                 logger.info(f"Injected {runtime_attr}")
 

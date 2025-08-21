@@ -259,7 +259,7 @@ def main(
                         err=True,
                     )
                     click.echo(
-                        f"Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True
+                        "Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True
                     )
                     # Still add Discord to attempt loading - it will fail properly
                     validated_adapter_types.append(adapter_type)

@@ -139,7 +139,7 @@ class TelemetryAggregator:
                 service_info.append((category, service_name))
 
         # Also collect from dynamic registry services
-        registry_tasks = await self.collect_from_registry_services()
+        registry_tasks = self.collect_from_registry_services()
         tasks.extend(registry_tasks["tasks"])
         service_info.extend(registry_tasks["info"])
 
@@ -237,7 +237,7 @@ class TelemetryAggregator:
             short_id = str(id(provider_name))[-6:]
             return f"{service_type}_{provider_cleaned.lower()}_{short_id}"
 
-    async def collect_from_registry_services(self) -> Dict[str, List]:
+    def collect_from_registry_services(self) -> Dict[str, List]:
         """
         Collect telemetry from dynamic services registered in ServiceRegistry.
 
@@ -399,7 +399,7 @@ class TelemetryAggregator:
                 healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
             )
 
-    async def collect_service(self, service_name: str) -> Union[ServiceTelemetryData, Dict[str, ServiceTelemetryData]]:
+    async def collect_service(self, service_name: str) -> ServiceTelemetryData | dict[str, ServiceTelemetryData]:
         """Collect telemetry from a single service or multiple adapter instances."""
         logger.debug(f"[TELEMETRY] Starting collection for service: {service_name}")
         try:
@@ -912,7 +912,7 @@ class TelemetryAggregator:
 
         return adapter_metrics
 
-    def get_fallback_metrics(self, service_name: Optional[str] = None, healthy: bool = False) -> ServiceTelemetryData:
+    def get_fallback_metrics(self, _service_name: Optional[str] = None, _healthy: bool = False) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.
 
         Parameters are accepted for compatibility but ignored - no fake metrics.
@@ -2133,7 +2133,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 service_names = [s.__class__.__name__ for s in all_services] if all_services else []
                 logger.debug(f"[TELEMETRY] Services in registry: {service_names}")
             except (TypeError, AttributeError):
-                logger.debug(f"[TELEMETRY] Registry is mock/test mode")
+                logger.debug("[TELEMETRY] Registry is mock/test mode")
 
             logger.debug(f"[TELEMETRY] Runtime available: {self._runtime is not None}")
             if self._runtime:

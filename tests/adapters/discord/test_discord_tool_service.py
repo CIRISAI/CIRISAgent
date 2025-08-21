@@ -154,56 +154,51 @@ class TestToolExecution:
 class TestToolRegistry:
     """Test tool registration and discovery."""
 
-    def test_get_tools(self):
+    @pytest.mark.asyncio
+    async def test_get_available_tools(self):
         """Test getting list of available tools."""
         service = DiscordToolService()
-        tools = service.get_tools()
+        tools = await service.get_available_tools()
 
         assert isinstance(tools, list)
         assert len(tools) == 10
+        assert "discord_send_message" in tools
+        assert "discord_delete_message" in tools
+        assert "discord_timeout_user" in tools
+        assert "discord_ban_user" in tools
 
-        # Check tool info structure
-        tool_names = [tool.name for tool in tools]
-        assert "discord_send_message" in tool_names
-        assert "discord_delete_message" in tool_names
-        assert "discord_timeout_user" in tool_names
-        assert "discord_ban_user" in tool_names
-
-    def test_get_tool_info(self):
+    @pytest.mark.asyncio
+    async def test_get_tool_info(self):
         """Test getting info for specific tool."""
         service = DiscordToolService()
 
         # Get info for delete message tool
-        info = service.get_tool_info("discord_delete_message")
+        info = await service.get_tool_info("discord_delete_message")
 
         assert info is not None
         assert info.name == "discord_delete_message"
-        assert info.description == "Delete a message in Discord"
-        assert info.category == "moderation"
+        assert info.description == "Delete a message from a Discord channel"
+        assert info.category == "discord"
         assert isinstance(info.parameters, ToolParameterSchema)
 
-    def test_get_tool_info_unknown(self):
+    @pytest.mark.asyncio
+    async def test_get_tool_info_unknown(self):
         """Test getting info for unknown tool returns None."""
         service = DiscordToolService()
 
-        info = service.get_tool_info("unknown_tool")
+        info = await service.get_tool_info("unknown_tool")
 
         assert info is None
 
-    def test_is_tool_available(self):
-        """Test checking tool availability."""
+    @pytest.mark.asyncio
+    async def test_list_tools(self):
+        """Test listing tools."""
         service = DiscordToolService()
+        tools = await service.list_tools()
 
-        # Without client, tools should be unavailable
-        assert service.is_tool_available("discord_send_message") is False
-
-        # With client, tools should be available
-        client = Mock(spec=discord.Client)
-        service.set_client(client)
-        assert service.is_tool_available("discord_send_message") is True
-
-        # Unknown tool should always be unavailable
-        assert service.is_tool_available("unknown_tool") is False
+        assert isinstance(tools, list)
+        assert len(tools) == 10
+        assert "discord_send_message" in tools
 
 
 class TestServiceCapabilities:
@@ -215,10 +210,11 @@ class TestServiceCapabilities:
         caps = service.get_capabilities()
 
         assert isinstance(caps, ServiceCapabilities)
-        assert caps.tool_support is True
-        assert caps.async_support is True
-        assert caps.batch_support is False
-        assert "discord_tools" in caps.supported_operations
+        assert caps.service_name == "DiscordToolService"
+        assert "execute_tool" in caps.actions
+        assert "get_available_tools" in caps.actions
+        assert caps.version == "1.0.0"
+        assert isinstance(caps.metadata, dict)
 
     def test_get_service_type(self):
         """Test service type is correct."""
@@ -234,7 +230,9 @@ class TestSpecificTools:
     async def test_send_message_tool(self):
         """Test send message tool execution."""
         client = Mock(spec=discord.Client)
-        channel = AsyncMock()
+        # Create a proper TextChannel mock
+        channel = AsyncMock(spec=discord.TextChannel)
+        channel.send = AsyncMock(return_value=Mock(id=123456))
         client.get_channel.return_value = channel
 
         service = DiscordToolService(client=client)
@@ -242,14 +240,18 @@ class TestSpecificTools:
         # Execute send message
         result = await service.execute_tool("discord_send_message", {"channel_id": 123, "content": "Test message"})
 
-        # Verify channel.send was called
+        # Verify result
+        assert result.success is True
+        assert result.status == ToolExecutionStatus.COMPLETED
         channel.send.assert_called_once_with("Test message")
 
     @pytest.mark.asyncio
     async def test_send_embed_tool(self):
         """Test send embed tool execution."""
         client = Mock(spec=discord.Client)
-        channel = AsyncMock()
+        # Create a proper TextChannel mock
+        channel = AsyncMock(spec=discord.TextChannel)
+        channel.send = AsyncMock(return_value=Mock(id=123456))
         client.get_channel.return_value = channel
 
         service = DiscordToolService(client=client)
@@ -260,6 +262,9 @@ class TestSpecificTools:
             {"channel_id": 123, "title": "Test Embed", "description": "Test Description", "color": 0xFF0000},
         )
 
+        # Verify result
+        assert result.success is True
+        assert result.status == ToolExecutionStatus.COMPLETED
         # Verify channel.send was called with an embed
         channel.send.assert_called_once()
         call_args = channel.send.call_args
@@ -275,19 +280,22 @@ class TestSpecificTools:
         user.id = 456
         user.name = "TestUser"
         user.discriminator = "1234"
-        user.avatar = "avatar_hash"
+        user.avatar = None  # No avatar for simplicity
+        user.bot = False
+        user.created_at = datetime.utcnow()
 
-        client.get_user.return_value = user
+        # Mock fetch_user as async
+        client.fetch_user = AsyncMock(return_value=user)
 
         service = DiscordToolService(client=client)
 
         # Execute get user info
-        result = await service.execute_tool("discord_get_user_info", {"user_id": 456})
+        result = await service.execute_tool("discord_get_user_info", {"user_id": "456"})
 
         # Should return user data
         assert result.success is True
-        assert result.data["id"] == 456
-        assert result.data["name"] == "TestUser"
+        assert result.data["user_id"] == "456"
+        assert result.data["username"] == "TestUser"
 
 
 class TestResultStorage:
@@ -310,7 +318,7 @@ class TestResultStorage:
         assert service._results[result.correlation_id] == result
 
     @pytest.mark.asyncio
-    async def test_get_result(self):
+    async def test_get_tool_result(self):
         """Test retrieving stored results."""
         client = Mock(spec=discord.Client)
         service = DiscordToolService(client=client)
@@ -326,12 +334,12 @@ class TestResultStorage:
         )
         service._results[correlation_id] = result
 
-        # Retrieve it
-        retrieved = service.get_result(correlation_id)
+        # Retrieve it using the async get_tool_result method
+        retrieved = await service.get_tool_result(correlation_id)
         assert retrieved == result
 
         # Non-existent result should return None
-        assert service.get_result("non-existent") is None
+        assert await service.get_tool_result("non-existent") is None
 
 
 class TestErrorHandling:

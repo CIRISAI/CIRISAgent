@@ -575,7 +575,8 @@ class IncidentManagementService(BaseGraphService):
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service can handle."""
-        return ["create_incident", "resolve_incident", "update_incident", "query_incidents"]
+        # Graph services typically don't handle actions through buses
+        return []
 
     # start() and stop() removed - use inherited methods from BaseGraphService/BaseService
 

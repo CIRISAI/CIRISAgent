@@ -1225,6 +1225,11 @@ class TSDBConsolidationService(BaseGraphService):
         """Get the service type."""
         return ServiceType.TELEMETRY
 
+    def _get_actions(self) -> List[str]:
+        """Get list of actions this service can handle."""
+        # Graph services typically don't handle actions through buses
+        return []
+
     async def _run_extensive_consolidation(self) -> None:
         """
         Run extensive consolidation - consolidates basic summaries from the past week.

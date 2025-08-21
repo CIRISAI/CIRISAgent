@@ -473,6 +473,18 @@ def convert_traces_to_otlp_json(
         if parent_span_id:
             span["parentSpanId"] = parent_span_id
 
+        # Add thoughts as events if present
+        if "thoughts" in trace and trace["thoughts"]:
+            events = []
+            for idx, thought in enumerate(trace["thoughts"]):
+                event = {
+                    "name": f"thought.step.{idx}",
+                    "timeUnixNano": str(time_ns + idx * 1000000),  # 1ms between thoughts
+                    "attributes": [{"key": "thought.content", "value": {"stringValue": thought.get("content", "")}}],
+                }
+                events.append(event)
+            span["events"] = events
+
         # Add status if there was an error
         if trace.get("error"):
             span["status"] = {"code": 2, "message": trace["error"]}  # ERROR

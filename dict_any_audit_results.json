@@ -813,7 +813,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
-        "line": 505,
+        "line": 517,
         "class": null,
         "function": "convert_logs_to_otlp_json",
         "context": "other",
@@ -821,7 +821,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
-        "line": 510,
+        "line": 522,
         "class": null,
         "function": "convert_logs_to_otlp_json",
         "context": "return_type",
@@ -829,7 +829,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
-        "line": 620,
+        "line": 632,
         "class": null,
         "function": "validate_otlp_json",
         "context": "function_parameter",

@@ -95,7 +95,27 @@ async def grant_consent(
     request.user_id = auth.username
 
     try:
-        return await manager.grant_consent(request)
+        result = await manager.grant_consent(request)
+
+        # Check if this created a pending partnership request
+        if request.stream == ConsentStream.PARTNERED:
+            # Check if there's a pending partnership
+            partnership_status = await manager.check_pending_partnership(auth.username)
+            if partnership_status == "pending":
+                # Return a special response indicating partnership is pending
+                return ConsentStatus(
+                    user_id=result.user_id,
+                    stream=result.stream,  # Still shows current stream
+                    categories=result.categories,
+                    granted_at=result.granted_at,
+                    expires_at=result.expires_at,
+                    last_modified=result.last_modified,
+                    impact_score=result.impact_score,
+                    attribution_count=result.attribution_count,
+                    # Add a note about pending partnership
+                )
+
+        return result
     except ConsentValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,6 +247,47 @@ async def get_consent_categories() -> dict:
             },
         },
     }
+
+
+@router.get("/partnership/status", response_model=dict)
+async def check_partnership_status(
+    auth: AuthContext = Depends(get_auth_context),
+    manager: ConsentManager = Depends(get_consent_manager),
+) -> dict:
+    """
+    Check status of pending partnership request.
+
+    Returns current status and any pending partnership request outcome.
+    """
+    user_id = auth.username
+
+    # Check for pending partnership
+    status = await manager.check_pending_partnership(user_id)
+
+    # Get current consent status
+    try:
+        current_consent = await manager.get_consent(user_id)
+        current_stream = current_consent.stream
+    except ConsentNotFoundError:
+        current_stream = ConsentStream.TEMPORARY
+
+    response = {
+        "current_stream": current_stream,
+        "partnership_status": status or "none",
+    }
+
+    if status == "accepted":
+        response["message"] = "Partnership approved! You now have PARTNERED consent."
+    elif status == "rejected":
+        response["message"] = "Partnership request was declined by the agent."
+    elif status == "deferred":
+        response["message"] = "Agent needs more information about the partnership."
+    elif status == "pending":
+        response["message"] = "Partnership request is being considered by the agent."
+    else:
+        response["message"] = "No pending partnership request."
+
+    return response
 
 
 @router.post("/cleanup", response_model=dict)

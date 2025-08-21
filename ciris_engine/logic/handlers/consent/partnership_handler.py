@@ -1,0 +1,144 @@
+"""
+Partnership request handler for Consensual Evolution Protocol.
+
+Handles bilateral consent for PARTNERED stream upgrades.
+Agent must approve through thought system (REJECT/DEFER/TASK_COMPLETE).
+"""
+
+import logging
+import uuid
+from typing import Optional
+
+from ciris_engine.logic import persistence
+from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.enums import TaskStatus
+from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+logger = logging.getLogger(__name__)
+
+
+class PartnershipRequestHandler:
+    """Handles partnership consent requests requiring bilateral agreement."""
+
+    def __init__(self, time_service: TimeServiceProtocol, auth_service: Optional[object] = None):
+        self.time_service = time_service
+        self.auth_service = auth_service
+
+    async def create_partnership_task(
+        self,
+        user_id: str,
+        categories: list[str],
+        reason: Optional[str] = None,
+        channel_id: Optional[str] = None,
+    ) -> Task:
+        """
+        Create a task for the agent to approve/reject partnership request.
+
+        Similar to shutdown tasks, the agent can:
+        - TASK_COMPLETE: Accept partnership
+        - REJECT: Decline partnership with reason
+        - DEFER: Request more information or delay decision
+
+        Args:
+            user_id: User requesting partnership
+            categories: Consent categories requested
+            reason: User's reason for requesting partnership
+            channel_id: Channel where request originated
+
+        Returns:
+            Created task for agent processing
+        """
+        now_iso = self.time_service.now().isoformat()
+        task_id = f"partnership_{user_id}_{uuid.uuid4().hex[:8]}"
+
+        # Format categories for description
+        category_str = ", ".join(categories) if categories else "all categories"
+
+        # Build task description
+        description = f"Partnership request from {user_id} for {category_str}."
+        if reason:
+            description += f" Reason: {reason}"
+        description += (
+            "\n\nThis is a request for PARTNERED consent - mutual growth agreement. "
+            "You may:\n"
+            "- Accept (TASK_COMPLETE): Form partnership for mutual learning\n"
+            "- Reject (REJECT): Decline with reason\n"
+            "- Defer (DEFER): Request more information or time to consider"
+        )
+
+        # Create task context
+        context = TaskContext(
+            channel_id=channel_id or "",
+            user_id=user_id,
+            correlation_id=f"consent_partnership_{uuid.uuid4().hex[:8]}",
+            parent_task_id=None,
+        )
+
+        # Create the task
+        task = Task(
+            task_id=task_id,
+            channel_id=channel_id or "",
+            description=description,
+            priority=5,  # Medium priority
+            status=TaskStatus.ACTIVE,
+            created_at=now_iso,
+            updated_at=now_iso,
+            context=context,
+            parent_task_id=None,
+        )
+
+        # Add task directly to persistence (like observers do)
+        persistence.add_task(task)
+        logger.info(f"Created partnership request task {task_id} for user {user_id}")
+
+        return task
+
+    def check_task_outcome(self, task_id: str) -> tuple[str, Optional[str]]:
+        """
+        Check the outcome of a partnership request task.
+
+        Returns:
+            Tuple of (outcome, reason) where outcome is:
+            - "pending": Still being processed
+            - "accepted": Partnership approved (TASK_COMPLETE)
+            - "rejected": Partnership declined (REJECT action)
+            - "deferred": More information needed (DEFER action)
+            - "failed": Task failed for technical reasons
+        """
+        task = persistence.get_task_by_id(task_id)
+        if not task:
+            return ("failed", "Task not found")
+
+        # Check task status
+        if task.status == TaskStatus.PENDING or task.status == TaskStatus.ACTIVE:
+            return ("pending", None)
+
+        if task.status == TaskStatus.COMPLETED:
+            return ("accepted", "Partnership approved by agent")
+
+        if task.status == TaskStatus.FAILED:
+            # Check if it was a REJECT or DEFER
+            thoughts = persistence.get_thoughts_by_task_id(task_id)
+            if thoughts:
+                for thought in reversed(thoughts):
+                    if hasattr(thought, "final_action") and thought.final_action:
+                        action = thought.final_action
+
+                        if action.action_type == "REJECT":
+                            reason = "No reason provided"
+                            if isinstance(action.action_params, dict):
+                                reason = action.action_params.get("reason", reason)
+                            return ("rejected", reason)
+
+                        elif action.action_type == "DEFER":
+                            reason = "More information needed"
+                            if isinstance(action.action_params, dict):
+                                reason = action.action_params.get("reason", reason)
+                            return ("deferred", reason)
+
+            return ("failed", "Task failed without clear reason")
+
+        if task.status == TaskStatus.CANCELLED:
+            return ("rejected", "Request was cancelled")
+
+        return ("pending", None)

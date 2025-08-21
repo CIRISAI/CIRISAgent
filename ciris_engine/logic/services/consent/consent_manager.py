@@ -75,6 +75,9 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
         self._consent_revokes = 0
         self._expired_cleanups = 0
 
+        # Pending partnership requests
+        self._pending_partnerships: Dict[str, Dict] = {}
+
     async def get_consent(self, user_id: str) -> ConsentStatus:
         """
         Get user's consent status.
@@ -131,6 +134,11 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
         """
         Grant or update consent.
         VALIDATES everything, creates audit trail.
+
+        PARTNERED requires bilateral agreement:
+        - Creates task for agent approval
+        - Agent can REJECT, DEFER, or TASK_COMPLETE (accept)
+        - Returns pending status until agent decides
         """
         self._consent_grants += 1
 
@@ -148,7 +156,51 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             # New user - this is fine
             pass
 
-        # Create new status
+        # Check if upgrading to PARTNERED - requires bilateral agreement
+        if request.stream == ConsentStream.PARTNERED:
+            # Check if already partnered
+            if previous_status and previous_status.stream == ConsentStream.PARTNERED:
+                logger.info(f"User {request.user_id} already has PARTNERED consent")
+                return previous_status
+
+            # Create partnership task for agent approval
+            from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
+
+            handler = PartnershipRequestHandler(time_service=self._time_service)
+            task = await handler.create_partnership_task(
+                user_id=request.user_id,
+                categories=[c.value for c in request.categories],
+                reason=request.reason,
+                channel_id=None,  # Will be set from context if available
+            )
+
+            # Return pending status with task ID
+            now = self._time_service.now()
+            pending_status = ConsentStatus(
+                user_id=request.user_id,
+                stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
+                categories=previous_status.categories if previous_status else [],
+                granted_at=previous_status.granted_at if previous_status else now,
+                expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
+                last_modified=now,
+                impact_score=previous_status.impact_score if previous_status else 0.0,
+                attribution_count=previous_status.attribution_count if previous_status else 0,
+            )
+
+            # Store pending partnership request
+            if request.user_id not in self._pending_partnerships:
+                self._pending_partnerships = {}
+            self._pending_partnerships[request.user_id] = {
+                "task_id": task.task_id,
+                "request": request,
+                "created_at": now,
+            }
+
+            logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
+            return pending_status
+
+        # For TEMPORARY and ANONYMOUS - no bilateral agreement needed
+        # Users can always downgrade unilaterally
         now = self._time_service.now()
         expires_at = None
         if request.stream == ConsentStream.TEMPORARY:
@@ -352,6 +404,85 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
         # TODO: Query from graph
         # For now return empty list
         return []
+
+    async def check_pending_partnership(self, user_id: str) -> Optional[str]:
+        """
+        Check status of pending partnership request.
+
+        Returns:
+            - "accepted": Partnership approved by agent
+            - "rejected": Partnership declined by agent
+            - "deferred": Agent needs more information
+            - "pending": Still processing
+            - None: No pending request
+        """
+        if user_id not in self._pending_partnerships:
+            return None
+
+        pending = self._pending_partnerships[user_id]
+        task_id = pending["task_id"]
+
+        # Check task outcome
+        from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
+
+        handler = PartnershipRequestHandler(time_service=self._time_service)
+        outcome, reason = handler.check_task_outcome(task_id)
+
+        if outcome == "accepted":
+            # Finalize the partnership
+            request = pending["request"]
+            now = self._time_service.now()
+
+            # Create PARTNERED status
+            partnered_status = ConsentStatus(
+                user_id=user_id,
+                stream=ConsentStream.PARTNERED,
+                categories=request.categories,
+                granted_at=now,
+                expires_at=None,  # PARTNERED doesn't expire
+                last_modified=now,
+                impact_score=0.0,
+                attribution_count=0,
+            )
+
+            # Store in graph
+            node = GraphNode(
+                id=f"consent/{user_id}",
+                type=NodeType.CONSENT,
+                scope=GraphScope.LOCAL,
+                attributes={
+                    "stream": partnered_status.stream,
+                    "categories": [c for c in partnered_status.categories],
+                    "granted_at": partnered_status.granted_at.isoformat(),
+                    "expires_at": None,
+                    "last_modified": partnered_status.last_modified.isoformat(),
+                    "impact_score": partnered_status.impact_score,
+                    "attribution_count": partnered_status.attribution_count,
+                    "partnership_approved": True,
+                    "approval_task_id": task_id,
+                },
+                updated_by="consent_manager",
+                updated_at=now,
+            )
+
+            add_graph_node(node, self._db_path, self._time_service)
+
+            # Update cache
+            self._consent_cache[user_id] = partnered_status
+
+            # Remove from pending
+            del self._pending_partnerships[user_id]
+
+            logger.info(f"Partnership approved for {user_id} via task {task_id}")
+            return "accepted"
+
+        elif outcome in ["rejected", "deferred", "failed"]:
+            # Remove from pending
+            del self._pending_partnerships[user_id]
+            logger.info(f"Partnership {outcome} for {user_id}: {reason}")
+            return outcome
+
+        return "pending"
 
     async def cleanup_expired(self) -> int:
         """

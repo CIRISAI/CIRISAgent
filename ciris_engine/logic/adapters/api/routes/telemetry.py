@@ -15,12 +15,12 @@ from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.telemetry import (
+    APIResponseThoughtStep,
     LogContext,
     MetricTags,
     QueryResult,
     ServiceMetricValue,
     TelemetryQueryFilters,
-    ThoughtStep,
 )
 
 from ..constants import (
@@ -117,7 +117,7 @@ class ReasoningTraceData(BaseModel):
     thought_count: int = Field(0, description="Number of thoughts")
     decision_count: int = Field(0, description="Number of decisions")
     reasoning_depth: int = Field(0, description="Maximum reasoning depth")
-    thoughts: List[ThoughtStep] = Field(default_factory=list, description="Thought steps")
+    thoughts: List[APIResponseThoughtStep] = Field(default_factory=list, description="Thought steps")
     outcome: Optional[str] = Field(None, description="Final outcome")
 
     @field_serializer("start_time")
@@ -811,7 +811,7 @@ async def get_reasoning_traces(
                         decision_count=0,
                         reasoning_depth=current.get("depth", 0),
                         thoughts=[
-                            ThoughtStep(
+                            APIResponseThoughtStep(
                                 step=i,
                                 content=(
                                     t.thought.content
@@ -911,7 +911,7 @@ async def get_reasoning_traces(
                             max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0
                         ),
                         thoughts=[
-                            ThoughtStep(
+                            APIResponseThoughtStep(
                                 step=i,
                                 content=(e.get("data", {}).get("context", {}).get("thought", e.get("event_type", ""))),
                                 timestamp=(

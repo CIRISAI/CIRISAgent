@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import aiofiles
 
-from ciris_engine.logic.services.graph.base import BaseGraphService
+from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.graph.incident import (
@@ -573,16 +573,11 @@ class IncidentManagementService(BaseGraphService):
         """Get the type of nodes this service manages."""
         return "INCIDENT"
 
-    def start(self) -> None:
-        """Start the service."""
-        super().start()
-        self._start_time = self._time_service.now() if self._time_service else datetime.now()
-        logger.info("IncidentManagementService started")
+    def _get_actions(self) -> List[str]:
+        """Get list of actions this service can handle."""
+        return ["create_incident", "resolve_incident", "update_incident", "query_incidents"]
 
-    def stop(self) -> None:
-        """Stop the service."""
-        super().stop()
-        logger.info("IncidentManagementService stopped")
+    # start() and stop() removed - use inherited methods from BaseGraphService/BaseService
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""

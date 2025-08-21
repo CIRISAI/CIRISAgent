@@ -400,6 +400,7 @@ def full_app():
     ]
 
     audit_service.query_entries = AsyncMock(return_value=audit_entries)
+    audit_service.query_events = AsyncMock(return_value=audit_entries)  # Add query_events method
     audit_service.get_metrics = Mock(return_value={"total_events": 5000, "events_24h": 500})
     app.state.audit_service = audit_service
 

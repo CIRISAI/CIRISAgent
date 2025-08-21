@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.services.graph.base import BaseGraphService
+from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus

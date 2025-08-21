@@ -69,6 +69,67 @@ Returns detailed system and service metrics:
 - Request counts and error rates
 - Uptime and health status
 
+### OpenTelemetry Protocol (OTLP) Export Endpoint
+`GET /v1/telemetry/otlp/{signal}`
+
+Exports telemetry data in OTLP JSON format compatible with OpenTelemetry v1.7.0 specification. This enables integration with any OpenTelemetry-compatible collector or observability platform.
+
+**Path Parameters:**
+- `signal`: The telemetry signal to export (metrics|traces|logs)
+
+**Query Parameters:**
+- `limit`: Maximum items to return (1-1000, default: 100)
+- `start_time`: ISO8601 timestamp for data start (optional)
+- `end_time`: ISO8601 timestamp for data end (optional)
+
+**Signal Types:**
+
+#### Metrics Export (`/v1/telemetry/otlp/metrics`)
+Returns OTLP resourceMetrics containing:
+- System-level metrics (health, uptime, error rates)
+- Service-level metrics (per-service health, memory, requests)
+- Covenant metrics (wise authority deferrals, compliance rate)
+- All metrics include proper OTLP gauge/sum types with timestamps
+
+#### Traces Export (`/v1/telemetry/otlp/traces`)
+Returns OTLP resourceSpans containing:
+- Cognitive processing traces from agent thoughts
+- Operation spans with trace and span IDs
+- Thought steps as span events
+- Attributes for cognitive state and agent context
+
+#### Logs Export (`/v1/telemetry/otlp/logs`)
+Returns OTLP resourceLogs containing:
+- Audit log entries with severity mapping
+- Trace context correlation (trace_id, span_id)
+- Service and component attributes
+- Proper OTLP severity levels (DEBUG=5, INFO=9, WARNING=13, ERROR=17, CRITICAL=21)
+
+**Example Usage:**
+```bash
+# Export metrics in OTLP format
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/v1/telemetry/otlp/metrics
+
+# Export traces for the last hour
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/v1/telemetry/otlp/traces?start_time=2025-08-21T00:00:00Z"
+
+# Export logs with limit
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/v1/telemetry/otlp/logs?limit=500"
+```
+
+**OTLP Integration:**
+The OTLP export endpoints enable CIRIS to integrate with modern observability stacks:
+- **Collectors**: OpenTelemetry Collector, Jaeger, Tempo
+- **Backends**: Prometheus, Grafana, DataDog, New Relic, Splunk
+- **Formats**: Standard OTLP JSON format (application/json)
+- **Compatibility**: OpenTelemetry v1.7.0 specification compliant
+
+**Push vs Pull Model:**
+Currently, CIRIS supports the **pull model** where external collectors can fetch telemetry data from these endpoints. For environments requiring push-based telemetry, collectors can periodically poll these endpoints or use a sidecar collector pattern.
+
 ## Service Taxonomy & Collection
 
 ### Core Services (33 Total)

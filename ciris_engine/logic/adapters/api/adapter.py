@@ -87,7 +87,7 @@ class ApiPlatform(Service):
         self.communication._app_state = self.app.state  # type: ignore[attr-defined]
 
         # Runtime control service
-        self.runtime_control = APIRuntimeControlService(runtime)
+        self.runtime_control = APIRuntimeControlService(runtime, time_service=getattr(runtime, "time_service", None))
 
         # Tool service
         self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))

@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 193,
-    "files_affected": 79,
+    "occurrences": 197,
+    "files_affected": 81,
     "categories": {
-      "generic_data": 171,
+      "generic_data": 175,
       "parameters": 5,
       "configuration": 3,
       "api_request": 1,
@@ -11,6 +11,38 @@
       "context_data": 7
     },
     "findings": [
+      {
+        "file": "error_telemetry_investigation.py",
+        "line": 23,
+        "class": null,
+        "function": "get_telemetry_unified",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "error_telemetry_investigation.py",
+        "line": 30,
+        "class": null,
+        "function": "analyze_unhealthy_services",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "debug_telemetry_collection.py",
+        "line": 22,
+        "class": null,
+        "function": "get_service_registry_info",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "debug_telemetry_collection.py",
+        "line": 31,
+        "class": null,
+        "function": "get_service_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
       {
         "file": "CIRISVoice/src/ciris_sdk_client.py",
         "line": 142,
@@ -2872,7 +2904,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 356,
-    "files_affected": 113
+    "occurrences": 360,
+    "files_affected": 115
   }
 }

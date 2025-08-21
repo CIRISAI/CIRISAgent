@@ -870,7 +870,7 @@ Tools available:
         """Collect base metrics for the CLI adapter."""
         uptime = 0.0
         if self._start_time:
-            uptime = (datetime.now() - self._start_time).total_seconds()
+            uptime = (self._get_time_service().now() - self._start_time).total_seconds()
 
         return {
             "healthy": True if self._running else False,

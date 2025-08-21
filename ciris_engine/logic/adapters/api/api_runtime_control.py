@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 class APIRuntimeControlService(BaseService, Service):
     """Runtime control exposed through API."""
 
-    def __init__(self, runtime: Any) -> None:
+    def __init__(self, runtime: Any, time_service: Optional[Any] = None) -> None:
         """Initialize API runtime control."""
         # Initialize BaseService for telemetry
-        super().__init__(time_service=None, service_name="APIRuntimeControlService")
+        super().__init__(time_service=time_service, service_name="APIRuntimeControlService")
 
         self.runtime = runtime
         self._paused = False
@@ -138,6 +138,9 @@ class APIRuntimeControlService(BaseService, Service):
 
     async def start(self) -> None:
         """Start the runtime control service."""
+        # Call parent start to properly initialize BaseService
+        await super().start()
+
         # Initialize adapter manager now that services should be available
         if self.runtime and hasattr(self.runtime, "time_service") and self.runtime.time_service:
             self.adapter_manager = RuntimeAdapterManager(self.runtime, self.runtime.time_service)

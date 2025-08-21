@@ -259,11 +259,20 @@ class TelemetryAggregator:
                     provider_name = provider.get("name", "")
                     provider_metadata = provider.get("metadata", {})
 
+                    # Extract the class name without instance ID (e.g., "GraphConfigService_123456" -> "GraphConfigService")
+                    provider_class_name = provider_name.split("_")[0] if "_" in provider_name else provider_name
+
+                    logger.info(
+                        f"[TELEMETRY] Checking registry service: {service_type}.{provider_name} (class: {provider_class_name})"
+                    )
+
                     # Skip if this provider is already in CATEGORIES
                     # Check both the provider name and simplified versions
                     already_collected = False
 
                     # Map of known core service implementations to their category names
+                    # Only skip services that are ALREADY collected via CATEGORIES
+                    # Do NOT skip adapter-provided services like APIToolService, CLIAdapter, etc.
                     core_service_mappings = {
                         "LocalGraphMemoryService": "memory",
                         "GraphConfigService": "config",
@@ -271,21 +280,26 @@ class TelemetryAggregator:
                         "WiseAuthorityService": "wise_authority",
                         "ConfigService": "config",  # Alternative name
                         "MemoryService": "memory",  # Alternative name
-                        # Note: APIRuntimeControlService is NOT in this list because it's a dynamic adapter service
-                        # MockLLMService is also NOT in this list because it's a dynamic mock service
+                        "TSDBConsolidationService": "tsdb_consolidation",
+                        "MockLLMService": "llm",  # Mock LLM should be collected through llm, not registry
+                        "SecretsToolService": "secrets_tool",  # Core secrets tool service
+                        # NOTE: Do NOT add adapter services here! They should be collected dynamically
+                        # APIToolService, APICommunicationService, CLIAdapter, DiscordWiseAuthority etc
+                        # are all valid dynamic services that should be collected
                     }
 
-                    # Check if this is a core service implementation
-                    if provider_name in core_service_mappings:
+                    # Check if this is a core service implementation (use class name without instance ID)
+                    if provider_class_name in core_service_mappings:
                         already_collected = True
-                        logger.debug(
-                            f"[TELEMETRY] Skipping core service {provider_name} - already collected as {core_service_mappings[provider_name]}"
+                        logger.info(
+                            f"[TELEMETRY] Skipping core service {provider_name} (class: {provider_class_name}) - already collected as {core_service_mappings[provider_class_name]}"
                         )
                     else:
-                        # Also check if provider name matches any service in CATEGORIES
+                        # Also check if provider class name matches any service in CATEGORIES
                         for cat_services in self.CATEGORIES.values():
-                            if provider_name.lower() in [s.lower() for s in cat_services]:
+                            if provider_class_name.lower() in [s.lower() for s in cat_services]:
                                 already_collected = True
+                                logger.info(f"[TELEMETRY] Skipping {provider_name} - already in CATEGORIES")
                                 break
 
                     if not already_collected:
@@ -319,7 +333,9 @@ class TelemetryAggregator:
             target_provider = None
 
             for provider in providers:
-                if hasattr(provider, "__class__") and provider.__class__.__name__ == provider_name:
+                # Extract class name from provider_name (remove instance ID)
+                provider_class_name = provider_name.split("_")[0] if "_" in provider_name else provider_name
+                if hasattr(provider, "__class__") and provider.__class__.__name__ == provider_class_name:
                     target_provider = provider
                     break
 
@@ -359,18 +375,19 @@ class TelemetryAggregator:
                     if asyncio.iscoroutinefunction(target_provider.is_healthy)
                     else target_provider.is_healthy()
                 )
+                # NO FALLBACK DATA - return actual health status with zero metrics
                 return ServiceTelemetryData(
                     healthy=is_healthy,
-                    uptime_seconds=300.0,  # Default 5 minutes
+                    uptime_seconds=0.0,  # NO FAKE UPTIME
                     error_count=0,
                     requests_handled=0,
                     error_rate=0.0,
                 )
 
-            # Default to healthy if no health check available
+            # NO DEFAULTS - if no health check, service is unhealthy
             return ServiceTelemetryData(
-                healthy=True,
-                uptime_seconds=300.0,
+                healthy=False,  # NO DEFAULT HEALTHY STATUS
+                uptime_seconds=0.0,  # NO FAKE UPTIME
                 error_count=0,
                 requests_handled=0,
                 error_rate=0.0,
@@ -411,8 +428,12 @@ class TelemetryAggregator:
             # Try different collection methods
             metrics = await self._try_collect_metrics(service)
             if metrics is not None:
+                logger.debug(
+                    f"[TELEMETRY] Collected from {service_name}: healthy={metrics.healthy}, uptime={metrics.uptime_seconds}"
+                )
                 return metrics
             # Return empty telemetry data instead of empty dict
+            logger.debug(f"[TELEMETRY] No metrics collected from {service_name}, returning unhealthy")
             return ServiceTelemetryData(
                 healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
             )  # NO FALLBACKS
@@ -467,7 +488,18 @@ class TelemetryAggregator:
                 logger.debug(
                     f"Found {service_name} as runtime.{attr_name}: {service.__class__.__name__ if service else 'None'}"
                 )
+                # Extra debug - check if service has required telemetry methods
+                has_get_metrics = hasattr(service, "get_metrics")
+                has_collect_metrics = hasattr(service, "_collect_metrics")
+                is_started = getattr(service, "_started", False)
+                logger.debug(
+                    f"  Service {service_name} telemetry: get_metrics={has_get_metrics}, _collect_metrics={has_collect_metrics}, _started={is_started}"
+                )
                 return service
+            else:
+                logger.debug(f"[TELEMETRY] runtime.{attr_name} is None for {service_name}")
+        else:
+            logger.debug(f"[TELEMETRY] No runtime attr mapping for {service_name}")
         return None
 
     def _get_service_from_registry(self, service_name: str):
@@ -868,10 +900,10 @@ class TelemetryAggregator:
                                 healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0
                             )
                     else:
-                        # No metrics method but adapter exists
+                        # No metrics method = unhealthy. NO FAKE DATA.
                         adapter_metrics[adapter_id] = ServiceTelemetryData(
-                            healthy=True,
-                            uptime_seconds=300.0,
+                            healthy=False,  # NO DEFAULT HEALTHY
+                            uptime_seconds=0.0,  # NO FAKE UPTIME
                             error_count=0,
                             requests_handled=0,
                             error_rate=0.0,

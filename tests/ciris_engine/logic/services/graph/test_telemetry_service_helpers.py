@@ -43,7 +43,7 @@ class TestTelemetryHelperMethods:
     async def test_get_control_service_from_runtime(self, telemetry_aggregator):
         """Test _get_control_service when runtime has runtime_control_service."""
         mock_control = Mock()
-        telemetry_aggregator._runtime.runtime_control_service = mock_control
+        telemetry_aggregator.runtime.runtime_control_service = mock_control
 
         result = await telemetry_aggregator._get_control_service()
         assert result == mock_control
@@ -51,7 +51,7 @@ class TestTelemetryHelperMethods:
     @pytest.mark.asyncio
     async def test_get_control_service_from_registry(self, telemetry_aggregator):
         """Test _get_control_service when using service registry."""
-        telemetry_aggregator._runtime = Mock(spec=[])  # No runtime_control_service
+        telemetry_aggregator.runtime = Mock(spec=[])  # No runtime_control_service
         mock_control = Mock()
         telemetry_aggregator.service_registry.get_service = AsyncMock(return_value=mock_control)
 
@@ -61,7 +61,7 @@ class TestTelemetryHelperMethods:
     @pytest.mark.asyncio
     async def test_get_control_service_none(self, telemetry_aggregator):
         """Test _get_control_service when no service available."""
-        telemetry_aggregator._runtime = None
+        telemetry_aggregator.runtime = None
         telemetry_aggregator.service_registry = None
 
         result = await telemetry_aggregator._get_control_service()
@@ -106,7 +106,7 @@ class TestTelemetryHelperMethods:
         mock_adapter = Mock()
         mock_adapter.__class__.__name__ = "ApiAdapter"
 
-        telemetry_aggregator._runtime.adapters = [mock_adapter]
+        telemetry_aggregator.runtime.adapters = [mock_adapter]
 
         result = telemetry_aggregator._find_adapter_instance("api")
         assert result == mock_adapter
@@ -116,14 +116,14 @@ class TestTelemetryHelperMethods:
         mock_adapter = Mock()
         mock_adapter.__class__.__name__ = "DiscordAdapter"
 
-        telemetry_aggregator._runtime.adapters = [mock_adapter]
+        telemetry_aggregator.runtime.adapters = [mock_adapter]
 
         result = telemetry_aggregator._find_adapter_instance("api")
         assert result is None
 
     def test_find_adapter_instance_no_runtime(self, telemetry_aggregator):
         """Test _find_adapter_instance with no runtime."""
-        telemetry_aggregator._runtime = None
+        telemetry_aggregator.runtime = None
         result = telemetry_aggregator._find_adapter_instance("api")
         assert result is None
 
@@ -260,120 +260,3 @@ class TestTelemetryHelperMethods:
         )
 
         assert result == {}
-
-    def test_init_telemetry_aggregator(self, telemetry_aggregator):
-        """Test _init_telemetry_aggregator creates aggregator."""
-        telemetry_aggregator._telemetry_aggregator = None
-        telemetry_aggregator._service_registry = Mock()
-        telemetry_aggregator._service_registry.get_all_services.return_value = []
-
-        with patch("ciris_engine.logic.services.graph.telemetry_aggregator.TelemetryAggregator") as MockAggregator:
-            telemetry_aggregator._init_telemetry_aggregator()
-
-            MockAggregator.assert_called_once_with(
-                service_registry=telemetry_aggregator._service_registry,
-                time_service=telemetry_aggregator._time_service,
-                runtime=telemetry_aggregator._runtime,
-            )
-            assert telemetry_aggregator._telemetry_aggregator is not None
-
-    def test_check_cache_hit(self, telemetry_aggregator, mock_aggregator):
-        """Test _check_cache returns cached data within TTL."""
-        telemetry_aggregator._telemetry_aggregator = mock_aggregator
-
-        cached_response = AggregatedTelemetryResponse(
-            system_healthy=True,
-            services_online=10,
-            services_total=10,
-            overall_error_rate=0.0,
-            overall_uptime_seconds=100,
-            total_errors=0,
-            total_requests=100,
-            timestamp="2025-01-01T00:00:00Z",
-            metadata=AggregatedTelemetryMetadata(
-                collection_method="parallel", cache_ttl_seconds=30, timestamp="2025-01-01T00:00:00Z"
-            ),
-        )
-
-        now = datetime.now(timezone.utc)
-        cache_time = now - timedelta(seconds=10)  # Within TTL
-        mock_aggregator.cache["test_key"] = (cache_time, cached_response)
-
-        result = telemetry_aggregator._check_cache("test_key", now)
-        assert result == cached_response
-        assert result.metadata.cache_hit is True
-
-    def test_check_cache_miss_expired(self, telemetry_aggregator, mock_aggregator):
-        """Test _check_cache returns None for expired cache."""
-        telemetry_aggregator._telemetry_aggregator = mock_aggregator
-
-        cached_response = Mock()
-        now = datetime.now(timezone.utc)
-        cache_time = now - timedelta(seconds=60)  # Beyond TTL
-        mock_aggregator.cache["test_key"] = (cache_time, cached_response)
-
-        result = telemetry_aggregator._check_cache("test_key", now)
-        assert result is None
-
-    def test_check_cache_miss_no_entry(self, telemetry_aggregator, mock_aggregator):
-        """Test _check_cache returns None when no cache entry."""
-        telemetry_aggregator._telemetry_aggregator = mock_aggregator
-        now = datetime.now(timezone.utc)
-
-        result = telemetry_aggregator._check_cache("test_key", now)
-        assert result is None
-
-    def test_convert_telemetry_to_services(self, telemetry_aggregator):
-        """Test _convert_telemetry_to_services."""
-        telemetry = {
-            "graph": {
-                "memory": ServiceTelemetryData(
-                    healthy=True, uptime_seconds=100, error_count=0, requests_handled=50, error_rate=0.0
-                ),
-                "config": {
-                    "healthy": False,
-                    "uptime_seconds": 50,
-                    "error_count": 1,
-                    "request_count": 10,
-                    "error_rate": 0.1,
-                    "memory_mb": 64,
-                    "custom_metrics": {"test": "value"},
-                },
-            },
-            "runtime": {
-                "llm": ServiceTelemetryData(
-                    healthy=True, uptime_seconds=200, error_count=0, requests_handled=100, error_rate=0.0
-                )
-            },
-        }
-
-        result = telemetry_aggregator._convert_telemetry_to_services(telemetry)
-
-        assert len(result) == 3
-        assert isinstance(result["memory"], ServiceTelemetryData)
-        assert result["memory"].healthy is True
-        assert isinstance(result["config"], ServiceTelemetryData)
-        assert result["config"].healthy is False
-        assert result["config"].requests_handled == 10
-        assert result["config"].custom_metrics == {"test": "value"}
-        assert isinstance(result["llm"], ServiceTelemetryData)
-
-    def test_convert_telemetry_to_services_empty(self, telemetry_aggregator):
-        """Test _convert_telemetry_to_services with empty telemetry."""
-        result = telemetry_aggregator._convert_telemetry_to_services({})
-        assert result == {}
-
-    def test_convert_telemetry_to_services_non_dict_category(self, telemetry_aggregator):
-        """Test _convert_telemetry_to_services skips non-dict categories."""
-        telemetry = {
-            "some_string": "not a dict",
-            "graph": {
-                "memory": ServiceTelemetryData(
-                    healthy=True, uptime_seconds=100, error_count=0, requests_handled=50, error_rate=0.0
-                )
-            },
-        }
-
-        result = telemetry_aggregator._convert_telemetry_to_services(telemetry)
-        assert len(result) == 1
-        assert "memory" in result

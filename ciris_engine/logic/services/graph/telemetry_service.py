@@ -767,7 +767,7 @@ class TelemetryAggregator:
         if self.runtime and hasattr(self.runtime, "runtime_control_service"):
             return self.runtime.runtime_control_service
         elif self.service_registry:
-            from ciris_engine.schemas.infrastructure.base import ServiceType
+            from ciris_engine.schemas.runtime.enums import ServiceType
 
             return await self.service_registry.get_service(ServiceType.RUNTIME_CONTROL)
         return None

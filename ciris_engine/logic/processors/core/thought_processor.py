@@ -103,8 +103,8 @@ class ThoughtProcessor:
             },
         )
 
-        # Add correlation
-        persistence.add_correlation(correlation, self._time_service)
+        # Add correlation to both persistence and telemetry service for distributed tracing
+        await persistence.add_correlation_with_telemetry(correlation, self._time_service, self.telemetry_service)
 
         # Record thought processing start as HOT PATH
         if self.telemetry_service:

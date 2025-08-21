@@ -1,5 +1,6 @@
 from .correlations import (
     add_correlation,
+    add_correlation_with_telemetry,
     get_correlation,
     get_correlations_by_channel,
     get_correlations_by_task_and_action,

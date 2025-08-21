@@ -1021,7 +1021,7 @@
       },
       {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 17,
+        "line": 20,
         "class": null,
         "function": "_parse_response_data",
         "context": "other",
@@ -1029,7 +1029,7 @@
       },
       {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 18,
+        "line": 21,
         "class": null,
         "function": "_parse_response_data",
         "context": "other",

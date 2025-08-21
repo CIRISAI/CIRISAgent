@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.persistence.db import get_db_connection
@@ -9,6 +9,9 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
 from ciris_engine.schemas.persistence.correlations import ChannelInfo, CorrelationRequestData, CorrelationResponseData
 from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation, ServiceCorrelationStatus
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.services.graph.telemetry_service import TelemetryService
 
 logger = logging.getLogger(__name__)
 
@@ -917,3 +920,39 @@ def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
         logger.warning("Failed to check admin status for channel %s: %s", channel_id, e)
 
     return False
+
+
+async def add_correlation_with_telemetry(
+    corr: ServiceCorrelation,
+    time_service: Optional[TimeServiceProtocol] = None,
+    telemetry_service: Optional["TelemetryService"] = None,
+    db_path: Optional[str] = None,
+) -> str:
+    """
+    Add correlation to both persistence (SQLite) and telemetry service (memory graph).
+
+    This ensures distributed tracing works by storing correlations in the memory graph
+    for OTLP export while also persisting them to SQLite for durability.
+
+    Args:
+        corr: The ServiceCorrelation to store
+        time_service: Optional time service for timestamps
+        telemetry_service: Optional telemetry service for distributed tracing
+        db_path: Optional database path for SQLite storage
+
+    Returns:
+        The correlation ID
+    """
+    # Store in SQLite persistence
+    correlation_id = add_correlation(corr, time_service, db_path)
+
+    # Also store in telemetry service for distributed tracing if available
+    if telemetry_service and hasattr(telemetry_service, "_store_correlation"):
+        try:
+            await telemetry_service._store_correlation(corr)
+            logger.debug(f"Stored correlation {correlation_id} in telemetry service for tracing")
+        except Exception as e:
+            # Don't fail if telemetry storage fails - it's supplementary
+            logger.warning(f"Failed to store correlation in telemetry service: {e}")
+
+    return correlation_id

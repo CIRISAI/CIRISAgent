@@ -718,7 +718,7 @@ class TelemetryAggregator:
 
         except Exception as e:
             logger.error(f"Failed to collect from {bus_name}: {e}")
-            return self.get_fallback_metrics(bus_name, healthy=False)
+            return self.get_fallback_metrics(bus_name)
 
     async def collect_from_component(self, component_name: str) -> ServiceTelemetryData:
         """Collect telemetry from runtime components."""

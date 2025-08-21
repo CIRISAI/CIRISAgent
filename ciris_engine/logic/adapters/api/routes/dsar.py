@@ -1,6 +1,11 @@
 """
 Data Subject Access Request (DSAR) endpoint for GDPR/privacy compliance.
 Handles data access, deletion, and export requests.
+
+INTEGRATED WITH CONSENSUAL EVOLUTION PROTOCOL v0.2:
+- Delete requests trigger decay protocol (90-day anonymization)
+- Access requests include consent status
+- Export includes consent history
 """
 
 import json
@@ -8,8 +13,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+
+from ciris_engine.logic.services.consent.consent_manager import ConsentManager, ConsentNotFoundError
+from ciris_engine.schemas.consent.core import ConsentStream
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
@@ -59,15 +67,21 @@ _dsar_requests = {}
 @router.post("/", response_model=StandardResponse)
 async def submit_dsar(
     request: DSARRequest,
+    req: Request,
 ) -> StandardResponse:
     """
     Submit a Data Subject Access Request (DSAR).
 
     This endpoint handles GDPR Article 15-22 rights:
-    - Right of access (Article 15)
+    - Right of access (Article 15) - Includes consent status
     - Right to rectification (Article 16)
-    - Right to erasure / "right to be forgotten" (Article 17)
-    - Right to data portability (Article 20)
+    - Right to erasure / "right to be forgotten" (Article 17) - Triggers decay protocol
+    - Right to data portability (Article 20) - Includes consent history
+
+    DELETE requests trigger Consensual Evolution Protocol:
+    - Immediate identity severance
+    - 90-day pattern decay
+    - Safety patterns may be retained (anonymized)
 
     Returns a ticket ID for tracking the request.
     """
@@ -79,6 +93,41 @@ async def submit_dsar(
 
     submitted_at = datetime.now(timezone.utc)
     estimated_completion = submitted_at + timedelta(days=14 if not request.urgent else 3)
+
+    # For DELETE requests, trigger consent decay protocol
+    decay_status = None
+    if request.request_type == "delete" and request.user_identifier:
+        try:
+            # Get consent manager
+            from ciris_engine.logic.services.infrastructure.time_service import TimeService
+
+            if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
+                consent_manager = req.app.state.consent_manager
+            else:
+                # Create default instance if not initialized
+                time_service = TimeService()
+                consent_manager = ConsentManager(time_service=time_service)
+
+            # Start decay protocol
+            decay_status = await consent_manager.revoke_consent(
+                user_id=request.user_identifier, reason=f"DSAR deletion request {ticket_id}"
+            )
+
+            # Log decay initiation
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.info(f"Decay protocol initiated for user {request.user_identifier} via DSAR {ticket_id}")
+
+        except ConsentNotFoundError:
+            # User has no consent record - that's fine for DSAR
+            pass
+        except Exception as e:
+            # Log but don't fail DSAR request
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Could not initiate decay protocol for DSAR {ticket_id}: {e}")
 
     # Store request (in production, this would go to a database)
     dsar_record = {
@@ -108,15 +157,24 @@ async def submit_dsar(
     safe_type = sanitize_for_log(request.request_type, max_length=50)
     logger.info(f"DSAR request submitted: {ticket_id} - Type: {safe_type} - Email: {safe_email}")
 
-    # Prepare response
+    # Prepare response with decay protocol info for delete requests
+    message = f"Your {request.request_type} request has been received. "
+    if request.request_type == "delete" and decay_status:
+        message += (
+            f"Decay protocol initiated: identity severed immediately, "
+            f"patterns will be anonymized over 90 days (complete by {decay_status.decay_complete_at.strftime('%Y-%m-%d')}). "
+        )
+    message += (
+        f"We will process your request within {'3 days' if request.urgent else '14 days'} "
+        f"during the pilot phase. You will receive updates at {request.email}."
+    )
+
     response_data = DSARResponse(
         ticket_id=ticket_id,
         status="pending_review",
         estimated_completion=estimated_completion.strftime("%Y-%m-%d"),
         contact_email=request.email,
-        message=f"Your {request.request_type} request has been received. "
-        f"We will process it within {'3 days' if request.urgent else '14 days'} "
-        f"during the pilot phase. You will receive updates at {request.email}.",
+        message=message,
     )
 
     return StandardResponse(

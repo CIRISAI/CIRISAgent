@@ -10,7 +10,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.logic.infrastructure.handlers.helpers import create_follow_up_thought
-from ciris_engine.logic.services.consent.consent_manager import ConsentManager, ConsentNotFoundError
+from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.schemas.actions import MemorizeParams
 from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -76,15 +76,15 @@ class MemorizeHandler(BaseActionHandler):
 
             if user_id:
                 # Check consent status for this user
-                consent_manager = ConsentManager(time_service=self.time_service, db_path=dispatch_context.db_path)
+                consent_service = ConsentService(time_service=self.time_service, db_path=dispatch_context.db_path)
                 try:
-                    consent_status = await consent_manager.get_consent(user_id)
+                    consent_status = await consent_service.get_consent(user_id)
 
                     # Check if TEMPORARY consent has expired
                     if consent_status.stream == ConsentStream.TEMPORARY:
                         if consent_status.expires_at and datetime.now(timezone.utc) > consent_status.expires_at:
                             # Consent expired - start decay protocol
-                            await consent_manager.revoke_consent(user_id, "TEMPORARY consent expired (14 days)")
+                            await consent_service.revoke_consent(user_id, "TEMPORARY consent expired (14 days)")
 
                             error_msg = (
                                 f"MEMORIZE BLOCKED: User consent expired. "
@@ -118,7 +118,7 @@ class MemorizeHandler(BaseActionHandler):
                         categories=[],  # No categories for default TEMPORARY
                         reason="Default TEMPORARY consent on first interaction",
                     )
-                    consent_status = await consent_manager.grant_consent(consent_request)
+                    consent_status = await consent_service.grant_consent(consent_request)
 
                     # Add consent metadata to node
                     if hasattr(node, "attributes"):

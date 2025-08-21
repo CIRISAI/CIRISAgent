@@ -10,11 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from ciris_engine.logic.services.consent.consent_manager import (
-    ConsentManager,
-    ConsentNotFoundError,
-    ConsentValidationError,
-)
+from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService, ConsentValidationError
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
     ConsentAuditEntry,
@@ -41,14 +37,14 @@ router = APIRouter(
 )
 
 
-def get_consent_manager(request: Request) -> ConsentManager:
+def get_consent_manager(request: Request) -> ConsentService:
     """Get the consent manager instance from app state."""
     if not hasattr(request.app.state, "consent_manager") or not request.app.state.consent_manager:
         # Create a default instance if not initialized
-        from ciris_engine.logic.services.infrastructure.time_service import TimeService
+        from ciris_engine.logic.services.lifecycle.time import TimeService
 
         time_service = TimeService()
-        request.app.state.consent_manager = ConsentManager(time_service=time_service)
+        request.app.state.consent_manager = ConsentService(time_service=time_service)
 
     return request.app.state.consent_manager
 
@@ -56,14 +52,14 @@ def get_consent_manager(request: Request) -> ConsentManager:
 @router.get("/status", response_model=ConsentStatus)
 async def get_consent_status(
     auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> ConsentStatus:
     """
     Get current consent status for authenticated user.
 
     Returns default TEMPORARY (14-day) consent if none exists.
     """
-    user_id = auth.username  # Use username as user_id
+    user_id = auth.user_id  # Use user_id from auth context
     try:
         return await manager.get_consent(user_id)
     except ConsentNotFoundError:
@@ -81,7 +77,7 @@ async def get_consent_status(
 async def grant_consent(
     request: ConsentRequest,
     auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> ConsentStatus:
     """
     Grant or update consent.
@@ -92,7 +88,7 @@ async def grant_consent(
     - ANONYMOUS: Statistics only, no identity
     """
     # Ensure user can only update their own consent
-    request.user_id = auth.username
+    request.user_id = auth.user_id
 
     try:
         result = await manager.grant_consent(request)
@@ -100,7 +96,7 @@ async def grant_consent(
         # Check if this created a pending partnership request
         if request.stream == ConsentStream.PARTNERED:
             # Check if there's a pending partnership
-            partnership_status = await manager.check_pending_partnership(auth.username)
+            partnership_status = await manager.check_pending_partnership(auth.user_id)
             if partnership_status == "pending":
                 # Return a special response indicating partnership is pending
                 return ConsentStatus(
@@ -127,7 +123,7 @@ async def grant_consent(
 async def revoke_consent(
     reason: Optional[str] = None,
     auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> ConsentDecayStatus:
     """
     Revoke consent and start decay protocol.
@@ -136,7 +132,7 @@ async def revoke_consent(
     - 90-day pattern decay
     - Safety patterns may be retained (anonymized)
     """
-    user_id = auth.username
+    user_id = auth.user_id
     try:
         return await manager.revoke_consent(user_id, reason)
     except ConsentNotFoundError:
@@ -149,7 +145,7 @@ async def revoke_consent(
 @router.get("/impact", response_model=ConsentImpactReport)
 async def get_impact_report(
     auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> ConsentImpactReport:
     """
     Get impact report showing contribution to collective learning.
@@ -160,7 +156,7 @@ async def get_impact_report(
     - Impact score
     - Example contributions (anonymized)
     """
-    user_id = auth.username
+    user_id = auth.user_id
     try:
         return await manager.get_impact_report(user_id)
     except ConsentNotFoundError:
@@ -174,12 +170,12 @@ async def get_impact_report(
 async def get_audit_trail(
     limit: int = 100,
     auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> list[ConsentAuditEntry]:
     """
     Get consent change history - IMMUTABLE AUDIT TRAIL.
     """
-    user_id = auth.username
+    user_id = auth.user_id
     return await manager.get_audit_trail(user_id, limit)
 
 
@@ -252,14 +248,14 @@ async def get_consent_categories() -> dict:
 @router.get("/partnership/status", response_model=dict)
 async def check_partnership_status(
     auth: AuthContext = Depends(get_auth_context),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> dict:
     """
     Check status of pending partnership request.
 
     Returns current status and any pending partnership request outcome.
     """
-    user_id = auth.username
+    user_id = auth.user_id
 
     # Check for pending partnership
     status = await manager.check_pending_partnership(user_id)
@@ -293,7 +289,7 @@ async def check_partnership_status(
 @router.post("/cleanup", response_model=dict)
 async def cleanup_expired(
     _auth: AuthContext = Depends(require_observer),
-    manager: ConsentManager = Depends(get_consent_manager),
+    manager: ConsentService = Depends(get_consent_manager),
 ) -> dict:
     """
     Clean up expired TEMPORARY consents (admin only).

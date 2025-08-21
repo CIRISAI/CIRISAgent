@@ -16,7 +16,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.services.consent.consent_manager import ConsentManager, ConsentNotFoundError
+from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.schemas.consent.core import ConsentStream
 
 from ..auth import get_current_user
@@ -106,7 +106,7 @@ async def submit_dsar(
             else:
                 # Create default instance if not initialized
                 time_service = TimeService()
-                consent_manager = ConsentManager(time_service=time_service)
+                consent_manager = ConsentService(time_service=time_service)
 
             # Start decay protocol
             decay_status = await consent_manager.revoke_consent(

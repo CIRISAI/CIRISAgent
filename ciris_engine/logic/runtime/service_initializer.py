@@ -79,6 +79,7 @@ class ServiceInitializer:
         self.config_service: Optional[Any] = None  # Will be GraphConfigService
         self.self_observation_service: Optional[Any] = None  # Will be SelfObservationService
         self.visibility_service: Optional[Any] = None  # Will be VisibilityService
+        self.consent_service: Optional[Any] = None  # Will be ConsentService
         self.runtime_control_service: Optional[Any] = None  # Will be RuntimeControlService
 
         # Module management
@@ -653,6 +654,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         logger.info("Visibility service initialized - providing reasoning transparency")
 
+        # Initialize consent service (Governance Service #5)
+        from ciris_engine.logic.services.governance.consent import ConsentService
+
+        assert self.time_service is not None
+        self.consent_service = ConsentService(
+            time_service=self.time_service,
+            memory_bus=None,  # Will use direct persistence
+            db_path=get_sqlite_db_full_path(self.essential_config),
+        )
+        await self.consent_service.start()
+        self._services_started_count += 1
+        logger.info("ConsentService initialized - managing user consent and decay protocol")
+
         # Initialize runtime control service
         from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
 
@@ -1004,6 +1018,22 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 metadata={"service_name": "SecretsToolService", "provider": "core"},
             )
             logger.info("SecretsToolService registered in ServiceRegistry")
+
+        # Register ConsentService as a tool service (v1.4.6)
+        if self.consent_service:
+            self.service_registry.register_service(
+                service_type=ServiceType.TOOL,
+                provider=self.consent_service,
+                priority=Priority.HIGH,
+                capabilities=[
+                    "execute_tool",
+                    "get_available_tools",
+                    "upgrade_relationship",
+                    "degrade_relationship",
+                ],
+                metadata={"service_name": "ConsentService", "provider": "core"},
+            )
+            logger.info("ConsentService registered in ServiceRegistry as TOOL service")
 
         # Task scheduler is single-instance - NO ServiceRegistry needed
 

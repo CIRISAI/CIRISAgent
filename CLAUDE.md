@@ -32,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 CIRIS (Covenant-Integrated Responsible Intelligence System) is an ethical AI platform:
 - **Production**: Discord moderation + API at agents.ciris.ai
-- **Architecture**: 21 core services, 6 message buses, strict type safety
+- **Architecture**: 22 core services, 6 message buses, strict type safety
 - **Philosophy**: No Dicts, No Strings, No Kings
 - **Target**: 4GB RAM, offline-capable deployment
 
@@ -140,10 +140,10 @@ https://agents.ciris.ai/v1/auth/oauth/datum/google/callback
    - All data structures use Pydantic schemas
    - Full type validation throughout the system
 
-2. **Service Architecture**: 21 Core Services + Adapter Services ✅
+2. **Service Architecture**: 22 Core Services + Adapter Services ✅
    - Graph Services (6): memory, config, telemetry, audit, incident_management, tsdb_consolidation
    - Infrastructure Services (7): time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
-   - Governance Services (4): wise_authority, adaptive_filter, visibility, self_observation
+   - Governance Services (5): wise_authority, adaptive_filter, visibility, self_observation, consent
    - Runtime Services (3): llm, runtime_control, task_scheduler
    - Tool Services (1): secrets_tool
    - **Note**: pattern_analysis_loop and identity_variance_monitor are sub-services within self_observation
@@ -151,7 +151,7 @@ https://agents.ciris.ai/v1/auth/oauth/datum/google/callback
      - CLI: 1 service (CLIAdapter)
      - API: 3 services (APICommunicationService, APIRuntimeControlService, APIToolService)
      - Discord: 3 services (Communication + WiseAuthority via DiscordAdapter, DiscordToolService)
-   - **Total at runtime**: 22 (CLI), 24 (API), 24 (Discord)
+   - **Total at runtime**: 23 (CLI), 25 (API), 25 (Discord)
 
 3. **API v1.0**: Fully Operational
    - All 78 endpoints implemented and tested across 12 modules

@@ -34,12 +34,12 @@ Most AI systems are black boxes that can't explain their decisions. CIRIS makes 
 3. **Building trust** - Communities can see exactly how decisions are made
 4. **[Learning locally](ciris_engine/logic/services/memory_service/README.md)** - Each deployment builds its own knowledge graph
 
-It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services), [graph memory](FSD/GRAPH_NODE_TYPE_SYSTEM.md), [distributed consensus](ciris_engine/logic/services/README.md)) to solve something simple: helping communities make better decisions together.
+It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services), [graph memory](FSD/GRAPH_NODE_TYPE_SYSTEM.md), [distributed consensus](ciris_engine/logic/services/README.md)) to solve something simple: helping communities make better decisions together.
 
 ## For Developers
 
 **Architecture Highlights:**
-- **[21 core services](docs/ARCHITECTURE.md#services)** (all required for proper operation)
+- **[22 core services](docs/ARCHITECTURE.md#services)** (all required for proper operation)
 - **[Graph-based memory](ciris_engine/logic/services/memory_service/README.md)** (Neo4j-compatible)
 - **[Multiple LLM providers](ciris_engine/logic/services/README.md#llm-service)** (OpenAI, Anthropic, Llama)
 - **[Full async Python](docs/ARCHITECTURE.md#async-design)** with type hints
@@ -82,10 +82,10 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
   - Logic implementation in `logic/`
   - Schemas for data models in `schemas/`
   - Perfect navigational determinism across the codebase
-- **Exactly 21 Services**: All required with clear responsibilities
+- **Exactly 22 Services**: All required with clear responsibilities
   - 6 Graph Services: memory, config, telemetry, audit, incident_management, tsdb_consolidation
   - 7 Infrastructure Services: time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
-  - 4 Governance Services: wise_authority, adaptive_filter, visibility, self_observation
+  - 5 Governance Services: wise_authority, adaptive_filter, visibility, self_observation, consent
   - 3 Runtime Services: llm, runtime_control, task_scheduler
   - 1 Tool Service: secrets_tool
 - **6 Message Buses**: Future-proof architecture for multi-provider services
@@ -162,6 +162,12 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
 - **[Network Communication](FSD/NETWORK_SCHEMAS.md)**: Inter-agent and CIRISNODE communication protocols
 - **Final Features Roadmap**: Complete feature set and architectural decisions
 - **[Secrets Management Deep Dive](FSD/SECRETS.md)**: Comprehensive secrets handling architecture
+
+### 🚧 Features in Development
+
+- **Multi-Modal Reasoning**: Memory graph visualizations as context alongside structured context objects to DMAs, enabling richer understanding through visual representation of relationships and patterns
+- **Localized Reasoning**: Native translations of all agent reasoning prompts for deployments, ensuring 100% contextual responses with in-line translations optional for international visibility
+- **[Consent Service](docs/CIRIS_CONSENT_SERVICE.md)**: v1.4.6 - Three-stream consent model (TEMPORARY/PARTNERED/ANONYMOUS) with bilateral partnership agreements, DSAR integration, and automatic expiry handling
 
 ---
 

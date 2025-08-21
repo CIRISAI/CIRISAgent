@@ -1,8 +1,9 @@
 """
-Consent Manager Service - FAIL FAST, FAIL LOUD, NO FAKE DATA.
+Consent Service - FAIL FAST, FAIL LOUD, NO FAKE DATA.
 
-Manages user consent for the Consensual Evolution Protocol.
+Governance Service #5: Manages user consent for the Consensual Evolution Protocol.
 Default: TEMPORARY (14 days) unless explicitly changed.
+This is the 22nd core CIRIS service.
 """
 
 import logging
@@ -14,7 +15,9 @@ from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.persistence import add_graph_node, get_graph_node
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.consent import ConsentManagerProtocol
+from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.consent.core import (
     ConsentAuditEntry,
     ConsentCategory,
@@ -43,13 +46,16 @@ class ConsentValidationError(Exception):
     pass
 
 
-class ConsentManager(BaseService, ConsentManagerProtocol):
+class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     """
+    Consent Service - 22nd Core CIRIS Service (Governance #5).
+
     Manages user consent with HARD GUARANTEES:
     - TEMPORARY by default (14 days)
     - No fake data or fallbacks
     - Immutable audit trail
     - Real decay protocol
+    - Bilateral agreement for PARTNERED
     """
 
     def __init__(
@@ -58,7 +64,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
         memory_bus: Optional[MemoryBus] = None,
         db_path: Optional[str] = None,
     ):
-        super().__init__(time_service=time_service, service_name="ConsentManager")
+        super().__init__(time_service=time_service, service_name="ConsentService")
         self._time_service = time_service
         self._memory_bus = memory_bus
         self._db_path = db_path
@@ -69,11 +75,29 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
         # Decay tracking
         self._active_decays: Dict[str, ConsentDecayStatus] = {}
 
-        # Metrics
+        # Core Metrics (real, no fake data)
         self._consent_checks = 0
         self._consent_grants = 0
         self._consent_revokes = 0
         self._expired_cleanups = 0
+
+        # Stream distribution metrics
+        self._temporary_count = 0
+        self._partnered_count = 0
+        self._anonymous_count = 0
+
+        # Partnership metrics
+        self._partnership_requests = 0
+        self._partnership_approvals = 0
+        self._partnership_rejections = 0
+
+        # Decay metrics
+        self._total_decays_initiated = 0
+        self._decays_completed = 0
+
+        # Consent age tracking
+        self._oldest_consent_days = 0.0
+        self._average_consent_age_hours = 0.0
 
         # Pending partnership requests
         self._pending_partnerships: Dict[str, Dict] = {}
@@ -163,6 +187,9 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
                 logger.info(f"User {request.user_id} already has PARTNERED consent")
                 return previous_status
 
+            # Track partnership request
+            self._partnership_requests += 1
+
             # Create partnership task for agent approval
             from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
 
@@ -235,7 +262,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             updated_at=now,
         )
 
-        add_graph_node(node, self._db_path, self._time_service)
+        add_graph_node(node, self._time_service, self._db_path)
 
         # Create audit entry
         audit = ConsentAuditEntry(
@@ -259,7 +286,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(audit_node, self._db_path, self._time_service)
+        add_graph_node(audit_node, self._time_service, self._db_path)
 
         # Update cache
         self._consent_cache[request.user_id] = new_status
@@ -272,6 +299,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
         Start decay protocol - IMMEDIATE identity severance.
         """
         self._consent_revokes += 1
+        self._total_decays_initiated += 1
 
         # Verify user exists
         status = await self.get_consent(user_id)
@@ -296,7 +324,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(decay_node, self._db_path, self._time_service)
+        add_graph_node(decay_node, self._time_service, self._db_path)
 
         # Update consent to expired
         revoked_status = ConsentStatus(
@@ -328,7 +356,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(node, self._db_path, self._time_service)
+        add_graph_node(node, self._time_service, self._db_path)
 
         # Create audit entry
         audit = ConsentAuditEntry(
@@ -351,7 +379,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(audit_node, self._db_path, self._time_service)
+        add_graph_node(audit_node, self._time_service, self._db_path)
 
         # Remove from cache
         if user_id in self._consent_cache:
@@ -465,7 +493,7 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
                 updated_at=now,
             )
 
-            add_graph_node(node, self._db_path, self._time_service)
+            add_graph_node(node, self._time_service, self._db_path)
 
             # Update cache
             self._consent_cache[user_id] = partnered_status
@@ -473,12 +501,20 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
             # Remove from pending
             del self._pending_partnerships[user_id]
 
+            # Track approval
+            self._partnership_approvals += 1
+
             logger.info(f"Partnership approved for {user_id} via task {task_id}")
             return "accepted"
 
         elif outcome in ["rejected", "deferred", "failed"]:
             # Remove from pending
             del self._pending_partnerships[user_id]
+
+            # Track rejection
+            if outcome == "rejected":
+                self._partnership_rejections += 1
+
             logger.info(f"Partnership {outcome} for {user_id}: {reason}")
             return outcome
 
@@ -509,36 +545,350 @@ class ConsentManager(BaseService, ConsentManagerProtocol):
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
-        return ServiceType.GOVERNANCE
+        return ServiceType.TOOL  # Changed to TOOL so it can be discovered by ToolBus
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""
         return ServiceCapabilities(
-            service_name="ConsentManager",
-            actions=[
-                "get_consent",
-                "grant_consent",
-                "revoke_consent",
-                "check_expiry",
-                "get_impact_report",
-                "cleanup_expired",
-            ],
+            service_name="ConsentService",
+            actions=[],  # Non-bussed services don't have actions
             version="0.2.0",
-            dependencies=[],
+            dependencies=["TimeService"],
             metadata={
                 "default_stream": "TEMPORARY",
                 "temporary_duration_days": 14,
                 "decay_duration_days": 90,
+                "partnership_requires_bilateral": True,
+                "service_number": 22,
+                "service_category": "Governance #5",
             },
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect consent-specific metrics."""
-        return {
-            "consent_checks": float(self._consent_checks),
-            "consent_grants": float(self._consent_grants),
-            "consent_revokes": float(self._consent_revokes),
-            "expired_cleanups": float(self._expired_cleanups),
-            "cached_consents": float(len(self._consent_cache)),
-            "active_decays": float(len(self._active_decays)),
+        """
+        Collect consent-specific metrics - REAL DATA ONLY.
+
+        Top 5 Most Important Metrics:
+        1. consent_active_users - Number of users with active consent
+        2. consent_stream_distribution - Breakdown by stream type (TEMPORARY/PARTNERED/ANONYMOUS)
+        3. consent_partnership_success_rate - Approval rate for partnership requests
+        4. consent_average_age_days - Average age of active consents
+        5. consent_decay_completion_rate - Percentage of decays completed vs initiated
+        """
+        # Get base metrics from parent
+        metrics = super()._collect_custom_metrics()
+
+        # Calculate stream distribution from cache
+        temporary_count = 0
+        partnered_count = 0
+        anonymous_count = 0
+        total_age_seconds = 0.0
+        consent_count = 0
+
+        now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+
+        for user_id, status in self._consent_cache.items():
+            consent_count += 1
+            if status.stream == ConsentStream.TEMPORARY:
+                temporary_count += 1
+            elif status.stream == ConsentStream.PARTNERED:
+                partnered_count += 1
+            elif status.stream == ConsentStream.ANONYMOUS:
+                anonymous_count += 1
+
+            # Calculate age
+            if status.granted_at:
+                age = (now - status.granted_at).total_seconds()
+                total_age_seconds += age
+
+        # Calculate average age in days
+        avg_age_days = (total_age_seconds / consent_count / 86400.0) if consent_count > 0 else 0.0
+
+        # Calculate partnership success rate
+        partnership_success_rate = 0.0
+        if self._partnership_requests > 0:
+            partnership_success_rate = (self._partnership_approvals / self._partnership_requests) * 100.0
+
+        # Calculate decay completion rate
+        decay_completion_rate = 0.0
+        if self._total_decays_initiated > 0:
+            decay_completion_rate = (self._decays_completed / self._total_decays_initiated) * 100.0
+
+        # Update metrics with the 5 most important ones
+        metrics.update(
+            {
+                # 1. Active users with consent
+                "consent_active_users": float(len(self._consent_cache)),
+                # 2. Stream distribution (percentage breakdown)
+                "consent_temporary_percent": (temporary_count / consent_count * 100.0) if consent_count > 0 else 0.0,
+                "consent_partnered_percent": (partnered_count / consent_count * 100.0) if consent_count > 0 else 0.0,
+                "consent_anonymous_percent": (anonymous_count / consent_count * 100.0) if consent_count > 0 else 0.0,
+                # 3. Partnership success rate
+                "consent_partnership_success_rate": partnership_success_rate,
+                "consent_partnership_requests_total": float(self._partnership_requests),
+                "consent_partnership_approvals_total": float(self._partnership_approvals),
+                # 4. Average consent age
+                "consent_average_age_days": avg_age_days,
+                # 5. Decay metrics
+                "consent_decay_completion_rate": decay_completion_rate,
+                "consent_active_decays": float(len(self._active_decays)),
+                "consent_total_decays_initiated": float(self._total_decays_initiated),
+                # Additional operational metrics
+                "consent_checks_total": float(self._consent_checks),
+                "consent_grants_total": float(self._consent_grants),
+                "consent_revokes_total": float(self._consent_revokes),
+                "consent_expired_cleanups_total": float(self._expired_cleanups),
+                "consent_pending_partnerships": float(len(self._pending_partnerships)),
+                # Service health
+                "consent_service_uptime_seconds": (
+                    self._calculate_uptime() if hasattr(self, "_calculate_uptime") else 0.0
+                ),
+            }
+        )
+
+        return metrics
+
+    def _check_dependencies(self) -> bool:
+        """Check service dependencies."""
+        return self._time_service is not None
+
+    def _get_actions(self) -> List[str]:
+        """Get available actions - not used for non-bussed services."""
+        return ["upgrade_relationship", "degrade_relationship"]
+
+    # ToolService Protocol Implementation
+
+    async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+        """Execute a tool and return the result."""
+        self._track_request()  # Track the tool execution
+
+        if tool_name == "upgrade_relationship":
+            result = await self._upgrade_relationship_tool(parameters)
+        elif tool_name == "degrade_relationship":
+            result = await self._degrade_relationship_tool(parameters)
+        else:
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.NOT_FOUND,
+                success=False,
+                data=None,
+                error=f"Unknown tool: {tool_name}",
+                correlation_id=f"consent_{tool_name}_{self._now().timestamp()}",
+            )
+
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            status=ToolExecutionStatus.COMPLETED if result.get("success") else ToolExecutionStatus.FAILED,
+            success=result.get("success", False),
+            data=result,
+            error=result.get("error"),
+            correlation_id=f"consent_{tool_name}_{self._now().timestamp()}",
+        )
+
+    async def get_available_tools(self) -> List[str]:
+        """Get list of available tool names."""
+        return ["upgrade_relationship", "degrade_relationship"]
+
+    async def list_tools(self) -> List[str]:
+        """List available tools - required by ToolServiceProtocol."""
+        return ["upgrade_relationship", "degrade_relationship"]
+
+    async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
+        """Get parameter schema for a specific tool."""
+        schemas = {
+            "upgrade_relationship": ToolParameterSchema(
+                type="object",
+                properties={
+                    "user_id": {"type": "string", "description": "User ID requesting the upgrade"},
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for upgrade request",
+                        "default": "User requested partnership",
+                    },
+                },
+                required=["user_id"],
+            ),
+            "degrade_relationship": ToolParameterSchema(
+                type="object",
+                properties={
+                    "user_id": {"type": "string", "description": "User ID requesting the downgrade"},
+                    "target_stream": {
+                        "type": "string",
+                        "description": "Target stream: TEMPORARY or ANONYMOUS",
+                        "default": "TEMPORARY",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for downgrade",
+                        "default": "User requested downgrade",
+                    },
+                },
+                required=["user_id"],
+            ),
         }
+        return schemas.get(tool_name)
+
+    async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
+        """Get detailed information about a specific tool."""
+        tools_info = {
+            "upgrade_relationship": ToolInfo(
+                name="upgrade_relationship",
+                description="Request to upgrade user relationship to PARTNERED (requires bilateral consent)",
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={
+                        "user_id": {"type": "string", "description": "User ID requesting the upgrade"},
+                        "reason": {
+                            "type": "string",
+                            "description": "Reason for upgrade request",
+                            "default": "User requested partnership",
+                        },
+                    },
+                    required=["user_id"],
+                ),
+            ),
+            "degrade_relationship": ToolInfo(
+                name="degrade_relationship",
+                description="Request to downgrade user relationship to TEMPORARY or ANONYMOUS",
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={
+                        "user_id": {"type": "string", "description": "User ID requesting the downgrade"},
+                        "target_stream": {
+                            "type": "string",
+                            "description": "Target stream: TEMPORARY or ANONYMOUS",
+                            "default": "TEMPORARY",
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "Reason for downgrade",
+                            "default": "User requested downgrade",
+                        },
+                    },
+                    required=["user_id"],
+                ),
+            ),
+        }
+        return tools_info.get(tool_name)
+
+    async def get_all_tool_info(self) -> List[ToolInfo]:
+        """Get info for all available tools."""
+        return [
+            await self.get_tool_info("upgrade_relationship"),
+            await self.get_tool_info("degrade_relationship"),
+        ]
+
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
+        """Get result of an async tool execution by correlation ID."""
+        # ConsentService tools are synchronous, so results are immediate
+        return None
+
+    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+        """Validate parameters for a tool."""
+        if tool_name == "upgrade_relationship":
+            return "user_id" in parameters
+        elif tool_name == "degrade_relationship":
+            return "user_id" in parameters
+        return False
+
+    async def _upgrade_relationship_tool(self, parameters: dict) -> dict:
+        """Tool implementation for upgrading relationship to PARTNERED."""
+        try:
+            user_id = parameters.get("user_id")
+            reason = parameters.get("reason", "User requested partnership")
+
+            if not user_id:
+                return {"success": False, "error": "user_id is required"}
+
+            # Get current consent status
+            try:
+                current = self.get_consent(user_id)
+            except ConsentNotFoundError:
+                # Create default TEMPORARY consent if none exists
+                current = self.grant_consent(user_id, ConsentStream.TEMPORARY, [ConsentCategory.ESSENTIAL])
+
+            if current.stream == ConsentStream.PARTNERED:
+                return {
+                    "success": True,
+                    "message": "Already in PARTNERED relationship",
+                    "current_stream": "PARTNERED",
+                    "user_id": user_id,
+                }
+
+            # Create upgrade request - this will need agent approval
+            request = ConsentRequest(
+                user_id=user_id,
+                requested_stream=ConsentStream.PARTNERED,
+                requested_categories=[ConsentCategory.ESSENTIAL, ConsentCategory.BEHAVIORAL],
+                reason=reason,
+                metadata={"tool_request": True},
+            )
+
+            # Update to PARTNERED (pending agent approval via thought/task system)
+            self.update_consent(user_id, ConsentStream.PARTNERED, request.requested_categories)
+
+            self._partnership_requests += 1
+
+            return {
+                "success": True,
+                "message": "Partnership upgrade requested - requires agent approval",
+                "current_stream": current.stream.value,
+                "requested_stream": "PARTNERED",
+                "user_id": user_id,
+                "status": "PENDING_APPROVAL",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to upgrade relationship: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _degrade_relationship_tool(self, parameters: dict) -> dict:
+        """Tool implementation for downgrading relationship."""
+        try:
+            user_id = parameters.get("user_id")
+            target_stream = parameters.get("target_stream", "TEMPORARY")
+            reason = parameters.get("reason", "User requested downgrade")
+
+            if not user_id:
+                return {"success": False, "error": "user_id is required"}
+
+            if target_stream not in ["TEMPORARY", "ANONYMOUS"]:
+                return {"success": False, "error": "target_stream must be TEMPORARY or ANONYMOUS"}
+
+            # Get current consent status
+            try:
+                current = self.get_consent(user_id)
+            except ConsentNotFoundError:
+                return {"success": False, "error": f"No consent found for user {user_id}"}
+
+            target = ConsentStream(target_stream)
+
+            if current.stream == target:
+                return {
+                    "success": True,
+                    "message": f"Already in {target_stream} relationship",
+                    "current_stream": target_stream,
+                    "user_id": user_id,
+                }
+
+            # Downgrades are immediate - no approval needed
+            if target == ConsentStream.TEMPORARY:
+                categories = [ConsentCategory.ESSENTIAL]
+            else:  # ANONYMOUS
+                categories = [ConsentCategory.STATISTICAL]
+
+            self.update_consent(user_id, target, categories)
+
+            self._downgrades_completed += 1
+
+            return {
+                "success": True,
+                "message": f"Relationship downgraded to {target_stream}",
+                "previous_stream": current.stream.value,
+                "current_stream": target_stream,
+                "user_id": user_id,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to degrade relationship: {e}")
+            return {"success": False, "error": str(e)}

@@ -425,6 +425,9 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                     return correlations
 
             # Fallback: query from memory graph
+            # Query correlations from database (not memory graph)
+            # Correlations are stored in SQLite, not as graph nodes
+            from ciris_engine.logic.persistence.models.correlations import get_recent_correlations
             from ciris_engine.schemas.services.graph_core import NodeType
             from ciris_engine.schemas.telemetry.core import (
                 CorrelationType,
@@ -435,65 +438,14 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 TraceContext,
             )
 
-            # Query correlations from memory
-            if hasattr(self, "_memory_bus") and self._memory_bus:
-                # Query for correlation nodes
-                nodes = await self._memory_bus.recall(
-                    query={"type": NodeType.TELEMETRY, "id_prefix": "correlation/", "limit": limit},
-                    handler_name="visibility_service",
-                )
-
-                # Convert nodes back to ServiceCorrelation objects
-                correlations = []
-                for node in nodes:
-                    if node.attributes and isinstance(node.attributes, dict):
-                        attrs = node.attributes
-
-                        # Reconstruct trace context if available
-                        trace_context = None
-                        if attrs.get("trace_id"):
-                            trace_context = TraceContext(
-                                trace_id=attrs.get("trace_id"),
-                                span_id=attrs.get("span_id"),
-                                parent_span_id=attrs.get("parent_span_id"),
-                                span_name=attrs.get("span_name"),
-                                span_kind=attrs.get("span_kind", "internal"),
-                            )
-
-                        # Reconstruct request data if task/thought IDs are present
-                        request_data = None
-                        if attrs.get("task_id") or attrs.get("thought_id"):
-                            request_data = ServiceRequestData(
-                                task_id=attrs.get("task_id"), thought_id=attrs.get("thought_id")
-                            )
-
-                        # Reconstruct response data if available
-                        response_data = None
-                        if "execution_time_ms" in attrs:
-                            response_data = ServiceResponseData(
-                                success=attrs.get("success", False),
-                                execution_time_ms=attrs.get("execution_time_ms", 0),
-                                error_message=attrs.get("error_message"),
-                            )
-
-                        # Create ServiceCorrelation object
-                        correlation = ServiceCorrelation(
-                            correlation_id=attrs.get("correlation_id", ""),
-                            correlation_type=CorrelationType.TRACE_SPAN,
-                            service_type=attrs.get("service_type", ""),
-                            handler_name=attrs.get("handler_name", ""),
-                            action_type=attrs.get("action_type", ""),
-                            status=ServiceCorrelationStatus[attrs.get("status", "PENDING")],
-                            timestamp=attrs.get("timestamp"),
-                            trace_context=trace_context,
-                            request_data=request_data,
-                            response_data=response_data,
-                        )
-                        correlations.append(correlation)
-
-                return correlations[-limit:]  # Return most recent
-
-            return []
+            try:
+                # Get recent correlations from database
+                correlations = get_recent_correlations(limit=limit)
+                # The correlations are already ServiceCorrelation objects from the database
+                return correlations
+            except Exception:
+                # Fallback to empty list if database not available
+                return []
 
         except Exception as e:
             logger.error(f"Failed to get recent traces: {e}")

@@ -204,17 +204,17 @@ async def interact(
     # Check consent status and add notice for first-time users
     consent_notice = ""
     try:
-        from ciris_engine.logic.services.consent.consent_manager import ConsentManager, ConsentNotFoundError
+        from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
         from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 
         # Get consent manager
         if hasattr(request.app.state, "consent_manager") and request.app.state.consent_manager:
             consent_manager = request.app.state.consent_manager
         else:
-            from ciris_engine.logic.services.infrastructure.time_service import TimeService
+            from ciris_engine.logic.services.lifecycle.time import TimeService
 
             time_service = TimeService()
-            consent_manager = ConsentManager(time_service=time_service)
+            consent_manager = ConsentService(time_service=time_service)
             request.app.state.consent_manager = consent_manager
 
         # Check if user has consent

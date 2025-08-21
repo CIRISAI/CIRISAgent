@@ -85,11 +85,11 @@ class TelemetryAggregator:
     """
     Enterprise telemetry aggregation for unified monitoring.
 
-    Collects metrics from all 21 required services in parallel and
+    Collects metrics from all 22 required services in parallel and
     provides aggregated views for different stakeholders.
     """
 
-    # Service mappings - v1.4.3 validated (36 real source types)
+    # Service mappings - v1.4.6 validated (37 real source types with ConsentService)
     CATEGORIES = {
         "buses": ["llm_bus", "memory_bus", "communication_bus", "wise_bus", "tool_bus", "runtime_control_bus"],
         "graph": ["memory", "config", "telemetry", "audit", "incident_management", "tsdb_consolidation"],
@@ -102,7 +102,7 @@ class TelemetryAggregator:
             "database_maintenance",  # Has get_metrics() now
             "secrets",  # SecretsService (not SecretsToolService)
         ],
-        "governance": ["wise_authority", "adaptive_filter", "visibility", "self_observation"],
+        "governance": ["wise_authority", "adaptive_filter", "visibility", "self_observation", "consent"],
         "runtime": ["llm", "runtime_control", "task_scheduler"],
         "tools": ["secrets_tool"],  # Separated from runtime for clarity
         "adapters": ["api", "discord", "cli"],  # Each can spawn multiple instances
@@ -473,6 +473,7 @@ class TelemetryAggregator:
             "adaptive_filter": "adaptive_filter_service",
             "visibility": "visibility_service",
             "self_observation": "self_observation_service",
+            "consent": "consent_service",
             # Runtime services
             "llm": "llm_service",
             "runtime_control": "runtime_control_service",
@@ -539,6 +540,7 @@ class TelemetryAggregator:
             "adaptive_filter": ["adaptivefilterservice"],
             "visibility": ["visibilityservice"],
             "self_observation": ["selfobservationservice"],
+            "consent": ["consentservice"],
             # Runtime services
             "llm": ["llmservice", "mockllmservice"],
             "runtime_control": ["runtimecontrolservice", "apiruntimecontrolservice"],
@@ -2293,19 +2295,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 if hasattr(resp, "error_message"):
                     attributes["error_message"] = resp.error_message
 
-            # Create and store the node
-            node = GraphNode(
-                id=node_id,
-                type=NodeType.TELEMETRY,
-                scope=GraphScope.LOCAL,
-                attributes=attributes,
-                version=1,
-                updated_by="telemetry_service",
-                updated_at=self._now(),
-            )
-
-            # Store in memory graph
-            await self._memory_bus.memorize(node=node, handler_name="telemetry_service")
+            # Don't store as graph node - telemetry correlations go in correlations DB
+            # Just keep in recent cache for quick access
 
             # Keep a recent cache for quick access
             if not hasattr(self, "_recent_correlations"):

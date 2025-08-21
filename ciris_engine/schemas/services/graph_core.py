@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.consent.core import ConsentStream
+
 
 class GraphScope(str, Enum):
     """Scope of graph nodes and edges."""
@@ -99,6 +101,13 @@ class GraphNode(BaseModel):
     version: int = Field(default=1, ge=1, description="Version number")
     updated_by: Optional[str] = Field(None, description="Who last updated")
     updated_at: Optional[datetime] = Field(None, description="When last updated")
+    consent_stream: ConsentStream = Field(
+        default=ConsentStream.TEMPORARY,
+        description="Consent stream for this node (TEMPORARY=14-day, PARTNERED=persistent, ANONYMOUS=stats-only)",
+    )
+    expires_at: Optional[datetime] = Field(
+        None, description="Expiry time for TEMPORARY consent nodes (auto-set to 14 days for TEMPORARY)"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

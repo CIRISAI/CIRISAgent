@@ -589,7 +589,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 995,
+        "line": 997,
         "class": "TelemetryAggregator",
         "function": "_extract_governance_metrics",
         "context": "return_type",
@@ -1341,7 +1341,7 @@
       },
       {
         "file": "ciris_engine/schemas/services/graph_core.py",
-        "line": 98,
+        "line": 100,
         "class": "GraphNode",
         "function": null,
         "context": "other",

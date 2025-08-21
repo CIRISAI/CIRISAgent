@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.services.consent.consent_manager import ConsentManager, ConsentNotFoundError
+from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.services.graph.consolidation import ConversationEntry, ParticipantData, ServiceInteractionData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType

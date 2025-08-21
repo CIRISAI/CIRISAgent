@@ -207,6 +207,12 @@ class UserProfile(BaseModel):
     permissions: List[str] = Field(default_factory=list, description="Granted permissions")
     restrictions: List[str] = Field(default_factory=list, description="Applied restrictions")
 
+    # Consent relationship state (v1.4.6)
+    consent_stream: str = Field("TEMPORARY", description="Consent stream: TEMPORARY, PARTNERED, or ANONYMOUS")
+    consent_expires_at: Optional[datetime] = Field(None, description="When TEMPORARY consent expires (14 days)")
+    partnership_requested_at: Optional[datetime] = Field(None, description="When partnership was requested")
+    partnership_approved: bool = Field(False, description="Whether partnership was approved by agent")
+
     # Additional context
     notes: Optional[str] = Field(None, description="Additional notes or context about the user")
 

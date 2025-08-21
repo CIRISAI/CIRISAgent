@@ -762,6 +762,76 @@ class TelemetryAggregator:
                 healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
             )
 
+    async def _get_control_service(self) -> Any:
+        """Get the runtime control service."""
+        if self.runtime and hasattr(self.runtime, "runtime_control_service"):
+            return self.runtime.runtime_control_service
+        elif self.service_registry:
+            from ciris_engine.schemas.infrastructure.base import ServiceType
+
+            return await self.service_registry.get_service(ServiceType.RUNTIME_CONTROL)
+        return None
+
+    def _is_adapter_running(self, adapter_info: Any) -> bool:
+        """Check if an adapter is running."""
+        if hasattr(adapter_info, "is_running"):
+            return adapter_info.is_running
+        elif hasattr(adapter_info, "status"):
+            from ciris_engine.schemas.services.core.runtime import AdapterStatus
+
+            return adapter_info.status in [AdapterStatus.ACTIVE, AdapterStatus.RUNNING]
+        return False
+
+    def _find_adapter_instance(self, adapter_type: str) -> Any:
+        """Find adapter instance in runtime."""
+        if hasattr(self.runtime, "adapters"):
+            for adapter in self.runtime.adapters:
+                if adapter_type in adapter.__class__.__name__.lower():
+                    return adapter
+        return None
+
+    async def _get_adapter_metrics(self, adapter_instance: Any) -> dict:
+        """Get metrics from adapter instance."""
+        if hasattr(adapter_instance, "get_metrics"):
+            if asyncio.iscoroutinefunction(adapter_instance.get_metrics):
+                return await adapter_instance.get_metrics()
+            return adapter_instance.get_metrics()
+        return None
+
+    def _create_telemetry_data(
+        self, metrics: dict, adapter_info: Any = None, adapter_id: str = None, healthy: bool = True
+    ) -> ServiceTelemetryData:
+        """Create ServiceTelemetryData from metrics."""
+        if not metrics:
+            return ServiceTelemetryData(
+                healthy=False,
+                uptime_seconds=0.0,
+                error_count=0,
+                requests_handled=0,
+                error_rate=0.0,
+                custom_metrics={"adapter_id": adapter_id} if adapter_id else {},
+            )
+
+        custom_metrics = {"adapter_id": adapter_id} if adapter_id else {}
+        if adapter_info:
+            custom_metrics["adapter_type"] = (
+                adapter_info.adapter_type if hasattr(adapter_info, "adapter_type") else None
+            )
+            if hasattr(adapter_info, "started_at") and adapter_info.started_at:
+                custom_metrics["start_time"] = adapter_info.started_at.isoformat()
+
+        custom_metrics.update(metrics.get("custom_metrics", {}))
+
+        return ServiceTelemetryData(
+            healthy=healthy,
+            uptime_seconds=metrics.get("uptime_seconds", 0.0),
+            error_count=metrics.get("error_count", 0),
+            requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
+            error_rate=metrics.get("error_rate", 0.0),
+            memory_mb=metrics.get("memory_mb"),
+            custom_metrics=custom_metrics,
+        )
+
     async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
         """
         Collect telemetry from ALL active adapter instances of a given type.
@@ -774,68 +844,19 @@ class TelemetryAggregator:
         # Try to get adapters from runtime control service if available
         if self.runtime:
             try:
-                # Get control service to list all adapters properly
-                control_service = None
-                if hasattr(self.runtime, "runtime_control_service"):
-                    control_service = self.runtime.runtime_control_service
-                elif self.service_registry:
-                    from ciris_engine.schemas.infrastructure.base import ServiceType
-
-                    control_service = await self.service_registry.get_service(ServiceType.RUNTIME_CONTROL)
-
+                control_service = await self._get_control_service()
                 if control_service and hasattr(control_service, "list_adapters"):
-                    # Get all adapters with their proper adapter_ids
                     all_adapters = await control_service.list_adapters()
 
                     for adapter_info in all_adapters:
-                        # Only collect from matching type and running adapters
-                        # Check if adapter is running - handle both old and new AdapterInfo schemas
-                        is_running = False
-                        if hasattr(adapter_info, "is_running"):
-                            is_running = adapter_info.is_running
-                        elif hasattr(adapter_info, "status"):
-                            # AdapterStatus enum values that mean running
-                            from ciris_engine.schemas.services.core.runtime import AdapterStatus
+                        if adapter_info.adapter_type == adapter_type and self._is_adapter_running(adapter_info):
+                            adapter_instance = self._find_adapter_instance(adapter_type)
 
-                            is_running = adapter_info.status in [AdapterStatus.ACTIVE, AdapterStatus.RUNNING]
-
-                        if adapter_info.adapter_type == adapter_type and is_running:
-                            # Try to get the actual adapter instance
-                            adapter_instance = None
-
-                            # Check bootstrap adapters in runtime.adapters
-                            if hasattr(self.runtime, "adapters"):
-                                for adapter in self.runtime.adapters:
-                                    # Match by type since bootstrap adapters might not have adapter_id
-                                    if adapter_type in adapter.__class__.__name__.lower():
-                                        adapter_instance = adapter
-                                        break
-
-                            # Collect metrics from the adapter
-                            if adapter_instance and hasattr(adapter_instance, "get_metrics"):
+                            if adapter_instance:
                                 try:
-                                    metrics = adapter_instance.get_metrics()
-                                    if asyncio.iscoroutinefunction(adapter_instance.get_metrics):
-                                        metrics = await adapter_instance.get_metrics()
-
-                                    adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                        healthy=True,
-                                        uptime_seconds=metrics.get("uptime_seconds", 0.0),
-                                        error_count=metrics.get("error_count", 0),
-                                        requests_handled=metrics.get("request_count")
-                                        or metrics.get("requests_handled", 0),
-                                        error_rate=metrics.get("error_rate", 0.0),
-                                        memory_mb=metrics.get("memory_mb"),
-                                        custom_metrics={
-                                            "adapter_id": adapter_info.adapter_id,
-                                            "adapter_type": adapter_info.adapter_type,
-                                            "start_time": (
-                                                adapter_info.started_at.isoformat()
-                                                if hasattr(adapter_info, "started_at") and adapter_info.started_at
-                                                else None
-                                            ),
-                                            **metrics.get("custom_metrics", {}),
-                                        },
+                                    metrics = await self._get_adapter_metrics(adapter_instance)
+                                    adapter_metrics[adapter_info.adapter_id] = self._create_telemetry_data(
+                                        metrics, adapter_info, adapter_info.adapter_id, healthy=True
                                     )
                                 except Exception as e:
                                     logger.error(f"Error getting metrics from {adapter_info.adapter_id}: {e}")
@@ -849,13 +870,13 @@ class TelemetryAggregator:
                                     )
                             else:
                                 # Adapter is running but no metrics available
+                                uptime = 0
+                                if hasattr(adapter_info, "started_at") and adapter_info.started_at:
+                                    uptime = (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
+
                                 adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                    healthy=True,  # It's running, so consider it healthy
-                                    uptime_seconds=(
-                                        (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
-                                        if hasattr(adapter_info, "started_at") and adapter_info.started_at
-                                        else 0
-                                    ),
+                                    healthy=True,
+                                    uptime_seconds=uptime,
                                     error_count=0,
                                     requests_handled=0,
                                     error_rate=0.0,
@@ -873,41 +894,18 @@ class TelemetryAggregator:
         # Fallback: Check bootstrap adapters directly
         if self.runtime and hasattr(self.runtime, "adapters"):
             for adapter in self.runtime.adapters:
-                adapter_class_name = adapter.__class__.__name__.lower()
-
-                if adapter_type in adapter_class_name:
-                    # Generate adapter_id for bootstrap adapters
+                if adapter_type in adapter.__class__.__name__.lower():
                     adapter_id = f"{adapter_type}_bootstrap"
 
-                    if hasattr(adapter, "get_metrics"):
-                        try:
-                            metrics = adapter.get_metrics()
-                            if asyncio.iscoroutinefunction(adapter.get_metrics):
-                                metrics = await adapter.get_metrics()
-
-                            adapter_metrics[adapter_id] = ServiceTelemetryData(
-                                healthy=True,
-                                uptime_seconds=metrics.get("uptime_seconds", 0.0),
-                                error_count=metrics.get("error_count", 0),
-                                requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
-                                error_rate=metrics.get("error_rate", 0.0),
-                                memory_mb=metrics.get("memory_mb"),
-                                custom_metrics={"adapter_id": adapter_id, **metrics.get("custom_metrics", {})},
-                            )
-                        except Exception as e:
-                            logger.error(f"Error getting metrics from {adapter_id}: {e}")
-                            adapter_metrics[adapter_id] = ServiceTelemetryData(
-                                healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0
-                            )
-                    else:
-                        # No metrics method = unhealthy. NO FAKE DATA.
+                    try:
+                        metrics = await self._get_adapter_metrics(adapter)
+                        adapter_metrics[adapter_id] = self._create_telemetry_data(
+                            metrics, None, adapter_id, healthy=bool(metrics)
+                        )
+                    except Exception as e:
+                        logger.error(f"Error getting metrics from {adapter_id}: {e}")
                         adapter_metrics[adapter_id] = ServiceTelemetryData(
-                            healthy=False,  # NO DEFAULT HEALTHY
-                            uptime_seconds=0.0,  # NO FAKE UPTIME
-                            error_count=0,
-                            requests_handled=0,
-                            error_rate=0.0,
-                            custom_metrics={"adapter_id": adapter_id},
+                            healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0
                         )
 
         return adapter_metrics
@@ -983,6 +981,26 @@ class TelemetryAggregator:
 
         return total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates
 
+    def _extract_metric_value(self, metrics_obj: Any, metric_name: str, default: Any = 0) -> Any:
+        """Extract a metric value from ServiceTelemetryData or dict."""
+        if isinstance(metrics_obj, ServiceTelemetryData):
+            if metrics_obj.custom_metrics:
+                return metrics_obj.custom_metrics.get(metric_name, default)
+        elif isinstance(metrics_obj, dict):
+            return metrics_obj.get(metric_name, default)
+        return default
+
+    def _extract_governance_metrics(
+        self, telemetry: Dict, service_name: str, metric_mappings: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Extract metrics from a governance service."""
+        results = {}
+        if "governance" in telemetry and service_name in telemetry["governance"]:
+            metrics = telemetry["governance"][service_name]
+            for covenant_key, service_key in metric_mappings.items():
+                results[covenant_key] = self._extract_metric_value(metrics, service_key)
+        return results
+
     def compute_covenant_metrics(
         self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]
     ) -> Dict[str, Union[float, int, str]]:
@@ -1001,53 +1019,28 @@ class TelemetryAggregator:
         }
 
         try:
-            # Extract from WiseAuthority metrics
-            if "governance" in telemetry and "wise_authority" in telemetry["governance"]:
-                wa_metrics = telemetry["governance"]["wise_authority"]
-                if isinstance(wa_metrics, ServiceTelemetryData):
-                    # Extract from custom_metrics if available
-                    if wa_metrics.custom_metrics:
-                        covenant_metrics["wise_authority_deferrals"] = wa_metrics.custom_metrics.get(
-                            "deferral_count", 0
-                        )
-                        covenant_metrics["ethical_decisions"] = wa_metrics.custom_metrics.get("guidance_requests", 0)
-                else:
-                    # Legacy dict handling
-                    covenant_metrics["wise_authority_deferrals"] = wa_metrics.get("deferral_count", 0)
-                    covenant_metrics["ethical_decisions"] = wa_metrics.get("guidance_requests", 0)
+            # Extract metrics from each governance service
+            wa_metrics = self._extract_governance_metrics(
+                telemetry,
+                "wise_authority",
+                {"wise_authority_deferrals": "deferral_count", "ethical_decisions": "guidance_requests"},
+            )
+            covenant_metrics.update(wa_metrics)
 
-            # Extract from AdaptiveFilter metrics
-            if "governance" in telemetry and "adaptive_filter" in telemetry["governance"]:
-                filter_metrics = telemetry["governance"]["adaptive_filter"]
-                if isinstance(filter_metrics, ServiceTelemetryData):
-                    if filter_metrics.custom_metrics:
-                        covenant_metrics["filter_interventions"] = filter_metrics.custom_metrics.get(
-                            "filter_actions", 0
-                        )
-                else:
-                    covenant_metrics["filter_interventions"] = filter_metrics.get("filter_actions", 0)
+            filter_metrics = self._extract_governance_metrics(
+                telemetry, "adaptive_filter", {"filter_interventions": "filter_actions"}
+            )
+            covenant_metrics.update(filter_metrics)
 
-            # Extract from Visibility metrics
-            if "governance" in telemetry and "visibility" in telemetry["governance"]:
-                vis_metrics = telemetry["governance"]["visibility"]
-                if isinstance(vis_metrics, ServiceTelemetryData):
-                    if vis_metrics.custom_metrics:
-                        covenant_metrics["transparency_score"] = vis_metrics.custom_metrics.get(
-                            "transparency_index", 0.0
-                        )
-                else:
-                    covenant_metrics["transparency_score"] = vis_metrics.get("transparency_index", 0.0)
+            vis_metrics = self._extract_governance_metrics(
+                telemetry, "visibility", {"transparency_score": "transparency_index"}
+            )
+            covenant_metrics.update(vis_metrics)
 
-            # Extract from SelfObservation metrics
-            if "governance" in telemetry and "self_observation" in telemetry["governance"]:
-                so_metrics = telemetry["governance"]["self_observation"]
-                if isinstance(so_metrics, ServiceTelemetryData):
-                    if so_metrics.custom_metrics:
-                        covenant_metrics["self_observation_insights"] = so_metrics.custom_metrics.get(
-                            "insights_generated", 0
-                        )
-                else:
-                    covenant_metrics["self_observation_insights"] = so_metrics.get("insights_generated", 0)
+            so_metrics = self._extract_governance_metrics(
+                telemetry, "self_observation", {"self_observation_insights": "insights_generated"}
+            )
+            covenant_metrics.update(so_metrics)
 
             # Calculate compliance rate (simplified - ratio of deferrals to decisions)
             if covenant_metrics["ethical_decisions"] > 0:
@@ -2117,14 +2110,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         """Get the service type."""
         return ServiceType.TELEMETRY
 
-    async def get_aggregated_telemetry(self) -> AggregatedTelemetryResponse:
-        """
-        Get aggregated telemetry from all services using parallel collection.
-
-        Returns enterprise telemetry with all service metrics collected in parallel.
-        """
-        # Initialize aggregator if needed
-        if not self._telemetry_aggregator and self._service_registry:
+    def _init_telemetry_aggregator(self) -> None:
+        """Initialize telemetry aggregator with debug logging."""
+        if self._service_registry:
             logger.debug(f"[TELEMETRY] Creating TelemetryAggregator with registry {id(self._service_registry)}")
             try:
                 all_services = self._service_registry.get_all_services()
@@ -2139,9 +2127,52 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             if self._runtime:
                 logger.debug(f"[TELEMETRY] Runtime has bus_manager: {hasattr(self._runtime, 'bus_manager')}")
                 logger.debug(f"[TELEMETRY] Runtime has memory_service: {hasattr(self._runtime, 'memory_service')}")
+
             self._telemetry_aggregator = TelemetryAggregator(
                 service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )
+
+    def _check_cache(self, cache_key: str, now: datetime) -> Optional[AggregatedTelemetryResponse]:
+        """Check cache for valid telemetry data."""
+        if cache_key in self._telemetry_aggregator.cache:
+            cached_time, cached_data = self._telemetry_aggregator.cache[cache_key]
+            if now - cached_time < self._telemetry_aggregator.cache_ttl:
+                if isinstance(cached_data, AggregatedTelemetryResponse):
+                    if cached_data.metadata:
+                        cached_data.metadata.cache_hit = True
+                    return cached_data
+                return cached_data
+        return None
+
+    def _convert_telemetry_to_services(self, telemetry: Dict) -> Dict[str, ServiceTelemetryData]:
+        """Convert nested telemetry dict to flat service dict."""
+        services_data = {}
+        for category, services in telemetry.items():
+            if isinstance(services, dict):
+                for service_name, service_info in services.items():
+                    if isinstance(service_info, ServiceTelemetryData):
+                        services_data[service_name] = service_info
+                    elif isinstance(service_info, dict):
+                        services_data[service_name] = ServiceTelemetryData(
+                            healthy=service_info.get("healthy", False),
+                            uptime_seconds=service_info.get("uptime_seconds"),
+                            error_count=service_info.get("error_count"),
+                            requests_handled=service_info.get("request_count"),
+                            error_rate=service_info.get("error_rate"),
+                            memory_mb=service_info.get("memory_mb"),
+                            custom_metrics=service_info.get("custom_metrics"),
+                        )
+        return services_data
+
+    async def get_aggregated_telemetry(self) -> AggregatedTelemetryResponse:
+        """
+        Get aggregated telemetry from all services using parallel collection.
+
+        Returns enterprise telemetry with all service metrics collected in parallel.
+        """
+        # Initialize aggregator if needed
+        if not self._telemetry_aggregator and self._service_registry:
+            self._init_telemetry_aggregator()
 
         if not self._telemetry_aggregator:
             logger.warning("No telemetry aggregator available")
@@ -2161,16 +2192,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         cache_key = "aggregated_telemetry"
         now = datetime.now(timezone.utc)
 
-        if cache_key in self._telemetry_aggregator.cache:
-            cached_time, cached_data = self._telemetry_aggregator.cache[cache_key]
-            if now - cached_time < self._telemetry_aggregator.cache_ttl:
-                # If cached data is already a response object, update its metadata
-                if isinstance(cached_data, AggregatedTelemetryResponse):
-                    if cached_data.metadata:
-                        cached_data.metadata.cache_hit = True
-                    return cached_data
-                # Legacy dict format (should not happen with new code)
-                return cached_data
+        cached_result = self._check_cache(cache_key, now)
+        if cached_result:
+            return cached_result
 
         # Collect from all services in parallel
         telemetry = await self._telemetry_aggregator.collect_all_parallel()
@@ -2178,24 +2202,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         # Calculate aggregates
         aggregates = self._telemetry_aggregator.calculate_aggregates(telemetry)
 
-        # Convert nested telemetry dict to flat service dict with ServiceTelemetryData objects
-        services_data = {}
-        for category, services in telemetry.items():
-            if isinstance(services, dict):
-                for service_name, service_info in services.items():
-                    # Check if it's already a ServiceTelemetryData object
-                    if isinstance(service_info, ServiceTelemetryData):
-                        services_data[service_name] = service_info
-                    elif isinstance(service_info, dict):
-                        services_data[service_name] = ServiceTelemetryData(
-                            healthy=service_info.get("healthy", False),
-                            uptime_seconds=service_info.get("uptime_seconds"),
-                            error_count=service_info.get("error_count"),
-                            requests_handled=service_info.get("request_count"),
-                            error_rate=service_info.get("error_rate"),
-                            memory_mb=service_info.get("memory_mb"),
-                            custom_metrics=service_info.get("custom_metrics"),
-                        )
+        # Convert nested telemetry dict to flat service dict
+        services_data = self._convert_telemetry_to_services(telemetry)
 
         # Combine telemetry and aggregates into typed response
         result = AggregatedTelemetryResponse(

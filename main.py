@@ -35,6 +35,7 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     def signal_handler(signum, frame):
         if shutdown_initiated["value"]:
             logger.warning(f"Signal {signum} received again, forcing immediate exit")
+            logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT signal_handler double signal")
             sys.exit(1)
 
         shutdown_initiated["value"] = True
@@ -44,6 +45,7 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
             runtime.request_shutdown(f"Signal {signum}")
         except Exception as e:
             logger.error(f"Error during shutdown request: {e}")
+            logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT signal_handler error")
             sys.exit(1)
 
     signal.signal(signal.SIGTERM, signal_handler)
@@ -303,8 +305,10 @@ def main(
             # Force immediate exit to avoid hanging in subprocess
             # Use os._exit only when running under coverage
             if sys.gettrace() is not None or "coverage" in sys.modules:
+                logger.info("DEBUG: EXITING NOW VIA os._exit(1) AT _handle_precommit_wrapper coverage")
                 os._exit(1)
             else:
+                logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT _handle_precommit_wrapper")
                 sys.exit(1)
 
         # Handle mock LLM as a module to load
@@ -451,9 +455,10 @@ def main(
 
                 # Force exit to handle the blocking input thread
                 logger.info("Forcing exit to handle blocking CLI input thread")
-                import os
-
-                os._exit(0)
+                # COMMENTED OUT: This was causing immediate exit before graceful shutdown could complete
+                # import os
+                # logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT monitor_shutdown for CLI adapter")
+                # os._exit(0)
 
             monitor_task = asyncio.create_task(monitor_shutdown())
 
@@ -499,17 +504,20 @@ def main(
             await asyncio.gather(*flush_tasks, return_exceptions=True)
             import os
 
+            logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI runtime completed")
             os._exit(0)
 
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
         logger.info("Interrupted by user, exiting...")
+        logger.info("DEBUG: EXITING NOW VIA sys.exit(0) AT KeyboardInterrupt in main")
         sys.exit(0)
     except SystemExit:
         raise  # Re-raise SystemExit to exit with the correct code
     except Exception as e:
         logger.error(f"Fatal error in main: {e}", exc_info=True)
+        logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT Fatal error in main")
         sys.exit(1)
 
     # Ensure clean exit after successful run
@@ -525,6 +533,7 @@ def main(
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
         import os
 
+        logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
         os._exit(0)
 
     # For CLI mode, force exit to handle blocking input thread
@@ -542,8 +551,10 @@ def main(
         time.sleep(0.1)  # Brief pause to ensure logs are written
         import os
 
+        logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI mode force exit")
         os._exit(0)
 
+    logger.info("DEBUG: EXITING NOW VIA sys.exit(0) AT end of main")
     sys.exit(0)
 
 

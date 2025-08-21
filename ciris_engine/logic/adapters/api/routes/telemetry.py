@@ -53,6 +53,7 @@ from .telemetry_models import (
     TimePeriod,
     TraceSpan,
 )
+from .telemetry_otlp import convert_logs_to_otlp_json, convert_to_otlp_json, convert_traces_to_otlp_json
 from .telemetry_resource_helpers import (
     MetricValueExtractor,
     ResourceDataPointBuilder,
@@ -399,6 +400,142 @@ async def _get_system_overview(request: Request) -> SystemOverview:
 
 
 # Endpoints
+
+
+@router.get("/otlp/{signal}", response_model=None)
+async def get_otlp_telemetry(
+    signal: str,
+    request: Request,
+    auth: AuthContext = Depends(require_observer),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum items to return"),
+    start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
+    end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
+) -> Dict:
+    """
+    OpenTelemetry Protocol (OTLP) JSON export.
+
+    Export telemetry data in OTLP JSON format for OpenTelemetry collectors.
+
+    Supported signals:
+    - metrics: System and service metrics
+    - traces: Distributed traces with spans
+    - logs: Structured log records
+
+    Returns OTLP JSON formatted data compatible with OpenTelemetry v1.7.0 specification.
+    """
+
+    if signal not in ["metrics", "traces", "logs"]:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid signal type: {signal}. Must be one of: metrics, traces, logs"
+        )
+
+    try:
+        if signal == "metrics":
+            # Get metrics from unified telemetry
+            telemetry_service = request.app.state.telemetry_service
+            if not telemetry_service:
+                raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+
+            # Get aggregated telemetry
+            aggregated = await telemetry_service.get_aggregated_telemetry()
+
+            # Convert to dict for OTLP conversion
+            telemetry_dict = {
+                "system_healthy": aggregated.system_healthy,
+                "services_online": aggregated.services_online,
+                "services_total": aggregated.services_total,
+                "overall_error_rate": aggregated.overall_error_rate,
+                "overall_uptime_seconds": aggregated.overall_uptime_seconds,
+                "total_errors": aggregated.total_errors,
+                "total_requests": aggregated.total_requests,
+                "services": aggregated.services,
+            }
+
+            # Add covenant metrics if available
+            if hasattr(aggregated, "covenant_metrics"):
+                telemetry_dict["covenant_metrics"] = aggregated.covenant_metrics
+
+            return convert_to_otlp_json(telemetry_dict)
+
+        elif signal == "traces":
+            # Get traces from visibility service
+            visibility_service = request.app.state.visibility_service
+            if not visibility_service:
+                raise HTTPException(status_code=503, detail="Visibility service not available")
+
+            # Get recent traces
+            traces = []
+            try:
+                # Get thought traces
+                thoughts = await visibility_service.get_recent_thoughts(limit=limit)
+                for thought in thoughts:
+                    trace_data = {
+                        "trace_id": getattr(thought, "id", str(uuid.uuid4())),
+                        "timestamp": getattr(thought, "timestamp", datetime.now(timezone.utc)).isoformat(),
+                        "operation": "thought_processing",
+                        "cognitive_state": getattr(thought, "cognitive_state", "unknown"),
+                        "thoughts": [],
+                    }
+
+                    # Add thought steps if available
+                    if hasattr(thought, "thought") and hasattr(thought.thought, "steps"):
+                        trace_data["thoughts"] = [
+                            {"content": step.content if hasattr(step, "content") else str(step)}
+                            for step in thought.thought.steps
+                        ]
+                    elif hasattr(thought, "content"):
+                        trace_data["thoughts"] = [{"content": thought.content}]
+
+                    traces.append(trace_data)
+            except Exception as e:
+                logger.warning(f"Failed to get traces: {e}")
+
+            return convert_traces_to_otlp_json(traces)
+
+        elif signal == "logs":
+            # Get logs from audit service
+            audit_service = request.app.state.audit_service
+            if not audit_service:
+                raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
+
+            # Query audit logs
+            logs = []
+            try:
+                entries = await audit_service.query_events(
+                    start_time=start_time or datetime.now(timezone.utc) - timedelta(hours=1),
+                    end_time=end_time or datetime.now(timezone.utc),
+                    limit=limit,
+                )
+
+                for entry in entries:
+                    log_data = {
+                        "timestamp": getattr(entry, "timestamp", datetime.now(timezone.utc)).isoformat(),
+                        "level": getattr(entry, "severity", "INFO"),
+                        "message": getattr(entry, "message", "") or getattr(entry, "description", ""),
+                        "service": getattr(entry, "service", "unknown"),
+                        "component": getattr(entry, "component", ""),
+                        "action": getattr(entry, "action", ""),
+                    }
+
+                    # Add correlation ID if available
+                    if hasattr(entry, "correlation_id"):
+                        log_data["correlation_id"] = entry.correlation_id
+
+                    # Add user context if available
+                    if hasattr(entry, "user_id"):
+                        log_data["user_id"] = entry.user_id
+
+                    logs.append(log_data)
+            except Exception as e:
+                logger.warning(f"Failed to get logs: {e}")
+
+            return convert_logs_to_otlp_json(logs)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OTLP export failed for {signal}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export {signal} in OTLP format")
 
 
 @router.get("/overview", response_model=SuccessResponse[SystemOverview])

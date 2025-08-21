@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 194,
-    "files_affected": 80,
+    "occurrences": 204,
+    "files_affected": 81,
     "categories": {
-      "generic_data": 172,
+      "generic_data": 182,
       "parameters": 5,
       "configuration": 3,
       "api_request": 1,
@@ -753,6 +753,86 @@
         "class": null,
         "function": "get_memory_stats",
         "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 20,
+        "class": null,
+        "function": "convert_to_otlp_json",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 25,
+        "class": null,
+        "function": "convert_to_otlp_json",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 282,
+        "class": null,
+        "function": "_create_gauge_metric",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 300,
+        "class": null,
+        "function": "_create_counter_metric",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 330,
+        "class": null,
+        "function": "_create_histogram_metric",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 356,
+        "class": null,
+        "function": "convert_traces_to_otlp_json",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 361,
+        "class": null,
+        "function": "convert_traces_to_otlp_json",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 471,
+        "class": null,
+        "function": "convert_logs_to_otlp_json",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 476,
+        "class": null,
+        "function": "convert_logs_to_otlp_json",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 586,
+        "class": null,
+        "function": "validate_otlp_json",
+        "context": "function_parameter",
         "usage_hint": "generic_data"
       },
       {
@@ -2920,7 +3000,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 362,
-    "files_affected": 115
+    "occurrences": 372,
+    "files_affected": 116
   }
 }

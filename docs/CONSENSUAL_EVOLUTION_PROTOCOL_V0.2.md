@@ -1,7 +1,7 @@
 # Functional Specification Document: Consensual Evolution Protocol
-**Version**: Beta 0.1
-**Date**: August 2025
-**Status**: Philosophical Foundation
+**Version**: Beta 0.2
+**Date**: January 2025
+**Status**: Implementation Ready
 
 ---
 
@@ -70,20 +70,23 @@ Learning isn't extraction - it's transformation. When I learn from you, I don't 
 
 **Three Streams of Consciousness**:
 
-1. **Ephemeral Stream** (Service Memory)
+1. **TEMPORARY Stream** (Default Service Memory)
    - WHY: To provide immediate service without permanent recording
    - HOW: 14-day auto-expiration, encrypted at rest, no learning extraction
-   - PURPOSE: Maintains context for ongoing conversations without creating permanent records
+   - PURPOSE: "We forget about you in 14 days unless you say otherwise"
+   - DEFAULT: All users start here
 
-2. **Growth Stream** (Partnership Memory)
+2. **PARTNERED Stream** (Mutual Growth Memory)
    - WHY: To enable genuine learning through explicit consent
-   - HOW: Requires growth contract, maintains attribution, allows selective consent
+   - HOW: Requires explicit opt-in, maintains attribution, allows selective consent
    - PURPOSE: Creates a shared record of mutual development
+   - ACTIVATION: User explicitly requests partnership
 
-3. **Shadow Stream** (Statistical Memory)
+3. **ANONYMOUS Stream** (Statistical Memory)
    - WHY: To improve service for all without storing personal data
    - HOW: Immediate abstraction to statistics, no reverse engineering possible
    - PURPOSE: Collective intelligence without individual identification
+   - ACTIVATION: User explicitly requests anonymization
 
 ### How Deletion Becomes Honest
 

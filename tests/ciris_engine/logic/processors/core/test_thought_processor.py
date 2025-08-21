@@ -75,6 +75,8 @@ class TestThoughtProcessor:
     def mock_persistence(self) -> Generator[Mock, None, None]:
         """Create mock persistence functions."""
         # Patch persistence in multiple places where it's imported
+        from unittest.mock import AsyncMock
+
         with patch("ciris_engine.logic.processors.core.thought_processor.persistence") as mock_persist, patch(
             "ciris_engine.logic.persistence"
         ) as mock_persist_global:
@@ -96,6 +98,7 @@ class TestThoughtProcessor:
             mock_persist.update_thought_status = Mock()
             mock_persist.update_task_status = Mock()
             mock_persist.add_correlation = Mock()
+            mock_persist.add_correlation_with_telemetry = AsyncMock(return_value="test_correlation_id")
             mock_persist.update_correlation = Mock()
 
             # Configure the global mock the same way
@@ -105,6 +108,7 @@ class TestThoughtProcessor:
             mock_persist_global.update_thought_status = mock_persist.update_thought_status
             mock_persist_global.update_task_status = mock_persist.update_task_status
             mock_persist_global.add_correlation = mock_persist.add_correlation
+            mock_persist_global.add_correlation_with_telemetry = mock_persist.add_correlation_with_telemetry
             mock_persist_global.update_correlation = mock_persist.update_correlation
 
             yield mock_persist

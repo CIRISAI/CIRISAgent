@@ -41,6 +41,8 @@ class NodeType(str, Enum):
     SOCIAL = "social"
     IDENTITY = "identity"
     OBSERVATION = "observation"
+    CONSENT = "consent"
+    DECAY = "decay"
 
 
 class ConfigNodeType(str, Enum):

@@ -1341,7 +1341,7 @@
       },
       {
         "file": "ciris_engine/schemas/services/graph_core.py",
-        "line": 96,
+        "line": 98,
         "class": "GraphNode",
         "function": null,
         "context": "other",

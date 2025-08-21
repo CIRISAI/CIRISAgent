@@ -783,7 +783,7 @@ async def get_reasoning_traces(
                                 decision_count=len(trace.decisions) if hasattr(trace, "decisions") else 0,
                                 reasoning_depth=len(trace.thought_steps) if hasattr(trace, "thought_steps") else 0,
                                 thoughts=[
-                                    ThoughtStep(
+                                    APIResponseThoughtStep(
                                         step=i,
                                         content=thought.content,
                                         timestamp=thought.timestamp,

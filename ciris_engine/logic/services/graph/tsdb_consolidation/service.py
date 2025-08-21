@@ -160,7 +160,7 @@ class TSDBConsolidationService(BaseGraphService):
             logger.warning("TSDBConsolidationService already running")
             return
 
-        super().start()
+        await super().start()
         self._running = True
         self._start_time = self._now()
 

@@ -1,4 +1,4 @@
-# Release Notes - v1.4.7-beta
+# Release Notes - v1.4.6-beta
 
 ## Overview
 This release introduces distributed tracing support with comprehensive task/thought correlation, fixes critical UI issues, and improves the memorize handler guidance. All traces are now properly linked to their originating tasks and thoughts, ensuring full observability across the CIRIS system.

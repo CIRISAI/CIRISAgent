@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
-from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 
@@ -17,18 +16,20 @@ from .constants import ERROR_ADAPTER_MANAGER_NOT_AVAILABLE, ERROR_TIME_SERVICE_N
 logger = logging.getLogger(__name__)
 
 
-class APIRuntimeControlService(BaseService, Service):
+class APIRuntimeControlService(Service):
     """Runtime control exposed through API."""
 
     def __init__(self, runtime: Any, time_service: Optional[Any] = None) -> None:
         """Initialize API runtime control."""
-        # Initialize BaseService for telemetry
-        super().__init__(time_service=time_service, service_name="APIRuntimeControlService")
+        super().__init__()
 
         self.runtime = runtime
+        self._time_service = time_service  # Store for telemetry compatibility
         self._paused = False
         self._pause_reason: Optional[str] = None
         self._pause_time: Optional[datetime] = None
+        self._start_time: Optional[datetime] = None  # For uptime tracking
+        self._started = False  # Track if service has been started
 
         # Adapter manager will be initialized later when services are available
         self.adapter_manager: Optional[RuntimeAdapterManager] = None
@@ -138,8 +139,9 @@ class APIRuntimeControlService(BaseService, Service):
 
     async def start(self) -> None:
         """Start the runtime control service."""
-        # Call parent start to properly initialize BaseService
-        await super().start()
+        # Track start time for telemetry
+        self._start_time = datetime.now(timezone.utc)
+        self._started = True
 
         # Initialize adapter manager now that services should be available
         if self.runtime and hasattr(self.runtime, "time_service") and self.runtime.time_service:
@@ -181,32 +183,29 @@ class APIRuntimeControlService(BaseService, Service):
             },
         )
 
-    def _check_dependencies(self) -> bool:
-        """Check if all dependencies are satisfied."""
-        return self.runtime is not None
+    def get_status(self) -> ServiceStatus:
+        """Get current service status."""
+        uptime = 0.0
+        if self._start_time:
+            uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
 
-    def _collect_custom_metrics(self) -> Dict[str, float]:
-        """Collect runtime control specific metrics."""
-        return {
-            "paused": float(self._paused),
-            "pause_duration": float(
-                (datetime.now(timezone.utc) - self._pause_time).total_seconds()
-                if self._pause_time and self._paused
-                else 0
-            ),
-            "adapter_manager_available": 1.0 if self.adapter_manager else 0.0,
-        }
-
-    def _get_actions(self) -> List[str]:
-        """Get the list of actions this service supports."""
-        return [
-            "pause_processing",
-            "resume_processing",
-            "emergency_shutdown",
-            "get_adapter_status",
-            "get_processor_status",
-            "get_processor_queue_status",
-        ]
+        return ServiceStatus(
+            service_name="APIRuntimeControlService",
+            service_type="RUNTIME_CONTROL",
+            is_healthy=self._started,
+            uptime_seconds=uptime,
+            last_error=None,
+            metrics={
+                "paused": float(self._paused),
+                "pause_duration": float(
+                    (datetime.now(timezone.utc) - self._pause_time).total_seconds()
+                    if self._pause_time and self._paused
+                    else 0
+                ),
+                "adapter_manager_available": 1.0 if self.adapter_manager else 0.0,
+            },
+            last_health_check=datetime.now(timezone.utc),
+        )
 
     # Adapter Management Methods
 

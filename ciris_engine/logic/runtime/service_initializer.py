@@ -854,9 +854,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.incident_management_service = IncidentManagementService(
             memory_bus=self.bus_manager.memory, time_service=self.time_service
         )
-        # Note: start() is now async and will be called by the runtime during startup
+        await self.incident_management_service.start()
         self._services_started_count += 1
-        logger.info("Incident management service initialized")
+        logger.info("Incident management service initialized and started")
 
     def verify_core_services(self) -> bool:
         """Verify all core services are operational."""

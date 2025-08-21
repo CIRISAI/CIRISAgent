@@ -812,14 +812,38 @@ async def get_reasoning_traces(
                         reasoning_depth=current.get("depth", 0),
                         thoughts=[
                             ThoughtStep(
-                                step=t.get("step", i),
-                                content=t.get("content", ""),
-                                timestamp=datetime.fromisoformat(
-                                    t.get("timestamp", datetime.now(timezone.utc).isoformat())
+                                step=i,
+                                content=(
+                                    t.thought.content
+                                    if hasattr(t, "thought") and hasattr(t.thought, "content")
+                                    else t.get("content", "") if isinstance(t, dict) else str(t)
                                 ),
-                                depth=t.get("depth", 0),
-                                action=t.get("action"),
-                                confidence=t.get("confidence"),
+                                timestamp=(
+                                    t.thought.timestamp
+                                    if hasattr(t, "thought") and hasattr(t.thought, "timestamp")
+                                    else (
+                                        datetime.fromisoformat(
+                                            t.get("timestamp", datetime.now(timezone.utc).isoformat())
+                                        )
+                                        if isinstance(t, dict)
+                                        else datetime.now(timezone.utc)
+                                    )
+                                ),
+                                depth=(
+                                    t.thought.depth
+                                    if hasattr(t, "thought") and hasattr(t.thought, "depth")
+                                    else t.get("depth", 0) if isinstance(t, dict) else 0
+                                ),
+                                action=(
+                                    t.thought.action
+                                    if hasattr(t, "thought") and hasattr(t.thought, "action")
+                                    else t.get("action") if isinstance(t, dict) else None
+                                ),
+                                confidence=(
+                                    t.thought.confidence
+                                    if hasattr(t, "thought") and hasattr(t.thought, "confidence")
+                                    else t.get("confidence") if isinstance(t, dict) else None
+                                ),
                             )
                             for i, t in enumerate(current.get("thoughts", []))
                         ],

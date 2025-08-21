@@ -87,7 +87,7 @@ class ApiPlatform(Service):
         self.communication._app_state = self.app.state  # type: ignore[attr-defined]
 
         # Runtime control service
-        self.runtime_control = APIRuntimeControlService(runtime)
+        self.runtime_control = APIRuntimeControlService(runtime, time_service=getattr(runtime, "time_service", None))
 
         # Tool service
         self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))
@@ -175,6 +175,17 @@ class ApiPlatform(Service):
         # Set up message handling
         self._setup_message_handling()
 
+    def _log_service_registry(self, service: Any) -> None:
+        """Log service registry details."""
+        try:
+            all_services = service.get_all_services()
+            service_count = len(all_services) if hasattr(all_services, "__len__") else 0
+            logger.info(f"[API] Injected service_registry {id(service)} with {service_count} services")
+            service_names = [s.__class__.__name__ for s in all_services] if all_services else []
+            logger.info(f"[API] Services in injected registry: {service_names}")
+        except (TypeError, AttributeError):
+            logger.info("[API] Injected service_registry (mock or test mode)")
+
     def _inject_service(
         self, runtime_attr: str, app_state_name: str, handler: Callable[[Any], None] | None = None
     ) -> None:
@@ -188,7 +199,11 @@ class ApiPlatform(Service):
             if handler:
                 handler(service)
 
-            logger.info(f"Injected {runtime_attr}")
+            # Special logging for service_registry
+            if runtime_attr == "service_registry":
+                self._log_service_registry(service)
+            else:
+                logger.info(f"Injected {runtime_attr}")
 
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""
@@ -270,6 +285,11 @@ class ApiPlatform(Service):
         """Start the API server."""
         logger.info(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
         await super().start()
+
+        # Track start time for metrics
+        import time
+
+        self._start_time = time.time()
 
         # Start the communication service
         await self.communication.start()
@@ -385,8 +405,14 @@ class ApiPlatform(Service):
 
     def get_metrics(self) -> dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
+        # Initialize base metrics
+        import time
+
+        uptime = time.time() - self._start_time if hasattr(self, "_start_time") else 0.0
+        metrics = {
+            "uptime_seconds": uptime,
+            "healthy": self.is_healthy(),
+        }
 
         # Add v1.4.3 specific metrics
         try:
@@ -395,7 +421,12 @@ class ApiPlatform(Service):
             comm_metrics = comm_status.metrics if hasattr(comm_status, "metrics") else {}
 
             # Get active WebSocket connections count
-            active_connections = len(self.communication._websocket_clients)
+            active_connections = 0
+            if hasattr(self.communication, "_websocket_clients"):
+                try:
+                    active_connections = len(self.communication._websocket_clients)
+                except (TypeError, AttributeError):
+                    active_connections = 0
 
             # Extract values with defaults
             requests_total = float(comm_metrics.get("requests_handled", 0))

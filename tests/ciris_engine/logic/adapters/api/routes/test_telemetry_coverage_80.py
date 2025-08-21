@@ -289,6 +289,7 @@ def app_with_detailed_services():
         audit_entries.append(entry)
 
     audit_service.query_entries = AsyncMock(return_value=audit_entries)
+    audit_service.query_events = AsyncMock(return_value=audit_entries)  # Add query_events method
     app.state.audit_service = audit_service
 
     # Incident management service

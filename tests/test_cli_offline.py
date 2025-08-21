@@ -24,6 +24,7 @@ def test_cli_offline_non_interactive(monkeypatch):
     runtime_mock.shutdown = AsyncMock()
     runtime_mock.startup_channel_id = "cli"
     runtime_mock._shutdown_complete = True  # Mark as shutdown complete to prevent monitor task from forcing exit
+    runtime_mock._shutdown_event = AsyncMock()  # Mock the shutdown event for new event-based approach
 
     def mock_runtime_init(modes: List[str], **kwargs):
         return runtime_mock

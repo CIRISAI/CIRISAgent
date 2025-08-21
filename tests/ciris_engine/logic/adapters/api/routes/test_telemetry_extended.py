@@ -400,6 +400,7 @@ def full_app():
     ]
 
     audit_service.query_entries = AsyncMock(return_value=audit_entries)
+    audit_service.query_events = AsyncMock(return_value=audit_entries)  # Add query_events method
     audit_service.get_metrics = Mock(return_value={"total_events": 5000, "events_24h": 500})
     app.state.audit_service = audit_service
 
@@ -945,13 +946,13 @@ class TestUnifiedEndpointExtended:
         if "_metadata" in data:
             assert "collection_time_ms" in data["_metadata"]
 
-    def test_unified_fallback_path(self, full_app):
-        """Test unified endpoint fallback when get_aggregated_telemetry doesn't exist."""
-        # Remove the get_aggregated_telemetry method to trigger fallback
+    def test_unified_no_fallback_philosophy(self, full_app):
+        """Test unified endpoint follows NO FALLBACKS philosophy when get_aggregated_telemetry doesn't exist."""
+        # Remove the get_aggregated_telemetry method to test NO FALLBACKS behavior
         if hasattr(full_app.state.telemetry_service, "get_aggregated_telemetry"):
             delattr(full_app.state.telemetry_service, "get_aggregated_telemetry")
 
-        # Ensure telemetry_service still has get_metrics for fallback path
+        # Even if telemetry_service has get_metrics, we don't fall back
         if not hasattr(full_app.state.telemetry_service, "get_metrics"):
             full_app.state.telemetry_service.get_metrics = Mock(
                 return_value={"fallback_metrics": 100, "test_metric": 50}
@@ -960,11 +961,11 @@ class TestUnifiedEndpointExtended:
         client = TestClient(full_app)
 
         response = client.get("/telemetry/unified")
-        assert response.status_code == 200
+        # Should return 503 per NO FALLBACKS philosophy - fail fast and loud
+        assert response.status_code == 503
 
         data = response.json()
-        # Fallback path should still return valid structure
-        assert "timestamp" in data or "services" in data
+        assert "NO FALLBACKS" in data["detail"] or "get_aggregated_telemetry" in data["detail"]
 
 
 class TestResourceHistoryEndpoint:

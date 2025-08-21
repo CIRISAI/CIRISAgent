@@ -23,6 +23,7 @@ def test_run_discord_uses_env(monkeypatch):
     runtime_mock.shutdown = AsyncMock()
     runtime_mock.startup_channel_id = "111"
     runtime_mock._shutdown_complete = True  # Mark as shutdown complete to prevent monitor task from forcing exit
+    runtime_mock._shutdown_event = AsyncMock()  # Mock the shutdown event for new event-based approach
 
     monkeypatch.setattr(
         "ciris_engine.logic.runtime.ciris_runtime.CIRISRuntime.__new__", lambda cls, *args, **kwargs: runtime_mock

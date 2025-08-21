@@ -8,7 +8,7 @@ into permanent summary records with proper edge connections.
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.services.graph.base import BaseGraphService
+from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -160,7 +160,7 @@ class TSDBConsolidationService(BaseGraphService):
             logger.warning("TSDBConsolidationService already running")
             return
 
-        super().start()
+        await super().start()
         self._running = True
         self._start_time = self._now()
 
@@ -208,7 +208,7 @@ class TSDBConsolidationService(BaseGraphService):
                 except asyncio.CancelledError:
                     pass  # NOSONAR - Expected when stopping the service in stop()
 
-        super().stop()
+        await super().stop()
         logger.info("TSDBConsolidationService stopped")
 
     async def _consolidation_loop(self) -> None:
@@ -1224,6 +1224,11 @@ class TSDBConsolidationService(BaseGraphService):
     def get_service_type(self) -> ServiceType:
         """Get the service type."""
         return ServiceType.TELEMETRY
+
+    def _get_actions(self) -> List[str]:
+        """Get list of actions this service can handle."""
+        # Graph services typically don't handle actions through buses
+        return []
 
     async def _run_extensive_consolidation(self) -> None:
         """

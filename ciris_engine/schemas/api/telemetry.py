@@ -26,8 +26,8 @@ class ServiceMetricValue(BaseModel):
     percentage: Optional[float] = Field(None, description="Percentage of total")
 
 
-class ThoughtStep(BaseModel):
-    """Individual thought step in reasoning."""
+class APIResponseThoughtStep(BaseModel):
+    """Individual thought step in API reasoning response."""
 
     step: int = Field(..., description="Step number")
     content: str = Field(..., description="Thought content")
@@ -35,6 +35,10 @@ class ThoughtStep(BaseModel):
     depth: int = Field(0, description="Reasoning depth")
     action: Optional[str] = Field(None, description="Action taken")
     confidence: Optional[float] = Field(None, description="Confidence level")
+
+
+# Backward compatibility alias - will be removed in future
+ThoughtStep = APIResponseThoughtStep
 
 
 class LogContext(BaseModel):

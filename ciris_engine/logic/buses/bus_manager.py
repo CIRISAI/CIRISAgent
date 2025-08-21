@@ -49,12 +49,12 @@ class BusManager:
         logger.debug(f"audit_service is None: {audit_service is None}")
 
         # Initialize all buses with proper dependencies
-        self.communication = CommunicationBus(service_registry, time_service)
-        self.memory = MemoryBus(service_registry, time_service, audit_service)
-        self.tool = ToolBus(service_registry, time_service)
-        self.wise = WiseBus(service_registry, time_service)
-        self.runtime_control = RuntimeControlBus(service_registry, time_service)
-        # LLM bus needs telemetry service for resource tracking
+        self.communication = CommunicationBus(service_registry, time_service, telemetry_service)
+        self.memory = MemoryBus(service_registry, time_service, audit_service, telemetry_service)
+        self.tool = ToolBus(service_registry, time_service, telemetry_service)
+        self.wise = WiseBus(service_registry, time_service, telemetry_service)
+        self.runtime_control = RuntimeControlBus(service_registry, time_service, telemetry_service)
+        # LLM bus already has telemetry service for resource tracking
         self.llm = LLMBus(service_registry, time_service, telemetry_service)
 
         # Store all buses for lifecycle management

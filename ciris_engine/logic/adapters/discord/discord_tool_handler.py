@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import discord
 
@@ -71,57 +71,14 @@ class DiscordToolHandler:
         """
         self.tool_registry = tool_registry
 
-    async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> ToolExecutionResult:
-        """Execute a registered Discord tool via the tool registry.
+    def _track_correlation_start(self, tool_name: str, typed_args: ToolExecutionArgs, correlation_id: str) -> None:
+        """Track the start of a tool execution in correlation system.
 
         Args:
-            tool_name: Name of the tool to execute
-            tool_args: Arguments to pass to the tool
-
-        Returns:
-            Tool execution result as a dictionary
-
-        Raises:
-            RuntimeError: If tool registry is not configured or tool not found
+            tool_name: Name of the tool being executed
+            typed_args: Typed tool arguments
+            correlation_id: Correlation ID for tracking
         """
-        if not self.tool_registry:
-            return ToolExecutionResult(
-                tool_name=tool_name,
-                status=ToolExecutionStatus.FAILED,
-                success=False,
-                data=None,
-                error="Tool registry not configured",
-                correlation_id=str(uuid.uuid4()),
-            )
-
-        handler = self.tool_registry.get_handler(tool_name)
-        if not handler:
-            return ToolExecutionResult(
-                tool_name=tool_name,
-                status=ToolExecutionStatus.FAILED,
-                success=False,
-                data=None,
-                error=f"Tool handler for '{tool_name}' not found",
-                correlation_id=str(uuid.uuid4()),
-            )
-
-        # Convert dict to typed args
-        typed_args = ToolExecutionArgs(
-            correlation_id=tool_args.get("correlation_id", str(uuid.uuid4())),
-            thought_id=tool_args.get("thought_id"),
-            task_id=tool_args.get("task_id"),
-            channel_id=tool_args.get("channel_id"),
-            timeout_seconds=tool_args.get("timeout_seconds", 30.0),
-            tool_specific_params={
-                k: v
-                for k, v in tool_args.items()
-                if k not in ["correlation_id", "thought_id", "task_id", "channel_id", "timeout_seconds"]
-            },
-        )
-
-        correlation_id = str(typed_args.correlation_id or uuid.uuid4())
-
-        # Create properly typed request data
         now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         request_data = ServiceRequestData(
             service_type="discord",
@@ -157,6 +114,174 @@ class DiscordToolHandler:
             time_service=self._time_service if self._time_service else TimeService(),
         )
 
+    def _process_tool_result(
+        self, tool_name: str, result_dict: Dict[str, Any], correlation_id: str, execution_time: float
+    ) -> ToolExecutionResult:
+        """Process the result from tool execution.
+
+        Args:
+            tool_name: Name of the tool that was executed
+            result_dict: Result dictionary from tool
+            correlation_id: Correlation ID for tracking
+            execution_time: Execution time in milliseconds
+
+        Returns:
+            ToolExecutionResult with processed data
+        """
+        # Create properly typed response data (for future use)
+        response_now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        ServiceResponseData(
+            success=result_dict.get("success", True),
+            result_summary=str(result_dict.get("data", {}))[:100] if result_dict.get("data") else None,
+            result_type="dict",
+            result_size=len(str(result_dict)),
+            error_type=None,
+            error_message=result_dict.get("error"),
+            error_traceback=None,
+            execution_time_ms=execution_time,
+            response_timestamp=response_now,
+            tokens_used=None,
+            memory_bytes=None,
+        )
+
+        # Create ToolExecutionResult
+        execution_result = ToolExecutionResult(
+            tool_name=tool_name,
+            status=(ToolExecutionStatus.COMPLETED if result_dict.get("success", True) else ToolExecutionStatus.FAILED),
+            success=result_dict.get("success", True),
+            data=result_dict,
+            error=result_dict.get("error"),
+            correlation_id=correlation_id or str(uuid.uuid4()),
+        )
+
+        if correlation_id:
+            self._tool_results[correlation_id] = execution_result
+            persistence.update_correlation(
+                CorrelationUpdateRequest(
+                    correlation_id=correlation_id,
+                    response_data=result_dict,
+                    status=ServiceCorrelationStatus.COMPLETED,
+                    metric_value=None,
+                    tags=None,
+                ),
+                correlation_or_time_service=self._time_service if self._time_service else TimeService(),
+            )
+
+        return execution_result
+
+    def _handle_tool_error(
+        self, tool_name: str, error: Exception, correlation_id: Optional[str]
+    ) -> ToolExecutionResult:
+        """Handle an error that occurred during tool execution.
+
+        Args:
+            tool_name: Name of the tool that failed
+            error: The exception that occurred
+            correlation_id: Optional correlation ID for tracking
+
+        Returns:
+            ToolExecutionResult with error information
+        """
+        error_result = {"error": str(error), "tool_name": tool_name}
+
+        if correlation_id:
+            persistence.update_correlation(
+                CorrelationUpdateRequest(
+                    correlation_id=correlation_id,
+                    response_data=error_result,
+                    status=ServiceCorrelationStatus.FAILED,
+                    metric_value=None,
+                    tags=None,
+                ),
+                correlation_or_time_service=self._time_service if self._time_service else TimeService(),
+            )
+
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            status=ToolExecutionStatus.FAILED,
+            success=False,
+            data=None,
+            error=str(error),
+            correlation_id=correlation_id or str(uuid.uuid4()),
+        )
+
+    def _create_error_result(
+        self, tool_name: str, error: str, correlation_id: Optional[str] = None
+    ) -> ToolExecutionResult:
+        """Create an error result for tool execution.
+
+        Args:
+            tool_name: Name of the tool
+            error: Error message
+            correlation_id: Optional correlation ID
+
+        Returns:
+            ToolExecutionResult with error
+        """
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            status=ToolExecutionStatus.FAILED,
+            success=False,
+            data=None,
+            error=error,
+            correlation_id=correlation_id or str(uuid.uuid4()),
+        )
+
+    def _convert_to_typed_args(self, tool_args: Union[Dict[str, Any], ToolExecutionArgs]) -> ToolExecutionArgs:
+        """Convert dict arguments to typed ToolExecutionArgs.
+
+        Args:
+            tool_args: Raw tool arguments
+
+        Returns:
+            Typed ToolExecutionArgs
+        """
+        if isinstance(tool_args, ToolExecutionArgs):
+            return tool_args
+
+        return ToolExecutionArgs(
+            correlation_id=tool_args.get("correlation_id", str(uuid.uuid4())),
+            thought_id=tool_args.get("thought_id"),
+            task_id=tool_args.get("task_id"),
+            channel_id=tool_args.get("channel_id"),
+            timeout_seconds=tool_args.get("timeout_seconds", 30.0),
+            tool_specific_params={
+                k: v
+                for k, v in tool_args.items()
+                if k not in ["correlation_id", "thought_id", "task_id", "channel_id", "timeout_seconds"]
+            },
+        )
+
+    async def execute_tool(
+        self, tool_name: str, tool_args: Union[Dict[str, Any], ToolExecutionArgs]
+    ) -> ToolExecutionResult:
+        """Execute a registered Discord tool via the tool registry.
+
+        Args:
+            tool_name: Name of the tool to execute
+            tool_args: Arguments to pass to the tool
+
+        Returns:
+            Tool execution result as a dictionary
+
+        Raises:
+            RuntimeError: If tool registry is not configured or tool not found
+        """
+        if not self.tool_registry:
+            return self._create_error_result(tool_name, "Tool registry not configured")
+
+        handler = self.tool_registry.get_handler(tool_name)
+        if not handler:
+            return self._create_error_result(tool_name, f"Tool handler for '{tool_name}' not found")
+
+        # Convert dict to typed args if needed
+        typed_args = self._convert_to_typed_args(tool_args)
+
+        correlation_id = str(typed_args.correlation_id or uuid.uuid4())
+
+        # Track correlation
+        self._track_correlation_start(tool_name, typed_args, correlation_id)
+
         try:
             import time
 
@@ -173,73 +298,12 @@ class DiscordToolHandler:
 
             result_dict = result if isinstance(result, dict) else result.__dict__
 
-            # Create properly typed response data
-            response_now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-            ServiceResponseData(
-                success=result_dict.get("success", True),
-                result_summary=str(result_dict.get("data", {}))[:100] if result_dict.get("data") else None,
-                result_type="dict",
-                result_size=len(str(result_dict)),
-                error_type=None,
-                error_message=result_dict.get("error"),
-                error_traceback=None,
-                execution_time_ms=_execution_time,
-                response_timestamp=response_now,
-                tokens_used=None,
-                memory_bytes=None,
-            )
-
-            # Create ToolExecutionResult
-            execution_result = ToolExecutionResult(
-                tool_name=tool_name,
-                status=(
-                    ToolExecutionStatus.COMPLETED if result_dict.get("success", True) else ToolExecutionStatus.FAILED
-                ),
-                success=result_dict.get("success", True),
-                data=result_dict,
-                error=result_dict.get("error"),
-                correlation_id=correlation_id or str(uuid.uuid4()),
-            )
-
-            if correlation_id:
-                self._tool_results[correlation_id] = execution_result
-                persistence.update_correlation(
-                    CorrelationUpdateRequest(
-                        correlation_id=correlation_id,
-                        response_data=result_dict,
-                        status=ServiceCorrelationStatus.COMPLETED,
-                        metric_value=None,
-                        tags=None,
-                    ),
-                    correlation_or_time_service=self._time_service if self._time_service else TimeService(),
-                )
-
-            return execution_result
+            # Process and return result
+            return self._process_tool_result(tool_name, result_dict, correlation_id, _execution_time)
 
         except Exception as e:
             logger.exception(f"Tool execution failed for {tool_name}: {e}")
-            error_result = {"error": str(e), "tool_name": tool_name}
-
-            if correlation_id:
-                persistence.update_correlation(
-                    CorrelationUpdateRequest(
-                        correlation_id=correlation_id,
-                        response_data=error_result,
-                        status=ServiceCorrelationStatus.FAILED,
-                        metric_value=None,
-                        tags=None,
-                    ),
-                    correlation_or_time_service=self._time_service if self._time_service else TimeService(),
-                )
-
-            return ToolExecutionResult(
-                tool_name=tool_name,
-                status=ToolExecutionStatus.FAILED,
-                success=False,
-                data=None,
-                error=str(e),
-                correlation_id=correlation_id or str(uuid.uuid4()),
-            )
+            return self._handle_tool_error(tool_name, e, correlation_id)
 
     async def get_tool_result(self, correlation_id: str, timeout: int = 10) -> Optional[ToolExecutionResult]:
         """Fetch a tool result by correlation ID from the internal cache.
@@ -337,7 +401,7 @@ class DiscordToolHandler:
                 tools.append(tool_info)
         return tools
 
-    def validate_tool_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    def validate_tool_parameters(self, tool_name: str, parameters: Union[Dict[str, Any], ToolExecutionArgs]) -> bool:
         """Basic parameter validation using tool registry schemas.
 
         Args:
@@ -351,11 +415,22 @@ class DiscordToolHandler:
             return False
 
         try:
+            # Convert to dict if it's ToolExecutionArgs
+            if isinstance(parameters, ToolExecutionArgs):
+                param_dict = parameters.get_all_params()
+            else:
+                param_dict = parameters
+
             schema = self.tool_registry.get_schema(tool_name)
             if not schema:
                 return False
 
-            return all(k in parameters for k in schema.keys())
+            # Check if all required keys are present
+            if hasattr(schema, "required"):
+                return all(k in param_dict for k in schema.required)
+            else:
+                # Legacy support for dict schemas
+                return all(k in param_dict for k in schema.keys())
 
         except Exception as e:
             logger.warning(f"Parameter validation failed for {tool_name}: {e}")

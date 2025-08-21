@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 
 import aiohttp
 
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -23,31 +24,39 @@ HTTP_HEADERS_DESC = "HTTP headers"
 REQUEST_TIMEOUT_DESC = "Request timeout in seconds"
 
 
-class APIToolService(ToolService):
+class APIToolService(BaseService, ToolService):
     """Tool service providing curl-like HTTP request functionality."""
 
     def __init__(self, time_service: Optional[TimeServiceProtocol] = None) -> None:
-        super().__init__()
-        self._time_service = time_service
+        # Initialize BaseService with proper arguments
+        super().__init__(time_service=time_service, service_name="APIToolService")
+        # ToolService is a Protocol, no need to call its __init__
         self._results: Dict[str, ToolExecutionResult] = {}
         self._tools = {
             "curl": self._curl,
             "http_get": self._http_get,
             "http_post": self._http_post,
         }
+        # Track tool executions
+        self._tool_executions = 0
+        self._tool_failures = 0
 
     async def start(self) -> None:
         """Start the API tool service."""
-        # Don't call super() on abstract method
+        await BaseService.start(self)
         logger.info("API tool service started")
 
     async def stop(self) -> None:
         """Stop the API tool service."""
-        # Don't call super() on abstract method
+        await BaseService.stop(self)
         logger.info("API tool service stopped")
 
     async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
         """Execute a tool and return the result."""
+        # Track request for telemetry
+        self._track_request()
+        self._tool_executions += 1
+
         logger.info(f"[API_TOOLS] execute_tool called with tool_name={tool_name}, parameters={parameters}")
 
         # Debug: print stack trace to see where this is called from
@@ -87,6 +96,9 @@ class APIToolService(ToolService):
             return tool_result
 
         except Exception as e:
+            # Track error for telemetry
+            self._track_error(e)
+            self._tool_failures += 1
             logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
             return ToolExecutionResult(
                 tool_name=tool_name,
@@ -254,14 +266,27 @@ class APIToolService(ToolService):
             metadata={"max_batch_size": 1, "supports_versioning": False, "supported_formats": ["json"]},
         )
 
-    def get_status(self) -> ServiceStatus:
-        """Get service status."""
-        return ServiceStatus(
-            service_name="APIToolService",
-            service_type="tool",
-            is_healthy=True,
-            uptime_seconds=0,  # Not tracked
-            last_error=None,
-            metrics={"tools_count": len(self._tools)},
-            custom_metrics={"tools": list(self._tools.keys())},
-        )
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect API tool service specific metrics."""
+        return {
+            "tools_count": float(len(self._tools)),
+            "tool_executions_total": float(self._tool_executions),
+            "tool_failures_total": float(self._tool_failures),
+            "tool_success_rate": float(self._tool_executions - self._tool_failures) / max(1, self._tool_executions),
+        }
+
+    def _get_actions(self) -> List[str]:
+        """Get the list of actions this service supports."""
+        return [
+            "execute_tool",
+            "get_available_tools",
+            "get_tool_result",
+            "validate_parameters",
+            "get_tool_info",
+            "get_all_tool_info",
+        ]
+
+    def _check_dependencies(self) -> bool:
+        """Check if all dependencies are satisfied."""
+        # APIToolService has no hard dependencies
+        return True

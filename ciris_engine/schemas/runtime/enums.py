@@ -43,6 +43,7 @@ class ServiceType(CaseInsensitiveEnum):
     SHUTDOWN = "shutdown"
     INITIALIZATION = "initialization"
     VISIBILITY = "visibility"
+    TSDB_CONSOLIDATION = "tsdb_consolidation"
 
     # Adapter services
     ADAPTER = "adapter"

@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.adapters.tools import ToolInfo as AdapterToolInfo
+from ciris_engine.schemas.adapters.tools import ToolParameterSchema
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.api.telemetry import ServiceMetrics, TimeSyncStatus
 from ciris_engine.schemas.runtime.adapter_management import (
@@ -158,19 +160,21 @@ class ShutdownResponse(BaseModel):
 class AdapterActionRequest(BaseModel):
     """Request for adapter operations."""
 
-    config: Optional[Dict[str, Any]] = Field(None, description="Adapter configuration")
+    config: Optional[AdapterConfig] = Field(None, description="Adapter configuration")
     auto_start: bool = Field(True, description="Whether to auto-start the adapter")
     force: bool = Field(False, description="Force the operation")
 
 
-class ToolInfo(BaseModel):
-    """Information about an available tool."""
+class ToolInfoResponse(BaseModel):
+    """Tool information response with provider details."""
 
     name: str = Field(..., description="Tool name")
     description: str = Field(..., description="Tool description")
     provider: str = Field(..., description="Provider service name")
-    schema: Dict[str, Any] = Field(default_factory=dict, description="Tool parameter schema")
+    parameters: Optional[ToolParameterSchema] = Field(None, description="Tool parameter schema")
     category: str = Field("general", description="Tool category")
+    cost: float = Field(0.0, description="Cost to execute the tool")
+    when_to_use: Optional[str] = Field(None, description="Guidance on when to use the tool")
 
 
 # Endpoints
@@ -970,10 +974,10 @@ async def reload_adapter(
 
 
 # Tool endpoints
-@router.get("/tools", response_model=SuccessResponse[List[ToolInfo]])
+@router.get("/tools", response_model=SuccessResponse[List[ToolInfoResponse]])
 async def get_available_tools(
     request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[List[ToolInfo]]:
+) -> SuccessResponse[List[ToolInfoResponse]]:
     """
     Get list of all available tools from all tool providers.
 
@@ -1008,12 +1012,14 @@ async def get_available_tools(
                             tool_infos = await provider.get_all_tool_info()
                             for info in tool_infos:
                                 all_tools.append(
-                                    ToolInfo(
+                                    ToolInfoResponse(
                                         name=info.name,
                                         description=info.description,
                                         provider=provider_name,
-                                        schema=info.parameters.model_dump() if info.parameters else {},
+                                        parameters=info.parameters if hasattr(info, "parameters") else None,
                                         category=getattr(info, "category", "general"),
+                                        cost=getattr(info, "cost", 0.0),
+                                        when_to_use=getattr(info, "when_to_use", None),
                                     )
                                 )
                         elif hasattr(provider, "list_tools"):
@@ -1021,12 +1027,14 @@ async def get_available_tools(
                             tool_names = await provider.list_tools()
                             for name in tool_names:
                                 all_tools.append(
-                                    ToolInfo(
+                                    ToolInfoResponse(
                                         name=name,
                                         description=f"{name} tool",
                                         provider=provider_name,
-                                        schema={},
+                                        parameters=None,
                                         category="general",
+                                        cost=0.0,
+                                        when_to_use=None,
                                     )
                                 )
                     except Exception as e:
@@ -1045,7 +1053,7 @@ async def get_available_tools(
                 if existing.provider != tool.provider:
                     existing.provider = f"{existing.provider}, {tool.provider}"
 
-        return SuccessResponse[List[ToolInfo]](data=unique_tools)
+        return SuccessResponse[List[ToolInfoResponse]](data=unique_tools)
 
     except Exception as e:
         logger.error(f"Error getting available tools: {e}")

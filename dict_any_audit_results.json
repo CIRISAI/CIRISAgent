@@ -1,14 +1,14 @@
 {
   "production": {
-    "occurrences": 212,
-    "files_affected": 83,
+    "occurrences": 204,
+    "files_affected": 81,
     "categories": {
-      "generic_data": 189,
-      "parameters": 6,
+      "generic_data": 182,
+      "parameters": 5,
       "configuration": 3,
       "api_request": 1,
-      "api_response": 5,
-      "context_data": 8
+      "api_response": 6,
+      "context_data": 7
     },
     "findings": [
       {
@@ -525,7 +525,7 @@
       },
       {
         "file": "ciris_modular_services/mock_llm/service.py",
-        "line": 144,
+        "line": 174,
         "class": "MockLLMService",
         "function": "get_capabilities",
         "context": "return_type",
@@ -533,7 +533,7 @@
       },
       {
         "file": "ciris_modular_services/mock_llm/service.py",
-        "line": 153,
+        "line": 183,
         "class": "MockLLMService",
         "function": "get_status",
         "context": "return_type",
@@ -589,105 +589,9 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 124,
+        "line": 995,
         "class": "TelemetryAggregator",
-        "function": "collect_all_parallel",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 170,
-        "class": "TelemetryAggregator",
-        "function": "collect_service",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 210,
-        "class": "TelemetryAggregator",
-        "function": "_try_collect_metrics",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 234,
-        "class": "TelemetryAggregator",
-        "function": "collect_from_bus",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 252,
-        "class": "TelemetryAggregator",
-        "function": "collect_from_adapter_instances",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 305,
-        "class": "TelemetryAggregator",
-        "function": "get_fallback_metrics",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 313,
-        "class": "TelemetryAggregator",
-        "function": "status_to_telemetry",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 332,
-        "class": "TelemetryAggregator",
-        "function": "_aggregate_service_metrics",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 364,
-        "class": "TelemetryAggregator",
-        "function": "compute_covenant_metrics",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 364,
-        "class": "TelemetryAggregator",
-        "function": "compute_covenant_metrics",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 412,
-        "class": "TelemetryAggregator",
-        "function": "calculate_aggregates",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 412,
-        "class": "TelemetryAggregator",
-        "function": "calculate_aggregates",
-        "context": "return_type",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 1456,
-        "class": "GraphTelemetryService",
-        "function": "get_aggregated_telemetry",
+        "function": "_extract_governance_metrics",
         "context": "return_type",
         "usage_hint": "generic_data"
       },
@@ -764,54 +668,6 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 48,
-        "class": "DiscordThreadManager",
-        "function": "__init__",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 73,
-        "class": "DiscordThreadManager",
-        "function": "create_thread",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 140,
-        "class": "DiscordThreadManager",
-        "function": "get_or_create_thread",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 203,
-        "class": "DiscordThreadManager",
-        "function": "create_guidance_thread",
-        "context": "function_parameter",
-        "usage_hint": "context_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 232,
-        "class": "DiscordThreadManager",
-        "function": "create_task_thread",
-        "context": "function_parameter",
-        "usage_hint": "generic_data"
-      },
-      {
-        "file": "ciris_engine/logic/adapters/discord/discord_thread_manager.py",
-        "line": 305,
-        "class": "DiscordThreadManager",
-        "function": "get_thread_info",
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
         "file": "ciris_engine/logic/adapters/discord/discord_vision_helper.py",
         "line": 210,
         "class": "DiscordVisionHelper",
@@ -837,23 +693,39 @@
       },
       {
         "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
-        "line": 74,
+        "line": 118,
         "class": "DiscordToolHandler",
-        "function": "execute_tool",
+        "function": "_process_tool_result",
         "context": "function_parameter",
-        "usage_hint": "parameters"
+        "usage_hint": "api_response"
       },
       {
         "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
-        "line": 340,
+        "line": 230,
+        "class": "DiscordToolHandler",
+        "function": "_convert_to_typed_args",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 256,
+        "class": "DiscordToolHandler",
+        "function": "execute_tool",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 404,
         "class": "DiscordToolHandler",
         "function": "validate_tool_parameters",
-        "context": "function_parameter",
+        "context": "other",
         "usage_hint": "generic_data"
       },
       {
         "file": "ciris_engine/logic/adapters/api/api_communication.py",
-        "line": 26,
+        "line": 30,
         "class": "APICommunicationService",
         "function": "__init__",
         "context": "variable_annotation",
@@ -861,7 +733,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/api_runtime_control.py",
-        "line": 94,
+        "line": 98,
         "class": "APIRuntimeControlService",
         "function": "get_runtime_status",
         "context": "return_type",
@@ -884,24 +756,88 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/logic/adapters/api/routes/system.py",
-        "line": 161,
-        "class": "AdapterActionRequest",
-        "function": null,
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 20,
+        "class": null,
+        "function": "convert_to_otlp_json",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 25,
+        "class": null,
+        "function": "convert_to_otlp_json",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 282,
+        "class": null,
+        "function": "_create_gauge_metric",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 300,
+        "class": null,
+        "function": "_create_counter_metric",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 330,
+        "class": null,
+        "function": "_create_histogram_metric",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 356,
+        "class": null,
+        "function": "convert_traces_to_otlp_json",
         "context": "other",
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/logic/adapters/api/routes/system.py",
-        "line": 172,
-        "class": "ToolInfo",
-        "function": null,
-        "context": "variable_annotation",
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 361,
+        "class": null,
+        "function": "convert_traces_to_otlp_json",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 471,
+        "class": null,
+        "function": "convert_logs_to_otlp_json",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 476,
+        "class": null,
+        "function": "convert_logs_to_otlp_json",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 586,
+        "class": null,
+        "function": "validate_otlp_json",
+        "context": "function_parameter",
         "usage_hint": "generic_data"
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
-        "line": 156,
+        "line": 263,
         "class": null,
         "function": "get_system_status",
         "context": "return_type",
@@ -941,7 +877,7 @@
       },
       {
         "file": "ciris_engine/logic/buses/runtime_control_bus.py",
-        "line": 166,
+        "line": 171,
         "class": "RuntimeControlBus",
         "function": "get_runtime_status",
         "context": "return_type",
@@ -1113,6 +1049,14 @@
         "class": "ServiceRegistry",
         "function": "register_service",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/registries/base.py",
+        "line": 299,
+        "class": "ServiceRegistry",
+        "function": "get_circuit_breaker_details",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -1588,14 +1532,6 @@
         "usage_hint": "generic_data"
       },
       {
-        "file": "ciris_engine/schemas/runtime/adapter_management.py",
-        "line": 52,
-        "class": "AdapterStatus",
-        "function": null,
-        "context": "other",
-        "usage_hint": "generic_data"
-      },
-      {
         "file": "ciris_engine/schemas/api/wa.py",
         "line": 84,
         "class": "WAGuidanceResponse",
@@ -1710,7 +1646,7 @@
     ]
   },
   "tests": {
-    "occurrences": 38,
+    "occurrences": 39,
     "findings": [
       {
         "file": "tests/test_handlers_api_mock_simple.py",
@@ -2015,11 +1951,19 @@
         "function": "mock_query_metrics",
         "context": "other",
         "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/runtime/test_modular_service_loader.py",
+        "line": 43,
+        "class": "MockService",
+        "function": "health_check",
+        "context": "return_type",
+        "usage_hint": "generic_data"
       }
     ]
   },
   "tools": {
-    "occurrences": 124,
+    "occurrences": 129,
     "findings": [
       {
         "file": "tools/validate_prod_routes.py",
@@ -2035,6 +1979,46 @@
         "class": "RouteValidator",
         "function": "test_route",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 53,
+        "class": "APITelemetryTester",
+        "function": "test_unified",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 85,
+        "class": "APITelemetryTester",
+        "function": "test_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 111,
+        "class": "APITelemetryTester",
+        "function": "test_traces",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 137,
+        "class": "APITelemetryTester",
+        "function": "test_logs",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 197,
+        "class": "APITelemetryTester",
+        "function": "test_service_health",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -3016,7 +3000,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 374,
+    "occurrences": 372,
     "files_affected": 116
   }
 }

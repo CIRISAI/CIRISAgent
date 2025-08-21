@@ -353,11 +353,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("AuthenticationService initialized")
 
         # Initialize WA authentication system with TimeService and AuthService
-        # Use the same directory as main database, but different file
+        # Use the main database path - WiseAuthority needs access to tasks table
         main_db_path = get_sqlite_db_full_path(self.essential_config)
-        wa_db_path = main_db_path.replace(".db", "_wa.db")
         self.wa_auth_system = WiseAuthorityService(
-            time_service=self.time_service, auth_service=self.auth_service, db_path=wa_db_path
+            time_service=self.time_service, auth_service=self.auth_service, db_path=main_db_path
         )
         await self.wa_auth_system.start()
         self._services_started_count += 1
@@ -515,6 +514,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self.telemetry_service = GraphTelemetryService(
                 memory_bus=self.bus_manager.memory, time_service=self.time_service  # Now we have the memory bus
             )
+            # Set service registry so it can initialize the aggregator
+            if self.service_registry:
+                self.telemetry_service._set_service_registry(self.service_registry)
             await self.telemetry_service.start()
             self._services_started_count += 1
             logger.info("GraphTelemetryService initialized")
@@ -592,6 +594,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info(
             "TSDB consolidation service initialized - consolidating missed windows and starting periodic consolidation"
         )
+
+        # Register TSDBConsolidationService in registry
+        self.service_registry.register_service(
+            service_type=ServiceType.TSDB_CONSOLIDATION,
+            provider=self.tsdb_consolidation_service,
+            priority=Priority.NORMAL,
+            capabilities=["consolidate_data", "get_summaries"],
+            metadata={"consolidation_interval": "6h", "type": "tsdb"},
+        )
+        logger.info("TSDBConsolidationService registered in ServiceRegistry")
 
         # Initialize maintenance service AFTER consolidation
         archive_dir = getattr(config, "data_archive_dir", "data_archive")
@@ -842,9 +854,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.incident_management_service = IncidentManagementService(
             memory_bus=self.bus_manager.memory, time_service=self.time_service
         )
-        self.incident_management_service.start()
+        await self.incident_management_service.start()
         self._services_started_count += 1
-        logger.info("Incident management service initialized")
+        logger.info("Incident management service initialized and started")
 
     def verify_core_services(self) -> bool:
         """Verify all core services are operational."""

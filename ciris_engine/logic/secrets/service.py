@@ -583,7 +583,11 @@ class SecretsService(BaseService, SecretsServiceProtocol):
                 "filter_detections": float(self._filter_detections),
                 "auto_encryptions": float(self._auto_encryptions),
                 "failed_decryptions": float(self._failed_decryptions),
-                "filter_enabled": 1.0 if self.filter and self.filter.enabled else 0.0,
+                "filter_enabled": (
+                    1.0
+                    if self.filter and hasattr(self.filter, "detection_config") and self.filter.detection_config.enabled
+                    else 0.0
+                ),
             }
         )
 

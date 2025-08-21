@@ -70,6 +70,9 @@ class TestSecretsServiceTelemetry:
         """Create a mock secrets filter."""
         mock = Mock(spec=SecretsFilter)
         mock.enabled = True
+        # Add detection_config for filter_enabled check
+        mock.detection_config = Mock()
+        mock.detection_config.enabled = True
         mock.get_pattern_stats.return_value = PatternStats(total_patterns=15, default_patterns=10, custom_patterns=5)
         return mock
 
@@ -124,6 +127,8 @@ class TestSecretsServiceTelemetry:
     async def test_get_metrics_filter_disabled(self, secrets_service):
         """Test telemetry with filter disabled."""
         secrets_service.filter.enabled = False
+        # The actual check in _collect_custom_metrics looks at detection_config.enabled
+        secrets_service.filter.detection_config.enabled = False
 
         metrics = await secrets_service.get_metrics()
 

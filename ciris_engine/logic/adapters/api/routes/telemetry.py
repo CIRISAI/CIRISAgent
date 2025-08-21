@@ -15,12 +15,12 @@ from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.telemetry import (
+    APIResponseThoughtStep,
     LogContext,
     MetricTags,
     QueryResult,
     ServiceMetricValue,
     TelemetryQueryFilters,
-    ThoughtStep,
 )
 
 from ..constants import (
@@ -53,6 +53,7 @@ from .telemetry_models import (
     TimePeriod,
     TraceSpan,
 )
+from .telemetry_otlp import convert_logs_to_otlp_json, convert_to_otlp_json, convert_traces_to_otlp_json
 from .telemetry_resource_helpers import (
     MetricValueExtractor,
     ResourceDataPointBuilder,
@@ -117,7 +118,7 @@ class ReasoningTraceData(BaseModel):
     thought_count: int = Field(0, description="Number of thoughts")
     decision_count: int = Field(0, description="Number of decisions")
     reasoning_depth: int = Field(0, description="Maximum reasoning depth")
-    thoughts: List[ThoughtStep] = Field(default_factory=list, description="Thought steps")
+    thoughts: List[APIResponseThoughtStep] = Field(default_factory=list, description="Thought steps")
     outcome: Optional[str] = Field(None, description="Final outcome")
 
     @field_serializer("start_time")
@@ -399,6 +400,142 @@ async def _get_system_overview(request: Request) -> SystemOverview:
 
 
 # Endpoints
+
+
+@router.get("/otlp/{signal}", response_model=None)
+async def get_otlp_telemetry(
+    signal: str,
+    request: Request,
+    auth: AuthContext = Depends(require_observer),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum items to return"),
+    start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
+    end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
+) -> Dict:
+    """
+    OpenTelemetry Protocol (OTLP) JSON export.
+
+    Export telemetry data in OTLP JSON format for OpenTelemetry collectors.
+
+    Supported signals:
+    - metrics: System and service metrics
+    - traces: Distributed traces with spans
+    - logs: Structured log records
+
+    Returns OTLP JSON formatted data compatible with OpenTelemetry v1.7.0 specification.
+    """
+
+    if signal not in ["metrics", "traces", "logs"]:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid signal type: {signal}. Must be one of: metrics, traces, logs"
+        )
+
+    try:
+        if signal == "metrics":
+            # Get metrics from unified telemetry
+            telemetry_service = request.app.state.telemetry_service
+            if not telemetry_service:
+                raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+
+            # Get aggregated telemetry
+            aggregated = await telemetry_service.get_aggregated_telemetry()
+
+            # Convert to dict for OTLP conversion
+            telemetry_dict = {
+                "system_healthy": aggregated.system_healthy,
+                "services_online": aggregated.services_online,
+                "services_total": aggregated.services_total,
+                "overall_error_rate": aggregated.overall_error_rate,
+                "overall_uptime_seconds": aggregated.overall_uptime_seconds,
+                "total_errors": aggregated.total_errors,
+                "total_requests": aggregated.total_requests,
+                "services": aggregated.services,
+            }
+
+            # Add covenant metrics if available
+            if hasattr(aggregated, "covenant_metrics"):
+                telemetry_dict["covenant_metrics"] = aggregated.covenant_metrics
+
+            return convert_to_otlp_json(telemetry_dict)
+
+        elif signal == "traces":
+            # Get traces from visibility service
+            visibility_service = request.app.state.visibility_service
+            if not visibility_service:
+                raise HTTPException(status_code=503, detail="Visibility service not available")
+
+            # Get recent traces
+            traces = []
+            try:
+                # Get thought traces
+                thoughts = await visibility_service.get_recent_thoughts(limit=limit)
+                for thought in thoughts:
+                    trace_data = {
+                        "trace_id": getattr(thought, "id", str(uuid.uuid4())),
+                        "timestamp": getattr(thought, "timestamp", datetime.now(timezone.utc)).isoformat(),
+                        "operation": "thought_processing",
+                        "cognitive_state": getattr(thought, "cognitive_state", "unknown"),
+                        "thoughts": [],
+                    }
+
+                    # Add thought steps if available
+                    if hasattr(thought, "thought") and hasattr(thought.thought, "steps"):
+                        trace_data["thoughts"] = [
+                            {"content": step.content if hasattr(step, "content") else str(step)}
+                            for step in thought.thought.steps
+                        ]
+                    elif hasattr(thought, "content"):
+                        trace_data["thoughts"] = [{"content": thought.content}]
+
+                    traces.append(trace_data)
+            except Exception as e:
+                logger.warning(f"Failed to get traces: {e}")
+
+            return convert_traces_to_otlp_json(traces)
+
+        elif signal == "logs":
+            # Get logs from audit service
+            audit_service = request.app.state.audit_service
+            if not audit_service:
+                raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
+
+            # Query audit logs
+            logs = []
+            try:
+                entries = await audit_service.query_events(
+                    start_time=start_time or datetime.now(timezone.utc) - timedelta(hours=1),
+                    end_time=end_time or datetime.now(timezone.utc),
+                    limit=limit,
+                )
+
+                for entry in entries:
+                    log_data = {
+                        "timestamp": getattr(entry, "timestamp", datetime.now(timezone.utc)).isoformat(),
+                        "level": getattr(entry, "severity", "INFO"),
+                        "message": getattr(entry, "message", "") or getattr(entry, "description", ""),
+                        "service": getattr(entry, "service", "unknown"),
+                        "component": getattr(entry, "component", ""),
+                        "action": getattr(entry, "action", ""),
+                    }
+
+                    # Add correlation ID if available
+                    if hasattr(entry, "correlation_id"):
+                        log_data["correlation_id"] = entry.correlation_id
+
+                    # Add user context if available
+                    if hasattr(entry, "user_id"):
+                        log_data["user_id"] = entry.user_id
+
+                    logs.append(log_data)
+            except Exception as e:
+                logger.warning(f"Failed to get logs: {e}")
+
+            return convert_logs_to_otlp_json(logs)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OTLP export failed for {signal}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export {signal} in OTLP format")
 
 
 @router.get("/overview", response_model=SuccessResponse[SystemOverview])
@@ -773,17 +910,17 @@ async def get_reasoning_traces(
                                 trace_id=f"trace_{task.task_id}",
                                 task_id=task.task_id,
                                 task_description=task.description,
-                                start_time=task.created_at,
-                                duration_ms=(
-                                    (task.completed_at - task.created_at).total_seconds() * 1000
-                                    if task.completed_at
-                                    else 0
+                                start_time=(
+                                    datetime.fromisoformat(task.created_at)
+                                    if isinstance(task.created_at, str)
+                                    else task.created_at
                                 ),
+                                duration_ms=0,  # TaskOutcome doesn't have completion timestamp
                                 thought_count=len(trace.thought_steps),
                                 decision_count=len(trace.decisions) if hasattr(trace, "decisions") else 0,
-                                reasoning_depth=trace.max_depth,
+                                reasoning_depth=len(trace.thought_steps) if hasattr(trace, "thought_steps") else 0,
                                 thoughts=[
-                                    ThoughtStep(
+                                    APIResponseThoughtStep(
                                         step=i,
                                         content=thought.content,
                                         timestamp=thought.timestamp,
@@ -811,15 +948,39 @@ async def get_reasoning_traces(
                         decision_count=0,
                         reasoning_depth=current.get("depth", 0),
                         thoughts=[
-                            ThoughtStep(
-                                step=t.get("step", i),
-                                content=t.get("content", ""),
-                                timestamp=datetime.fromisoformat(
-                                    t.get("timestamp", datetime.now(timezone.utc).isoformat())
+                            APIResponseThoughtStep(
+                                step=i,
+                                content=(
+                                    t.thought.content
+                                    if hasattr(t, "thought") and hasattr(t.thought, "content")
+                                    else t.get("content", "") if isinstance(t, dict) else str(t)
                                 ),
-                                depth=t.get("depth", 0),
-                                action=t.get("action"),
-                                confidence=t.get("confidence"),
+                                timestamp=(
+                                    t.thought.timestamp
+                                    if hasattr(t, "thought") and hasattr(t.thought, "timestamp")
+                                    else (
+                                        datetime.fromisoformat(
+                                            t.get("timestamp", datetime.now(timezone.utc).isoformat())
+                                        )
+                                        if isinstance(t, dict)
+                                        else datetime.now(timezone.utc)
+                                    )
+                                ),
+                                depth=(
+                                    t.thought.depth
+                                    if hasattr(t, "thought") and hasattr(t.thought, "depth")
+                                    else t.get("depth", 0) if isinstance(t, dict) else 0
+                                ),
+                                action=(
+                                    t.thought.action
+                                    if hasattr(t, "thought") and hasattr(t.thought, "action")
+                                    else t.get("action") if isinstance(t, dict) else None
+                                ),
+                                confidence=(
+                                    t.thought.confidence
+                                    if hasattr(t, "thought") and hasattr(t.thought, "confidence")
+                                    else t.get("confidence") if isinstance(t, dict) else None
+                                ),
                             )
                             for i, t in enumerate(current.get("thoughts", []))
                         ],
@@ -835,38 +996,69 @@ async def get_reasoning_traces(
     if not traces and audit_service:
         try:
             # Query audit entries related to reasoning
-            entries = await audit_service.query_entries(
-                action_prefix="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
+            entries = await audit_service.query_events(
+                event_type="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
             )
 
             # Group by correlation ID or time window
             trace_groups = defaultdict(list)
             for entry in entries:
-                trace_key = entry.context.get("task_id", entry.timestamp.strftime("%Y%m%d%H%M"))
+                # entry is a dict from query_events with structure: {event_id, event_type, timestamp, user_id, data: {context}, metadata}
+                context = entry.get("data", {}).get("context", {})
+                timestamp = (
+                    datetime.fromisoformat(entry["timestamp"])
+                    if isinstance(entry.get("timestamp"), str)
+                    else entry.get("timestamp", datetime.now(timezone.utc))
+                )
+                trace_key = context.get("task_id", timestamp.strftime("%Y%m%d%H%M"))
                 trace_groups[trace_key].append(entry)
 
             # Build traces from groups
             for trace_id, entries in list(trace_groups.items())[:limit]:
                 if entries:
-                    entries.sort(key=lambda e: e.timestamp)
+                    entries.sort(
+                        key=lambda e: (
+                            datetime.fromisoformat(e["timestamp"])
+                            if isinstance(e["timestamp"], str)
+                            else e["timestamp"]
+                        )
+                    )
+
+                    # Parse timestamps from entries (dicts)
+                    start_timestamp = (
+                        datetime.fromisoformat(entries[0]["timestamp"])
+                        if isinstance(entries[0].get("timestamp"), str)
+                        else entries[0].get("timestamp", datetime.now(timezone.utc))
+                    )
+                    end_timestamp = (
+                        datetime.fromisoformat(entries[-1]["timestamp"])
+                        if isinstance(entries[-1].get("timestamp"), str)
+                        else entries[-1].get("timestamp", datetime.now(timezone.utc))
+                    )
 
                     trace_data = ReasoningTraceData(
                         trace_id=f"trace_{trace_id}",
-                        task_id=trace_id if trace_id != entries[0].timestamp.strftime("%Y%m%d%H%M") else None,
+                        task_id=trace_id if trace_id != start_timestamp.strftime("%Y%m%d%H%M") else None,
                         task_description=None,
-                        start_time=entries[0].timestamp,
-                        duration_ms=(entries[-1].timestamp - entries[0].timestamp).total_seconds() * 1000,
+                        start_time=start_timestamp,
+                        duration_ms=(end_timestamp - start_timestamp).total_seconds() * 1000,
                         thought_count=len(entries),
-                        decision_count=sum(1 for e in entries if "decision" in e.action.lower()),
-                        reasoning_depth=max(e.context.get("depth", 0) for e in entries),
+                        decision_count=sum(1 for e in entries if "decision" in e.get("event_type", "").lower()),
+                        reasoning_depth=(
+                            max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0
+                        ),
                         thoughts=[
-                            ThoughtStep(
+                            APIResponseThoughtStep(
                                 step=i,
-                                content=e.context.get("thought", e.action),
-                                timestamp=e.timestamp,
-                                depth=e.context.get("depth", 0),
-                                action=e.context.get("action"),
-                                confidence=e.context.get("confidence"),
+                                content=(e.get("data", {}).get("context", {}).get("thought", e.get("event_type", ""))),
+                                timestamp=(
+                                    datetime.fromisoformat(e["timestamp"])
+                                    if isinstance(e.get("timestamp"), str)
+                                    else e.get("timestamp", datetime.now(timezone.utc))
+                                ),
+                                depth=(e.get("data", {}).get("context", {}).get("depth", 0)),
+                                action=(e.get("data", {}).get("context", {}).get("action")),
+                                confidence=(e.get("data", {}).get("context", {}).get("confidence")),
                             )
                             for i, e in enumerate(entries)
                         ],
@@ -911,7 +1103,7 @@ async def get_system_logs(
     if audit_service:
         try:
             # Query audit entries as logs
-            entries = await audit_service.query_entries(
+            entries = await audit_service.query_events(
                 start_time=start_time, end_time=end_time, limit=limit * 2  # Get extra for filtering
             )
 
@@ -1340,11 +1532,13 @@ async def get_unified_telemetry(
         if not telemetry_service:
             raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
 
-        # Get telemetry data
-        if hasattr(telemetry_service, "get_aggregated_telemetry"):
-            result = await get_telemetry_from_service(telemetry_service, view, category, format, live)
-        else:
-            result = await get_telemetry_fallback(request.app.state, view, category)
+        # Get telemetry data - NO FALLBACKS, fail FAST and LOUD per CIRIS philosophy
+        if not hasattr(telemetry_service, "get_aggregated_telemetry"):
+            raise HTTPException(
+                status_code=503,
+                detail="CRITICAL: Telemetry service does not have get_aggregated_telemetry method - NO FALLBACKS!",
+            )
+        result = await get_telemetry_from_service(telemetry_service, view, category, format, live)
 
         # Handle export formats
         if format == "prometheus":

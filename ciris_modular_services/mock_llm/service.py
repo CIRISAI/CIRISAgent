@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import instructor
 from pydantic import BaseModel
 
-from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as MockLLMServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
@@ -121,21 +121,51 @@ class MockLLMClient:
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
 
-class MockLLMService(Service, MockLLMServiceProtocol):
+class MockLLMService(BaseService, MockLLMServiceProtocol):
     """Mock LLM service used for offline testing."""
 
-    def __init__(self, *_: Any, **__: Any) -> None:
-        super().__init__()
+    def __init__(self, *_: Any, **kwargs: Any) -> None:
+        # Initialize BaseService with service name
+        super().__init__(service_name="MockLLMService", **kwargs)
         self._client: Optional[MockLLMClient] = None
         self.model_name = "mock-model"
+
+        # Metrics tracking for get_metrics
+        self._start_time = None
+        self._total_requests = 0
+        self._total_errors = 0
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cost_cents = 0.0
 
     def get_service_type(self) -> ServiceType:
         """Get the service type."""
         return ServiceType.LLM
 
+    def _get_actions(self) -> List[str]:
+        """Get list of actions this service provides."""
+        return ["call_llm_structured", "extract_json"]
+
+    def _check_dependencies(self) -> bool:
+        """Check if all required dependencies are available."""
+        return True  # Mock service has no external dependencies
+
+    def _collect_custom_metrics(self) -> Dict[str, float]:
+        """Collect service-specific metrics."""
+        return {
+            "total_requests": float(self._total_requests),
+            "total_errors": float(self._total_errors),
+            "total_input_tokens": float(self._total_input_tokens),
+            "total_output_tokens": float(self._total_output_tokens),
+            "total_cost_cents": self._total_cost_cents,
+        }
+
     async def start(self) -> None:
         await super().start()
         self._client = MockLLMClient()
+        import time
+
+        self._start_time = time.time()
 
     async def stop(self) -> None:
         self._client = None
@@ -163,6 +193,32 @@ class MockLLMService(Service, MockLLMServiceProtocol):
         """Check if service is healthy."""
         return self._client is not None
 
+    async def get_metrics(self) -> Dict[str, float]:
+        """
+        Get all LLM metrics including base, custom, and v1.4.3 specific metrics.
+        Following the pattern from LLMService.
+        """
+        import time
+
+        uptime = time.time() - self._start_time if self._start_time else 0.0
+
+        # Return v1.4.3 compliant LLM metrics
+        return {
+            # Base metrics
+            "uptime_seconds": uptime,
+            "request_count": float(self._total_requests),
+            "error_count": float(self._total_errors),
+            "error_rate": self._total_errors / max(1, self._total_requests),
+            # v1.4.3 specific LLM metrics
+            "llm_requests_total": float(self._total_requests),
+            "llm_tokens_input": float(self._total_input_tokens),
+            "llm_tokens_output": float(self._total_output_tokens),
+            "llm_tokens_total": float(self._total_input_tokens + self._total_output_tokens),
+            "llm_cost_cents": self._total_cost_cents,
+            "llm_errors_total": float(self._total_errors),
+            "llm_uptime_seconds": uptime,
+        }
+
     def _get_client(self) -> MockLLMClient:
         if not self._client:
             raise RuntimeError("MockLLMService has not been started")
@@ -183,9 +239,20 @@ class MockLLMService(Service, MockLLMServiceProtocol):
 
         logger.debug(f"Mock call_llm_structured with response_model: {response_model}")
 
-        response = await self._client._create(
-            messages=messages, response_model=response_model, max_tokens=max_tokens, temperature=temperature, **kwargs
-        )
+        # Track request
+        self._total_requests += 1
+
+        try:
+            response = await self._client._create(
+                messages=messages,
+                response_model=response_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+        except Exception as e:
+            self._total_errors += 1
+            raise
 
         # Simulate llama4scout resource usage from together.ai
         # Estimate input tokens from messages
@@ -198,13 +265,21 @@ class MockLLMService(Service, MockLLMServiceProtocol):
         if output_tokens == 0:
             output_tokens = 25  # Default minimum output
 
+        # Calculate cost in cents
+        cost_cents = (input_tokens * 0.0002 / 1000 + output_tokens * 0.0003 / 1000) * 100
+
+        # Track metrics for get_metrics
+        self._total_input_tokens += input_tokens
+        self._total_output_tokens += output_tokens
+        self._total_cost_cents += cost_cents
+
         usage = ResourceUsage(
             tokens_used=input_tokens + output_tokens,
             tokens_input=input_tokens,
             tokens_output=output_tokens,
             # Together.ai pricing for Llama models: ~$0.0002/1K input, $0.0003/1K output tokens
             # $0.0002 per 1K tokens = $0.0002/1000 per token
-            cost_cents=(input_tokens * 0.0002 / 1000 + output_tokens * 0.0003 / 1000) * 100,  # Convert to cents
+            cost_cents=cost_cents,  # Convert to cents
             # Energy estimates: ~0.0001 kWh per 1K tokens (efficient model)
             energy_kwh=(input_tokens + output_tokens) * 0.0001 / 1000,
             # Carbon: ~0.5g CO2 per kWh (US grid average)

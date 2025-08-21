@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Union
 
 import discord
@@ -10,6 +10,7 @@ from discord.errors import ConnectionClosed, HTTPException
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.protocols.services import CommunicationService, WiseAuthorityService
+from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.discord import (
     DiscordApprovalData,
     DiscordChannelInfo,
@@ -1167,6 +1168,29 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             metrics={"latency": latency_ms},
         )
 
+    def _get_time_service(self) -> TimeServiceProtocol:
+        """Get time service instance."""
+        # Discord adapter already has _time_service set in __init__
+        if self._time_service is None:
+            raise RuntimeError("TimeService not available")
+        return self._time_service
+
+    def _collect_metrics(self) -> Dict[str, float]:
+        """Collect base metrics for the Discord adapter."""
+        uptime = 0.0
+        if self._start_time:
+            uptime = (self._get_time_service().now() - self._start_time).total_seconds()
+
+        is_running = self._channel_manager and self._channel_manager.client and self._channel_manager.client.is_ready()
+
+        return {
+            "healthy": True if is_running else False,
+            "uptime_seconds": uptime,
+            "request_count": float(self._messages_processed),
+            "error_count": float(self._errors_total),
+            "error_rate": float(self._errors_total) / max(1, self._messages_processed),
+        }
+
     def get_metrics(self) -> Dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
@@ -1257,7 +1281,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         """
         try:
             # Capture start time
-            self._start_time = datetime.now()
+            self._start_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
 
             # Emit telemetry for adapter start
             await self._emit_telemetry("discord.adapter.starting", 1.0, {"adapter_type": "discord"})

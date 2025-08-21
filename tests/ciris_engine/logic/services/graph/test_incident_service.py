@@ -111,11 +111,11 @@ def incident_service(mock_memory_bus: Mock, mock_time_service: Mock) -> Incident
 async def test_incident_service_lifecycle(incident_service: IncidentManagementService) -> None:
     """Test IncidentService start/stop lifecycle."""
     # Start
-    incident_service.start()
+    await incident_service.start()
     assert incident_service._started is True
 
     # Stop
-    incident_service.stop()
+    await incident_service.stop()
     assert incident_service._started is False
 
 

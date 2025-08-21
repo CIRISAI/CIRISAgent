@@ -19,13 +19,17 @@ logger = logging.getLogger(__name__)
 class APIRuntimeControlService(Service):
     """Runtime control exposed through API."""
 
-    def __init__(self, runtime: Any) -> None:
+    def __init__(self, runtime: Any, time_service: Optional[Any] = None) -> None:
         """Initialize API runtime control."""
         super().__init__()
+
         self.runtime = runtime
+        self._time_service = time_service  # Store for telemetry compatibility
         self._paused = False
         self._pause_reason: Optional[str] = None
         self._pause_time: Optional[datetime] = None
+        self._start_time: Optional[datetime] = None  # For uptime tracking
+        self._started = False  # Track if service has been started
 
         # Adapter manager will be initialized later when services are available
         self.adapter_manager: Optional[RuntimeAdapterManager] = None
@@ -135,6 +139,10 @@ class APIRuntimeControlService(Service):
 
     async def start(self) -> None:
         """Start the runtime control service."""
+        # Track start time for telemetry
+        self._start_time = datetime.now(timezone.utc)
+        self._started = True
+
         # Initialize adapter manager now that services should be available
         if self.runtime and hasattr(self.runtime, "time_service") and self.runtime.time_service:
             self.adapter_manager = RuntimeAdapterManager(self.runtime, self.runtime.time_service)
@@ -177,11 +185,15 @@ class APIRuntimeControlService(Service):
 
     def get_status(self) -> ServiceStatus:
         """Get current service status."""
+        uptime = 0.0
+        if self._start_time:
+            uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
+
         return ServiceStatus(
             service_name="APIRuntimeControlService",
             service_type="RUNTIME_CONTROL",
-            is_healthy=True,
-            uptime_seconds=0.0,  # Would need to track start time
+            is_healthy=self._started,
+            uptime_seconds=uptime,
             last_error=None,
             metrics={
                 "paused": float(self._paused),
@@ -190,6 +202,7 @@ class APIRuntimeControlService(Service):
                     if self._pause_time and self._paused
                     else 0
                 ),
+                "adapter_manager_available": 1.0 if self.adapter_manager else 0.0,
             },
             last_health_check=datetime.now(timezone.utc),
         )

@@ -866,6 +866,20 @@ Tools available:
 
         return channels
 
+    def _collect_metrics(self) -> Dict[str, float]:
+        """Collect base metrics for the CLI adapter."""
+        uptime = 0.0
+        if self._start_time:
+            uptime = (self._get_time_service().now() - self._start_time).total_seconds()
+
+        return {
+            "healthy": True if self._running else False,
+            "uptime_seconds": uptime,
+            "request_count": float(self._commands_executed_count),
+            "error_count": float(self._errors_total_count),
+            "error_rate": float(self._errors_total_count) / max(1, self._commands_executed_count),
+        }
+
     async def get_metrics(self) -> Dict[str, float]:
         """
         Get all CLI adapter metrics including base, custom, and v1.4.3 specific.

@@ -223,7 +223,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             await self._record_event("processor_control", "pause", success=success)
 
             return ProcessorControlResponse(
-                success=True, processor_name="agent", operation="pause", new_status=self._processor_status, error=None
+                success=success,
+                processor_name="agent",
+                operation="pause",
+                new_status=self._processor_status,
+                error=None if success else "Failed to pause processor",
             )
 
         except Exception as e:
@@ -263,7 +267,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             await self._record_event("processor_control", "resume", success=success)
 
             return ProcessorControlResponse(
-                success=True, processor_name="agent", operation="resume", new_status=self._processor_status, error=None
+                success=success,
+                processor_name="agent",
+                operation="resume",
+                new_status=self._processor_status,
+                error=None if success else "Failed to resume processor",
             )
 
         except Exception as e:
@@ -742,7 +750,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return None
 
         info = await self.adapter_manager.get_adapter_info(adapter_id)
-        if "error" in info:
+        if info is None or "error" in info:
             return None
 
         # Map the status string to AdapterStatus enum
@@ -1746,7 +1754,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             # Original metrics
             "events_count": float(len(self._events_history)),
             "processor_status": 1.0 if self._processor_status == ProcessorStatus.RUNNING else 0.0,
-            "adapters_loaded": float(len(self.adapter_manager.active_adapters)) if self.adapter_manager else 0.0,
+            "adapters_loaded": float(len(self.adapter_manager.loaded_adapters)) if self.adapter_manager else 0.0,
             # Enhanced metrics
             "queue_depth": float(queue_depth),
             "thoughts_processed": float(self._thoughts_processed),
@@ -1912,8 +1920,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             metrics={
                 "events_count": float(len(self._events_history)),
                 "adapters_loaded": float(
-                    len(self.adapter_manager.active_adapters)
-                    if self.adapter_manager and hasattr(self.adapter_manager, "active_adapters")
+                    len(self.adapter_manager.loaded_adapters)
+                    if self.adapter_manager and hasattr(self.adapter_manager, "loaded_adapters")
                     else 0
                 ),
             },

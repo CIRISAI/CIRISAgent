@@ -61,7 +61,7 @@ def mock_runtime():
 @pytest.fixture
 def runtime_control_service(mock_runtime):
     """Create APIRuntimeControlService instance."""
-    return APIRuntimeControlService(mock_runtime)
+    return APIRuntimeControlService(mock_runtime, time_service=None)
 
 
 class TestAPIRuntimeControlPauseResume:

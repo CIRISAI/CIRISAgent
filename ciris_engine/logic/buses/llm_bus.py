@@ -16,7 +16,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -571,7 +571,7 @@ class LLMBus(BaseBus[LLMService]):
         avg_latency = total_latency / total_requests if total_requests > 0 else 0.0
 
         # Count circuit breakers open
-        circuit_breakers_open = sum(1 for cb in self.circuit_breakers.values() if cb.is_open)
+        circuit_breakers_open = sum(1 for cb in self.circuit_breakers.values() if cb.state == CircuitState.OPEN)
 
         return {
             "llm_requests_total": float(total_requests),

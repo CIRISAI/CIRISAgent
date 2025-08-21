@@ -5,7 +5,7 @@ Communication message bus - handles all communication service operations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -46,7 +46,12 @@ class CommunicationBus(BaseBus[CommunicationService]):
     - fetch_messages
     """
 
-    def __init__(self, service_registry: "ServiceRegistry", time_service: TimeServiceProtocol):
+    def __init__(
+        self,
+        service_registry: "ServiceRegistry",
+        time_service: TimeServiceProtocol,
+        telemetry_service: Optional[Any] = None,
+    ):
         super().__init__(service_type=ServiceType.COMMUNICATION, service_registry=service_registry)
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None

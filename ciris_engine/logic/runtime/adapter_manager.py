@@ -7,7 +7,7 @@ extending the existing processor control capabilities with adapter lifecycle man
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import aiofiles
 
@@ -23,7 +23,15 @@ from ciris_engine.logic.registries.base import Priority, SelectionStrategy
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.registration import AdapterServiceRegistration
 from ciris_engine.schemas.infrastructure.base import ServiceRegistration
-from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterOperationResult, AdapterStatus
+from ciris_engine.schemas.runtime.adapter_management import (
+    AdapterConfig,
+    AdapterInfo,
+    AdapterMetrics,
+    AdapterOperationResult,
+    AdapterStatus,
+    CommunicationAdapterInfo,
+    CommunicationAdapterStatus,
+)
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 logger = logging.getLogger(__name__)
@@ -36,7 +44,7 @@ class AdapterInstance:
     adapter_id: str
     adapter_type: str
     adapter: Any  # Actually Service but also needs BaseAdapterProtocol methods
-    config_params: dict  # Adapter-specific settings
+    config_params: AdapterConfig  # Adapter-specific settings
     loaded_at: datetime
     is_running: bool = False
     services_registered: List[str] = field(default_factory=list)
@@ -52,7 +60,7 @@ class AdapterManagerInterface:
     """Interface for runtime adapter management operations"""
 
     async def load_adapter(
-        self, adapter_type: str, adapter_id: str, config_params: Optional[dict] = None
+        self, adapter_type: str, adapter_id: str, config_params: Optional[AdapterConfig] = None
     ) -> AdapterOperationResult:
         """Load and start a new adapter instance"""
         raise NotImplementedError("This is an interface method")
@@ -61,7 +69,9 @@ class AdapterManagerInterface:
         """Stop and unload an adapter instance"""
         raise NotImplementedError("This is an interface method")
 
-    async def reload_adapter(self, adapter_id: str, config_params: Optional[dict] = None) -> AdapterOperationResult:
+    async def reload_adapter(
+        self, adapter_id: str, config_params: Optional[AdapterConfig] = None
+    ) -> AdapterOperationResult:
         """Reload an adapter with new configuration"""
         raise NotImplementedError("This is an interface method")
 
@@ -88,7 +98,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         self._register_config_listener()
 
     async def load_adapter(
-        self, adapter_type: str, adapter_id: str, config_params: Optional[dict] = None
+        self, adapter_type: str, adapter_id: str, config_params: Optional[AdapterConfig] = None
     ) -> AdapterOperationResult:
         """Load and start a new adapter instance
 
@@ -116,7 +126,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             adapter_class = load_adapter(adapter_type)
 
-            adapter_kwargs = config_params or {}
+            adapter_kwargs = config_params.settings if config_params else {}
             # Adapters expect runtime as first argument, then kwargs
             adapter = adapter_class(self.runtime, **adapter_kwargs)  # type: ignore[call-arg]
 
@@ -124,7 +134,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 adapter_id=adapter_id,
                 adapter_type=adapter_type,
                 adapter=adapter,
-                config_params=adapter_kwargs,
+                config_params=config_params or AdapterConfig(adapter_type=adapter_type, enabled=True),
                 loaded_at=self.time_service.now(),
             )
 
@@ -151,7 +161,9 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             self._register_adapter_services(instance)
 
             # Save adapter config to graph
-            await self._save_adapter_config_to_graph(adapter_id, adapter_type, adapter_kwargs)
+            await self._save_adapter_config_to_graph(
+                adapter_id, adapter_type, config_params or AdapterConfig(adapter_type=adapter_type, enabled=True)
+            )
 
             # Don't add dynamically loaded adapters to runtime.adapters
             # to avoid duplicate bootstrap entries in control_service
@@ -285,7 +297,9 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 details={},
             )
 
-    async def reload_adapter(self, adapter_id: str, config_params: Optional[dict] = None) -> AdapterOperationResult:
+    async def reload_adapter(
+        self, adapter_id: str, config_params: Optional[AdapterConfig] = None
+    ) -> AdapterOperationResult:
         """Reload an adapter with new configuration
 
         Args:
@@ -354,10 +368,14 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 except Exception:
                     health_status = "error"
 
-                metrics_dict: Optional[dict] = None
+                metrics: Optional[AdapterMetrics] = None
                 if health_status == "healthy":
                     uptime_seconds = (self.time_service.now() - instance.loaded_at).total_seconds()
-                    metrics_dict = {"uptime_seconds": uptime_seconds, "health_status": health_status}
+                    metrics = AdapterMetrics(
+                        uptime_seconds=uptime_seconds,
+                        messages_processed=0,  # Would need to track this
+                        errors_count=0,  # Would need to track this
+                    )
 
                 # Get tools from adapter if it has a tool service
                 tools = None
@@ -366,17 +384,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         tool_service = instance.adapter.tool_service
                         if hasattr(tool_service, "get_all_tool_info"):
                             tool_infos = await tool_service.get_all_tool_info()
-                            tools = [
-                                {
-                                    "name": info.name,
-                                    "description": info.description,
-                                    "schema": info.parameters.model_dump() if info.parameters else {},
-                                }
-                                for info in tool_infos
-                            ]
+                            tools = [info.name for info in tool_infos]
                         elif hasattr(tool_service, "list_tools"):
                             tool_names = await tool_service.list_tools()
-                            tools = [{"name": name, "description": f"{name} tool", "schema": {}} for name in tool_names]
+                            tools = tool_names
                 except Exception as e:
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
@@ -392,7 +403,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                             enabled=instance.is_running,
                             settings=self._sanitize_config_params(instance.adapter_type, instance.config_params),
                         ),
-                        metrics=metrics_dict,
+                        metrics=metrics,
                         last_activity=None,
                         tools=tools,
                     )
@@ -457,13 +468,14 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             uptime_seconds = (self.time_service.now() - instance.loaded_at).total_seconds()
 
-            metrics_dict: Optional[dict] = None
+            metrics: Optional[AdapterMetrics] = None
             if health_status == "healthy":
-                metrics_dict = {
-                    "uptime_seconds": uptime_seconds,
-                    "health_status": health_status,
-                    "service_details": service_details,
-                }
+                metrics = AdapterMetrics(
+                    uptime_seconds=uptime_seconds,
+                    messages_processed=0,  # Would need to track this
+                    errors_count=0,  # Would need to track this
+                    last_error=None,
+                )
 
             # Get tools from adapter if it has a tool service
             tools = None
@@ -472,17 +484,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     tool_service = instance.adapter.tool_service
                     if hasattr(tool_service, "get_all_tool_info"):
                         tool_infos = await tool_service.get_all_tool_info()
-                        tools = [
-                            {
-                                "name": info.name,
-                                "description": info.description,
-                                "schema": info.parameters.model_dump() if info.parameters else {},
-                            }
-                            for info in tool_infos
-                        ]
+                        tools = [info.name for info in tool_infos]
                     elif hasattr(tool_service, "list_tools"):
                         tool_names = await tool_service.list_tools()
-                        tools = [{"name": name, "description": f"{name} tool", "schema": {}} for name in tool_names]
+                        tools = tool_names
             except Exception as e:
                 logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
@@ -497,7 +502,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     enabled=instance.is_running,
                     settings=self._sanitize_config_params(instance.adapter_type, instance.config_params),
                 ),
-                metrics=metrics_dict,
+                metrics=metrics,
                 last_activity=None,
                 tools=tools,
             )
@@ -506,7 +511,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             logger.error(f"Failed to get adapter status for {adapter_id}: {e}", exc_info=True)
             return None
 
-    def _sanitize_config_params(self, adapter_type: str, config_params: dict) -> dict:
+    def _sanitize_config_params(self, adapter_type: str, config_params: Optional[AdapterConfig]) -> AdapterConfig:
         """Sanitize config parameters to remove sensitive information.
 
         Args:
@@ -517,7 +522,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             Sanitized configuration with sensitive fields masked
         """
         if not config_params:
-            return {}
+            return AdapterConfig(adapter_type=adapter_type, enabled=False)
 
         # Define sensitive fields per adapter type
         sensitive_fields = {
@@ -530,24 +535,24 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         # Get sensitive fields for this adapter type
         fields_to_mask = sensitive_fields.get(adapter_type, ["token", "password", "secret", "api_key"])
 
-        # Create a copy of the config to avoid modifying the original
-        sanitized = {}
-        for key, value in config_params.items():
+        # Create a sanitized copy of the settings
+        sanitized_settings: Dict[str, Optional[Union[str, int, float, bool, List[str]]]] = {}
+        for key, value in config_params.settings.items():
             # Check if this field should be masked
             if any(sensitive in key.lower() for sensitive in fields_to_mask):
                 # Mask the value but show it exists
                 if value:
-                    sanitized[key] = "***MASKED***"
+                    sanitized_settings[key] = "***MASKED***"
                 else:
-                    sanitized[key] = None  # type: ignore[assignment]
-            elif isinstance(value, dict):
-                # Recursively sanitize nested dictionaries
-                sanitized[key] = self._sanitize_config_params(adapter_type, value)  # type: ignore[assignment]
+                    sanitized_settings[key] = None
             else:
                 # Keep non-sensitive values as-is
-                sanitized[key] = value
+                sanitized_settings[key] = value
 
-        return sanitized
+        # Return a new AdapterConfig with sanitized settings
+        return AdapterConfig(
+            adapter_type=config_params.adapter_type, enabled=config_params.enabled, settings=sanitized_settings
+        )
 
     async def load_adapter_from_template(
         self, template_name: str, adapter_id: Optional[str] = None
@@ -684,37 +689,39 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         except Exception as e:
             logger.error(f"Error unregistering services for adapter {instance.adapter_id}: {e}", exc_info=True)
 
-    def get_adapter_info(self, adapter_id: str) -> dict:
+    def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
         """Get detailed information about a specific adapter."""
         if adapter_id not in self.loaded_adapters:
-            return {}
+            return None
 
         try:
             instance = self.loaded_adapters[adapter_id]
 
-            return {
-                "adapter_id": adapter_id,
-                "adapter_type": instance.adapter_type,
-                "config": instance.config_params,
-                "load_time": instance.loaded_at.isoformat(),
-                "is_running": instance.is_running,
-            }
+            return AdapterInfo(
+                adapter_id=adapter_id,
+                adapter_type=instance.adapter_type,
+                config=instance.config_params,
+                load_time=instance.loaded_at.isoformat(),
+                is_running=instance.is_running,
+            )
 
         except Exception as e:
             logger.error(f"Failed to get adapter info for {adapter_id}: {e}", exc_info=True)
-            return {}
+            return None
 
-    def get_communication_adapter_status(self) -> dict:
+    def get_communication_adapter_status(self) -> CommunicationAdapterStatus:
         """Get status of communication adapters."""
         communication_adapter_types = {"discord", "api", "cli"}  # Known communication adapter types
 
-        communication_adapters = []
+        communication_adapters: List[CommunicationAdapterInfo] = []
         running_count = 0
 
         for adapter_id, instance in self.loaded_adapters.items():
             if instance.adapter_type in communication_adapter_types:
                 communication_adapters.append(
-                    {"adapter_id": adapter_id, "adapter_type": instance.adapter_type, "is_running": instance.is_running}
+                    CommunicationAdapterInfo(
+                        adapter_id=adapter_id, adapter_type=instance.adapter_type, is_running=instance.is_running
+                    )
                 )
                 if instance.is_running:
                     running_count += 1
@@ -728,15 +735,17 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         elif total_count == 0:
             warning_message = "No communication adapters are loaded."
 
-        return {
-            "total_communication_adapters": total_count,
-            "running_communication_adapters": running_count,
-            "communication_adapters": communication_adapters,
-            "safe_to_unload": safe_to_unload,
-            "warning_message": warning_message,
-        }
+        return CommunicationAdapterStatus(
+            total_communication_adapters=total_count,
+            running_communication_adapters=running_count,
+            communication_adapters=communication_adapters,
+            safe_to_unload=safe_to_unload,
+            warning_message=warning_message,
+        )
 
-    async def _save_adapter_config_to_graph(self, adapter_id: str, adapter_type: str, config_params: dict) -> None:
+    async def _save_adapter_config_to_graph(
+        self, adapter_id: str, adapter_type: str, config_params: AdapterConfig
+    ) -> None:
         """Save adapter configuration to graph config service."""
         try:
             # Get config service from runtime

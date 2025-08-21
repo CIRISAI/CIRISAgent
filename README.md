@@ -8,7 +8,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-🎉 **BETA RELEASE 1.4.4-beta** | [Release Notes](RELEASE_NOTES_1.4.3.md) | [Telemetry Guide](docs/TELEMETRY_TAXONOMY_V143.md)
+🎉 **BETA RELEASE 1.4.5-beta** | [Release Notes](RELEASE_NOTES_1.4.5.md) | [Telemetry Architecture](TELEMETRY_ARCHITECTURE.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -48,7 +48,8 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
 **Key Features:**
 - **Hot-swappable adapters** (Discord, API, CLI)
 - **[Built-in A/B testing](ciris_engine/logic/processors/README.md#decision-evaluation)** for decisions
-- **[Distributed tracing](ciris_engine/logic/telemetry/README.md)** and metrics
+- **[Enterprise Telemetry](TELEMETRY_ARCHITECTURE.md)** - 554+ Prometheus metrics, traces, logs
+- **[Distributed tracing](ciris_engine/logic/telemetry/README.md)** with parallel collection
 - **[Automatic secret detection](docs/SECRETS_MANAGEMENT.md)** and encryption
 - **[Mock LLM](docs/MOCK_LLM.md)** for offline development
 
@@ -124,7 +125,15 @@ It's technically sophisticated ([21 microservices](docs/ARCHITECTURE.md#services
 - **Agent Creation API**: Create new agents through ceremony (WA signature required)
   - `POST /v1/agents/create` - Initiate creation ceremony
   - All identity changes require WA approval via MEMORIZE
-- **[Telemetry System](ciris_engine/logic/telemetry/README.md)**: Multi-tier metric collection with security filtering, resource monitoring, and agent self-awareness via SystemSnapshot
+- **[Enterprise Telemetry System](TELEMETRY_ARCHITECTURE.md)**: Production-grade observability
+  - **41 Services** monitored in real-time with health tracking
+  - **554+ Prometheus Metrics** with HELP/TYPE annotations
+  - **Multiple Output Formats**: JSON, Prometheus, Graphite
+  - **Unified Endpoint**: `/v1/telemetry/unified` with views and filtering
+  - **Traces**: Cognitive reasoning paths with thought chains
+  - **No Fallback Philosophy**: Real metrics only, no fake data
+  - **Parallel Collection**: All services queried simultaneously
+  - **Graph-Based TSDB**: 6-hour consolidation windows
 - **[Hot/Cold Path Analytics](ciris_engine/logic/telemetry/README.md)**: Intelligent telemetry with path-aware retention policies and priority-based collection
 - **[Time Series Database (TSDB)](FSD/TELEMETRY.md)**: Built-in TSDB for unified storage of metrics, logs, and audit events with time-based queries and cross-correlation analysis
 - **API System**: Comprehensive HTTP REST API with real-time telemetry endpoints, processor control, and TSDB data access
@@ -195,8 +204,13 @@ curl -X POST http://localhost:8080/v1/runtime/processor/pause
 - **[Audit Trail](ciris_engine/logic/audit/README.md)**: Cryptographically signed operation logs
 
 ### 📊 Operational Insights
-- **Real-Time Telemetry**: System metrics and health
-- **Service Health**: Circuit breaker states and availability
+- **[Real-Time Telemetry](TELEMETRY_ARCHITECTURE.md)**: System metrics and health
+  - `/v1/telemetry/unified` - Aggregated metrics (JSON/Prometheus/Graphite)
+  - `/v1/telemetry/traces` - Cognitive reasoning traces
+  - `/v1/telemetry/logs` - System logs with filtering
+  - `/v1/telemetry/metrics` - Detailed service metrics
+- **Service Health**: 41 services with circuit breaker states
+- **Monitoring Tool**: `python tools/api_telemetry_tool.py --monitor`
 - **Memory Timeline**: Time-based memory queries
 - **Audit Statistics**: Action patterns and compliance
 

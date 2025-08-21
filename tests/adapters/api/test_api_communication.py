@@ -108,7 +108,7 @@ class TestAPICommunicationMessageSending:
             assert communication_service._response_queue.qsize() == 3
 
             # Verify metrics were updated
-            assert communication_service._requests_handled == 3
+            assert communication_service._request_count == 3
 
     @pytest.mark.asyncio
     async def test_send_message_error_handling(self, communication_service, app_state):

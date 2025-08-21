@@ -51,6 +51,13 @@ class PrometheusConverter:
 
     def _process_value(self, key: str, value: Any, prefix: str) -> None:
         """Process a single value based on its type."""
+        # Special handling for custom_metrics - merge into parent namespace
+        if key == "custom_metrics" and isinstance(value, dict):
+            # Process custom_metrics directly into the parent prefix
+            # This avoids creating separate "custom_metrics" namespaces
+            self._process_dict(value, prefix)
+            return
+
         full_key = self._build_key(key, prefix)
 
         if isinstance(value, dict):

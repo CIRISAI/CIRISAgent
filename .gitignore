@@ -53,3 +53,7 @@ data_backup_*
 
 # Crush database files
 .crush/
+
+# Log symlinks that change frequently
+logs/.current_log
+logs/.current_incident_log

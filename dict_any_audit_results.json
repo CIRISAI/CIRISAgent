@@ -1875,7 +1875,7 @@
     ]
   },
   "tools": {
-    "occurrences": 124,
+    "occurrences": 129,
     "findings": [
       {
         "file": "tools/validate_prod_routes.py",
@@ -1891,6 +1891,46 @@
         "class": "RouteValidator",
         "function": "test_route",
         "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 53,
+        "class": "APITelemetryTester",
+        "function": "test_unified",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 85,
+        "class": "APITelemetryTester",
+        "function": "test_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 111,
+        "class": "APITelemetryTester",
+        "function": "test_traces",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 137,
+        "class": "APITelemetryTester",
+        "function": "test_logs",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 195,
+        "class": "APITelemetryTester",
+        "function": "test_service_health",
+        "context": "return_type",
         "usage_hint": "generic_data"
       },
       {
@@ -2872,7 +2912,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 356,
-    "files_affected": 113
+    "occurrences": 361,
+    "files_affected": 114
   }
 }

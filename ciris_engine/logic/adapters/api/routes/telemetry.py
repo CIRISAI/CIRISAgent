@@ -773,15 +773,15 @@ async def get_reasoning_traces(
                                 trace_id=f"trace_{task.task_id}",
                                 task_id=task.task_id,
                                 task_description=task.description,
-                                start_time=task.created_at,
-                                duration_ms=(
-                                    (task.completed_at - task.created_at).total_seconds() * 1000
-                                    if task.completed_at
-                                    else 0
+                                start_time=(
+                                    datetime.fromisoformat(task.created_at)
+                                    if isinstance(task.created_at, str)
+                                    else task.created_at
                                 ),
+                                duration_ms=0,  # TaskOutcome doesn't have completion timestamp
                                 thought_count=len(trace.thought_steps),
                                 decision_count=len(trace.decisions) if hasattr(trace, "decisions") else 0,
-                                reasoning_depth=trace.max_depth,
+                                reasoning_depth=len(trace.thought_steps) if hasattr(trace, "thought_steps") else 0,
                                 thoughts=[
                                     ThoughtStep(
                                         step=i,
@@ -835,38 +835,69 @@ async def get_reasoning_traces(
     if not traces and audit_service:
         try:
             # Query audit entries related to reasoning
-            entries = await audit_service.query_entries(
-                action_prefix="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
+            entries = await audit_service.query_events(
+                event_type="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
             )
 
             # Group by correlation ID or time window
             trace_groups = defaultdict(list)
             for entry in entries:
-                trace_key = entry.context.get("task_id", entry.timestamp.strftime("%Y%m%d%H%M"))
+                # entry is a dict from query_events with structure: {event_id, event_type, timestamp, user_id, data: {context}, metadata}
+                context = entry.get("data", {}).get("context", {})
+                timestamp = (
+                    datetime.fromisoformat(entry["timestamp"])
+                    if isinstance(entry.get("timestamp"), str)
+                    else entry.get("timestamp", datetime.now(timezone.utc))
+                )
+                trace_key = context.get("task_id", timestamp.strftime("%Y%m%d%H%M"))
                 trace_groups[trace_key].append(entry)
 
             # Build traces from groups
             for trace_id, entries in list(trace_groups.items())[:limit]:
                 if entries:
-                    entries.sort(key=lambda e: e.timestamp)
+                    entries.sort(
+                        key=lambda e: (
+                            datetime.fromisoformat(e["timestamp"])
+                            if isinstance(e["timestamp"], str)
+                            else e["timestamp"]
+                        )
+                    )
+
+                    # Parse timestamps from entries (dicts)
+                    start_timestamp = (
+                        datetime.fromisoformat(entries[0]["timestamp"])
+                        if isinstance(entries[0].get("timestamp"), str)
+                        else entries[0].get("timestamp", datetime.now(timezone.utc))
+                    )
+                    end_timestamp = (
+                        datetime.fromisoformat(entries[-1]["timestamp"])
+                        if isinstance(entries[-1].get("timestamp"), str)
+                        else entries[-1].get("timestamp", datetime.now(timezone.utc))
+                    )
 
                     trace_data = ReasoningTraceData(
                         trace_id=f"trace_{trace_id}",
-                        task_id=trace_id if trace_id != entries[0].timestamp.strftime("%Y%m%d%H%M") else None,
+                        task_id=trace_id if trace_id != start_timestamp.strftime("%Y%m%d%H%M") else None,
                         task_description=None,
-                        start_time=entries[0].timestamp,
-                        duration_ms=(entries[-1].timestamp - entries[0].timestamp).total_seconds() * 1000,
+                        start_time=start_timestamp,
+                        duration_ms=(end_timestamp - start_timestamp).total_seconds() * 1000,
                         thought_count=len(entries),
-                        decision_count=sum(1 for e in entries if "decision" in e.action.lower()),
-                        reasoning_depth=max(e.context.get("depth", 0) for e in entries),
+                        decision_count=sum(1 for e in entries if "decision" in e.get("event_type", "").lower()),
+                        reasoning_depth=(
+                            max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0
+                        ),
                         thoughts=[
                             ThoughtStep(
                                 step=i,
-                                content=e.context.get("thought", e.action),
-                                timestamp=e.timestamp,
-                                depth=e.context.get("depth", 0),
-                                action=e.context.get("action"),
-                                confidence=e.context.get("confidence"),
+                                content=(e.get("data", {}).get("context", {}).get("thought", e.get("event_type", ""))),
+                                timestamp=(
+                                    datetime.fromisoformat(e["timestamp"])
+                                    if isinstance(e.get("timestamp"), str)
+                                    else e.get("timestamp", datetime.now(timezone.utc))
+                                ),
+                                depth=(e.get("data", {}).get("context", {}).get("depth", 0)),
+                                action=(e.get("data", {}).get("context", {}).get("action")),
+                                confidence=(e.get("data", {}).get("context", {}).get("confidence")),
                             )
                             for i, e in enumerate(entries)
                         ],
@@ -911,7 +942,7 @@ async def get_system_logs(
     if audit_service:
         try:
             # Query audit entries as logs
-            entries = await audit_service.query_entries(
+            entries = await audit_service.query_events(
                 start_time=start_time, end_time=end_time, limit=limit * 2  # Get extra for filtering
             )
 

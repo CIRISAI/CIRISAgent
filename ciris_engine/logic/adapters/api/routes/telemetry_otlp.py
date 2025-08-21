@@ -384,15 +384,29 @@ def convert_traces_to_otlp_json(
     spans = []
 
     for trace in traces_data:
-        # Generate trace ID from hash of trace content
-        trace_id = (
-            hashlib.sha256(f"{trace.get('trace_id', '')}_{trace.get('timestamp', '')}".encode())
-            .hexdigest()[:32]
-            .upper()
-        )
+        # Use provided trace_id or generate one
+        if "trace_id" in trace and trace["trace_id"]:
+            # Convert to 32-char hex format for OTLP
+            trace_id = trace["trace_id"].replace("-", "")[:32].upper().ljust(32, "0")
+        else:
+            trace_id = (
+                hashlib.sha256(f"{trace.get('trace_id', '')}_{trace.get('timestamp', '')}".encode())
+                .hexdigest()[:32]
+                .upper()
+            )
 
-        # Generate span ID
-        span_id = hashlib.sha256(f"{trace_id}_{trace.get('operation', 'unknown')}".encode()).hexdigest()[:16].upper()
+        # Use provided span_id or generate one
+        if "span_id" in trace and trace["span_id"]:
+            span_id = trace["span_id"].replace("-", "")[:16].upper().ljust(16, "0")
+        else:
+            span_id = (
+                hashlib.sha256(f"{trace_id}_{trace.get('operation', 'unknown')}".encode()).hexdigest()[:16].upper()
+            )
+
+        # Handle parent span ID
+        parent_span_id = None
+        if "parent_span_id" in trace and trace["parent_span_id"]:
+            parent_span_id = trace["parent_span_id"].replace("-", "")[:16].upper().ljust(16, "0")
 
         # Convert timestamp
         if isinstance(trace.get("timestamp"), str):
@@ -404,6 +418,10 @@ def convert_traces_to_otlp_json(
         else:
             time_ns = int(time.time() * 1e9)
 
+        # Calculate end time based on duration if available
+        duration_ms = trace.get("duration_ms", 1.0)
+        end_time_ns = time_ns + int(duration_ms * 1e6)
+
         # Build span attributes
         span_attrs = []
 
@@ -411,39 +429,55 @@ def convert_traces_to_otlp_json(
         if "operation" in trace:
             span_attrs.append({"key": "operation.name", "value": {"stringValue": str(trace["operation"])}})
 
-        if "agent_id" in trace:
-            span_attrs.append({"key": "agent.id", "value": {"stringValue": str(trace["agent_id"])}})
+        if "service" in trace:
+            span_attrs.append({"key": "service.name", "value": {"stringValue": str(trace["service"])}})
 
-        if "cognitive_state" in trace:
-            span_attrs.append({"key": "cognitive.state", "value": {"stringValue": str(trace["cognitive_state"])}})
+        if "handler" in trace:
+            span_attrs.append({"key": "handler.name", "value": {"stringValue": str(trace["handler"])}})
 
-        if "thoughts" in trace and isinstance(trace["thoughts"], list):
-            # Add thought steps as events
-            events = []
-            for i, thought in enumerate(trace["thoughts"]):
-                thought_content = thought.get("content", "") if isinstance(thought, dict) else str(thought)
-                events.append(
-                    {
-                        "name": f"thought.step.{i}",
-                        "timeUnixNano": str(time_ns + i * 1000000),  # Offset each by 1ms
-                        "attributes": [{"key": "thought.content", "value": {"stringValue": thought_content}}],
-                    }
-                )
-        else:
-            events = []
+        if "status" in trace:
+            span_attrs.append({"key": "span.status", "value": {"stringValue": str(trace["status"])}})
 
+        # Add task/thought linkage - CRITICAL for CIRIS tracing
+        if "task_id" in trace and trace["task_id"]:
+            span_attrs.append({"key": "ciris.task_id", "value": {"stringValue": str(trace["task_id"])}})
+
+        if "thought_id" in trace and trace["thought_id"]:
+            span_attrs.append({"key": "ciris.thought_id", "value": {"stringValue": str(trace["thought_id"])}})
+
+        # Add success/error information
+        if "success" in trace:
+            span_attrs.append({"key": "span.success", "value": {"boolValue": bool(trace["success"])}})
+
+        if "error" in trace and trace["error"]:
+            span_attrs.append({"key": "error.message", "value": {"stringValue": str(trace["error"])}})
+
+        # Determine span kind
+        span_kind = 2  # SERVER by default
+        if "span_kind" in trace:
+            kind_map = {"internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5}
+            span_kind = kind_map.get(trace["span_kind"], 2)
+
+        # Build the span
         span = {
             "traceId": trace_id,
             "spanId": span_id,
-            "name": trace.get("operation", "unknown_operation"),
+            "name": trace.get("span_name", trace.get("operation", "unknown_operation")),
             "startTimeUnixNano": str(time_ns),
-            "endTimeUnixNano": str(time_ns + 1000000),  # 1ms duration by default
-            "kind": 2,  # SERVER
+            "endTimeUnixNano": str(end_time_ns),
+            "kind": span_kind,
             "attributes": span_attrs,
         }
 
-        if events:
-            span["events"] = events
+        # Add parent span ID if available
+        if parent_span_id:
+            span["parentSpanId"] = parent_span_id
+
+        # Add status if there was an error
+        if trace.get("error"):
+            span["status"] = {"code": 2, "message": trace["error"]}  # ERROR
+        elif trace.get("success") is False:
+            span["status"] = {"code": 2, "message": "Operation failed"}  # ERROR
 
         spans.append(span)
 

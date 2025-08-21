@@ -2226,6 +2226,100 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         return result
 
+    async def _store_correlation(self, correlation: "ServiceCorrelation") -> None:
+        """
+        Store a service correlation (trace span) in the memory graph.
+
+        Correlations are always linked to tasks/thoughts unless they're edge observations
+        that the adaptive filter chose not to create a task for.
+        """
+        try:
+            from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+            # Extract task and thought IDs from the correlation's request data if available
+            task_id = None
+            thought_id = None
+
+            if correlation.request_data:
+                # Try to extract from request data
+                if hasattr(correlation.request_data, "task_id"):
+                    task_id = correlation.request_data.task_id
+                if hasattr(correlation.request_data, "thought_id"):
+                    thought_id = correlation.request_data.thought_id
+                elif isinstance(correlation.request_data, dict):
+                    task_id = correlation.request_data.get("task_id")
+                    thought_id = correlation.request_data.get("thought_id")
+
+            # Create a graph node for the correlation
+            node_id = f"correlation/{correlation.correlation_id}"
+
+            # Build attributes including task/thought linkage
+            attributes = {
+                "correlation_id": correlation.correlation_id,
+                "correlation_type": (
+                    correlation.correlation_type.value
+                    if hasattr(correlation.correlation_type, "value")
+                    else str(correlation.correlation_type)
+                ),
+                "service_type": correlation.service_type,
+                "handler_name": correlation.handler_name,
+                "action_type": correlation.action_type,
+                "status": correlation.status.value if hasattr(correlation.status, "value") else str(correlation.status),
+                "timestamp": correlation.timestamp.isoformat() if correlation.timestamp else self._now().isoformat(),
+                "task_id": task_id,  # Link to task if available
+                "thought_id": thought_id,  # Link to thought if available
+            }
+
+            # Add trace context if available
+            if correlation.trace_context:
+                trace_ctx = correlation.trace_context
+                attributes.update(
+                    {
+                        "trace_id": trace_ctx.trace_id if hasattr(trace_ctx, "trace_id") else None,
+                        "span_id": trace_ctx.span_id if hasattr(trace_ctx, "span_id") else None,
+                        "parent_span_id": trace_ctx.parent_span_id if hasattr(trace_ctx, "parent_span_id") else None,
+                        "span_name": trace_ctx.span_name if hasattr(trace_ctx, "span_name") else None,
+                        "span_kind": trace_ctx.span_kind if hasattr(trace_ctx, "span_kind") else None,
+                    }
+                )
+
+            # Add response data if available
+            if correlation.response_data:
+                resp = correlation.response_data
+                if hasattr(resp, "execution_time_ms"):
+                    attributes["execution_time_ms"] = resp.execution_time_ms
+                if hasattr(resp, "success"):
+                    attributes["success"] = resp.success
+                if hasattr(resp, "error_message"):
+                    attributes["error_message"] = resp.error_message
+
+            # Create and store the node
+            node = GraphNode(
+                id=node_id,
+                type=NodeType.TELEMETRY,
+                scope=GraphScope.LOCAL,
+                attributes=attributes,
+                version=1,
+                updated_by="telemetry_service",
+                updated_at=self._now(),
+            )
+
+            # Store in memory graph
+            await self._memory_bus.memorize(node=node, handler_name="telemetry_service")
+
+            # Keep a recent cache for quick access
+            if not hasattr(self, "_recent_correlations"):
+                self._recent_correlations = []
+
+            self._recent_correlations.append(correlation)
+            # Keep only last 1000 correlations in memory
+            if len(self._recent_correlations) > 1000:
+                self._recent_correlations = self._recent_correlations[-1000:]
+
+        except Exception as e:
+            logger.error(f"Failed to store correlation {correlation.correlation_id}: {e}")
+            # Don't raise - we don't want telemetry failures to break the application
+
     def _get_actions(self) -> List[str]:
         """Get the list of actions this service supports."""
         return [

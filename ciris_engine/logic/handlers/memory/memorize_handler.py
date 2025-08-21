@@ -154,9 +154,7 @@ class MemorizeHandler(BaseActionHandler):
 
                 follow_up_content = (
                     f"MEMORIZE COMPLETE - stored {node.type.value} '{node.id}'{content_preview}. "
-                    "ACTION REQUIRED: Your next action should be TASK_COMPLETE unless you were explicitly requested to notify the user, "
-                    "or if further action is required to complete the parent task, but most of the time TASK_COMPLETE is next. "
-                    "Do NOT memorize again - the information is already stored."
+                    "Information successfully saved to memory graph."
                 )
             else:
                 follow_up_content = (

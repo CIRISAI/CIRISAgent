@@ -408,6 +408,97 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         self._redaction_operations += 1
         return redacted_content
 
+    async def get_recent_traces(self, limit: int = 100) -> List["ServiceCorrelation"]:
+        """
+        Get recent trace correlations from the telemetry service.
+
+        Returns ServiceCorrelation objects that represent trace spans,
+        always linked to their corresponding tasks/thoughts.
+        """
+        try:
+            # Get telemetry service from runtime if available
+            if hasattr(self, "_runtime") and self._runtime:
+                telemetry_service = getattr(self._runtime, "telemetry_service", None)
+                if telemetry_service and hasattr(telemetry_service, "_recent_correlations"):
+                    # Return the most recent correlations
+                    correlations = telemetry_service._recent_correlations[-limit:]
+                    return correlations
+
+            # Fallback: query from memory graph
+            from ciris_engine.schemas.services.graph_core import NodeType
+            from ciris_engine.schemas.telemetry.core import (
+                CorrelationType,
+                ServiceCorrelation,
+                ServiceCorrelationStatus,
+                ServiceRequestData,
+                ServiceResponseData,
+                TraceContext,
+            )
+
+            # Query correlations from memory
+            if hasattr(self, "_memory_bus") and self._memory_bus:
+                # Query for correlation nodes
+                nodes = await self._memory_bus.recall(
+                    query={"type": NodeType.TELEMETRY, "id_prefix": "correlation/", "limit": limit},
+                    handler_name="visibility_service",
+                )
+
+                # Convert nodes back to ServiceCorrelation objects
+                correlations = []
+                for node in nodes:
+                    if node.attributes and isinstance(node.attributes, dict):
+                        attrs = node.attributes
+
+                        # Reconstruct trace context if available
+                        trace_context = None
+                        if attrs.get("trace_id"):
+                            trace_context = TraceContext(
+                                trace_id=attrs.get("trace_id"),
+                                span_id=attrs.get("span_id"),
+                                parent_span_id=attrs.get("parent_span_id"),
+                                span_name=attrs.get("span_name"),
+                                span_kind=attrs.get("span_kind", "internal"),
+                            )
+
+                        # Reconstruct request data if task/thought IDs are present
+                        request_data = None
+                        if attrs.get("task_id") or attrs.get("thought_id"):
+                            request_data = ServiceRequestData(
+                                task_id=attrs.get("task_id"), thought_id=attrs.get("thought_id")
+                            )
+
+                        # Reconstruct response data if available
+                        response_data = None
+                        if "execution_time_ms" in attrs:
+                            response_data = ServiceResponseData(
+                                success=attrs.get("success", False),
+                                execution_time_ms=attrs.get("execution_time_ms", 0),
+                                error_message=attrs.get("error_message"),
+                            )
+
+                        # Create ServiceCorrelation object
+                        correlation = ServiceCorrelation(
+                            correlation_id=attrs.get("correlation_id", ""),
+                            correlation_type=CorrelationType.TRACE_SPAN,
+                            service_type=attrs.get("service_type", ""),
+                            handler_name=attrs.get("handler_name", ""),
+                            action_type=attrs.get("action_type", ""),
+                            status=ServiceCorrelationStatus[attrs.get("status", "PENDING")],
+                            timestamp=attrs.get("timestamp"),
+                            trace_context=trace_context,
+                            request_data=request_data,
+                            response_data=response_data,
+                        )
+                        correlations.append(correlation)
+
+                return correlations[-limit:]  # Return most recent
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Failed to get recent traces: {e}")
+            return []
+
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect visibility service metrics."""
         metrics = super()._collect_custom_metrics()

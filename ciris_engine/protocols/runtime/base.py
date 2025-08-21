@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Protocol
 if TYPE_CHECKING:
     from ciris_engine.schemas.dma.core import DMAContext, DMADecision
     from ciris_engine.schemas.handlers.schemas import HandlerContext, HandlerResult
-    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterStatus
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
     from ciris_engine.schemas.runtime.enums import ServiceType
     from ciris_engine.schemas.runtime.models import Task, Thought
     from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -133,7 +133,7 @@ class BaseAdapterProtocol(Protocol):
         ...
 
     @abstractmethod
-    def get_status(self) -> "AdapterStatus":
+    def get_status(self) -> "RuntimeAdapterStatus":
         """Get adapter status."""
         ...
 

@@ -28,9 +28,9 @@ from ciris_engine.schemas.runtime.adapter_management import (
     AdapterInfo,
     AdapterMetrics,
     AdapterOperationResult,
-    AdapterStatus,
     CommunicationAdapterInfo,
     CommunicationAdapterStatus,
+    RuntimeAdapterStatus,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
 
@@ -75,11 +75,11 @@ class AdapterManagerInterface:
         """Reload an adapter with new configuration"""
         raise NotImplementedError("This is an interface method")
 
-    async def list_adapters(self) -> List[AdapterStatus]:
+    async def list_adapters(self) -> List[RuntimeAdapterStatus]:
         """List all loaded adapter instances"""
         raise NotImplementedError("This is an interface method")
 
-    async def get_adapter_status(self, adapter_id: str) -> Optional[AdapterStatus]:
+    async def get_adapter_status(self, adapter_id: str) -> Optional[RuntimeAdapterStatus]:
         """Get detailed status of a specific adapter"""
         raise NotImplementedError("This is an interface method")
 
@@ -347,7 +347,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 details={},
             )
 
-    async def list_adapters(self) -> List[AdapterStatus]:
+    async def list_adapters(self) -> List[RuntimeAdapterStatus]:
         """List all loaded adapter instances
 
         Returns:
@@ -392,7 +392,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
                 adapters.append(
-                    AdapterStatus(
+                    RuntimeAdapterStatus(
                         adapter_id=adapter_id,
                         adapter_type=instance.adapter_type,
                         is_running=instance.is_running,
@@ -415,7 +415,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             logger.error(f"Failed to list adapters: {e}", exc_info=True)
             return []
 
-    async def get_adapter_status(self, adapter_id: str) -> Optional[AdapterStatus]:
+    async def get_adapter_status(self, adapter_id: str) -> Optional[RuntimeAdapterStatus]:
         """Get detailed status of a specific adapter
 
         Args:
@@ -491,7 +491,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             except Exception as e:
                 logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
-            return AdapterStatus(
+            return RuntimeAdapterStatus(
                 adapter_id=adapter_id,
                 adapter_type=instance.adapter_type,
                 is_running=instance.is_running,

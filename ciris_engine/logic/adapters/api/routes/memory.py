@@ -358,7 +358,7 @@ async def visualize_graph(
         safe_width = int(width) + 40  # Already validated as int by Query
 
         # Wrap in HTML with escaped values
-        html = f"""
+        html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -411,7 +411,7 @@ async def visualize_graph(
         </html>
         """
 
-        return HTMLResponse(content=html)
+        return HTMLResponse(content=html_content)
 
     except Exception as e:
         logger.error(f"Failed to visualize graph: {e}")

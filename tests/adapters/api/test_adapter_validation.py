@@ -51,10 +51,9 @@ class TestAdapterValidation:
         assert status.metrics == metrics
         assert status.metrics.messages_processed == 100
 
-    def test_adapter_listing_with_metrics(self):
+    def test_adapter_listing_with_metrics(self, app, client):
         """Test that adapter listing properly formats metrics."""
-        app = FastAPI()
-        app.include_router(system.router, prefix="/v1/system")
+        # Router already included by app fixture
 
         # Mock runtime control service with async method
         mock_runtime = MagicMock()
@@ -76,16 +75,8 @@ class TestAdapterValidation:
 
         app.state.main_runtime_control_service = mock_runtime
 
-        # Use test client instead of AsyncClient
-        client = TestClient(app)
-
-        # Mock auth dependency
-        def mock_auth_dep():
-            return MagicMock(user_id="test_user", role="OBSERVER")
-
-        app.dependency_overrides[system.require_observer] = mock_auth_dep
-
-        response = client.get("/v1/system/adapters")
+        # Use dev auth credentials
+        response = client.get("/v1/system/adapters", headers={"Authorization": "Bearer admin:ciris_admin_password"})
 
         assert response.status_code == 200
         data = response.json()
@@ -119,33 +110,53 @@ class TestToolProviderCounting:
         from ciris_engine.schemas.runtime.enums import ServiceType
 
         mock_provider1 = MagicMock()
-        mock_provider1.instance = MagicMock()
+        mock_provider1.instance = MagicMock(spec=["get_all_tool_info"])
         mock_provider1.instance.__class__.__name__ = "APIToolService"
-        mock_provider1.instance.get_all_tool_info = AsyncMock(
-            return_value=[
-                MagicMock(name="tool1", description="Tool 1", parameters=None),
-                MagicMock(name="tool2", description="Tool 2", parameters=None),
-            ]
-        )
+        # Create proper mock tool objects with actual values
+        tool1 = MagicMock()
+        tool1.name = "tool1"
+        tool1.description = "Tool 1"
+        tool1.parameters = None
+        tool1.category = "general"
+        tool1.cost = 0.0
+        tool1.when_to_use = None
+
+        tool2 = MagicMock()
+        tool2.name = "tool2"
+        tool2.description = "Tool 2"
+        tool2.parameters = None
+        tool2.category = "general"
+        tool2.cost = 0.0
+        tool2.when_to_use = None
+
+        mock_provider1.instance.get_all_tool_info = AsyncMock(return_value=[tool1, tool2])
 
         mock_provider2 = MagicMock()
-        mock_provider2.instance = MagicMock()
+        mock_provider2.instance = MagicMock(spec=["get_all_tool_info"])
         mock_provider2.instance.__class__.__name__ = "SecretsToolService"
-        mock_provider2.instance.get_all_tool_info = AsyncMock(
-            return_value=[
-                MagicMock(name="recall_secret", description="Recall secret", parameters=None),
-            ]
-        )
+        tool3 = MagicMock()
+        tool3.name = "recall_secret"
+        tool3.description = "Recall secret"
+        tool3.parameters = None
+        tool3.category = "general"
+        tool3.cost = 0.0
+        tool3.when_to_use = None
+
+        mock_provider2.instance.get_all_tool_info = AsyncMock(return_value=[tool3])
 
         # Duplicate provider (should be deduplicated)
         mock_provider3 = MagicMock()
-        mock_provider3.instance = MagicMock()
+        mock_provider3.instance = MagicMock(spec=["get_all_tool_info"])
         mock_provider3.instance.__class__.__name__ = "APIToolService"
-        mock_provider3.instance.get_all_tool_info = AsyncMock(
-            return_value=[
-                MagicMock(name="tool3", description="Tool 3", parameters=None),
-            ]
-        )
+        tool4 = MagicMock()
+        tool4.name = "tool3"
+        tool4.description = "Tool 3"
+        tool4.parameters = None
+        tool4.category = "general"
+        tool4.cost = 0.0
+        tool4.when_to_use = None
+
+        mock_provider3.instance.get_all_tool_info = AsyncMock(return_value=[tool4])
 
         mock_registry._services[ServiceType.TOOL] = [
             mock_provider1,
@@ -186,22 +197,30 @@ class TestToolProviderCounting:
 
         # Two providers offering the same tool
         mock_provider1 = MagicMock()
-        mock_provider1.instance = MagicMock()
+        mock_provider1.instance = MagicMock(spec=["get_all_tool_info"])
         mock_provider1.instance.__class__.__name__ = "Provider1"
-        mock_provider1.instance.get_all_tool_info = AsyncMock(
-            return_value=[
-                MagicMock(name="shared_tool", description="Shared tool", parameters=None),
-            ]
-        )
+        shared_tool1 = MagicMock()
+        shared_tool1.name = "shared_tool"
+        shared_tool1.description = "Shared tool"
+        shared_tool1.parameters = None
+        shared_tool1.category = "general"
+        shared_tool1.cost = 0.0
+        shared_tool1.when_to_use = None
+
+        mock_provider1.instance.get_all_tool_info = AsyncMock(return_value=[shared_tool1])
 
         mock_provider2 = MagicMock()
-        mock_provider2.instance = MagicMock()
+        mock_provider2.instance = MagicMock(spec=["get_all_tool_info"])
         mock_provider2.instance.__class__.__name__ = "Provider2"
-        mock_provider2.instance.get_all_tool_info = AsyncMock(
-            return_value=[
-                MagicMock(name="shared_tool", description="Shared tool", parameters=None),
-            ]
-        )
+        shared_tool2 = MagicMock()
+        shared_tool2.name = "shared_tool"
+        shared_tool2.description = "Shared tool"
+        shared_tool2.parameters = None
+        shared_tool2.category = "general"
+        shared_tool2.cost = 0.0
+        shared_tool2.when_to_use = None
+
+        mock_provider2.instance.get_all_tool_info = AsyncMock(return_value=[shared_tool2])
 
         mock_registry._services[ServiceType.TOOL] = [
             mock_provider1,

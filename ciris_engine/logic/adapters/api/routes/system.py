@@ -748,7 +748,7 @@ async def list_adapters(
                     loaded_at=adapter.started_at or datetime.now(timezone.utc),
                     services_registered=[],  # Not available from AdapterInfo
                     config_params=config,
-                    metrics=metrics.__dict__ if metrics else None,
+                    metrics=metrics,  # Pass the AdapterMetrics object directly
                     last_activity=None,
                     tools=adapter.tools,  # Include tools information
                 )

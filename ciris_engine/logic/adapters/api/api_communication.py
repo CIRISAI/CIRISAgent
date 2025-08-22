@@ -110,14 +110,14 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
                         message_channel_map = getattr(self._app_state, "message_channel_map", {})
                         message_id = message_channel_map.get(channel_id)
                         if message_id:
-                            from ciris_engine.logic.adapters.api.routes.agent import notify_interact_response
+                            from ciris_engine.logic.adapters.api.routes.agent import store_message_response
 
-                            await notify_interact_response(message_id, content)
-                            logger.info(f"Notified interact response for message {message_id} in channel {channel_id}")
+                            await store_message_response(message_id, content)
+                            logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
                             # Clean up the mapping
                             del message_channel_map[channel_id]
                 except Exception as e:
-                    logger.debug(f"Could not notify interact response: {e}")
+                    logger.debug(f"Could not store interact response: {e}")
 
             # Track successful request
             self._track_request()

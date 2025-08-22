@@ -51,8 +51,7 @@ class TestAdapterValidation:
         assert status.metrics == metrics
         assert status.metrics.messages_processed == 100
 
-    @pytest.mark.asyncio
-    async def test_adapter_listing_with_metrics(self):
+    def test_adapter_listing_with_metrics(self):
         """Test that adapter listing properly formats metrics."""
         app = FastAPI()
         app.include_router(system.router, prefix="/v1/system")
@@ -77,42 +76,40 @@ class TestAdapterValidation:
 
         app.state.main_runtime_control_service = mock_runtime
 
-        # Use async client
-        from httpx import AsyncClient
+        # Use test client instead of AsyncClient
+        client = TestClient(app)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            # Mock auth dependency
-            async def mock_auth_dep():
-                return MagicMock(user_id="test_user", role="OBSERVER")
+        # Mock auth dependency
+        def mock_auth_dep():
+            return MagicMock(user_id="test_user", role="OBSERVER")
 
-            app.dependency_overrides[system.require_observer] = mock_auth_dep
+        app.dependency_overrides[system.require_observer] = mock_auth_dep
 
-            response = await client.get("/v1/system/adapters")
+        response = client.get("/v1/system/adapters")
 
-            assert response.status_code == 200
-            data = response.json()
+        assert response.status_code == 200
+        data = response.json()
 
-            assert "data" in data
-            assert "adapters" in data["data"]
-            adapters = data["data"]["adapters"]
+        assert "data" in data
+        assert "adapters" in data["data"]
+        adapters = data["data"]["adapters"]
 
-            assert len(adapters) == 1
-            adapter = adapters[0]
+        assert len(adapters) == 1
+        adapter = adapters[0]
 
-            # Verify metrics is present and valid
-            assert "metrics" in adapter
-            if adapter["metrics"]:
-                assert adapter["metrics"]["messages_processed"] == 50
-                assert adapter["metrics"]["errors_count"] == 2
+        # Verify metrics is present and valid
+        assert "metrics" in adapter
+        if adapter["metrics"]:
+            assert adapter["metrics"]["messages_processed"] == 50
+            assert adapter["metrics"]["errors_count"] == 2
 
 
 class TestToolProviderCounting:
     """Test tool provider counting and deduplication."""
 
-    def test_tool_provider_deduplication(self):
+    def test_tool_provider_deduplication(self, app, client):
         """Test that duplicate tool providers are deduplicated."""
-        app = FastAPI()
-        app.include_router(system.router, prefix="/v1/system")
+        # Router already included by app fixture
 
         # Mock service registry with duplicate providers
         mock_registry = MagicMock()
@@ -160,32 +157,27 @@ class TestToolProviderCounting:
 
         app.state.service_registry = mock_registry
 
-        client = TestClient(app)
+        # Use dev auth credentials
+        response = client.get("/v1/system/tools", headers={"Authorization": "Bearer admin:ciris_admin_password"})
 
-        with patch("ciris_engine.logic.adapters.api.routes.system.require_observer") as mock_auth:
-            mock_auth.return_value = MagicMock(user_id="test_user", role="OBSERVER")
+        assert response.status_code == 200
+        data = response.json()
 
-            response = client.get("/v1/system/tools")
+        # Check metadata
+        assert "metadata" in data
+        metadata = data["metadata"]
 
-            assert response.status_code == 200
-            data = response.json()
+        # Should have only 2 unique providers (APIToolService and SecretsToolService)
+        assert metadata["provider_count"] == 2
+        assert set(metadata["providers"]) == {"APIToolService", "SecretsToolService"}
 
-            # Check metadata
-            assert "metadata" in data
-            metadata = data["metadata"]
+        # Should have 4 total tools
+        assert metadata["total_tools"] == 4
+        assert len(data["data"]) == 4
 
-            # Should have only 2 unique providers (APIToolService and SecretsToolService)
-            assert metadata["provider_count"] == 2
-            assert set(metadata["providers"]) == {"APIToolService", "SecretsToolService"}
-
-            # Should have 4 total tools
-            assert metadata["total_tools"] == 4
-            assert len(data["data"]) == 4
-
-    def test_tool_deduplication_same_name(self):
+    def test_tool_deduplication_same_name(self, app, client):
         """Test that tools with same name from different providers are deduplicated."""
-        app = FastAPI()
-        app.include_router(system.router, prefix="/v1/system")
+        # Router already included by app fixture
 
         mock_registry = MagicMock()
         mock_registry._services = {}
@@ -220,28 +212,23 @@ class TestToolProviderCounting:
 
         app.state.service_registry = mock_registry
 
-        client = TestClient(app)
+        # Use dev auth credentials
+        response = client.get("/v1/system/tools", headers={"Authorization": "Bearer admin:ciris_admin_password"})
 
-        with patch("ciris_engine.logic.adapters.api.routes.system.require_observer") as mock_auth:
-            mock_auth.return_value = MagicMock(user_id="test_user", role="OBSERVER")
+        assert response.status_code == 200
+        data = response.json()
 
-            response = client.get("/v1/system/tools")
+        # Should have only 1 tool (deduplicated)
+        assert len(data["data"]) == 1
 
-            assert response.status_code == 200
-            data = response.json()
+        # Provider should list both providers
+        tool = data["data"][0]
+        assert "Provider1" in tool["provider"]
+        assert "Provider2" in tool["provider"]
 
-            # Should have only 1 tool (deduplicated)
-            assert len(data["data"]) == 1
-
-            # Provider should list both providers
-            tool = data["data"][0]
-            assert "Provider1" in tool["provider"]
-            assert "Provider2" in tool["provider"]
-
-    def test_empty_tool_list(self):
+    def test_empty_tool_list(self, app, client):
         """Test handling of empty tool list."""
-        app = FastAPI()
-        app.include_router(system.router, prefix="/v1/system")
+        # Router already included by app fixture
 
         # Mock registry with no tool providers
         mock_registry = MagicMock()
@@ -250,19 +237,15 @@ class TestToolProviderCounting:
 
         app.state.service_registry = mock_registry
 
-        client = TestClient(app)
+        # Use dev auth credentials
+        response = client.get("/v1/system/tools", headers={"Authorization": "Bearer admin:ciris_admin_password"})
 
-        with patch("ciris_engine.logic.adapters.api.routes.system.require_observer") as mock_auth:
-            mock_auth.return_value = MagicMock(user_id="test_user", role="OBSERVER")
+        assert response.status_code == 200
+        data = response.json()
 
-            response = client.get("/v1/system/tools")
+        assert data["data"] == []
 
-            assert response.status_code == 200
-            data = response.json()
-
-            assert data["data"] == []
-
-            if "metadata" in data:
-                assert data["metadata"]["provider_count"] == 0
-                assert data["metadata"]["total_tools"] == 0
-                assert data["metadata"]["providers"] == []
+        if "metadata" in data:
+            assert data["metadata"]["provider_count"] == 0
+            assert data["metadata"]["total_tools"] == 0
+            assert data["metadata"]["providers"] == []

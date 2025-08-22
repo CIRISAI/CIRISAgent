@@ -396,7 +396,8 @@ class TestGenerateSVG:
 
         svg = generate_svg(nodes, edges)
 
-        assert "<line" in svg
+        # We now use <path> for curved edges instead of <line>
+        assert "<path" in svg
         assert 'stroke="#2563eb"' in svg  # CREATED color
         assert "CREATED" in svg  # Edge label
 

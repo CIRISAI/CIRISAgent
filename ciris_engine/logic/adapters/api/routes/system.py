@@ -990,7 +990,7 @@ async def get_available_tools(
 
     try:
         all_tools = []
-        tool_providers = []
+        tool_providers = set()  # Use set to avoid counting duplicates
 
         # Get all tool providers from the service registry
         service_registry = getattr(request.app.state, "service_registry", None)
@@ -1005,7 +1005,7 @@ async def get_available_tools(
                     try:
                         provider = provider_data.instance
                         provider_name = provider.__class__.__name__
-                        tool_providers.append(provider_name)
+                        tool_providers.add(provider_name)  # Use add to avoid duplicates
 
                         if hasattr(provider, "get_all_tool_info"):
                             # Modern interface with ToolInfo objects
@@ -1053,7 +1053,18 @@ async def get_available_tools(
                 if existing.provider != tool.provider:
                     existing.provider = f"{existing.provider}, {tool.provider}"
 
-        return SuccessResponse[List[ToolInfoResponse]](data=unique_tools)
+        # Log provider information for debugging
+        logger.info(f"Tool providers found: {len(tool_providers)} unique providers: {tool_providers}")
+        logger.info(f"Total tools collected: {len(all_tools)}, Unique tools: {len(unique_tools)}")
+
+        return SuccessResponse[List[ToolInfoResponse]](
+            data=unique_tools,
+            metadata={
+                "providers": list(tool_providers),
+                "provider_count": len(tool_providers),
+                "total_tools": len(unique_tools),
+            },
+        )
 
     except Exception as e:
         logger.error(f"Error getting available tools: {e}")

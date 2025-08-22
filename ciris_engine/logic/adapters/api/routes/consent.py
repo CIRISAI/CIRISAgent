@@ -70,7 +70,9 @@ async def get_consent_status(
             categories=[],
             reason="Default TEMPORARY consent on first API access",
         )
-        return await manager.grant_consent(request)
+        # Generate channel_id for API requests
+        channel_id = f"api_{user_id}"
+        return await manager.grant_consent(request, channel_id=channel_id)
 
 
 @router.post("/grant", response_model=ConsentStatus)
@@ -89,9 +91,12 @@ async def grant_consent(
     """
     # Ensure user can only update their own consent
     request.user_id = auth.user_id
+    
+    # Generate channel_id for API requests (needed for partnership tasks)
+    channel_id = f"api_{auth.user_id}"
 
     try:
-        result = await manager.grant_consent(request)
+        result = await manager.grant_consent(request, channel_id=channel_id)
 
         # Check if this created a pending partnership request
         if request.stream == ConsentStream.PARTNERED:

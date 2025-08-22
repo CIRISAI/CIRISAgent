@@ -154,7 +154,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 raise ConsentNotFoundError(f"No consent found for user {user_id}")
             raise
 
-    async def grant_consent(self, request: ConsentRequest) -> ConsentStatus:
+    async def grant_consent(self, request: ConsentRequest, channel_id: Optional[str] = None) -> ConsentStatus:
         """
         Grant or update consent.
         VALIDATES everything, creates audit trail.
@@ -198,7 +198,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 user_id=request.user_id,
                 categories=[c.value for c in request.categories],
                 reason=request.reason,
-                channel_id=None,  # Will be set from context if available
+                channel_id=channel_id,  # Pass through the channel_id from API
             )
 
             # Return pending status with task ID
@@ -280,7 +280,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Store audit entry
         audit_node = GraphNode(
             id=f"consent_audit/{audit.entry_id}",
-            type=NodeType.AUDIT,
+            type=NodeType.AUDIT_ENTRY,
             scope=GraphScope.LOCAL,
             attributes=audit.model_dump(mode="json"),
             updated_by="consent_manager",
@@ -373,7 +373,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         audit_node = GraphNode(
             id=f"consent_audit/{audit.entry_id}",
-            type=NodeType.AUDIT,
+            type=NodeType.AUDIT_ENTRY,
             scope=GraphScope.LOCAL,
             attributes=audit.model_dump(mode="json"),
             updated_by="consent_manager",

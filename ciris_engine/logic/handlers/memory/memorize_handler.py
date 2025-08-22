@@ -76,7 +76,7 @@ class MemorizeHandler(BaseActionHandler):
 
             if user_id:
                 # Check consent status for this user
-                consent_service = ConsentService(time_service=self.time_service, db_path=dispatch_context.db_path)
+                consent_service = ConsentService(time_service=self.time_service)
                 try:
                     consent_status = await consent_service.get_consent(user_id)
 

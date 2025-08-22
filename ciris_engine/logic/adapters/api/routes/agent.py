@@ -219,22 +219,22 @@ async def interact(
 
         # Check if user has consent
         try:
-            consent_status = await consent_manager.get_consent(auth.username)
+            consent_status = await consent_manager.get_consent(auth.user_id)
         except ConsentNotFoundError:
             # First interaction - create default TEMPORARY consent
             consent_req = ConsentRequest(
-                user_id=auth.username,
+                user_id=auth.user_id,
                 stream=ConsentStream.TEMPORARY,
                 categories=[],
                 reason="Default TEMPORARY consent on first interaction",
             )
-            consent_status = await consent_manager.grant_consent(consent_req)
+            consent_status = await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 
             # Add notice to response
             consent_notice = "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
 
     except Exception as e:
-        logger.warning(f"Could not check consent for user {auth.username}: {e}")
+        logger.warning(f"Could not check consent for user {auth.user_id}: {e}")
 
     # Track timing
     start_time = datetime.now(timezone.utc)

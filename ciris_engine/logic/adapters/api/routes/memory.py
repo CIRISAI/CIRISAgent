@@ -335,7 +335,7 @@ async def visualize_graph(
             hours=hours,
             scope=scope,
             node_type=type,
-            limit=200,  # Limit for visualization
+            limit=1000,  # Increased default limit for better visualization
         )
 
         # Query edges between the nodes we have
@@ -352,11 +352,18 @@ async def visualize_graph(
                 # Get edges for each node (limit to prevent too many)
                 seen_edges = set()  # Track (source, target) pairs to avoid duplicates
 
-                for node in nodes[:100]:  # Query more nodes since this is faster
+                for node in nodes[:500]:  # Query edges for up to 500 nodes
                     # Get all edges for this node
-                    node_edges = get_edges_for_node(
-                        node_id=node.id, scope=node.scope.value if hasattr(node.scope, "value") else str(node.scope)
-                    )
+                    # get_edges_for_node expects a GraphScope enum, not a string
+                    from ciris_engine.schemas.services.graph_core import GraphScope
+
+                    # Convert scope to GraphScope enum if it's a string
+                    if isinstance(node.scope, str):
+                        scope_enum = GraphScope(node.scope)
+                    else:
+                        scope_enum = node.scope
+
+                    node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
 
                     for edge_data in node_edges:
                         # Only include edges where both nodes are in our visualization
@@ -370,10 +377,10 @@ async def visualize_graph(
                                 seen_edges.add(edge_key)
 
                                 # Limit total edges for performance
-                                if len(edges) >= 200:
+                                if len(edges) >= 500:
                                     break
 
-                    if len(edges) >= 200:
+                    if len(edges) >= 500:
                         break
 
                 logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")

@@ -6,7 +6,7 @@ FAIL FAST AND LOUD: Any missing schema should cause immediate test failure.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -89,11 +89,11 @@ class TestBaseGraphServiceInitialization:
         assert service.service_name == "TestGraphService"
         assert service._memory_bus == memory_bus
         assert service._time_service == time_service
-        assert service._telemetry_service is None
         assert service._request_count == 0
         assert service._error_count == 0
         assert service._total_response_time == 0.0
         assert service._start_time is None
+        assert service._started is False
 
     def test_init_without_dependencies(self):
         """Test initialization without dependencies."""
@@ -102,7 +102,7 @@ class TestBaseGraphServiceInitialization:
         assert service.service_name == "TestGraphService"
         assert service._memory_bus is None
         assert service._time_service is None
-        assert service._telemetry_service is None
+        assert service._started is False
 
     def test_set_memory_bus(self, memory_bus):
         """Test setting memory bus after initialization."""
@@ -129,33 +129,30 @@ class TestBaseGraphServiceLifecycle:
             await graph_service.start()
             
             assert graph_service._start_time is not None
+            assert graph_service._started is True
             mock_logger.info.assert_called_once_with("TestGraphService started")
 
     @pytest.mark.asyncio
-    async def test_start_with_telemetry(self, graph_service):
-        """Test starting service with telemetry."""
-        mock_telemetry = MagicMock()
-        graph_service._telemetry_service = mock_telemetry
-        
+    async def test_start_service(self, graph_service):
+        """Test starting service sets proper state."""
         with patch('ciris_engine.logic.services.graph.base.logger') as mock_logger:
             await graph_service.start()
             
             assert graph_service._start_time is not None
+            assert graph_service._started is True
             mock_logger.info.assert_called_once_with("TestGraphService started")
-            mock_telemetry.update_service_metrics.assert_called_once()
-            
-            # Check the metrics passed to telemetry
-            call_args = mock_telemetry.update_service_metrics.call_args[0][0]
-            assert call_args.service_name == "TestGraphService"
-            assert call_args.healthy is True
-            assert call_args.uptime_seconds == 0.0
 
     @pytest.mark.asyncio
     async def test_stop(self, graph_service):
         """Test stopping service."""
+        # Start first
+        await graph_service.start()
+        assert graph_service._started is True
+        
         with patch('ciris_engine.logic.services.graph.base.logger') as mock_logger:
             await graph_service.stop()
             
+            assert graph_service._started is False
             mock_logger.info.assert_called_once_with("TestGraphService stopped")
 
 
@@ -196,7 +193,7 @@ class TestBaseGraphServiceMetrics:
     """Test metrics collection."""
 
     def test_collect_custom_metrics_with_all_dependencies(self, graph_service):
-        """Test collecting metrics with all dependencies."""
+        """Test collecting custom metrics with all dependencies."""
         graph_service._request_count = 10
         graph_service._error_count = 2
         
@@ -208,7 +205,7 @@ class TestBaseGraphServiceMetrics:
         assert metrics["graph_errors_total"] == 2.0
 
     def test_collect_custom_metrics_without_dependencies(self):
-        """Test collecting metrics without dependencies."""
+        """Test collecting custom metrics without dependencies."""
         service = TestGraphService()
         
         metrics = service._collect_custom_metrics()
@@ -217,9 +214,44 @@ class TestBaseGraphServiceMetrics:
         assert metrics["time_service_available"] == 0.0
         assert metrics["graph_operations_total"] == 0.0
         assert metrics["graph_errors_total"] == 0.0
+    
+    def test_collect_metrics_full(self, graph_service):
+        """Test full metrics collection including base metrics."""
+        # Set up state
+        graph_service._request_count = 5
+        graph_service._error_count = 1
+        graph_service._total_response_time = 250.0  # 50ms average
+        graph_service._started = True
+        graph_service._start_time = datetime.now() - timedelta(seconds=30)
+        
+        metrics = graph_service._collect_metrics()
+        
+        # Check base metrics
+        assert "uptime_seconds" in metrics
+        assert metrics["uptime_seconds"] >= 30.0
+        assert metrics["request_count"] == 5.0
+        assert metrics["error_count"] == 1.0
+        assert metrics["avg_response_time_ms"] == 50.0
+        assert metrics["healthy"] == 1.0
+        
+        # Check custom metrics are included
+        assert metrics["memory_bus_available"] == 1.0
+        assert metrics["graph_operations_total"] == 5.0
+    
+    @pytest.mark.asyncio
+    async def test_get_metrics(self, graph_service):
+        """Test the public get_metrics method."""
+        graph_service._request_count = 3
+        graph_service._started = True
+        
+        metrics = await graph_service.get_metrics()
+        
+        assert isinstance(metrics, dict)
+        assert metrics["request_count"] == 3.0
+        assert "healthy" in metrics
 
-    def test_track_request_without_telemetry(self, graph_service):
-        """Test tracking a request without telemetry."""
+    def test_track_request(self, graph_service):
+        """Test tracking a request."""
         initial_count = graph_service._request_count
         initial_time = graph_service._total_response_time
         
@@ -228,73 +260,13 @@ class TestBaseGraphServiceMetrics:
         assert graph_service._request_count == initial_count + 1
         assert graph_service._total_response_time == initial_time + 100.5
 
-    def test_track_request_with_telemetry(self, graph_service):
-        """Test tracking a request with telemetry."""
-        mock_telemetry = MagicMock()
-        graph_service._telemetry_service = mock_telemetry
-        graph_service._update_telemetry = MagicMock()
-        
-        graph_service._track_request(50.0)
-        
-        assert graph_service._request_count == 1
-        assert graph_service._total_response_time == 50.0
-        graph_service._update_telemetry.assert_called_once()
-
-    def test_track_error_without_telemetry(self, graph_service):
-        """Test tracking an error without telemetry."""
+    def test_track_error(self, graph_service):
+        """Test tracking an error."""
         initial_count = graph_service._error_count
         
         graph_service._track_error()
         
         assert graph_service._error_count == initial_count + 1
-
-    def test_track_error_with_telemetry(self, graph_service):
-        """Test tracking an error with telemetry."""
-        mock_telemetry = MagicMock()
-        graph_service._telemetry_service = mock_telemetry
-        graph_service._update_telemetry = MagicMock()
-        
-        graph_service._track_error()
-        
-        assert graph_service._error_count == 1
-        graph_service._update_telemetry.assert_called_once()
-
-    @patch('ciris_engine.logic.services.graph.base.psutil')
-    def test_update_telemetry(self, mock_psutil, graph_service):
-        """Test updating telemetry metrics."""
-        # Setup mocks
-        mock_process = MagicMock()
-        mock_psutil.Process.return_value = mock_process
-        mock_process.memory_info.return_value = MagicMock(rss=100 * 1024 * 1024)  # 100 MB
-        mock_process.cpu_percent.return_value = 25.5
-        
-        mock_telemetry = MagicMock()
-        graph_service._telemetry_service = mock_telemetry
-        graph_service._start_time = datetime.now()
-        graph_service._request_count = 5
-        graph_service._error_count = 1
-        graph_service._total_response_time = 500.0
-        
-        graph_service._update_telemetry()
-        
-        mock_telemetry.update_service_metrics.assert_called_once()
-        
-        # Check metrics passed
-        metrics = mock_telemetry.update_service_metrics.call_args[0][0]
-        assert metrics.service_name == "TestGraphService"
-        assert metrics.healthy is True
-        assert metrics.memory_usage_mb == 100.0
-        assert metrics.cpu_usage_percent == 25.5
-        assert metrics.request_count == 5
-        assert metrics.error_count == 1
-        assert metrics.avg_response_time_ms == 100.0  # 500/5
-
-    def test_update_telemetry_no_service(self, graph_service):
-        """Test update telemetry with no telemetry service."""
-        graph_service._telemetry_service = None
-        
-        # Should not raise any errors
-        graph_service._update_telemetry()
 
 
 class TestBaseGraphServiceStoreOperations:
@@ -547,19 +519,16 @@ class TestBaseGraphServiceEdgeCases:
         
         assert result == []
 
-    def test_average_response_time_no_requests(self, graph_service):
-        """Test average response time calculation with no requests."""
+    def test_metrics_with_no_requests(self, graph_service):
+        """Test metrics when no requests have been made."""
         graph_service._start_time = datetime.now()
+        graph_service._started = True
         
-        with patch('ciris_engine.logic.services.graph.base.psutil'):
-            mock_telemetry = MagicMock()
-            graph_service._telemetry_service = mock_telemetry
-            
-            graph_service._update_telemetry()
-            
-            # Check that avg_response_time_ms is 0 when no requests
-            metrics = mock_telemetry.update_service_metrics.call_args[0][0]
-            assert metrics.avg_response_time_ms == 0.0
+        metrics = graph_service._collect_metrics()
+        
+        # Average response time should be 0 when no requests
+        assert metrics["avg_response_time_ms"] == 0.0
+        assert metrics["request_count"] == 0.0
 
     @pytest.mark.asyncio
     async def test_concurrent_operations(self, graph_service, memory_bus):

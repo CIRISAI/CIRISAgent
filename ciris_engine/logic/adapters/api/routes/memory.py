@@ -338,9 +338,49 @@ async def visualize_graph(
             limit=200,  # Limit for visualization
         )
 
-        # Query edges (simplified - just between nodes we have)
+        # Query edges between the nodes we have
         edges = []
-        # Note: node_ids would be used for edge filtering in a full implementation
+        if nodes:
+            # Get all node IDs for filtering
+            node_ids = set(node.id for node in nodes)
+
+            # Query edges directly from persistence for these nodes
+            try:
+                # Import the edge query function
+                from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+                # Get edges for each node (limit to prevent too many)
+                seen_edges = set()  # Track (source, target) pairs to avoid duplicates
+
+                for node in nodes[:100]:  # Query more nodes since this is faster
+                    # Get all edges for this node
+                    node_edges = get_edges_for_node(
+                        node_id=node.id, scope=node.scope.value if hasattr(node.scope, "value") else str(node.scope)
+                    )
+
+                    for edge_data in node_edges:
+                        # Only include edges where both nodes are in our visualization
+                        if edge_data.target in node_ids:
+                            edge_key = (edge_data.source, edge_data.target)
+                            reverse_key = (edge_data.target, edge_data.source)
+
+                            # Avoid duplicate edges
+                            if edge_key not in seen_edges and reverse_key not in seen_edges:
+                                edges.append(edge_data)
+                                seen_edges.add(edge_key)
+
+                                # Limit total edges for performance
+                                if len(edges) >= 200:
+                                    break
+
+                    if len(edges) >= 200:
+                        break
+
+                logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
+
+            except Exception as e:
+                logger.warning(f"Failed to query edges for visualization: {e}")
+                # Continue with empty edges if query fails
 
         # Generate SVG
         svg = generate_svg(

@@ -5,6 +5,7 @@ Consolidated metrics, traces, logs, and insights from all system components.
 """
 
 import logging
+import sys
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -530,7 +531,11 @@ async def get_otlp_telemetry(
                     traces.append(trace_data)
 
             except Exception as e:
-                logger.warning(f"Failed to get traces: {e}")
+                # logger.warning(f"Failed to get traces: {e}")
+                print(f"ERROR in get_otlp_telemetry traces: {e}", file=sys.stderr)
+                import traceback
+
+                traceback.print_exc()
 
             return convert_traces_to_otlp_json(traces)
 

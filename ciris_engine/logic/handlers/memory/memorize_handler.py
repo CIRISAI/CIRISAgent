@@ -75,9 +75,9 @@ class MemorizeHandler(BaseActionHandler):
                 user_id = node.id[5:]  # Remove "user_" prefix
 
             if user_id:
-                # Check consent status for this user
-                consent_service = ConsentService(time_service=self.time_service)
+                # Check consent status for this user (if service is available)
                 try:
+                    consent_service = ConsentService(time_service=self.time_service)
                     consent_status = await consent_service.get_consent(user_id)
 
                     # Check if TEMPORARY consent has expired
@@ -131,6 +131,10 @@ class MemorizeHandler(BaseActionHandler):
                             )
 
                     logger.info(f"Created default TEMPORARY consent for new user {user_id}")
+                except (RuntimeError, Exception) as e:
+                    # Consent service not available (e.g., in tests or minimal configurations)
+                    # Log but continue - consent is not mandatory for memorization
+                    logger.debug(f"Consent service not available: {e}. Continuing without consent check.")
 
             if hasattr(node, "attributes") and node.attributes:
                 # Handle both dict and GraphNodeAttributes types

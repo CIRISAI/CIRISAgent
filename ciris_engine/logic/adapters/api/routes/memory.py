@@ -57,11 +57,8 @@ async def store_memory(
 
     try:
         # Store node via memory service
-        result = await memory_service.memorize(
-            node=body.node,
-            handler_name=f"api_user_{auth.user_id}",
-            metadata={"source": "api", "user": auth.user_id},
-        )
+        # Note: memorize() only accepts the node parameter
+        result = await memory_service.memorize(node=body.node)
 
         return SuccessResponse(
             data=result,
@@ -154,11 +151,19 @@ async def forget_memory(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Forget node via memory service
-        result = await memory_service.forget(
-            node_id=node_id,
-            handler_name=f"api_user_{auth.user_id}",
+        # Create a minimal GraphNode with just the ID for deletion
+        # The forget method will look up the full node internally
+        from ciris_engine.schemas.graph.memory import GraphNode
+
+        node_to_forget = GraphNode(
+            id=node_id,
+            type="unknown",  # Will be looked up by forget method
+            scope="local",  # Default scope
+            attributes={},
         )
+
+        # Forget node via memory service
+        result = memory_service.forget(node=node_to_forget)
 
         return SuccessResponse(
             data=result,

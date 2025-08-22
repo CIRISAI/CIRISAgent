@@ -163,7 +163,7 @@ async def forget_memory(
         )
 
         # Forget node via memory service
-        result = memory_service.forget(node=node_to_forget)
+        result = await memory_service.forget(node=node_to_forget)
 
         return SuccessResponse(
             data=result,

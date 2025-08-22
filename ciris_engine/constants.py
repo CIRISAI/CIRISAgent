@@ -3,12 +3,12 @@
 from pathlib import Path
 
 # Version information
-CIRIS_VERSION = "1.4.6-beta"
+CIRIS_VERSION = "1.0.0-RC1"
 CIRIS_VERSION_MAJOR = 1
-CIRIS_VERSION_MINOR = 4
-CIRIS_VERSION_PATCH = 6
+CIRIS_VERSION_MINOR = 0
+CIRIS_VERSION_PATCH = 0
 CIRIS_VERSION_BUILD = 0  # Build number for incremental improvements
-CIRIS_VERSION_STAGE = "beta"
+CIRIS_VERSION_STAGE = "RC1"
 CIRIS_CODENAME = "Graceful Guardian"  # Codename for this release
 
 # Agent defaults

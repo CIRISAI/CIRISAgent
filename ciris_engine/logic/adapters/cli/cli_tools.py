@@ -81,11 +81,20 @@ class CLIToolService(BaseService, ToolService):
             result = {"error": f"Unknown tool: {tool_name}"}
             success = False
             error_msg: Optional[str] = f"Unknown tool: {tool_name}"
+            self._tool_failures += 1  # Track as failure
         else:
             try:
                 result = await self._tools[tool_name](parameters)
-                success = result.get("error") is None
-                error_msg = result.get("error")
+                # Check if result is dict-like to safely get error
+                if isinstance(result, dict):
+                    success = result.get("error") is None
+                    error_msg = result.get("error")
+                    if not success:
+                        self._tool_failures += 1  # Track tool-reported errors
+                else:
+                    # Non-dict results are considered successful
+                    success = True
+                    error_msg = None
             except Exception as e:
                 # Track error for telemetry
                 self._track_error(e)
@@ -96,11 +105,15 @@ class CLIToolService(BaseService, ToolService):
 
         execution_time_ms = (self._time_service.timestamp() - start_time) * 1000  # milliseconds
 
-        # Add execution time to result data
+        # Ensure result is a dict for ToolExecutionResult
         if result is None:
             result = {}
-        if isinstance(result, dict):
-            result["_execution_time_ms"] = execution_time_ms
+        elif not isinstance(result, dict):
+            # Wrap non-dict results  
+            result = {"result": result}
+        
+        # Add execution time to result data
+        result["_execution_time_ms"] = execution_time_ms
 
         tool_result = ToolExecutionResult(
             tool_name=tool_name,
@@ -378,7 +391,7 @@ class CLIToolService(BaseService, ToolService):
             actions=["execute_tool", "get_available_tools", "get_tool_schema", "get_tool_result"],
             version="1.0.0",
             dependencies=[],
-            resource_limits={"max_concurrent_tools": 10},
+            metadata={"resource_limits": {"max_concurrent_tools": 10}},
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

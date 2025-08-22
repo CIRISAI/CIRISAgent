@@ -91,7 +91,7 @@ async def grant_consent(
     """
     # Ensure user can only update their own consent
     request.user_id = auth.user_id
-    
+
     # Generate channel_id for API requests (needed for partnership tasks)
     channel_id = f"api_{auth.user_id}"
 

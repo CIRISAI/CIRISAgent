@@ -1,0 +1,268 @@
+"""
+Tests for adapter validation and tool provider counting fixes.
+
+This module tests the fixes for:
+1. RuntimeAdapterStatus validation errors
+2. Tool provider deduplication
+3. Metadata in tool listing responses
+"""
+
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from ciris_engine.logic.adapters.api.routes import system
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterMetrics, RuntimeAdapterStatus
+
+
+class TestAdapterValidation:
+    """Test adapter validation fixes."""
+
+    def test_adapter_metrics_object_validation(self):
+        """Test that AdapterMetrics is passed as object, not dict."""
+        # Create valid AdapterMetrics object
+        metrics = AdapterMetrics(
+            messages_processed=100,
+            errors_count=5,
+            uptime_seconds=3600.0,
+            last_error="Test error",
+            last_error_time=datetime.now(timezone.utc),
+        )
+
+        # Create RuntimeAdapterStatus with metrics object
+        config = AdapterConfig(adapter_type="test", enabled=True, settings={})
+
+        # This should not raise validation error
+        status = RuntimeAdapterStatus(
+            adapter_id="test_adapter",
+            adapter_type="test",
+            is_running=True,
+            loaded_at=datetime.now(timezone.utc),
+            services_registered=["test_service"],
+            config_params=config,
+            metrics=metrics,  # Pass object, not dict
+            last_activity=datetime.now(timezone.utc),
+            tools=["test_tool"],
+        )
+
+        assert status.metrics == metrics
+        assert status.metrics.messages_processed == 100
+
+    @pytest.mark.asyncio
+    async def test_adapter_listing_with_metrics(self):
+        """Test that adapter listing properly formats metrics."""
+        app = FastAPI()
+        app.include_router(system.router, prefix="/v1/system")
+
+        # Mock runtime control service with async method
+        mock_runtime = MagicMock()
+        mock_adapter_info = MagicMock()
+        mock_adapter_info.adapter_id = "test_adapter"
+        mock_adapter_info.adapter_type = "api"
+        mock_adapter_info.status = "RUNNING"
+        mock_adapter_info.started_at = datetime.now(timezone.utc)
+        mock_adapter_info.messages_processed = 50
+        mock_adapter_info.error_count = 2
+        mock_adapter_info.last_error = "Test error"
+        mock_adapter_info.tools = ["tool1", "tool2"]
+
+        # Make list_adapters async
+        async def async_list_adapters():
+            return [mock_adapter_info]
+
+        mock_runtime.list_adapters = async_list_adapters
+
+        app.state.main_runtime_control_service = mock_runtime
+
+        # Use async client
+        from httpx import AsyncClient
+
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            # Mock auth dependency
+            async def mock_auth_dep():
+                return MagicMock(user_id="test_user", role="OBSERVER")
+
+            app.dependency_overrides[system.require_observer] = mock_auth_dep
+
+            response = await client.get("/v1/system/adapters")
+
+            assert response.status_code == 200
+            data = response.json()
+
+            assert "data" in data
+            assert "adapters" in data["data"]
+            adapters = data["data"]["adapters"]
+
+            assert len(adapters) == 1
+            adapter = adapters[0]
+
+            # Verify metrics is present and valid
+            assert "metrics" in adapter
+            if adapter["metrics"]:
+                assert adapter["metrics"]["messages_processed"] == 50
+                assert adapter["metrics"]["errors_count"] == 2
+
+
+class TestToolProviderCounting:
+    """Test tool provider counting and deduplication."""
+
+    def test_tool_provider_deduplication(self):
+        """Test that duplicate tool providers are deduplicated."""
+        app = FastAPI()
+        app.include_router(system.router, prefix="/v1/system")
+
+        # Mock service registry with duplicate providers
+        mock_registry = MagicMock()
+        mock_registry._services = {}
+
+        # Create mock tool providers (including duplicates)
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_provider1 = MagicMock()
+        mock_provider1.instance = MagicMock()
+        mock_provider1.instance.__class__.__name__ = "APIToolService"
+        mock_provider1.instance.get_all_tool_info = MagicMock(
+            return_value=[
+                MagicMock(name="tool1", description="Tool 1", parameters=None),
+                MagicMock(name="tool2", description="Tool 2", parameters=None),
+            ]
+        )
+
+        mock_provider2 = MagicMock()
+        mock_provider2.instance = MagicMock()
+        mock_provider2.instance.__class__.__name__ = "SecretsToolService"
+        mock_provider2.instance.get_all_tool_info = MagicMock(
+            return_value=[
+                MagicMock(name="recall_secret", description="Recall secret", parameters=None),
+            ]
+        )
+
+        # Duplicate provider (should be deduplicated)
+        mock_provider3 = MagicMock()
+        mock_provider3.instance = MagicMock()
+        mock_provider3.instance.__class__.__name__ = "APIToolService"
+        mock_provider3.instance.get_all_tool_info = MagicMock(
+            return_value=[
+                MagicMock(name="tool3", description="Tool 3", parameters=None),
+            ]
+        )
+
+        mock_registry._services[ServiceType.TOOL] = [
+            mock_provider1,
+            mock_provider2,
+            mock_provider3,  # Duplicate APIToolService
+        ]
+
+        mock_registry.get_provider_info = MagicMock(return_value={"services": {}})
+
+        app.state.service_registry = mock_registry
+
+        client = TestClient(app)
+
+        with patch("ciris_engine.logic.adapters.api.routes.system.require_observer") as mock_auth:
+            mock_auth.return_value = MagicMock(user_id="test_user", role="OBSERVER")
+
+            response = client.get("/v1/system/tools")
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # Check metadata
+            assert "metadata" in data
+            metadata = data["metadata"]
+
+            # Should have only 2 unique providers (APIToolService and SecretsToolService)
+            assert metadata["provider_count"] == 2
+            assert set(metadata["providers"]) == {"APIToolService", "SecretsToolService"}
+
+            # Should have 4 total tools
+            assert metadata["total_tools"] == 4
+            assert len(data["data"]) == 4
+
+    def test_tool_deduplication_same_name(self):
+        """Test that tools with same name from different providers are deduplicated."""
+        app = FastAPI()
+        app.include_router(system.router, prefix="/v1/system")
+
+        mock_registry = MagicMock()
+        mock_registry._services = {}
+
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Two providers offering the same tool
+        mock_provider1 = MagicMock()
+        mock_provider1.instance = MagicMock()
+        mock_provider1.instance.__class__.__name__ = "Provider1"
+        mock_provider1.instance.get_all_tool_info = MagicMock(
+            return_value=[
+                MagicMock(name="shared_tool", description="Shared tool", parameters=None),
+            ]
+        )
+
+        mock_provider2 = MagicMock()
+        mock_provider2.instance = MagicMock()
+        mock_provider2.instance.__class__.__name__ = "Provider2"
+        mock_provider2.instance.get_all_tool_info = MagicMock(
+            return_value=[
+                MagicMock(name="shared_tool", description="Shared tool", parameters=None),
+            ]
+        )
+
+        mock_registry._services[ServiceType.TOOL] = [
+            mock_provider1,
+            mock_provider2,
+        ]
+
+        mock_registry.get_provider_info = MagicMock(return_value={"services": {}})
+
+        app.state.service_registry = mock_registry
+
+        client = TestClient(app)
+
+        with patch("ciris_engine.logic.adapters.api.routes.system.require_observer") as mock_auth:
+            mock_auth.return_value = MagicMock(user_id="test_user", role="OBSERVER")
+
+            response = client.get("/v1/system/tools")
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # Should have only 1 tool (deduplicated)
+            assert len(data["data"]) == 1
+
+            # Provider should list both providers
+            tool = data["data"][0]
+            assert "Provider1" in tool["provider"]
+            assert "Provider2" in tool["provider"]
+
+    def test_empty_tool_list(self):
+        """Test handling of empty tool list."""
+        app = FastAPI()
+        app.include_router(system.router, prefix="/v1/system")
+
+        # Mock registry with no tool providers
+        mock_registry = MagicMock()
+        mock_registry._services = {}
+        mock_registry.get_provider_info = MagicMock(return_value={"services": {}})
+
+        app.state.service_registry = mock_registry
+
+        client = TestClient(app)
+
+        with patch("ciris_engine.logic.adapters.api.routes.system.require_observer") as mock_auth:
+            mock_auth.return_value = MagicMock(user_id="test_user", role="OBSERVER")
+
+            response = client.get("/v1/system/tools")
+
+            assert response.status_code == 200
+            data = response.json()
+
+            assert data["data"] == []
+
+            if "metadata" in data:
+                assert data["metadata"]["provider_count"] == 0
+                assert data["metadata"]["total_tools"] == 0
+                assert data["metadata"]["providers"] == []

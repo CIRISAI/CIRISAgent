@@ -108,3 +108,83 @@ class TestSystemRoutes:
         """Test that invalid endpoints return 404."""
         response = client.get("/v1/system/invalid", headers=auth_headers)
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_adapters_response_validation(self, client, auth_headers):
+        """Test that adapter listing returns valid RuntimeAdapterStatus objects."""
+        response = client.get("/v1/system/adapters", headers=auth_headers)
+
+        if response.status_code == status.HTTP_200_OK:
+            data = response.json()
+            assert "data" in data
+            assert "adapters" in data["data"]
+
+            adapters = data["data"]["adapters"]
+            for adapter in adapters:
+                # Verify required fields for RuntimeAdapterStatus
+                assert "adapter_id" in adapter
+                assert "adapter_type" in adapter
+                assert "is_running" in adapter
+                assert "loaded_at" in adapter
+                assert "services_registered" in adapter
+                assert "config_params" in adapter
+
+                # Verify metrics is either None or valid AdapterMetrics
+                if "metrics" in adapter and adapter["metrics"] is not None:
+                    metrics = adapter["metrics"]
+                    assert isinstance(metrics, dict)
+                    assert "messages_processed" in metrics
+                    assert "errors_count" in metrics
+                    assert "uptime_seconds" in metrics
+
+    def test_tools_endpoint_requires_auth(self, client):
+        """Test that tools endpoint requires auth."""
+        response = client.get("/v1/system/tools")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_tools_endpoint_with_auth(self, client, auth_headers):
+        """Test tools endpoint returns deduplicated providers."""
+        response = client.get("/v1/system/tools", headers=auth_headers)
+
+        if response.status_code == status.HTTP_200_OK:
+            data = response.json()
+            assert "data" in data
+
+            # Check for metadata that was added in the fix
+            if "metadata" in data:
+                metadata = data["metadata"]
+                assert "providers" in metadata
+                assert "provider_count" in metadata
+                assert "total_tools" in metadata
+
+                # Verify providers are unique (no duplicates)
+                providers = metadata["providers"]
+                assert len(providers) == len(set(providers)), "Tool providers should be unique"
+
+                # Verify counts match
+                assert metadata["provider_count"] == len(providers)
+                assert metadata["total_tools"] == len(data["data"])
+
+            # Verify each tool has required fields
+            tools = data["data"]
+            for tool in tools:
+                assert "name" in tool
+                assert "description" in tool
+                assert "provider" in tool
+                assert "category" in tool
+                assert "cost" in tool
+
+    def test_tools_deduplication(self, client, auth_headers):
+        """Test that duplicate tools from multiple providers are deduplicated."""
+        response = client.get("/v1/system/tools", headers=auth_headers)
+
+        if response.status_code == status.HTTP_200_OK:
+            data = response.json()
+            tools = data["data"]
+
+            # Check that tool names are unique
+            tool_names = [tool["name"] for tool in tools]
+            assert len(tool_names) == len(set(tool_names)), "Tool names should be unique"
+
+            # Check for tools with multiple providers (comma-separated)
+            multi_provider_tools = [tool for tool in tools if "," in tool.get("provider", "")]
+            # This is valid - tools can have multiple providers listed

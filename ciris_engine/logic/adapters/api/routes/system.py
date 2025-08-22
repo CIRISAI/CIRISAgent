@@ -1056,15 +1056,9 @@ async def get_available_tools(
         # Log provider information for debugging
         logger.info(f"Tool providers found: {len(tool_providers)} unique providers: {tool_providers}")
         logger.info(f"Total tools collected: {len(all_tools)}, Unique tools: {len(unique_tools)}")
+        logger.info(f"Tool provider summary: {list(tool_providers)}")
 
-        return SuccessResponse[List[ToolInfoResponse]](
-            data=unique_tools,
-            metadata={
-                "providers": list(tool_providers),
-                "provider_count": len(tool_providers),
-                "total_tools": len(unique_tools),
-            },
-        )
+        return SuccessResponse[List[ToolInfoResponse]](data=unique_tools)
 
     except Exception as e:
         logger.error(f"Error getting available tools: {e}")

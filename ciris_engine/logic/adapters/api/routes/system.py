@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, ValidationError, field_serializer
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -726,7 +726,12 @@ async def list_adapters(
         adapter_statuses = []
         for adapter in adapters:
             # Convert AdapterInfo to AdapterStatusSchema
-            config = AdapterConfig(adapter_type=adapter.adapter_type, enabled=adapter.status == "RUNNING", settings={})
+            # Check status using the enum value (which is lowercase)
+            from ciris_engine.schemas.services.core.runtime import AdapterStatus
+
+            is_running = adapter.status == AdapterStatus.RUNNING or str(adapter.status).lower() == "running"
+
+            config = AdapterConfig(adapter_type=adapter.adapter_type, enabled=is_running, settings={})
 
             metrics = None
             if adapter.messages_processed > 0 or adapter.error_count > 0:
@@ -744,7 +749,7 @@ async def list_adapters(
                 AdapterStatusSchema(
                     adapter_id=adapter.adapter_id,
                     adapter_type=adapter.adapter_type,
-                    is_running=adapter.status == "RUNNING",
+                    is_running=is_running,
                     loaded_at=adapter.started_at or datetime.now(timezone.utc),
                     services_registered=[],  # Not available from AdapterInfo
                     config_params=config,
@@ -762,8 +767,17 @@ async def list_adapters(
 
         return SuccessResponse(data=response)
 
+    except ValidationError as e:
+        logger.error(f"Validation error listing adapters: {e}")
+        logger.error(f"Validation errors detail: {e.errors()}")
+        # Return empty list on validation error to avoid breaking GUI
+        return SuccessResponse(data=AdapterListResponse(adapters=[], total_count=0, running_count=0))
     except Exception as e:
         logger.error(f"Error listing adapters: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -802,10 +802,16 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
             # Get current consent status
             try:
-                current = self.get_consent(user_id)
+                current = await self.get_consent(user_id)
             except ConsentNotFoundError:
                 # Create default TEMPORARY consent if none exists
-                current = self.grant_consent(user_id, ConsentStream.TEMPORARY, [ConsentCategory.ESSENTIAL])
+                request = ConsentRequest(
+                    user_id=user_id,
+                    stream=ConsentStream.TEMPORARY,
+                    categories=[],  # TEMPORARY doesn't need categories
+                    reason="Default consent for impact calculation"
+                )
+                current = await self.grant_consent(request)
 
             if current.stream == ConsentStream.PARTNERED:
                 return {
@@ -857,7 +863,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
             # Get current consent status
             try:
-                current = self.get_consent(user_id)
+                current = await self.get_consent(user_id)
             except ConsentNotFoundError:
                 return {"success": False, "error": f"No consent found for user {user_id}"}
 

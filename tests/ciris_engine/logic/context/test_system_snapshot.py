@@ -343,5 +343,5 @@ async def test_build_system_snapshot_with_version_info():
     assert re.match(
         r"^\d+\.\d+\.\d+(-\w+)?$", snapshot.agent_version
     ), f"Invalid version format: {snapshot.agent_version}"
-    assert snapshot.agent_codename == "Graceful Guardian"
+    assert snapshot.agent_codename == "Stable Foundation"
     # code_hash might be None in tests

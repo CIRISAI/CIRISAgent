@@ -71,6 +71,17 @@ class TimelineResponse(BaseModel):
     total: int = Field(..., description="Total memories in timeframe")
 
 
+class MemoryVisualizationParams(BaseModel):
+    """Parameters for memory graph visualization."""
+
+    hours: int = Field(24, ge=1, le=168, description="Hours to look back")
+    layout: str = Field("timeline", description="Layout: timeline, hierarchy, circular")
+    width: int = Field(800, ge=400, le=2000, description="SVG width")
+    height: int = Field(600, ge=300, le=1500, description="SVG height")
+    scope: Optional[str] = Field(None, description="Filter by scope")
+    type: Optional[str] = Field(None, description="Filter by node type")
+
+
 class MemoryResource:
     """
     Memory service client for v1 API (Pre-Beta).
@@ -509,3 +520,62 @@ class MemoryResource:
         """
         response = await self.query(related_to=node_id, depth=depth, include_edges=True)
         return response.nodes
+
+    async def visualize(
+        self,
+        hours: int = 24,
+        layout: str = "timeline",
+        width: int = 800,
+        height: int = 600,
+        scope: Optional[str] = None,
+        type: Optional[str] = None,
+    ) -> str:
+        """
+        Generate an interactive SVG visualization of the memory graph.
+
+        Args:
+            hours: Hours to look back (1-168, default 24)
+            layout: Layout algorithm - "timeline", "hierarchy", or "circular"
+            width: SVG width in pixels (400-2000)
+            height: SVG height in pixels (300-1500)
+            scope: Filter by scope (optional)
+            type: Filter by node type (optional)
+
+        Returns:
+            HTML string containing the SVG visualization
+
+        Example:
+            # Get timeline visualization for last 7 days
+            html = await client.memory.visualize(
+                hours=168,
+                layout="timeline",
+                width=1200,
+                height=800
+            )
+
+            # Save to file
+            with open("memory_graph.html", "w") as f:
+                f.write(html)
+
+            # Filter by type
+            concepts_viz = await client.memory.visualize(
+                type="CONCEPT",
+                layout="hierarchy"
+            )
+        """
+        params = {"hours": hours, "layout": layout, "width": width, "height": height}
+
+        if scope:
+            params["scope"] = scope
+        if type:
+            params["type"] = type
+
+        # The visualization endpoint returns HTML directly
+        result = await self._transport.request(
+            "GET", "/v1/memory/visualize/graph", params=params, raw_response=True  # Get raw HTML response
+        )
+
+        # If transport returns bytes, decode to string
+        if isinstance(result, bytes):
+            return result.decode("utf-8")
+        return result

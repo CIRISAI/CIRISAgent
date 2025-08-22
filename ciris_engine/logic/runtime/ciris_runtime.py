@@ -616,6 +616,16 @@ class CIRISRuntime:
             logger.info(f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}")
             await self.service_initializer.load_modules(self.modules_to_load)
 
+        # Set runtime on audit service so it can create trace correlations
+        if self.audit_service:
+            self.audit_service._runtime = self
+            logger.debug("Set runtime reference on audit service for trace correlations")
+
+        # Set runtime on visibility service so it can access telemetry for traces
+        if self.visibility_service:
+            self.visibility_service._runtime = self
+            logger.debug("Set runtime reference on visibility service for trace retrieval")
+
         # Update runtime control service with runtime reference
         if self.runtime_control_service:
             if hasattr(self.runtime_control_service, "_set_runtime"):

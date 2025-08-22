@@ -5,6 +5,7 @@ Consolidated metrics, traces, logs, and insights from all system components.
 """
 
 import logging
+import sys
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -530,46 +531,62 @@ async def get_otlp_telemetry(
                     traces.append(trace_data)
 
             except Exception as e:
-                logger.warning(f"Failed to get traces: {e}")
+                # logger.warning(f"Failed to get traces: {e}")
+                print(f"ERROR in get_otlp_telemetry traces: {e}", file=sys.stderr)
+                import traceback
+
+                traceback.print_exc()
 
             return convert_traces_to_otlp_json(traces)
 
         elif signal == "logs":
-            # Get logs from audit service
-            audit_service = request.app.state.audit_service
-            if not audit_service:
-                raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
-
-            # Query audit logs
+            # Get actual log events from log files (not audit entries)
+            # Events are logs, audit entries are not logs
             logs = []
             try:
-                entries = await audit_service.query_events(
-                    start_time=start_time or datetime.now(timezone.utc) - timedelta(hours=1),
-                    end_time=end_time or datetime.now(timezone.utc),
+                from .telemetry_logs_reader import log_reader
+
+                # Read actual log files including incidents
+                file_logs = log_reader.read_logs(
+                    level=None,  # Get all levels
+                    service=None,  # Get all services
                     limit=limit,
+                    start_time=start_time if start_time else None,  # Don't default to 1 hour ago
+                    end_time=end_time if end_time else None,  # Don't default to now
+                    include_incidents=True,  # Include incident logs (WARNING/ERROR/CRITICAL)
                 )
 
-                for entry in entries:
+                # Convert LogEntry objects to dict format for OTLP
+                for log_entry in file_logs:
                     log_data = {
-                        "timestamp": getattr(entry, "timestamp", datetime.now(timezone.utc)).isoformat(),
-                        "level": getattr(entry, "severity", "INFO"),
-                        "message": getattr(entry, "message", "") or getattr(entry, "description", ""),
-                        "service": getattr(entry, "service", "unknown"),
-                        "component": getattr(entry, "component", ""),
-                        "action": getattr(entry, "action", ""),
+                        "timestamp": log_entry.timestamp.isoformat(),
+                        "level": log_entry.level,
+                        "message": log_entry.message,
+                        "service": log_entry.service,
                     }
 
-                    # Add correlation ID if available
-                    if hasattr(entry, "correlation_id"):
-                        log_data["correlation_id"] = entry.correlation_id
+                    # Add context data if available
+                    if log_entry.context:
+                        if log_entry.context.correlation_id:
+                            log_data["correlation_id"] = log_entry.context.correlation_id
+                        if log_entry.context.trace_id:
+                            log_data["trace_id"] = log_entry.context.trace_id
+                        if log_entry.context.user_id:
+                            log_data["user_id"] = log_entry.context.user_id
+                        if hasattr(log_entry.context, "entity_id") and log_entry.context.entity_id:
+                            log_data["entity_id"] = log_entry.context.entity_id
 
-                    # Add user context if available
-                    if hasattr(entry, "user_id"):
-                        log_data["user_id"] = entry.user_id
+                    # Add trace ID at top level if available
+                    if log_entry.trace_id:
+                        log_data["trace_id"] = log_entry.trace_id
 
                     logs.append(log_data)
+
+            except ImportError:
+                # Log reader module not available
+                logger.warning("Log reader not available for OTLP logs export")
             except Exception as e:
-                logger.warning(f"Failed to get logs: {e}")
+                logger.warning(f"Failed to read log files for OTLP: {e}")
 
             return convert_logs_to_otlp_json(logs)
 

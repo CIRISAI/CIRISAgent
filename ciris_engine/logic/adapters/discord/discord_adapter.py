@@ -101,7 +101,12 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
             self._time_service = TimeService()
 
-        self._channel_manager = DiscordChannelManager(token, bot, on_message)
+        # Pass monitored channel IDs from config
+        monitored_channels = self.discord_config.monitored_channel_ids if self.discord_config else []
+
+        self._channel_manager = DiscordChannelManager(
+            token=token, client=bot, on_message_callback=on_message, monitored_channel_ids=monitored_channels
+        )
         self._message_handler = DiscordMessageHandler(bot)
         self._guidance_handler = DiscordGuidanceHandler(
             bot, self._time_service, self.bus_manager.memory if self.bus_manager else None

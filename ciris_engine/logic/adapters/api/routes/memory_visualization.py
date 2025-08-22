@@ -88,8 +88,8 @@ def get_node_color(node_type: NodeType) -> str:
     return type_colors.get(node_type, "#9ca3af")
 
 
-def get_node_size(node: GraphNode) -> int:
-    """Calculate node size based on importance."""
+def get_node_size(node: GraphNode, edge_count: int = 0) -> int:
+    """Calculate node size based on importance and connections."""
     base_size = 8
 
     # Adjust based on scope
@@ -97,6 +97,11 @@ def get_node_size(node: GraphNode) -> int:
         base_size += 4
     elif node.scope == "community":
         base_size += 2
+
+    # Adjust based on number of connections
+    if edge_count > 0:
+        # Logarithmic scaling for edge count
+        base_size += min(int(math.log(edge_count + 1) * 3), 12)
 
     # Adjust based on number of attributes
     if node.attributes:
@@ -222,33 +227,46 @@ def _generate_svg_header(width: int, height: int) -> List[str]:
 
 
 def _render_edge(edge: GraphEdge, positions: Dict[str, Tuple[float, float]]) -> List[str]:
-    """Render a single edge as SVG elements."""
+    """Render a single edge as SVG elements with curved path."""
     if edge.source not in positions or edge.target not in positions:
         return []
 
     x1, y1 = positions[edge.source]
     x2, y2 = positions[edge.target]
-    mid_x = (x1 + x2) / 2
-    mid_y = (y1 + y2) / 2
+
+    # Calculate control point for quadratic bezier curve
+    dx = x2 - x1
+    dy = y2 - y1
+    distance = math.sqrt(dx * dx + dy * dy) if (dx * dx + dy * dy) > 0 else 1
+
+    # Create a slight curve for better visibility
+    offset = min(25, distance * 0.15)  # Curve amount
+    cx = (x1 + x2) / 2 - (dy / distance) * offset
+    cy = (y1 + y2) / 2 + (dx / distance) * offset
+
+    # Use quadratic bezier path
+    path = f"M {x1},{y1} Q {cx},{cy} {x2},{y2}"
 
     color = get_edge_color(edge.relationship)
     style = get_edge_style(edge.relationship)
 
-    parts = [f'<line class="edge" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" {style}/>']
+    parts = [f'<path class="edge" d="{path}" fill="none" stroke="{color}" ' f'stroke-width="2" opacity="0.5" {style}/>']
 
     if edge.relationship:
+        # Place label at the control point for better positioning
         parts.append(
-            f'<text class="edge-label" x="{mid_x}" y="{mid_y}" text-anchor="middle">{edge.relationship}</text>'
+            f'<text class="edge-label" x="{cx}" y="{cy}" text-anchor="middle" '
+            f'font-size="10" fill="{color}">{edge.relationship}</text>'
         )
 
     return parts
 
 
-def _render_node(node: GraphNode, position: Tuple[float, float]) -> List[str]:
+def _render_node(node: GraphNode, position: Tuple[float, float], edge_count: int = 0) -> List[str]:
     """Render a single node as SVG elements."""
     x, y = position
     color = get_node_color(node.type)
-    size = get_node_size(node)
+    size = get_node_size(node, edge_count)
 
     # Get string values for type and scope
     type_str = node.type.value if hasattr(node.type, "value") else str(node.type)
@@ -299,11 +317,18 @@ def generate_svg(
         svg_parts.extend(_render_edge(edge, positions))
     svg_parts.append("</g>")
 
-    # Draw nodes
+    # Calculate edge counts for each node
+    edge_counts = {}
+    for edge in edges:
+        edge_counts[edge.source] = edge_counts.get(edge.source, 0) + 1
+        edge_counts[edge.target] = edge_counts.get(edge.target, 0) + 1
+
+    # Draw nodes with edge counts for sizing
     svg_parts.append('<g id="nodes">')
     for node in nodes:
         if node.id in positions:
-            svg_parts.extend(_render_node(node, positions[node.id]))
+            edge_count = edge_counts.get(node.id, 0)
+            svg_parts.extend(_render_node(node, positions[node.id], edge_count))
     svg_parts.append("</g>")
 
     svg_parts.append("</svg>")

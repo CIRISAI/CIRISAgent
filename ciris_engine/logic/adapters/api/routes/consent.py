@@ -49,30 +49,111 @@ def get_consent_manager(request: Request) -> ConsentService:
     return request.app.state.consent_manager
 
 
-@router.get("/status", response_model=ConsentStatus)
+@router.get("/status")
 async def get_consent_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> ConsentStatus:
+) -> dict:
     """
     Get current consent status for authenticated user.
 
-    Returns default TEMPORARY (14-day) consent if none exists.
+    Returns None if no consent exists (user has not interacted yet).
     """
     user_id = auth.user_id  # Use user_id from auth context
     try:
-        return await manager.get_consent(user_id)
+        consent = await manager.get_consent(user_id)
+        return {
+            "has_consent": True,
+            "user_id": user_id,
+            "stream": consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
+            "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
+            "expires_at": consent.expires_at.isoformat() if hasattr(consent, "expires_at") else None,
+        }
     except ConsentNotFoundError:
-        # Create default TEMPORARY consent
-        request = ConsentRequest(
-            user_id=user_id,
-            stream=ConsentStream.TEMPORARY,
-            categories=[],
-            reason="Default TEMPORARY consent on first API access",
-        )
-        # Generate channel_id for API requests
-        channel_id = f"api_{user_id}"
-        return await manager.grant_consent(request, channel_id=channel_id)
+        # No consent exists yet - user hasn't interacted
+        return {
+            "has_consent": False,
+            "user_id": user_id,
+            "message": "No consent record found. Consent will be created on first interaction.",
+        }
+
+
+@router.get("/query")
+async def query_consents(
+    status: Optional[str] = None,
+    user_id: Optional[str] = None,
+    auth: AuthContext = Depends(get_auth_context),
+    manager: ConsentService = Depends(get_consent_manager),
+) -> dict:
+    """
+    Query consent records with optional filters.
+
+    Args:
+        status: Filter by status (ACTIVE, REVOKED, EXPIRED)
+        user_id: Filter by user ID (admin only)
+
+    Returns:
+        Dictionary with consents list and total count
+    """
+    # For non-admin users, only show their own consents
+    if auth.role != "ADMIN" and user_id and user_id != auth.user_id:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Cannot query other users' consents")
+
+    # If no user_id specified, use authenticated user's ID
+    if not user_id:
+        user_id = auth.user_id
+
+    # Get user's consent status
+    try:
+        consent_status = await manager.get_consent(user_id)
+
+        # Filter by status if requested
+        if status and status == "ACTIVE":
+            # Check if consent is currently active
+            if consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]:
+                consents = [
+                    {
+                        "id": f"consent_{user_id}",
+                        "user_id": user_id,
+                        "status": "ACTIVE",
+                        "scope": "general",
+                        "purpose": "Agent interaction and data processing",
+                        "granted_at": (
+                            consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None
+                        ),
+                        "expires_at": consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
+                        "metadata": {},
+                    }
+                ]
+            else:
+                consents = []
+        else:
+            # Return all consents for user
+            consents = [
+                {
+                    "id": f"consent_{user_id}",
+                    "user_id": user_id,
+                    "status": (
+                        "ACTIVE"
+                        if consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]
+                        else "REVOKED"
+                    ),
+                    "scope": "general",
+                    "purpose": "Agent interaction and data processing",
+                    "granted_at": (
+                        consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None
+                    ),
+                    "expires_at": consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
+                    "metadata": {},
+                }
+            ]
+    except Exception:
+        # No consent found
+        consents = []
+
+    return {"consents": consents, "total": len(consents)}
 
 
 @router.post("/grant", response_model=ConsentStatus)

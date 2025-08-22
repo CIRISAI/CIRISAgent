@@ -371,6 +371,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             else:
                 logger.debug("No export path configured")
 
+            # Create trace correlation for this event
+            from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+            action_type = HandlerActionType.OBSERVE  # Default for general audit events
+            await self._create_trace_correlation(entry, action_type)
+
         except Exception as e:
             logger.error(f"Failed to log event {event_type}: {e}")
 
@@ -783,7 +789,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
     # ========== Private Helper Methods ==========
 
     async def _store_entry_in_graph(self, entry: AuditRequest, action_type: HandlerActionType) -> None:
-        """Store an audit entry in the graph."""
+        """Store an audit entry in the graph and create a trace correlation."""
         if not self._memory_bus:
             logger.error("Memory bus not available for audit storage")
             return
@@ -817,6 +823,91 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         if result.status != MemoryOpStatus.OK:
             logger.error(f"Failed to store audit entry in graph: {result}")
+
+        # Create a ServiceCorrelation for trace tracking
+        await self._create_trace_correlation(entry, action_type)
+
+    async def _create_trace_correlation(self, entry: AuditRequest, action_type: HandlerActionType) -> None:
+        """Create a ServiceCorrelation for trace tracking."""
+        logger.info(f"Creating trace correlation for audit event {entry.entry_id}")
+        try:
+            from ciris_engine.schemas.telemetry.core import (
+                CorrelationType,
+                ServiceCorrelation,
+                ServiceCorrelationStatus,
+                ServiceRequestData,
+                ServiceResponseData,
+                TraceContext,
+            )
+
+            # Get telemetry service from runtime
+            telemetry_service = None
+            if hasattr(self, "_runtime") and self._runtime:
+                telemetry_service = getattr(self._runtime, "telemetry_service", None)
+
+            if not telemetry_service:
+                # Try to get from service registry
+                from ciris_engine.logic.registries.service_registry import ServiceRegistry
+
+                registry = ServiceRegistry()
+                from ciris_engine.schemas.runtime.enums import ServiceType
+
+                telemetry_service = registry.get_service(ServiceType.TELEMETRY)
+
+            if not telemetry_service:
+                logger.debug("Telemetry service not available for trace correlation")
+                return
+
+            # Create correlation
+            correlation = ServiceCorrelation(
+                correlation_id=entry.entry_id,
+                correlation_type=CorrelationType.AUDIT_EVENT,
+                service_type="audit",
+                handler_name=entry.actor,
+                action_type=action_type.value,
+                request_data=ServiceRequestData(
+                    service_type="audit",
+                    method_name="log_event",
+                    thought_id=entry.details.get("thought_id"),
+                    task_id=entry.details.get("task_id"),
+                    parameters={
+                        "action": action_type.value,
+                        "entity_id": entry.entity_id,
+                    },
+                    request_timestamp=entry.timestamp,
+                ),
+                response_data=ServiceResponseData(
+                    success=True if entry.outcome == "success" else False,
+                    execution_time_ms=0,  # We don't track this for audit events
+                    response_timestamp=entry.timestamp,  # Use same timestamp for audit events
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                created_at=entry.timestamp,
+                updated_at=entry.timestamp,
+                timestamp=entry.timestamp,
+                trace_context=TraceContext(
+                    trace_id=f"trace_{entry.entry_id}",
+                    span_id=entry.entry_id,
+                    parent_span_id=entry.details.get("thought_id"),
+                    span_name=f"audit.{action_type.value}",
+                ),
+                tags={
+                    "action": action_type.value,
+                    "actor": entry.actor,
+                    "severity": self._get_severity(action_type),
+                },
+            )
+
+            # Store correlation in telemetry service
+            if hasattr(telemetry_service, "_store_correlation"):
+                await telemetry_service._store_correlation(correlation)
+                logger.info(f"Successfully stored trace correlation for audit event {entry.entry_id}")
+            else:
+                logger.warning(f"Telemetry service does not have _store_correlation method")
+
+        except Exception as e:
+            logger.error(f"Failed to create trace correlation: {e}", exc_info=True)
+            # Don't fail the audit operation if trace creation fails
 
     async def _initialize_hash_chain(self) -> None:
         """Initialize hash chain components."""

@@ -836,6 +836,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             key_path=str(audit_key_path),
             retention_days=retention_days,
         )
+        # Runtime will be set later when available
         # Set service registry so it can access memory bus
         if self.service_registry:
             graph_audit._set_service_registry(self.service_registry)

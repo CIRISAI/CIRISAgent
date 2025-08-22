@@ -620,7 +620,7 @@ class DiscordToolService(ToolService):
         """Get detailed information about all available Discord tools."""
         infos = []
         for tool_name in self._tools:
-            info = self.get_tool_info(tool_name)
+            info = await self.get_tool_info(tool_name)
             if info:
                 infos.append(info)
         return infos

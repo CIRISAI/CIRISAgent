@@ -809,7 +809,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                     user_id=user_id,
                     stream=ConsentStream.TEMPORARY,
                     categories=[],  # TEMPORARY doesn't need categories
-                    reason="Default consent for impact calculation"
+                    reason="Default consent for impact calculation",
                 )
                 current = await self.grant_consent(request)
 
@@ -865,7 +865,18 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             try:
                 current = await self.get_consent(user_id)
             except ConsentNotFoundError:
-                return {"success": False, "error": f"No consent found for user {user_id}"}
+                # If no consent exists and target is ANONYMOUS, create it
+                if target_stream == "ANONYMOUS":
+                    self.update_consent(user_id, ConsentStream.ANONYMOUS, [ConsentCategory.STATISTICAL])
+                    self._downgrades_completed += 1
+                    return {
+                        "success": True,
+                        "message": "Created ANONYMOUS consent for proactive opt-out",
+                        "current_stream": "ANONYMOUS",
+                        "user_id": user_id,
+                    }
+                else:
+                    return {"success": False, "error": f"No consent found for user {user_id}"}
 
             target = ConsentStream(target_stream)
 

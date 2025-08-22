@@ -974,10 +974,8 @@ async def reload_adapter(
 
 
 # Tool endpoints
-@router.get("/tools", response_model=SuccessResponse[List[ToolInfoResponse]])
-async def get_available_tools(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[List[ToolInfoResponse]]:
+@router.get("/tools")
+async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> dict:
     """
     Get list of all available tools from all tool providers.
 
@@ -990,7 +988,7 @@ async def get_available_tools(
 
     try:
         all_tools = []
-        tool_providers = []
+        tool_providers = set()  # Use set to avoid counting duplicates
 
         # Get all tool providers from the service registry
         service_registry = getattr(request.app.state, "service_registry", None)
@@ -1005,7 +1003,7 @@ async def get_available_tools(
                     try:
                         provider = provider_data.instance
                         provider_name = provider.__class__.__name__
-                        tool_providers.append(provider_name)
+                        tool_providers.add(provider_name)  # Use add to avoid duplicates
 
                         if hasattr(provider, "get_all_tool_info"):
                             # Modern interface with ToolInfo objects
@@ -1053,7 +1051,24 @@ async def get_available_tools(
                 if existing.provider != tool.provider:
                     existing.provider = f"{existing.provider}, {tool.provider}"
 
-        return SuccessResponse[List[ToolInfoResponse]](data=unique_tools)
+        # Log provider information for debugging
+        logger.info(f"Tool providers found: {len(tool_providers)} unique providers: {tool_providers}")
+        logger.info(f"Total tools collected: {len(all_tools)}, Unique tools: {len(unique_tools)}")
+        logger.info(f"Tool provider summary: {list(tool_providers)}")
+
+        # Create response with additional metadata for tool providers
+        # Since ResponseMetadata is immutable, we need to create a dict response
+        return {
+            "data": [tool.model_dump() for tool in unique_tools],
+            "metadata": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "request_id": None,
+                "duration_ms": None,
+                "providers": list(tool_providers),
+                "provider_count": len(tool_providers),
+                "total_tools": len(unique_tools),
+            },
+        }
 
     except Exception as e:
         logger.error(f"Error getting available tools: {e}")

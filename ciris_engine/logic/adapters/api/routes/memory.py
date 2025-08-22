@@ -57,11 +57,8 @@ async def store_memory(
 
     try:
         # Store node via memory service
-        result = await memory_service.memorize(
-            node=body.node,
-            handler_name=f"api_user_{auth.user_id}",
-            metadata={"source": "api", "user": auth.user_id},
-        )
+        # Note: memorize() only accepts the node parameter
+        result = await memory_service.memorize(node=body.node)
 
         return SuccessResponse(
             data=result,
@@ -154,11 +151,19 @@ async def forget_memory(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Forget node via memory service
-        result = await memory_service.forget(
-            node_id=node_id,
-            handler_name=f"api_user_{auth.user_id}",
+        # Create a minimal GraphNode with just the ID for deletion
+        # The forget method will look up the full node internally
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+        node_to_forget = GraphNode(
+            id=node_id,
+            type=NodeType.CONCEPT,  # Default type, will be looked up by forget method
+            scope=GraphScope.LOCAL,  # Default scope
+            attributes={},
         )
+
+        # Forget node via memory service
+        result = await memory_service.forget(node=node_to_forget)
 
         return SuccessResponse(
             data=result,
@@ -335,12 +340,59 @@ async def visualize_graph(
             hours=hours,
             scope=scope,
             node_type=type,
-            limit=200,  # Limit for visualization
+            limit=1000,  # Increased default limit for better visualization
         )
 
-        # Query edges (simplified - just between nodes we have)
+        # Query edges between the nodes we have
         edges = []
-        # Note: node_ids would be used for edge filtering in a full implementation
+        if nodes:
+            # Get all node IDs for filtering
+            node_ids = set(node.id for node in nodes)
+
+            # Query edges directly from persistence for these nodes
+            try:
+                # Import the edge query function
+                from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+                # Get edges for each node (limit to prevent too many)
+                seen_edges = set()  # Track (source, target) pairs to avoid duplicates
+
+                for node in nodes[:500]:  # Query edges for up to 500 nodes
+                    # Get all edges for this node
+                    # get_edges_for_node expects a GraphScope enum, not a string
+                    from ciris_engine.schemas.services.graph_core import GraphScope
+
+                    # Convert scope to GraphScope enum if it's a string
+                    if isinstance(node.scope, str):
+                        scope_enum = GraphScope(node.scope)
+                    else:
+                        scope_enum = node.scope
+
+                    node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
+
+                    for edge_data in node_edges:
+                        # Only include edges where both nodes are in our visualization
+                        if edge_data.target in node_ids:
+                            edge_key = (edge_data.source, edge_data.target)
+                            reverse_key = (edge_data.target, edge_data.source)
+
+                            # Avoid duplicate edges
+                            if edge_key not in seen_edges and reverse_key not in seen_edges:
+                                edges.append(edge_data)
+                                seen_edges.add(edge_key)
+
+                                # Limit total edges for performance
+                                if len(edges) >= 500:
+                                    break
+
+                    if len(edges) >= 500:
+                        break
+
+                logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
+
+            except Exception as e:
+                logger.warning(f"Failed to query edges for visualization: {e}")
+                # Continue with empty edges if query fails
 
         # Generate SVG
         svg = generate_svg(

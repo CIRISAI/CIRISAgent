@@ -8,6 +8,7 @@ from .resources.agent import AgentIdentity, AgentResource, AgentStatus, Conversa
 from .resources.audit import AuditResource
 from .resources.auth import AuthResource
 from .resources.config import ConfigResource
+from .resources.consent import ConsentResource
 from .resources.emergency import EmergencyResource
 from .resources.jobs import JobsResource
 from .resources.memory import MemoryResource
@@ -79,6 +80,7 @@ class CIRISClient:
         self.auth = AuthResource(self._transport)
         self.wa = WiseAuthorityResource(self._transport)
         self.config = ConfigResource(self._transport)
+        self.consent = ConsentResource(self._transport)  # NEW: Consent management
         self.emergency = EmergencyResource(self._transport)  # NEW: Emergency operations
         self.jobs = JobsResource(self._transport)  # NEW: Async job management
 

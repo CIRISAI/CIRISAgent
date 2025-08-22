@@ -1,11 +1,11 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.services.graph_core import GraphEdge, GraphEdgeAttributes, GraphNode, GraphScope
+from ciris_engine.schemas.services.graph_core import GraphEdge, GraphEdgeAttributes, GraphNode, GraphScope, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,64 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
 
             cursor.execute(sql, params)
             conn.commit()
+
+            # If we just created a new USER node, ensure TEMPORARY consent exists
+            if not existing_row and node.type == NodeType.USER:
+                logger.info(f"New USER node created: {node.id}. Creating TEMPORARY consent.")
+                try:
+                    # Import here to avoid circular dependencies
+                    from ciris_engine.logic.services.governance.consent import ConsentService
+                    from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
+
+                    # Create consent service instance
+                    consent_service = ConsentService(time_service=time_service)
+
+                    # Check if consent already exists (synchronously)
+                    try:
+                        # Try to get existing consent
+                        existing_consent = consent_service._get_consent(node.id)
+                        if existing_consent:
+                            logger.debug(f"User {node.id} already has consent: {existing_consent.stream}")
+                            return node.id
+                    except:
+                        pass  # No existing consent, create new one
+
+                    # Create default TEMPORARY consent synchronously
+                    # The consent service stores consent in the database directly
+                    consent_status = ConsentStatus(
+                        user_id=node.id,
+                        stream=ConsentStream.TEMPORARY,
+                        categories=[],
+                        granted_at=time_service.now(),
+                        expires_at=time_service.now() + timedelta(days=14),  # 14-day temporary consent
+                        last_modified=time_service.now(),
+                        impact_score=0.0,
+                        attribution_count=0,
+                    )
+
+                    # Store consent directly in database
+                    consent_node = GraphNode(
+                        id=f"consent_{node.id}",
+                        type=NodeType.CONSENT,
+                        scope=GraphScope.LOCAL,
+                        attributes={
+                            "user_id": node.id,
+                            "stream": ConsentStream.TEMPORARY.value,
+                            "granted_at": consent_status.granted_at.isoformat(),
+                            "expires_at": consent_status.expires_at.isoformat(),
+                            "reason": "Default TEMPORARY consent on user creation",
+                        },
+                        updated_by="system_user_creation",
+                        updated_at=time_service.now(),
+                    )
+
+                    # Recursively add the consent node (but it won't trigger again since it's not a USER type)
+                    add_graph_node(consent_node, time_service=time_service, db_path=db_path)
+                    logger.info(f"Created TEMPORARY consent for new user {node.id}")
+
+                except Exception as e:
+                    logger.warning(f"Could not create consent for user {node.id}: {e}")
+                    # Don't fail the node creation if consent fails
 
         logger.debug("Successfully saved graph node %s in scope %s", node.id, node.scope.value)
         return node.id

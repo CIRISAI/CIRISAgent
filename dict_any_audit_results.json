@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 204,
-    "files_affected": 81,
+    "occurrences": 207,
+    "files_affected": 82,
     "categories": {
-      "generic_data": 182,
+      "generic_data": 185,
       "parameters": 5,
       "configuration": 3,
       "api_request": 1,
@@ -117,7 +117,7 @@
       },
       {
         "file": "ciris_sdk/client.py",
-        "line": 125,
+        "line": 127,
         "class": "CIRISClient",
         "function": "interact",
         "context": "other",
@@ -125,7 +125,7 @@
       },
       {
         "file": "ciris_sdk/client.py",
-        "line": 145,
+        "line": 147,
         "class": "CIRISClient",
         "function": "ask",
         "context": "other",
@@ -244,6 +244,30 @@
         "usage_hint": "generic_data"
       },
       {
+        "file": "ciris_sdk/resources/consent.py",
+        "line": 47,
+        "class": "ConsentRequest",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_sdk/resources/consent.py",
+        "line": 61,
+        "class": "ConsentRecord",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_sdk/resources/consent.py",
+        "line": 96,
+        "class": "ConsentResource",
+        "function": "grant",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
         "file": "ciris_sdk/resources/config.py",
         "line": 179,
         "class": "ConfigResource",
@@ -293,7 +317,7 @@
       },
       {
         "file": "ciris_sdk/resources/memory.py",
-        "line": 89,
+        "line": 100,
         "class": "MemoryResource",
         "function": "store",
         "context": "other",
@@ -301,7 +325,7 @@
       },
       {
         "file": "ciris_sdk/resources/memory.py",
-        "line": 176,
+        "line": 187,
         "class": "MemoryResource",
         "function": "query",
         "context": "other",
@@ -309,7 +333,7 @@
       },
       {
         "file": "ciris_sdk/resources/memory.py",
-        "line": 237,
+        "line": 248,
         "class": "MemoryResource",
         "function": "query",
         "context": "variable_annotation",
@@ -317,7 +341,7 @@
       },
       {
         "file": "ciris_sdk/resources/memory.py",
-        "line": 305,
+        "line": 316,
         "class": "MemoryResource",
         "function": "query_iter",
         "context": "other",
@@ -325,7 +349,7 @@
       },
       {
         "file": "ciris_sdk/resources/memory.py",
-        "line": 309,
+        "line": 320,
         "class": "MemoryResource",
         "function": "query_iter",
         "context": "other",
@@ -3000,7 +3024,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 372,
-    "files_affected": 116
+    "occurrences": 375,
+    "files_affected": 117
   }
 }

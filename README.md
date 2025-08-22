@@ -1,5 +1,5 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Beta](https://img.shields.io/badge/Status-BETA-orange.svg)](NOTICE)
+[![RC1](https://img.shields.io/badge/Status-RC1-yellow.svg)](NOTICE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/CIRISAI/CIRISAgent)
 
 # CIRIS Engine (CIRISAgent)
@@ -8,7 +8,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.4.6-beta** | [Release Notes](RELEASE_NOTES_1.4.6.md) | [Telemetry Architecture](TELEMETRY_ARCHITECTURE.md)
+**RELEASE CANDIDATE 1.0.0-RC1** | [Release Notes](RELEASE_NOTES_1.0.0-RC1.md) | [Telemetry Architecture](TELEMETRY_ARCHITECTURE.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 

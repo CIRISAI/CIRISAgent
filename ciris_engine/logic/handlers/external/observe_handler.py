@@ -133,6 +133,12 @@ class ObserveHandler(BaseActionHandler):
             final_status = ThoughtStatus.FAILED
             follow_up_info = str(e)
 
+            # Create error follow-up and return immediately to avoid duplicate
+            error_follow_up = f"CIRIS_FOLLOW_UP_THOUGHT: OBSERVE action failed: {follow_up_info}"
+            return self.complete_thought_and_create_followup(
+                thought=thought, follow_up_content=error_follow_up, action_result=result, status=ThoughtStatus.FAILED
+            )
+
         follow_up_text = (
             f"CIRIS_FOLLOW_UP_THOUGHT: OBSERVE action completed. Info: {follow_up_info}"
             if action_performed

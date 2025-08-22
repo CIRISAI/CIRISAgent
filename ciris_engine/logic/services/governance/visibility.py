@@ -12,8 +12,11 @@ VisibilityService focuses exclusively on reasoning traces and decision history.
 It does NOT provide service health, metrics, or general system status.
 """
 
+import logging
 from datetime import datetime
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.persistence import (
@@ -422,7 +425,12 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 if telemetry_service and hasattr(telemetry_service, "_recent_correlations"):
                     # Return the most recent correlations
                     correlations = telemetry_service._recent_correlations[-limit:]
+                    logger.debug(f"Retrieved {len(correlations)} traces from telemetry service")
                     return correlations
+                else:
+                    logger.warning("Telemetry service found but _recent_correlations not available")
+            else:
+                logger.warning("No _runtime reference on visibility service - cannot get telemetry service")
 
             # Fallback: query from memory graph
             # Query correlations from database (not memory graph)
@@ -442,9 +450,11 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 # Get recent correlations from database
                 correlations = get_recent_correlations(limit=limit)
                 # The correlations are already ServiceCorrelation objects from the database
+                logger.debug(f"Retrieved {len(correlations)} traces from database")
                 return correlations
-            except Exception:
-                # Fallback to empty list if database not available
+            except Exception as e:
+                # Log the error loudly
+                logger.error(f"Failed to get traces from database: {e}", exc_info=True)
                 return []
 
         except Exception as e:

@@ -30,6 +30,14 @@ from .models import (  # Legacy models; Telemetry models; Other models
     TelemetrySystemOverview,
 )
 from .resources.agent import AgentIdentity, AgentStatus, ConversationHistory, ConversationMessage, InteractResponse
+from .resources.consent import (
+    ConsentAction,
+    ConsentRecord,
+    ConsentRequest,
+    ConsentResponse,
+    ConsentScope,
+    ConsentStatus,
+)
 from .resources.emergency import EmergencyCommandType, EmergencyShutdownResponse, WASignedCommand
 from .resources.memory import GraphNode, MemoryQueryResponse, MemoryStoreResponse, TimelineResponse
 from .resources.system import (
@@ -64,6 +72,13 @@ __all__ = [
     "RuntimeControlResponse",
     "ServicesStatusResponse",
     "ShutdownResponse",
+    # Consent types
+    "ConsentAction",
+    "ConsentScope",
+    "ConsentStatus",
+    "ConsentRequest",
+    "ConsentResponse",
+    "ConsentRecord",
     # Emergency types
     "EmergencyShutdownResponse",
     "WASignedCommand",

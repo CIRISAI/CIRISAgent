@@ -358,9 +358,10 @@ class TestServiceRegistryMetrics:
 
         # Check it's a dict with expected metrics
         assert isinstance(metrics, dict)
+        # Registry no longer tracks uptime_seconds (processor handles that)
         assert (
-            len(metrics) == 16
-        ), f"Expected 16 metrics (10 detailed + 4 v1.4.3 + 2 health), got {len(metrics)}: {list(metrics.keys())}"
+            len(metrics) == 15
+        ), f"Expected 15 metrics (10 detailed + 4 v1.4.3 + 1 health), got {len(metrics)}: {list(metrics.keys())}"
 
         # Check all expected metrics are present
         self.assert_required_metrics(metrics, self.SERVICE_REGISTRY_METRICS)

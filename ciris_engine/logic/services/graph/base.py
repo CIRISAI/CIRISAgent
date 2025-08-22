@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.protocols.runtime.base import GraphServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
-from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
 
 if TYPE_CHECKING:
@@ -198,6 +198,123 @@ class BaseGraphService(ABC, GraphServiceProtocol):
             return result
 
         return []
+
+    async def recall_node(self, node_id: str, scope: Optional[str] = None) -> Optional[GraphNode]:
+        """Recall a specific node by ID.
+        
+        Args:
+            node_id: The ID of the node to recall
+            scope: Optional scope to limit the recall
+            
+        Returns:
+            The GraphNode if found, None otherwise
+        """
+        query = MemoryQuery(
+            query_type="recall",
+            node_id=node_id,
+            scope=scope or "default"
+        )
+        
+        start_time = time.time()
+        try:
+            async with self._memory_bus.get_connection() as memory:
+                nodes = await memory.recall(query)
+                response_time = (time.time() - start_time) * 1000
+                self._track_request(response_time)
+                return nodes[0] if nodes else None
+        except Exception as e:
+            self._track_error()
+            logger.error(f"{self.service_name}: Error recalling node {node_id}: {e}")
+            return None
+    
+    async def search_nodes(
+        self, 
+        node_type: Optional[NodeType] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        limit: int = 10,
+        scope: Optional[str] = None
+    ) -> List[GraphNode]:
+        """Search for nodes by type and/or metadata filters.
+        
+        Args:
+            node_type: Optional NodeType to filter by
+            metadata_filter: Optional metadata key-value pairs to match
+            limit: Maximum number of results to return
+            scope: Optional scope to limit the search
+            
+        Returns:
+            List of matching GraphNodes
+        """
+        # Build a search query
+        # Since MemoryQuery requires node_id for recall, we'll use a different approach
+        # This is a known architectural issue - MemoryQuery isn't designed for search
+        query = MemoryQuery(
+            query_type="search",
+            scope=scope or "default",
+            # Use node_id field to pass search criteria as a workaround
+            node_id=""  # Empty for search queries
+        )
+        
+        start_time = time.time()
+        try:
+            async with self._memory_bus.get_connection() as memory:
+                # Get all nodes and filter locally
+                # This is inefficient but necessary until MemoryQuery is fixed
+                all_nodes = await memory.recall(query)
+                response_time = (time.time() - start_time) * 1000
+                self._track_request(response_time)
+                
+                if not all_nodes:
+                    return []
+                
+                # Filter results based on criteria
+                results = []
+                for node in all_nodes:
+                    if not isinstance(node, GraphNode):
+                        continue
+                        
+                    # Check node type filter
+                    if node_type and node.type != node_type:
+                        continue
+                    
+                    # Check metadata filter
+                    if metadata_filter:
+                        # Get metadata from attributes
+                        node_meta = {}
+                        if hasattr(node.attributes, 'metadata'):
+                            node_meta = node.attributes.metadata or {}
+                        elif isinstance(node.attributes, dict):
+                            node_meta = node.attributes.get('metadata', {})
+                        
+                        if not all(node_meta.get(k) == v for k, v in metadata_filter.items()):
+                            continue
+                    
+                    results.append(node)
+                    if len(results) >= limit:
+                        break
+                
+                return results
+        except Exception as e:
+            self._track_error()
+            logger.error(f"{self.service_name}: Error searching nodes: {e}")
+            return []
+    
+    async def query_memory(self, query: MemoryQuery) -> List[GraphNode]:
+        """Legacy method - delegates to recall_node or search_nodes based on query type.
+        
+        Args:
+            query: MemoryQuery object
+            
+        Returns:
+            List of GraphNodes (empty list if none found)
+        """
+        if query.node_id:
+            # This is a recall query for a specific node
+            node = await self.recall_node(query.node_id, query.scope)
+            return [node] if node else []
+        else:
+            # This is a search query - use default search
+            return await self.search_nodes(scope=query.scope)
 
     @abstractmethod
     def get_node_type(self) -> str:

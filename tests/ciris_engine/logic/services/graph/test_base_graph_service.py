@@ -279,11 +279,8 @@ class TestBaseGraphServiceStoreOperations:
         node = GraphNode(
             id="test-123",
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL,
-            attributes=GraphNodeAttributes(
-                timestamp=datetime.now(timezone.utc),
-                metadata={"test": "data"}
-            )
+            scope=GraphScope.LOCAL,
+            attributes={"created_by": "test", "metadata": {"test": "data"}}
         )
         
         # Mock successful storage
@@ -305,8 +302,8 @@ class TestBaseGraphServiceStoreOperations:
         graph_node = GraphNode(
             id="converted-123",
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL,
-            attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+            scope=GraphScope.LOCAL,
+            attributes=GraphNodeAttributes(created_by="test")
         )
         mock_obj.to_graph_node.return_value = graph_node
         
@@ -327,8 +324,8 @@ class TestBaseGraphServiceStoreOperations:
         node = GraphNode(
             id="fail-123",
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL,
-            attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+            scope=GraphScope.LOCAL,
+            attributes=GraphNodeAttributes(created_by="test")
         )
         
         # Mock failed storage
@@ -349,8 +346,8 @@ class TestBaseGraphServiceStoreOperations:
         node = GraphNode(
             id="test-123",
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL,
-            attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+            scope=GraphScope.LOCAL,
+            attributes=GraphNodeAttributes(created_by="test")
         )
         
         # FAIL FAST AND LOUD - RuntimeError expected
@@ -367,15 +364,15 @@ class TestBaseGraphServiceQueryOperations:
         # FAIL FAST if MemoryQuery schema missing
         query = MemoryQuery(
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL
+            scope=GraphScope.LOCAL
         )
         
         nodes = [
             GraphNode(
                 id=f"node-{i}",
                 type=NodeType.CONCEPT,
-                scope=GraphScope.GLOBAL,
-                attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+                scope=GraphScope.LOCAL,
+                attributes=GraphNodeAttributes(created_by="test")
             )
             for i in range(3)
         ]
@@ -399,8 +396,8 @@ class TestBaseGraphServiceQueryOperations:
         node = GraphNode(
             id="single-node",
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL,
-            attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+            scope=GraphScope.LOCAL,
+            attributes=GraphNodeAttributes(created_by="test")
         )
         
         memory_bus.recall.return_value = MemoryOpResult(
@@ -422,8 +419,8 @@ class TestBaseGraphServiceQueryOperations:
             GraphNode(
                 id=f"direct-{i}",
                 type=NodeType.CONCEPT,
-                scope=GraphScope.GLOBAL,
-                attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+                scope=GraphScope.LOCAL,
+                attributes=GraphNodeAttributes(created_by="test")
             )
             for i in range(2)
         ]
@@ -538,8 +535,8 @@ class TestBaseGraphServiceEdgeCases:
             GraphNode(
                 id=f"concurrent-{i}",
                 type=NodeType.CONCEPT,
-                scope=GraphScope.GLOBAL,
-                attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+                scope=GraphScope.LOCAL,
+                attributes=GraphNodeAttributes(created_by="test")
             )
             for i in range(5)
         ]
@@ -566,6 +563,241 @@ class TestBaseGraphServiceEdgeCases:
         
         # Check query result
         assert len(results[5]) == 5
+
+
+class TestBaseGraphServiceNewMethods:
+    """Test new recall_node and search_nodes methods."""
+
+    @pytest.mark.asyncio
+    async def test_recall_node_success(self, graph_service, memory_bus):
+        """Test successful node recall by ID."""
+        # Create a typed node - TypedGraphNode is abstract, so use a GraphNode directly
+        node = GraphNode(
+            id="recall-123",
+            type=NodeType.CONCEPT,
+            scope=GraphScope.LOCAL,
+            attributes={"created_by": "test", "metadata": {"test": "data"}}
+        )
+        
+        # Setup context manager mock
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=[node])
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        result = await graph_service.recall_node("recall-123", "test-scope")
+        
+        assert result == node
+        # Check the MemoryQuery was created correctly
+        call_args = mock_connection.recall.call_args[0][0]
+        assert call_args.query_type == "recall"
+        assert call_args.node_id == "recall-123"
+        assert call_args.scope == "test-scope"
+
+    @pytest.mark.asyncio
+    async def test_recall_node_not_found(self, graph_service, memory_bus):
+        """Test recall_node returns None when node not found."""
+        # Mock empty result
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=[])
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        result = await graph_service.recall_node("missing-id")
+        
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_recall_node_error_handling(self, graph_service, memory_bus):
+        """Test recall_node handles errors gracefully."""
+        # Mock connection that raises an error
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(side_effect=Exception("Database error"))
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        with patch('ciris_engine.logic.services.graph.base.logger') as mock_logger:
+            result = await graph_service.recall_node("error-id")
+            
+            assert result is None
+            assert graph_service._error_count == 1
+            mock_logger.error.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_search_nodes_by_type(self, graph_service, memory_bus):
+        """Test searching nodes by type."""
+        # Create test nodes
+        nodes = [
+            GraphNode(
+                id=f"node-{i}",
+                type=NodeType.CONCEPT if i % 2 == 0 else NodeType.MEMORY,
+                scope=GraphScope.LOCAL,
+                attributes={"created_by": "test", "metadata": {}}
+            )
+            for i in range(5)
+        ]
+        
+        # Mock recall to return all nodes
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=nodes)
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        # Search for CONCEPT nodes only
+        result = await graph_service.search_nodes(node_type=NodeType.CONCEPT)
+        
+        assert len(result) == 3  # nodes 0, 2, 4
+        assert all(node.type == NodeType.CONCEPT for node in result)
+
+    @pytest.mark.asyncio
+    async def test_search_nodes_by_metadata(self, graph_service, memory_bus):
+        """Test searching nodes by metadata filter."""
+        # Create test nodes with different metadata
+        nodes = [
+            GraphNode(
+                id=f"meta-{i}",
+                type=NodeType.CONCEPT,
+                scope=GraphScope.LOCAL,
+                attributes={"created_by": "test", "metadata": {"category": "A" if i < 2 else "B", "value": i}}
+            )
+            for i in range(4)
+        ]
+        
+        # Mock recall
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=nodes)
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        # Search for category="A" nodes
+        result = await graph_service.search_nodes(metadata_filter={"category": "A"})
+        
+        assert len(result) == 2
+        # Access metadata through attributes
+        assert all(node.attributes.metadata["category"] == "A" for node in result)
+
+    @pytest.mark.asyncio
+    async def test_search_nodes_with_limit(self, graph_service, memory_bus):
+        """Test search nodes respects limit."""
+        # Create many nodes
+        nodes = [
+            GraphNode(
+                id=f"limit-{i}",
+                type=NodeType.CONCEPT,
+                scope=GraphScope.LOCAL,
+                attributes={"created_by": "test", "metadata": {}}
+            )
+            for i in range(20)
+        ]
+        
+        # Mock recall
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=nodes)
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        # Search with limit
+        result = await graph_service.search_nodes(limit=5)
+        
+        assert len(result) == 5
+
+    @pytest.mark.asyncio
+    async def test_search_nodes_empty_result(self, graph_service, memory_bus):
+        """Test search_nodes handles empty results."""
+        # Mock empty recall
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=[])
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        result = await graph_service.search_nodes(node_type=NodeType.CONCEPT)
+        
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_search_nodes_error_handling(self, graph_service, memory_bus):
+        """Test search_nodes handles errors gracefully."""
+        # Mock connection that raises an error
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(side_effect=Exception("Search failed"))
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        with patch('ciris_engine.logic.services.graph.base.logger') as mock_logger:
+            result = await graph_service.search_nodes()
+            
+            assert result == []
+            assert graph_service._error_count == 1
+            mock_logger.error.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_query_memory_delegates_to_recall(self, graph_service, memory_bus):
+        """Test query_memory delegates to recall_node when node_id is present."""
+        # Create test node
+        node = GraphNode(
+            id="legacy-123",
+            type=NodeType.CONCEPT,
+            scope=GraphScope.LOCAL,
+            attributes={"created_by": "test", "metadata": {}}
+        )
+        
+        # Mock recall
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=[node])
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        # Use legacy query_memory with node_id
+        query = MemoryQuery(
+            query_type="recall",
+            node_id="legacy-123",
+            scope="test"
+        )
+        
+        result = await graph_service.query_memory(query)
+        
+        assert len(result) == 1
+        assert result[0] == node
+
+    @pytest.mark.asyncio
+    async def test_query_memory_delegates_to_search(self, graph_service, memory_bus):
+        """Test query_memory delegates to search_nodes when no node_id."""
+        # Create test nodes
+        nodes = [
+            GraphNode(
+                id=f"search-{i}",
+                type=NodeType.CONCEPT,
+                scope=GraphScope.LOCAL,
+                attributes={"created_by": "test", "metadata": {}}
+            )
+            for i in range(3)
+        ]
+        
+        # Mock recall
+        mock_connection = AsyncMock()
+        mock_connection.recall = AsyncMock(return_value=nodes)
+        memory_bus.get_connection = MagicMock()
+        memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
+        memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
+        
+        # Use legacy query_memory without node_id (search)
+        query = MemoryQuery(
+            query_type="search",
+            scope="test"
+        )
+        
+        result = await graph_service.query_memory(query)
+        
+        assert len(result) == 3
 
 
 class TestSchemaValidation:
@@ -606,8 +838,8 @@ class TestSchemaValidation:
         node = GraphNode(
             id="test",
             type=NodeType.CONCEPT,
-            scope=GraphScope.GLOBAL,
-            attributes=GraphNodeAttributes(timestamp=datetime.now(timezone.utc))
+            scope=GraphScope.LOCAL,
+            attributes=GraphNodeAttributes(created_by="test")
         )
         assert node.id == "test"
         

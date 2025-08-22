@@ -153,12 +153,12 @@ async def forget_memory(
     try:
         # Create a minimal GraphNode with just the ID for deletion
         # The forget method will look up the full node internally
-        from ciris_engine.schemas.graph.memory import GraphNode
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
         node_to_forget = GraphNode(
             id=node_id,
-            type="unknown",  # Will be looked up by forget method
-            scope="local",  # Default scope
+            type=NodeType.CONCEPT,  # Default type, will be looked up by forget method
+            scope=GraphScope.LOCAL,  # Default scope
             attributes={},
         )
 

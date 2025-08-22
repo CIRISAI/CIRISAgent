@@ -551,7 +551,7 @@ class ServiceRegistry:
         return {
             # Required for telemetry health detection
             "healthy": True,
-            "uptime_seconds": 300.0,  # Default 5 minutes uptime
+            # Registry doesn't track uptime - that's processor's job
             # Test-expected metric names
             "registry_total_services": float(total_services),
             "registry_service_types": float(service_types),

@@ -237,6 +237,9 @@ class AgentProcessor:
             logger.warning("Processing is already running")
             return
 
+        # Track start time for uptime calculation
+        self._start_time = datetime.now()
+
         self._ensure_stop_event()
         if self._stop_event is not None:
             self._stop_event.clear()
@@ -1460,13 +1463,11 @@ class AgentProcessor:
 
     def _collect_metrics(self) -> dict:
         """Collect base metrics for the agent processor."""
-        # Calculate uptime
-        uptime_seconds = 0.0
-        if hasattr(self, "_start_time") and self._start_time:
-            uptime_seconds = (datetime.now() - self._start_time).total_seconds()
-        elif self._time_service:
-            # Use time service if available (processor started at initialization)
-            uptime_seconds = 300.0  # Default to 5 minutes if no start time tracked
+        # Calculate uptime - MUST have start time
+        if not hasattr(self, "_start_time") or not self._start_time:
+            raise RuntimeError("Processor start time not tracked - cannot calculate uptime")
+
+        uptime_seconds = (datetime.now() - self._start_time).total_seconds()
 
         # Get queue size from processing_queue if it exists
         queue_size = 0

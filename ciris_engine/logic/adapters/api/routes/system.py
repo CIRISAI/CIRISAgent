@@ -25,7 +25,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     AdapterMetrics,
     AdapterOperationResult,
 )
-from ciris_engine.schemas.runtime.adapter_management import AdapterStatus as AdapterStatusSchema
+from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.utils.serialization import serialize_timestamp

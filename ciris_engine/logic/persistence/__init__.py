@@ -22,6 +22,7 @@ from .db import (
 from .models import (
     QueueStatus,
     add_correlation,
+    add_correlation_with_telemetry,
     add_graph_edge,
     add_graph_node,
     add_task,

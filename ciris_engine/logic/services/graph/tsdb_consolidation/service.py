@@ -18,6 +18,7 @@ from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.consent.core import ConsentStream
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.graph.consolidation import (
@@ -521,6 +522,9 @@ class TSDBConsolidationService(BaseGraphService):
 
         # Get tasks completed in the period
         tasks = self._query_manager.query_tasks_in_period(period_start, period_end)
+
+        # 1.5. Handle consent expiry - anonymize expired TEMPORARY nodes
+        await self._handle_consent_expiry(nodes_by_type, period_end)
 
         # 2. Create summaries
 
@@ -1224,6 +1228,74 @@ class TSDBConsolidationService(BaseGraphService):
     def get_service_type(self) -> ServiceType:
         """Get the service type."""
         return ServiceType.TELEMETRY
+
+    async def _handle_consent_expiry(self, nodes_by_type: Dict[str, TSDBNodeQueryResult], period_end: datetime) -> None:
+        """
+        Handle consent expiry by anonymizing expired TEMPORARY nodes.
+
+        When a TEMPORARY node expires (14 days), it gets renamed from:
+        - user_<id> -> temporary_user_<hash>
+
+        When transitioning to ANONYMOUS, it becomes:
+        - user_<id> -> anonymous_user_<hash>
+
+        Args:
+            nodes_by_type: All nodes in the period by type
+            period_end: End of the consolidation period
+        """
+        # Check user nodes for expiry
+        user_nodes = nodes_by_type.get(
+            "user", TSDBNodeQueryResult(nodes=[], period_start=period_end, period_end=period_end)
+        ).nodes
+
+        for node in user_nodes:
+            # Check if node has consent_stream and expires_at
+            if hasattr(node, "consent_stream") and hasattr(node, "expires_at"):
+                # Check if TEMPORARY and expired
+                if node.consent_stream == ConsentStream.TEMPORARY and node.expires_at:
+                    if period_end > node.expires_at:
+                        # Node has expired - anonymize it
+                        old_id = node.id
+
+                        # Generate anonymized ID based on hash of original ID
+                        import hashlib
+
+                        id_hash = hashlib.sha256(old_id.encode()).hexdigest()[:8]
+
+                        # Rename based on stream type
+                        if node.consent_stream == ConsentStream.TEMPORARY:
+                            new_id = f"temporary_user_{id_hash}"
+                        else:
+                            new_id = f"anonymous_user_{id_hash}"
+
+                        logger.info(f"Anonymizing expired node: {old_id} -> {new_id}")
+
+                        # Update the node ID
+                        node.id = new_id
+
+                        # Clear any PII from attributes if present
+                        if hasattr(node, "attributes") and isinstance(node.attributes, dict):
+                            # Remove PII fields
+                            pii_fields = ["email", "name", "phone", "address", "ip_address"]
+                            for field in pii_fields:
+                                if field in node.attributes:
+                                    del node.attributes[field]
+
+                            # Add anonymization metadata
+                            node.attributes["anonymized_at"] = period_end.isoformat()
+                            node.attributes["original_stream"] = node.consent_stream
+
+                        # Update in memory bus if available
+                        if self._memory_bus:
+                            try:
+                                # Update the node in the graph
+                                status = await self._memory_bus.update_node(node)
+                                if status.success:
+                                    logger.info(f"Successfully anonymized node {old_id}")
+                                else:
+                                    logger.warning(f"Failed to update anonymized node: {status.message}")
+                            except Exception as e:
+                                logger.error(f"Error updating anonymized node: {e}")
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service can handle."""

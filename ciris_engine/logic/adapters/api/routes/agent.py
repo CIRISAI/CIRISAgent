@@ -201,6 +201,41 @@ async def interact(
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
+    # Check consent status and add notice for first-time users
+    consent_notice = ""
+    try:
+        from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
+        from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
+
+        # Get consent manager
+        if hasattr(request.app.state, "consent_manager") and request.app.state.consent_manager:
+            consent_manager = request.app.state.consent_manager
+        else:
+            from ciris_engine.logic.services.lifecycle.time import TimeService
+
+            time_service = TimeService()
+            consent_manager = ConsentService(time_service=time_service)
+            request.app.state.consent_manager = consent_manager
+
+        # Check if user has consent
+        try:
+            consent_status = await consent_manager.get_consent(auth.user_id)
+        except ConsentNotFoundError:
+            # First interaction - create default TEMPORARY consent
+            consent_req = ConsentRequest(
+                user_id=auth.user_id,
+                stream=ConsentStream.TEMPORARY,
+                categories=[],
+                reason="Default TEMPORARY consent on first interaction",
+            )
+            consent_status = await consent_manager.grant_consent(consent_req, channel_id=channel_id)
+
+            # Add notice to response
+            consent_notice = "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
+
+    except Exception as e:
+        logger.warning(f"Could not check consent for user {auth.user_id}: {e}")
+
     # Track timing
     start_time = datetime.now(timezone.utc)
 
@@ -221,6 +256,10 @@ async def interact(
 
         # Get response
         response_content = _message_responses.get(message_id, "I'm processing your request. Please check back shortly.")
+
+        # Add consent notice if this is first interaction
+        if consent_notice:
+            response_content += consent_notice
 
         # Clean up
         _response_events.pop(message_id, None)

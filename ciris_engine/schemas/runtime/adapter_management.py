@@ -55,7 +55,7 @@ class AdapterMetrics(BaseModel):
     last_error_time: Optional[datetime] = Field(None, description="Last error timestamp")
 
 
-class AdapterStatus(BaseModel):
+class RuntimeAdapterStatus(BaseModel):
     """Status of a single adapter."""
 
     adapter_id: str = Field(..., description="Unique " + ADAPTER_ID_DESC)
@@ -72,7 +72,7 @@ class AdapterStatus(BaseModel):
 class AdapterListResponse(BaseModel):
     """Response containing list of adapters."""
 
-    adapters: List[AdapterStatus] = Field(..., description="List of adapter statuses")
+    adapters: List[RuntimeAdapterStatus] = Field(..., description="List of adapter statuses")
     total_count: int = Field(..., description="Total number of adapters")
     running_count: int = Field(..., description="Number of running adapters")
 

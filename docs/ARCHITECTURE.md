@@ -3,7 +3,7 @@
 ## Table of Contents
 - [High-Level Architecture](#high-level-architecture)
 - [Core Design Philosophy](#core-design-philosophy)
-- [The 21 Services](#services)
+- [The 22 Services](#services)
 - [Message Bus Architecture](#message-bus-architecture)
 - [Type Safety Architecture](#type-safety)
 - [Async Design Patterns](#async-design)
@@ -40,7 +40,7 @@
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         21 SERVICES LAYER                            │   │
+│  │                         22 SERVICES LAYER                            │   │
 │  │                                                                      │   │
 │  │  Graph Services (6)        │  Runtime Services (3)                  │   │
 │  │  ┌──────────────────┐     │  ┌─────────────┐  ┌──────────────┐   │   │
@@ -52,12 +52,13 @@
 │  │  │ TSDB Service     │     │  ┌─────────────┐  ┌──────────────┐   │   │
 │  │  └──────────────────┘     │  │Time Service │  │Shutdown Svc  │   │   │
 │  │                           │  │Init Service │  │Auth Service  │   │   │
-│  │  Governance (4)           │  │Resource Mon │  │Database Maint│   │   │
+│  │  Governance (5)           │  │Resource Mon │  │Database Maint│   │   │
 │  │  ┌──────────────────┐     │  │Secrets Svc  │                  │   │   │
 │  │  │ Wise Authority   │     │  └─────────────┘  └──────────────┘   │   │
 │  │  │ Adaptive Filter  │     │                                        │   │
 │  │  │ Visibility       │     │  Tool Services (1)                    │   │
 │  │  │ Self Observation │     │  ┌─────────────┐                      │   │
+│  │  │ Consent Service  │     │                                        │   │
 │  │  └──────────────────┘     │  │Secrets Tool │                      │   │
 │  │                           │  └─────────────┘                      │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
@@ -93,7 +94,7 @@ This philosophy ensures:
 
 ## Services
 
-CIRIS has exactly **21 services** - no more, no less. Each service has a specific purpose and clear boundaries.
+CIRIS has exactly **22 services** - no more, no less. Each service has a specific purpose and clear boundaries.
 
 ### Graph Services (6)
 
@@ -226,7 +227,7 @@ Foundation services that enable the system:
 **Access**: Direct injection
 **Why**: Central security boundary. All secrets encrypted with AES-256-GCM.
 
-### Governance Services (4)
+### Governance Services (5)
 
 Ethical and operational governance:
 
@@ -254,9 +255,15 @@ Ethical and operational governance:
 **Access**: Direct injection
 **Why**: Continuous learning. Detects patterns, generates insights the agent can act on. Monitors identity variance and triggers WA review if threshold exceeded.
 
+#### 21. Consent Service
+**Purpose**: User consent management and decay protocol implementation
+**Protocol**: `ConsentManagerProtocol`
+**Access**: Direct injection
+**Why**: GDPR compliance and ethical data handling. Manages TEMPORARY (14-day default), PARTNERED (bilateral agreement), and ANONYMOUS streams. Implements 90-day decay protocol for real deletion.
+
 ### Tool Services (1)
 
-#### 21. Secrets Tool Service
+#### 22. Secrets Tool Service
 **Purpose**: Agent self-help tools including secret recall and filter updates
 **Protocol**: `ToolServiceProtocol`
 **Bus**: `ToolBus` (always present)

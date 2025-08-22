@@ -465,6 +465,22 @@ async def build_system_snapshot(
             user_profiles_list = []
             for name, graphql_profile in enriched_context.user_profiles:
                 # Create UserProfile from GraphQLUserProfile data
+                # Extract consent attributes from GraphQL profile (v1.4.6)
+                consent_attrs = {attr.key: attr.value for attr in graphql_profile.attributes}
+                consent_stream = consent_attrs.get("consent_stream", "TEMPORARY")
+                consent_expires_at = None
+                if "consent_expires_at" in consent_attrs:
+                    try:
+                        consent_expires_at = datetime.fromisoformat(consent_attrs["consent_expires_at"])
+                    except (ValueError, TypeError):
+                        pass
+                partnership_requested_at = None
+                if "partnership_requested_at" in consent_attrs:
+                    try:
+                        partnership_requested_at = datetime.fromisoformat(consent_attrs["partnership_requested_at"])
+                    except (ValueError, TypeError):
+                        pass
+
                 user_profiles_list.append(
                     UserProfile(
                         user_id=name,  # Use name as user_id
@@ -480,6 +496,11 @@ async def build_system_snapshot(
                         is_wa=any(attr.key == "is_wa" and attr.value == "true" for attr in graphql_profile.attributes),
                         permissions=[attr.value for attr in graphql_profile.attributes if attr.key == "permission"],
                         restrictions=[attr.value for attr in graphql_profile.attributes if attr.key == "restriction"],
+                        # Consent relationship state (v1.4.6)
+                        consent_stream=consent_stream,
+                        consent_expires_at=consent_expires_at,
+                        partnership_requested_at=partnership_requested_at,
+                        partnership_approved=consent_attrs.get("partnership_approved", "false").lower() == "true",
                     )
                 )
 
@@ -675,6 +696,21 @@ async def build_system_snapshot(
                         # No created_at/first_seen in node, use current time
                         created_at = datetime.now()
 
+                    # Extract consent information from node attributes (v1.4.6)
+                    consent_stream = attrs.get("consent_stream", "TEMPORARY")
+                    consent_expires_at = None
+                    if "consent_expires_at" in attrs:
+                        try:
+                            consent_expires_at = datetime.fromisoformat(attrs["consent_expires_at"])
+                        except (ValueError, TypeError):
+                            pass
+                    partnership_requested_at = None
+                    if "partnership_requested_at" in attrs:
+                        try:
+                            partnership_requested_at = datetime.fromisoformat(attrs["partnership_requested_at"])
+                        except (ValueError, TypeError):
+                            pass
+
                     user_profile = UserProfile(
                         user_id=user_id,
                         display_name=attrs.get("username", attrs.get("display_name", f"User_{user_id}")),
@@ -687,6 +723,11 @@ async def build_system_snapshot(
                         is_wa=attrs.get("is_wa", False),
                         permissions=attrs.get("permissions", []),
                         restrictions=attrs.get("restrictions", []),
+                        # Consent relationship state (v1.4.6)
+                        consent_stream=consent_stream,
+                        consent_expires_at=consent_expires_at,
+                        partnership_requested_at=partnership_requested_at,
+                        partnership_approved=attrs.get("partnership_approved", False),
                         # Store ALL other attributes and connected nodes in notes for access
                         notes=notes_content,
                     )

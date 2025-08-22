@@ -19,6 +19,7 @@ from .routes import (
     audit,
     auth,
     config,
+    consent,
     dsar,
     emergency,
     memory,
@@ -98,6 +99,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         # === THE 21 CORE CIRIS SERVICES ===
         # Graph Services (6)
         app.state.memory_service = None
+        app.state.consent_manager = None  # Consent manager for Consensual Evolution Protocol
         app.state.config_service = None
         app.state.telemetry_service = None
         app.state.audit_service = None
@@ -148,6 +150,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         wa.router,  # Wise Authority
         auth.router,  # Authentication
         users.router,  # User management
+        consent.router,  # Consent management (Consensual Evolution Protocol)
         dsar.router,  # Data Subject Access Requests (GDPR compliance)
         transparency.router,  # Public transparency feed (no auth)
     ]

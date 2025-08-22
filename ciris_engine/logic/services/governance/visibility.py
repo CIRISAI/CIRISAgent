@@ -408,6 +408,49 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         self._redaction_operations += 1
         return redacted_content
 
+    async def get_recent_traces(self, limit: int = 100) -> List["ServiceCorrelation"]:
+        """
+        Get recent trace correlations from the telemetry service.
+
+        Returns ServiceCorrelation objects that represent trace spans,
+        always linked to their corresponding tasks/thoughts.
+        """
+        try:
+            # Get telemetry service from runtime if available
+            if hasattr(self, "_runtime") and self._runtime:
+                telemetry_service = getattr(self._runtime, "telemetry_service", None)
+                if telemetry_service and hasattr(telemetry_service, "_recent_correlations"):
+                    # Return the most recent correlations
+                    correlations = telemetry_service._recent_correlations[-limit:]
+                    return correlations
+
+            # Fallback: query from memory graph
+            # Query correlations from database (not memory graph)
+            # Correlations are stored in SQLite, not as graph nodes
+            from ciris_engine.logic.persistence.models.correlations import get_recent_correlations
+            from ciris_engine.schemas.services.graph_core import NodeType
+            from ciris_engine.schemas.telemetry.core import (
+                CorrelationType,
+                ServiceCorrelation,
+                ServiceCorrelationStatus,
+                ServiceRequestData,
+                ServiceResponseData,
+                TraceContext,
+            )
+
+            try:
+                # Get recent correlations from database
+                correlations = get_recent_correlations(limit=limit)
+                # The correlations are already ServiceCorrelation objects from the database
+                return correlations
+            except Exception:
+                # Fallback to empty list if database not available
+                return []
+
+        except Exception as e:
+            logger.error(f"Failed to get recent traces: {e}")
+            return []
+
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect visibility service metrics."""
         metrics = super()._collect_custom_metrics()

@@ -3,13 +3,16 @@ Memorize handler - clean implementation using BusManager
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.logic.infrastructure.handlers.helpers import create_follow_up_thought
+from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.schemas.actions import MemorizeParams
+from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
@@ -64,6 +67,79 @@ class MemorizeHandler(BaseActionHandler):
 
         # Check if this is a user node and validate attributes
         if node.type == NodeType.USER or node.id.startswith("user/"):
+            # Extract user_id from node id (format: user/{uid} or user_{uid})
+            user_id = None
+            if node.id.startswith("user/"):
+                user_id = node.id[5:]  # Remove "user/" prefix
+            elif node.id.startswith("user_"):
+                user_id = node.id[5:]  # Remove "user_" prefix
+
+            if user_id:
+                # Check consent status for this user (if service is available)
+                try:
+                    consent_service = ConsentService(time_service=self.time_service)
+                    consent_status = await consent_service.get_consent(user_id)
+
+                    # Check if TEMPORARY consent has expired
+                    if consent_status.stream == ConsentStream.TEMPORARY:
+                        if consent_status.expires_at and datetime.now(timezone.utc) > consent_status.expires_at:
+                            # Consent expired - start decay protocol
+                            await consent_service.revoke_consent(user_id, "TEMPORARY consent expired (14 days)")
+
+                            error_msg = (
+                                f"MEMORIZE BLOCKED: User consent expired. "
+                                f"User {user_id}'s TEMPORARY consent expired on {consent_status.expires_at}. "
+                                f"Decay protocol initiated. User data will be anonymized over 90 days."
+                            )
+                            logger.warning(f"Blocked memorize for expired consent: user {user_id}")
+
+                            return self.complete_thought_and_create_followup(
+                                thought=thought,
+                                follow_up_content=error_msg,
+                                action_result=result,
+                                status=ThoughtStatus.FAILED,
+                            )
+
+                    # Add consent metadata to node attributes
+                    if hasattr(node, "attributes"):
+                        if isinstance(node.attributes, dict):
+                            node.attributes["consent_stream"] = consent_status.stream
+                            node.attributes["consent_expires_at"] = (
+                                consent_status.expires_at.isoformat() if consent_status.expires_at else None
+                            )
+                            node.attributes["consent_granted_at"] = consent_status.granted_at.isoformat()
+
+                except ConsentNotFoundError:
+                    # No consent exists - try to create default TEMPORARY consent
+                    try:
+                        now = datetime.now(timezone.utc)
+                        consent_request = ConsentRequest(
+                            user_id=user_id,
+                            stream=ConsentStream.TEMPORARY,
+                            categories=[],  # No categories for default TEMPORARY
+                            reason="Default TEMPORARY consent on first interaction",
+                        )
+                        consent_status = await consent_service.grant_consent(consent_request, channel_id=None)
+
+                        # Add consent metadata to node
+                        if hasattr(node, "attributes"):
+                            if isinstance(node.attributes, dict):
+                                node.attributes["consent_stream"] = ConsentStream.TEMPORARY
+                                node.attributes["consent_expires_at"] = (now + timedelta(days=14)).isoformat()
+                                node.attributes["consent_granted_at"] = now.isoformat()
+                                node.attributes["consent_notice"] = (
+                                    "We forget about you in 14 days unless you say otherwise"
+                                )
+
+                        logger.info(f"Created default TEMPORARY consent for new user {user_id}")
+                    except (RuntimeError, Exception) as grant_error:
+                        # Can't grant consent either - service unavailable
+                        logger.debug(f"Cannot grant consent: {grant_error}. Continuing without consent.")
+                except (RuntimeError, Exception) as e:
+                    # Consent service not available (e.g., in tests or minimal configurations)
+                    # Log but continue - consent is not mandatory for memorization
+                    logger.debug(f"Consent service not available: {e}. Continuing without consent check.")
+
             if hasattr(node, "attributes") and node.attributes:
                 # Handle both dict and GraphNodeAttributes types
                 if isinstance(node.attributes, dict):
@@ -154,9 +230,7 @@ class MemorizeHandler(BaseActionHandler):
 
                 follow_up_content = (
                     f"MEMORIZE COMPLETE - stored {node.type.value} '{node.id}'{content_preview}. "
-                    "ACTION REQUIRED: Your next action should be TASK_COMPLETE unless you were explicitly requested to notify the user, "
-                    "or if further action is required to complete the parent task, but most of the time TASK_COMPLETE is next. "
-                    "Do NOT memorize again - the information is already stored."
+                    "Information successfully saved to memory graph."
                 )
             else:
                 follow_up_content = (

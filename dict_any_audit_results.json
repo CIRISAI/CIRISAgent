@@ -589,7 +589,7 @@
       },
       {
         "file": "ciris_engine/logic/services/graph/telemetry_service.py",
-        "line": 995,
+        "line": 997,
         "class": "TelemetryAggregator",
         "function": "_extract_governance_metrics",
         "context": "return_type",
@@ -813,7 +813,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
-        "line": 471,
+        "line": 517,
         "class": null,
         "function": "convert_logs_to_otlp_json",
         "context": "other",
@@ -821,7 +821,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
-        "line": 476,
+        "line": 522,
         "class": null,
         "function": "convert_logs_to_otlp_json",
         "context": "return_type",
@@ -829,7 +829,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
-        "line": 586,
+        "line": 632,
         "class": null,
         "function": "validate_otlp_json",
         "context": "function_parameter",
@@ -845,7 +845,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/api/routes/agent.py",
-        "line": 402,
+        "line": 441,
         "class": null,
         "function": "get_history",
         "context": "other",
@@ -1021,7 +1021,7 @@
       },
       {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 17,
+        "line": 20,
         "class": null,
         "function": "_parse_response_data",
         "context": "other",
@@ -1029,7 +1029,7 @@
       },
       {
         "file": "ciris_engine/logic/persistence/models/correlations.py",
-        "line": 18,
+        "line": 21,
         "class": null,
         "function": "_parse_response_data",
         "context": "other",
@@ -1341,7 +1341,7 @@
       },
       {
         "file": "ciris_engine/schemas/services/graph_core.py",
-        "line": 96,
+        "line": 100,
         "class": "GraphNode",
         "function": null,
         "context": "other",

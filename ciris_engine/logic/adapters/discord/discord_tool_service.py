@@ -454,16 +454,16 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_available_tools(self) -> List[str]:
+    async def get_available_tools(self) -> List[str]:
         """Get list of available Discord tools."""
         return list(self._tools.keys())
 
-    def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         """Get result of a tool execution by correlation ID."""
         # All Discord tools are synchronous, so results are available immediately
         return self._results.get(correlation_id)
 
-    def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
         """Validate parameters for a Discord tool."""
         required_params = {
             "discord_send_message": ["channel_id", "content"],
@@ -483,7 +483,7 @@ class DiscordToolService(ToolService):
 
         return all(param in parameters for param in required_params[tool_name])
 
-    def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
+    async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed information about a specific Discord tool."""
         tool_schemas = {
             "discord_send_message": ToolParameterSchema(
@@ -631,7 +631,7 @@ class DiscordToolService(ToolService):
 
     def get_service_type(self) -> ServiceType:
         """Get the type of this service."""
-        return ServiceType.ADAPTER
+        return ServiceType.TOOL
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""
@@ -671,13 +671,13 @@ class DiscordToolService(ToolService):
             last_health_check=datetime.now(timezone.utc) if self._time_service is None else self._time_service.now(),
         )
 
-    def list_tools(self) -> List[str]:
+    async def list_tools(self) -> List[str]:
         """List available tools - required by ToolServiceProtocol."""
         return list(self._tools.keys())
 
-    def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
+    async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
         """Get parameter schema for a specific tool - required by ToolServiceProtocol."""
-        tool_info = self.get_tool_info(tool_name)
+        tool_info = await self.get_tool_info(tool_name)
         if tool_info:
             return tool_info.parameters
         return None

@@ -6,10 +6,12 @@ Consolidates SERVICE_INTERACTION correlations into ConversationSummaryNode.
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
+from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
+from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.services.graph.consolidation import ConversationEntry, ParticipantData, ServiceInteractionData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
@@ -172,6 +174,8 @@ class ConversationConsolidator:
         Returns edges from summary to:
         - User participants (INVOLVED_USER)
         - Channels where conversations happened (OCCURRED_IN_CHANNEL)
+
+        NOTE: Consent checking happens during consolidation phase, not edge creation.
         """
         edges = []
 
@@ -191,12 +195,19 @@ class ConversationConsolidator:
         # Create edges to participants
         for user_id, participant in participant_data.items():
             if user_id and participant.message_count > 0:
-                # Create user node if needed (edge creation will handle this)
+                # NOTE: Consent is checked and added during memorize operations
+                # Here we just create the node with basic info
+                # The memorize_handler will add consent metadata
+
                 user_node = GraphNode(
                     id=f"user_{user_id}",
                     type=NodeType.USER,
                     scope=GraphScope.LOCAL,
-                    attributes={"user_id": user_id, "username": participant.author_name or user_id},
+                    attributes={
+                        "user_id": user_id,
+                        "username": participant.author_name or user_id,
+                        # Consent metadata will be added by memorize_handler
+                    },
                     updated_by="tsdb_consolidation",
                     updated_at=self._time_service.now() if self._time_service else period_end,
                 )

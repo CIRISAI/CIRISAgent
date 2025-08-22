@@ -18,7 +18,7 @@ from ciris_engine.logic.runtime.adapter_manager import AdapterInstance, RuntimeA
 from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterOperationResult
-from ciris_engine.schemas.runtime.adapter_management import AdapterStatus as AdapterStatusModel
+from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusModel
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.core.runtime import (

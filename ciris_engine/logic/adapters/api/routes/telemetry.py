@@ -463,30 +463,72 @@ async def get_otlp_telemetry(
             if not visibility_service:
                 raise HTTPException(status_code=503, detail="Visibility service not available")
 
-            # Get recent traces
+            # Get recent trace correlations
             traces = []
             try:
-                # Get thought traces
-                thoughts = await visibility_service.get_recent_thoughts(limit=limit)
-                for thought in thoughts:
+                # Get service correlations (trace spans)
+                correlations = await visibility_service.get_recent_traces(limit=limit)
+
+                for correlation in correlations:
+                    # Build trace data from correlation
                     trace_data = {
-                        "trace_id": getattr(thought, "id", str(uuid.uuid4())),
-                        "timestamp": getattr(thought, "timestamp", datetime.now(timezone.utc)).isoformat(),
-                        "operation": "thought_processing",
-                        "cognitive_state": getattr(thought, "cognitive_state", "unknown"),
-                        "thoughts": [],
+                        "trace_id": (
+                            correlation.trace_context.trace_id
+                            if correlation.trace_context
+                            else correlation.correlation_id
+                        ),
+                        "span_id": (
+                            correlation.trace_context.span_id if correlation.trace_context else str(uuid.uuid4())
+                        ),
+                        "parent_span_id": (
+                            correlation.trace_context.parent_span_id if correlation.trace_context else None
+                        ),
+                        "timestamp": (
+                            correlation.timestamp.isoformat()
+                            if correlation.timestamp
+                            else datetime.now(timezone.utc).isoformat()
+                        ),
+                        "operation": correlation.action_type or "unknown",
+                        "service": correlation.service_type,
+                        "handler": correlation.handler_name,
+                        "status": (
+                            correlation.status.value
+                            if hasattr(correlation.status, "value")
+                            else str(correlation.status)
+                        ),
                     }
 
-                    # Add thought steps if available
-                    if hasattr(thought, "thought") and hasattr(thought.thought, "steps"):
-                        trace_data["thoughts"] = [
-                            {"content": step.content if hasattr(step, "content") else str(step)}
-                            for step in thought.thought.steps
-                        ]
-                    elif hasattr(thought, "content"):
-                        trace_data["thoughts"] = [{"content": thought.content}]
+                    # Add task/thought linkage
+                    if correlation.request_data:
+                        if hasattr(correlation.request_data, "task_id") and correlation.request_data.task_id:
+                            trace_data["task_id"] = correlation.request_data.task_id
+                        if hasattr(correlation.request_data, "thought_id") and correlation.request_data.thought_id:
+                            trace_data["thought_id"] = correlation.request_data.thought_id
+
+                    # Add performance data
+                    if correlation.response_data:
+                        if hasattr(correlation.response_data, "execution_time_ms"):
+                            trace_data["duration_ms"] = correlation.response_data.execution_time_ms
+                        if hasattr(correlation.response_data, "success"):
+                            trace_data["success"] = correlation.response_data.success
+                        if hasattr(correlation.response_data, "error_message"):
+                            trace_data["error"] = correlation.response_data.error_message
+
+                    # Add span attributes
+                    if correlation.trace_context:
+                        trace_data["span_name"] = (
+                            correlation.trace_context.span_name
+                            if hasattr(correlation.trace_context, "span_name")
+                            else correlation.action_type
+                        )
+                        trace_data["span_kind"] = (
+                            correlation.trace_context.span_kind
+                            if hasattr(correlation.trace_context, "span_kind")
+                            else "internal"
+                        )
 
                     traces.append(trace_data)
+
             except Exception as e:
                 logger.warning(f"Failed to get traces: {e}")
 

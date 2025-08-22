@@ -58,6 +58,10 @@ coverage.xml
 # env.sh # This is sourced in CMD, so it must be copied. Dockerfile copies ../. so it will be /app/env.sh
 # env_student.sh
 
+# Sensitive directories
+.secrets/
+audit_keys/
+
 # Project specific ignores
 scripts/
 deploy/

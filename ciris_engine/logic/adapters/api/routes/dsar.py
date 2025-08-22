@@ -117,7 +117,8 @@ async def submit_dsar(
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.info(f"Decay protocol initiated for user {request.user_identifier} via DSAR {ticket_id}")
+            # Use structured logging to avoid log injection
+            logger.info("Decay protocol initiated via DSAR", extra={"user_id": request.user_identifier, "ticket_id": ticket_id})
 
         except ConsentNotFoundError:
             # User has no consent record - that's fine for DSAR

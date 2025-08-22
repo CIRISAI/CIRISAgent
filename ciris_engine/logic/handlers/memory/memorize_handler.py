@@ -119,7 +119,7 @@ class MemorizeHandler(BaseActionHandler):
                             categories=[],  # No categories for default TEMPORARY
                             reason="Default TEMPORARY consent on first interaction",
                         )
-                        consent_status = await consent_service.grant_consent(consent_request)
+                        consent_status = await consent_service.grant_consent(consent_request, channel_id=None)
 
                         # Add consent metadata to node
                         if hasattr(node, "attributes"):

@@ -110,27 +110,31 @@ class MemorizeHandler(BaseActionHandler):
                             node.attributes["consent_granted_at"] = consent_status.granted_at.isoformat()
 
                 except ConsentNotFoundError:
-                    # No consent exists - create default TEMPORARY consent
-                    now = datetime.now(timezone.utc)
-                    consent_request = ConsentRequest(
-                        user_id=user_id,
-                        stream=ConsentStream.TEMPORARY,
-                        categories=[],  # No categories for default TEMPORARY
-                        reason="Default TEMPORARY consent on first interaction",
-                    )
-                    consent_status = await consent_service.grant_consent(consent_request)
+                    # No consent exists - try to create default TEMPORARY consent
+                    try:
+                        now = datetime.now(timezone.utc)
+                        consent_request = ConsentRequest(
+                            user_id=user_id,
+                            stream=ConsentStream.TEMPORARY,
+                            categories=[],  # No categories for default TEMPORARY
+                            reason="Default TEMPORARY consent on first interaction",
+                        )
+                        consent_status = await consent_service.grant_consent(consent_request)
 
-                    # Add consent metadata to node
-                    if hasattr(node, "attributes"):
-                        if isinstance(node.attributes, dict):
-                            node.attributes["consent_stream"] = ConsentStream.TEMPORARY
-                            node.attributes["consent_expires_at"] = (now + timedelta(days=14)).isoformat()
-                            node.attributes["consent_granted_at"] = now.isoformat()
-                            node.attributes["consent_notice"] = (
-                                "We forget about you in 14 days unless you say otherwise"
-                            )
+                        # Add consent metadata to node
+                        if hasattr(node, "attributes"):
+                            if isinstance(node.attributes, dict):
+                                node.attributes["consent_stream"] = ConsentStream.TEMPORARY
+                                node.attributes["consent_expires_at"] = (now + timedelta(days=14)).isoformat()
+                                node.attributes["consent_granted_at"] = now.isoformat()
+                                node.attributes["consent_notice"] = (
+                                    "We forget about you in 14 days unless you say otherwise"
+                                )
 
-                    logger.info(f"Created default TEMPORARY consent for new user {user_id}")
+                        logger.info(f"Created default TEMPORARY consent for new user {user_id}")
+                    except (RuntimeError, Exception) as grant_error:
+                        # Can't grant consent either - service unavailable
+                        logger.debug(f"Cannot grant consent: {grant_error}. Continuing without consent.")
                 except (RuntimeError, Exception) as e:
                     # Consent service not available (e.g., in tests or minimal configurations)
                     # Log but continue - consent is not mandatory for memorization

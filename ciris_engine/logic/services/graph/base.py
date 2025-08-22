@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.protocols.runtime.base import GraphServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
-from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
 
 if TYPE_CHECKING:
@@ -199,7 +199,7 @@ class BaseGraphService(ABC, GraphServiceProtocol):
 
         return []
 
-    async def recall_node(self, node_id: str, scope: Optional[str] = None) -> Optional[GraphNode]:
+    async def recall_node(self, node_id: str, scope: Optional[GraphScope] = None) -> Optional[GraphNode]:
         """Recall a specific node by ID.
         
         Args:
@@ -210,9 +210,8 @@ class BaseGraphService(ABC, GraphServiceProtocol):
             The GraphNode if found, None otherwise
         """
         query = MemoryQuery(
-            query_type="recall",
             node_id=node_id,
-            scope=scope or "default"
+            scope=scope or GraphScope.LOCAL
         )
         
         start_time = time.time()
@@ -232,7 +231,7 @@ class BaseGraphService(ABC, GraphServiceProtocol):
         node_type: Optional[NodeType] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
         limit: int = 10,
-        scope: Optional[str] = None
+        scope: Optional[GraphScope] = None
     ) -> List[GraphNode]:
         """Search for nodes by type and/or metadata filters.
         
@@ -245,14 +244,15 @@ class BaseGraphService(ABC, GraphServiceProtocol):
         Returns:
             List of matching GraphNodes
         """
+        from ciris_engine.schemas.services.graph_core import GraphScope
+        
         # Build a search query
-        # Since MemoryQuery requires node_id for recall, we'll use a different approach
+        # Since MemoryQuery requires node_id for recall, we'll use a wildcard
         # This is a known architectural issue - MemoryQuery isn't designed for search
         query = MemoryQuery(
-            query_type="search",
-            scope=scope or "default",
-            # Use node_id field to pass search criteria as a workaround
-            node_id=""  # Empty for search queries
+            node_id="*",  # Wildcard for search queries
+            scope=scope or GraphScope.LOCAL,
+            type=node_type  # Use the type field for filtering
         )
         
         start_time = time.time()
@@ -308,13 +308,13 @@ class BaseGraphService(ABC, GraphServiceProtocol):
         Returns:
             List of GraphNodes (empty list if none found)
         """
-        if query.node_id:
+        if query.node_id and query.node_id != "*":
             # This is a recall query for a specific node
             node = await self.recall_node(query.node_id, query.scope)
             return [node] if node else []
         else:
-            # This is a search query - use default search
-            return await self.search_nodes(scope=query.scope)
+            # This is a search query - use search with type filter if provided
+            return await self.search_nodes(node_type=query.type, scope=query.scope)
 
     @abstractmethod
     def get_node_type(self) -> str:

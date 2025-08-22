@@ -363,6 +363,7 @@ class TestBaseGraphServiceQueryOperations:
         """Test successful query returning list."""
         # FAIL FAST if MemoryQuery schema missing
         query = MemoryQuery(
+            node_id="test_query",
             type=NodeType.CONCEPT,
             scope=GraphScope.LOCAL
         )
@@ -391,7 +392,7 @@ class TestBaseGraphServiceQueryOperations:
     @pytest.mark.asyncio
     async def test_query_graph_success_with_single_node(self, graph_service, memory_bus):
         """Test successful query returning single node."""
-        query = MemoryQuery(type=NodeType.CONCEPT)
+        query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
         
         node = GraphNode(
             id="single-node",
@@ -413,7 +414,7 @@ class TestBaseGraphServiceQueryOperations:
     @pytest.mark.asyncio
     async def test_query_graph_direct_list_result(self, graph_service, memory_bus):
         """Test query with direct list result (no MemoryOpResult wrapper)."""
-        query = MemoryQuery(type=NodeType.CONCEPT)
+        query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
         
         nodes = [
             GraphNode(
@@ -434,7 +435,7 @@ class TestBaseGraphServiceQueryOperations:
     @pytest.mark.asyncio
     async def test_query_graph_failure(self, graph_service, memory_bus):
         """Test failed query."""
-        query = MemoryQuery(type=NodeType.CONCEPT)
+        query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
         
         memory_bus.recall.return_value = MemoryOpResult(
             status=MemoryOpStatus.ERROR,
@@ -450,7 +451,7 @@ class TestBaseGraphServiceQueryOperations:
         """Test querying without memory bus."""
         service = TestGraphService(time_service=time_service)
         
-        query = MemoryQuery(type=NodeType.CONCEPT)
+        query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
         
         with patch('ciris_engine.logic.services.graph.base.logger') as mock_logger:
             result = await service.query_graph(query)
@@ -461,7 +462,7 @@ class TestBaseGraphServiceQueryOperations:
     @pytest.mark.asyncio
     async def test_query_graph_unexpected_result_type(self, graph_service, memory_bus):
         """Test query with unexpected result type."""
-        query = MemoryQuery(type=NodeType.CONCEPT)
+        query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
         
         # Return something unexpected
         memory_bus.recall.return_value = "unexpected string result"
@@ -586,14 +587,13 @@ class TestBaseGraphServiceNewMethods:
         memory_bus.get_connection.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
         memory_bus.get_connection.return_value.__aexit__ = AsyncMock()
         
-        result = await graph_service.recall_node("recall-123", "test-scope")
+        result = await graph_service.recall_node("recall-123", GraphScope.LOCAL)
         
         assert result == node
         # Check the MemoryQuery was created correctly
         call_args = mock_connection.recall.call_args[0][0]
-        assert call_args.query_type == "recall"
         assert call_args.node_id == "recall-123"
-        assert call_args.scope == "test-scope"
+        assert call_args.scope == GraphScope.LOCAL
 
     @pytest.mark.asyncio
     async def test_recall_node_not_found(self, graph_service, memory_bus):
@@ -843,5 +843,6 @@ class TestSchemaValidation:
         )
         assert node.id == "test"
         
-        query = MemoryQuery(type=NodeType.CONCEPT)
+        query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
         assert query.type == NodeType.CONCEPT
+        assert query.node_id == "test_query"

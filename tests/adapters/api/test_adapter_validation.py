@@ -8,7 +8,7 @@ This module tests the fixes for:
 """
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -121,7 +121,7 @@ class TestToolProviderCounting:
         mock_provider1 = MagicMock()
         mock_provider1.instance = MagicMock()
         mock_provider1.instance.__class__.__name__ = "APIToolService"
-        mock_provider1.instance.get_all_tool_info = MagicMock(
+        mock_provider1.instance.get_all_tool_info = AsyncMock(
             return_value=[
                 MagicMock(name="tool1", description="Tool 1", parameters=None),
                 MagicMock(name="tool2", description="Tool 2", parameters=None),
@@ -131,7 +131,7 @@ class TestToolProviderCounting:
         mock_provider2 = MagicMock()
         mock_provider2.instance = MagicMock()
         mock_provider2.instance.__class__.__name__ = "SecretsToolService"
-        mock_provider2.instance.get_all_tool_info = MagicMock(
+        mock_provider2.instance.get_all_tool_info = AsyncMock(
             return_value=[
                 MagicMock(name="recall_secret", description="Recall secret", parameters=None),
             ]
@@ -141,7 +141,7 @@ class TestToolProviderCounting:
         mock_provider3 = MagicMock()
         mock_provider3.instance = MagicMock()
         mock_provider3.instance.__class__.__name__ = "APIToolService"
-        mock_provider3.instance.get_all_tool_info = MagicMock(
+        mock_provider3.instance.get_all_tool_info = AsyncMock(
             return_value=[
                 MagicMock(name="tool3", description="Tool 3", parameters=None),
             ]
@@ -188,7 +188,7 @@ class TestToolProviderCounting:
         mock_provider1 = MagicMock()
         mock_provider1.instance = MagicMock()
         mock_provider1.instance.__class__.__name__ = "Provider1"
-        mock_provider1.instance.get_all_tool_info = MagicMock(
+        mock_provider1.instance.get_all_tool_info = AsyncMock(
             return_value=[
                 MagicMock(name="shared_tool", description="Shared tool", parameters=None),
             ]
@@ -197,7 +197,7 @@ class TestToolProviderCounting:
         mock_provider2 = MagicMock()
         mock_provider2.instance = MagicMock()
         mock_provider2.instance.__class__.__name__ = "Provider2"
-        mock_provider2.instance.get_all_tool_info = MagicMock(
+        mock_provider2.instance.get_all_tool_info = AsyncMock(
             return_value=[
                 MagicMock(name="shared_tool", description="Shared tool", parameters=None),
             ]

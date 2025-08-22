@@ -974,10 +974,8 @@ async def reload_adapter(
 
 
 # Tool endpoints
-@router.get("/tools", response_model=SuccessResponse[List[ToolInfoResponse]])
-async def get_available_tools(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[List[ToolInfoResponse]]:
+@router.get("/tools")
+async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> dict:
     """
     Get list of all available tools from all tool providers.
 
@@ -1058,7 +1056,19 @@ async def get_available_tools(
         logger.info(f"Total tools collected: {len(all_tools)}, Unique tools: {len(unique_tools)}")
         logger.info(f"Tool provider summary: {list(tool_providers)}")
 
-        return SuccessResponse[List[ToolInfoResponse]](data=unique_tools)
+        # Create response with additional metadata for tool providers
+        # Since ResponseMetadata is immutable, we need to create a dict response
+        return {
+            "data": [tool.model_dump() for tool in unique_tools],
+            "metadata": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "request_id": None,
+                "duration_ms": None,
+                "providers": list(tool_providers),
+                "provider_count": len(tool_providers),
+                "total_tools": len(unique_tools),
+            },
+        }
 
     except Exception as e:
         logger.error(f"Error getting available tools: {e}")

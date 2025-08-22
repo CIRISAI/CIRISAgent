@@ -6,7 +6,7 @@ Reads actual log files from disk instead of audit entries.
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, List, Optional
 
@@ -233,8 +233,9 @@ class LogFileReader:
         timestamp_str, module, level, message = match.groups()
 
         try:
-            # Parse timestamp
+            # Parse timestamp and make it timezone-aware (UTC)
             timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
 
             # Extract service name from module
             service = module.strip().split(".")[0]

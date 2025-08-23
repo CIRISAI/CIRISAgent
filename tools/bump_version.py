@@ -65,10 +65,18 @@ def bump_version(bump_type: str):
         return False
 
     # Construct new version string
-    if build > 0:
-        new_version = f"{major}.{minor}.{patch}.{build}-{stage}"
+    # Handle RC versions specially
+    if stage == "rc":
+        if build > 0:
+            new_version = f"{major}.{minor}.{patch}-rc{build}"
+        else:
+            new_version = f"{major}.{minor}.{patch}"  # No stage for release version
     else:
-        new_version = f"{major}.{minor}.{patch}-{stage}"
+        # Regular versioning for beta, alpha, etc.
+        if build > 0:
+            new_version = f"{major}.{minor}.{patch}.{build}-{stage}"
+        else:
+            new_version = f"{major}.{minor}.{patch}-{stage}"
 
     # Update content
     content = re.sub(r'CIRIS_VERSION = "[^"]+"', f'CIRIS_VERSION = "{new_version}"', content)

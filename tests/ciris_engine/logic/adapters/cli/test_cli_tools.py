@@ -638,15 +638,15 @@ class TestServiceMetrics:
                 # Successful execution
                 await cli_tool_service.execute_tool("list_files", {"path": temp_dir})
 
-                # Failed execution (unknown_tool doesn't increment failures, just returns error)
+                # Failed execution (unknown_tool MUST increment failures)
                 await cli_tool_service.execute_tool("unknown_tool", {})
 
         metrics = cli_tool_service._collect_custom_metrics()
 
         assert metrics["tool_executions_total"] == 2.0
-        # unknown_tool doesn't increment failures (it's not an exception, just unknown)
-        assert metrics["tool_failures_total"] == 0.0
-        assert metrics["tool_success_rate"] == 1.0  # 2 executions, 0 failures
+        # unknown_tool MUST increment failures (we fixed this!)
+        assert metrics["tool_failures_total"] == 1.0
+        assert metrics["tool_success_rate"] == 0.5  # 2 executions, 1 failure
 
     @pytest.mark.asyncio
     async def test_get_actions(self, cli_tool_service):

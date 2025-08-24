@@ -488,19 +488,19 @@ class TestEdgeCases:
 
     @pytest.mark.asyncio
     async def test_execute_tool_with_non_dict_result(self, cli_tool_service):
-        """Test handling of non-dict result from tool."""
+        """Test handling of non-dict result from tool - MUST FAIL FAST AND LOUD."""
 
         async def string_tool(params):
-            return "string result"
+            return "string result"  # BAD! Tools MUST return dicts!
 
         cli_tool_service._tools["string_tool"] = string_tool
 
         result = await cli_tool_service.execute_tool("string_tool", {})
 
-        # Non-dict results are wrapped in a dict with "result" key
-        assert result.data["result"] == "string result"
-        assert "_execution_time_ms" in result.data
-        assert result.success is True
+        # FAIL FAST: Non-dict results MUST cause failure with clear error
+        assert result.success is False
+        assert "non-dict result" in result.error or "TypeError" in str(result.data.get("error", ""))
+        assert "Tools MUST return typed dict results" in str(result.data.get("error", ""))
 
     @pytest.mark.asyncio
     async def test_write_file_sync_method(self, cli_tool_service):

@@ -701,7 +701,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/discord/discord_tool_service.py",
-        "line": 396,
+        "line": 401,
         "class": "DiscordToolService",
         "function": "_get_user_info",
         "context": "variable_annotation",

@@ -28,6 +28,8 @@ class DiscordToolService(ToolService):
         self._client = client
         self._time_service = time_service
         self._results: Dict[str, ToolExecutionResult] = {}
+        self._tool_executions = 0
+        self._tool_failures = 0
 
         # Define available tools
         self._tools = {
@@ -60,8 +62,10 @@ class DiscordToolService(ToolService):
         logger.info(f"[DISCORD_TOOLS] execute_tool called with tool_name={tool_name}, parameters={parameters}")
 
         correlation_id = parameters.get("correlation_id", str(uuid.uuid4()))
+        self._tool_executions += 1
 
         if not self._client:
+            self._tool_failures += 1
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.FAILED,
@@ -72,6 +76,7 @@ class DiscordToolService(ToolService):
             )
 
         if tool_name not in self._tools:
+            self._tool_failures += 1  # Unknown tool is a failure!
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.NOT_FOUND,

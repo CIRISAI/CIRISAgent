@@ -40,6 +40,8 @@ class SecretsToolService(BaseService, ToolService):
         self._secrets_retrieved = 0
         self._secrets_stored = 0
         self._metrics_tracking = {}  # For custom metric tracking
+        self._tool_executions = 0
+        self._tool_failures = 0
 
     def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
         """Track a metric with default value."""
@@ -72,6 +74,7 @@ class SecretsToolService(BaseService, ToolService):
     async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         self._track_request()  # Track the tool execution
+        self._tool_executions += 1
 
         if tool_name == "recall_secret":
             result = await self._recall_secret(parameters)
@@ -80,9 +83,11 @@ class SecretsToolService(BaseService, ToolService):
         elif tool_name == "self_help":
             result = await self._self_help(parameters)
         else:
+            self._tool_failures += 1  # Unknown tool is a failure!
             result = ToolResult(success=False, error=f"Unknown tool: {tool_name}")
 
         if not result.success:
+            self._tool_failures += 1  # Track failed executions
             self._track_error(Exception(result.error or "Tool execution failed"))
 
         return ToolExecutionResult(

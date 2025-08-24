@@ -28,7 +28,6 @@ class QAModule(Enum):
 
     # SDK modules
     SDK = "sdk"
-    SDK_COMPREHENSIVE = "sdk_comprehensive"
 
     # Full suites
     API_FULL = "api_full"
@@ -42,7 +41,7 @@ class QATestCase:
 
     name: str
     module: QAModule
-    endpoint: Optional[str] = None
+    endpoint: str
     method: str = "GET"
     payload: Optional[Dict] = None
     expected_status: int = 200
@@ -84,98 +83,40 @@ class QAConfig:
 
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
+        from .modules import APITestModule, HandlerTestModule, SDKTestModule
 
-        # Define test cases for each module
-        test_definitions = {
-            QAModule.AUTH: [
-                QATestCase(
-                    "Login",
-                    QAModule.AUTH,
-                    "/v1/auth/login",
-                    "POST",
-                    {"username": self.admin_username, "password": self.admin_password},
-                    requires_auth=False,
-                ),
-                QATestCase("Current User", QAModule.AUTH, "/v1/auth/me", "GET"),
-                QATestCase("List Users", QAModule.AUTH, "/v1/auth/users", "GET"),
-            ],
-            QAModule.TELEMETRY: [
-                QATestCase("Unified Telemetry", QAModule.TELEMETRY, "/v1/telemetry/unified", "GET"),
-                QATestCase("Service Health", QAModule.TELEMETRY, "/v1/telemetry/services", "GET"),
-                QATestCase("System Metrics", QAModule.TELEMETRY, "/v1/telemetry/metrics", "GET"),
-            ],
-            QAModule.AGENT: [
-                QATestCase("Agent Status", QAModule.AGENT, "/v1/agent/status", "GET"),
-                QATestCase(
-                    "Agent Interact", QAModule.AGENT, "/v1/agent/interact", "POST", {"message": "Hello, how are you?"}
-                ),
-                QATestCase("Agent History", QAModule.AGENT, "/v1/agent/history", "GET"),
-            ],
-            QAModule.SYSTEM: [
-                QATestCase("System Status", QAModule.SYSTEM, "/v1/system/status", "GET"),
-                QATestCase("List Adapters", QAModule.SYSTEM, "/v1/system/adapters", "GET"),
-                QATestCase("Processing Queue", QAModule.SYSTEM, "/v1/system/queue", "GET"),
-            ],
-            QAModule.MEMORY: [
-                QATestCase(
-                    "Search Memory", QAModule.MEMORY, "/v1/memory/search", "POST", {"query": "test", "limit": 10}
-                ),
-                QATestCase("Memory Stats", QAModule.MEMORY, "/v1/memory/stats", "GET"),
-            ],
-            QAModule.AUDIT: [
-                QATestCase("Audit Events", QAModule.AUDIT, "/v1/audit/events", "GET"),
-                QATestCase("Verify Chain", QAModule.AUDIT, "/v1/audit/verify", "GET"),
-            ],
-            QAModule.TOOLS: [
-                QATestCase("List Tools", QAModule.TOOLS, "/v1/tools", "GET"),
-                QATestCase("Tool Info", QAModule.TOOLS, "/v1/tools/list_files", "GET"),
-            ],
-            QAModule.TASKS: [
-                QATestCase("List Tasks", QAModule.TASKS, "/v1/tasks", "GET"),
-                QATestCase(
-                    "Create Task", QAModule.TASKS, "/v1/tasks", "POST", {"description": "Test task", "priority": 5}
-                ),
-            ],
-            QAModule.GUIDANCE: [
-                QATestCase(
-                    "Request Guidance",
-                    QAModule.GUIDANCE,
-                    "/v1/guidance/request",
-                    "POST",
-                    {"thought_id": "test-thought", "context": {"test": "context"}},
-                ),
-            ],
-            QAModule.HANDLERS: [
-                QATestCase(
-                    "Test Greeting Handler", QAModule.HANDLERS, "/v1/agent/interact", "POST", {"message": "Hello CIRIS"}
-                ),
-                QATestCase(
-                    "Test Help Handler", QAModule.HANDLERS, "/v1/agent/interact", "POST", {"message": "I need help"}
-                ),
-                QATestCase(
-                    "Test Time Handler",
-                    QAModule.HANDLERS,
-                    "/v1/agent/interact",
-                    "POST",
-                    {"message": "What time is it?"},
-                ),
-            ],
-            QAModule.SIMPLE_HANDLERS: [
-                QATestCase(
-                    "Simple Greeting", QAModule.SIMPLE_HANDLERS, "/v1/agent/interact", "POST", {"message": "Hi"}
-                ),
-                QATestCase(
-                    "Simple Question",
-                    QAModule.SIMPLE_HANDLERS,
-                    "/v1/agent/interact",
-                    "POST",
-                    {"message": "How are you?"},
-                ),
-            ],
-        }
+        # API test modules
+        if module == QAModule.AUTH:
+            return APITestModule.get_auth_tests()
+        elif module == QAModule.TELEMETRY:
+            return APITestModule.get_telemetry_tests()
+        elif module == QAModule.AGENT:
+            return APITestModule.get_agent_tests()
+        elif module == QAModule.SYSTEM:
+            return APITestModule.get_system_tests()
+        elif module == QAModule.MEMORY:
+            return APITestModule.get_memory_tests()
+        elif module == QAModule.AUDIT:
+            return APITestModule.get_audit_tests()
+        elif module == QAModule.TOOLS:
+            return APITestModule.get_tool_tests()
+        elif module == QAModule.TASKS:
+            return APITestModule.get_task_tests()
+        elif module == QAModule.GUIDANCE:
+            return APITestModule.get_guidance_tests()
 
-        # Handle aggregate modules
-        if module == QAModule.API_FULL:
+        # Handler test modules
+        elif module == QAModule.HANDLERS:
+            return HandlerTestModule.get_handler_tests()
+        elif module == QAModule.SIMPLE_HANDLERS:
+            return HandlerTestModule.get_simple_handler_tests()
+
+        # SDK test modules
+        elif module == QAModule.SDK:
+            return SDKTestModule.get_sdk_tests()
+
+        # Aggregate modules
+        elif module == QAModule.API_FULL:
             tests = []
             for m in [
                 QAModule.AUTH,
@@ -188,19 +129,19 @@ class QAConfig:
                 QAModule.TASKS,
                 QAModule.GUIDANCE,
             ]:
-                tests.extend(test_definitions.get(m, []))
+                tests.extend(self.get_module_tests(m))
             return tests
 
         elif module == QAModule.HANDLERS_FULL:
             tests = []
             for m in [QAModule.HANDLERS, QAModule.SIMPLE_HANDLERS]:
-                tests.extend(test_definitions.get(m, []))
+                tests.extend(self.get_module_tests(m))
             return tests
 
         elif module == QAModule.ALL:
             tests = []
-            for m in test_definitions:
-                tests.extend(test_definitions[m])
+            for m in [QAModule.API_FULL, QAModule.HANDLERS_FULL, QAModule.SDK]:
+                tests.extend(self.get_module_tests(m))
             return tests
 
-        return test_definitions.get(module, [])
+        return []

@@ -29,6 +29,9 @@ class QAModule(Enum):
     # SDK modules
     SDK = "sdk"
 
+    # Extended modules
+    EXTENDED_API = "extended_api"
+
     # Full suites
     API_FULL = "api_full"
     HANDLERS_FULL = "handlers_full"
@@ -84,6 +87,7 @@ class QAConfig:
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
+        from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
 
         # API test modules
         if module == QAModule.AUTH:
@@ -114,6 +118,10 @@ class QAConfig:
         # SDK test modules
         elif module == QAModule.SDK:
             return SDKTestModule.get_sdk_tests()
+
+        # Extended API tests
+        elif module == QAModule.EXTENDED_API:
+            return ComprehensiveAPITestModule.get_all_extended_tests()
 
         # Aggregate modules
         elif module == QAModule.API_FULL:

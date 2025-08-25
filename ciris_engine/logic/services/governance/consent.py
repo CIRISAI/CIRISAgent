@@ -232,10 +232,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         if previous_status and request.stream != previous_status.stream:
             # Notify adaptive filter about consent transition
             if hasattr(self, "_filter_service"):
+                # Handle both enum and string types for stream
+                prev_stream = previous_status.stream.value if hasattr(previous_status.stream, 'value') else previous_status.stream
+                req_stream = request.stream.value if hasattr(request.stream, 'value') else request.stream
                 is_gaming = await self._filter_service.handle_consent_transition(
                     request.user_id,
-                    previous_status.stream.value,
-                    request.stream.value
+                    prev_stream,
+                    req_stream
                 )
                 
                 if is_gaming:

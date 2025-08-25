@@ -10,7 +10,7 @@ Validates that:
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -18,6 +18,8 @@ from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.filter import AdaptiveFilterService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import ConsentCategory, ConsentRequest, ConsentStream
+from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.filters_core import (
     AdaptiveFilterConfig,
     FilterPriority,
@@ -64,23 +66,24 @@ class MockTimeService(TimeServiceProtocol):
     
     def get_capabilities(self):
         """Get service capabilities."""
-        from ciris_engine.schemas.services.core import ServiceCapabilities
-        from ciris_engine.schemas.runtime.enums import ServiceType
         return ServiceCapabilities(
             service_name="MockTimeService",
-            service_type=ServiceType.INFRASTRUCTURE,
-            supports_reasoning=False,
-            supports_wa_auth=False
+            actions=["now", "now_iso", "timestamp", "get_uptime"],
+            version="1.0.0",
+            dependencies=[],
+            metadata={"description": "Mock time service for testing"}
         )
     
     def get_status(self):
         """Get current service status."""
-        from ciris_engine.schemas.services.core import ServiceStatus
         return ServiceStatus(
-            healthy=True,
             service_name="MockTimeService",
-            uptime=0.0,
-            message="Mock service"
+            service_type="time",
+            is_healthy=True,
+            uptime_seconds=self.get_uptime(),
+            metrics={"current_time": self._current_time.timestamp()},
+            last_error=None,
+            last_health_check=self._current_time
         )
     
     async def is_healthy(self) -> bool:
@@ -89,8 +92,7 @@ class MockTimeService(TimeServiceProtocol):
     
     def get_service_type(self):
         """Get the type of this service."""
-        from ciris_engine.schemas.runtime.enums import ServiceType
-        return ServiceType.INFRASTRUCTURE
+        return ServiceType.TIME
     
     def get_uptime(self) -> float:
         """Get service uptime in seconds."""
@@ -106,7 +108,7 @@ class MockConfigService:
     async def get_config(self, key: str):
         return self._configs.get(key)
     
-    async def set_config(self, key: str, value, metadata=None):
+    async def set_config(self, key: str, value, metadata=None, updated_by=None):
         self._configs[key] = value
         return Mock(success=True)
 
@@ -141,11 +143,21 @@ async def filter_service(time_service):
 @pytest.fixture
 async def consent_service(time_service, filter_service):
     """Provide consent service linked to filter."""
-    service = ConsentService(time_service=time_service)
-    service._filter_service = filter_service
-    await service.start()
-    yield service
-    await service.stop()
+    # Use a temporary database for testing
+    import tempfile
+    from ciris_engine.logic.persistence.db import initialize_database
+    
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=True) as tmp_db:
+        db_path = tmp_db.name
+        initialize_database(db_path)
+        
+        # Mock the database path to use our temporary database
+        with patch('ciris_engine.logic.config.db_paths.get_sqlite_db_full_path', return_value=db_path):
+            service = ConsentService(time_service=time_service, db_path=db_path)
+            service._filter_service = filter_service
+            await service.start()
+            yield service
+            await service.stop()
 
 
 class TestAnonymousFiltering:

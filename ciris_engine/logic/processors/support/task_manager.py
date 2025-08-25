@@ -79,18 +79,18 @@ class TaskManager:
         Activate pending tasks up to the configured limit.
         Returns the number of tasks activated.
         """
-        logger.info("[TASK DEBUG] activate_pending_tasks called")
+        logger.debug("[TASK DEBUG] activate_pending_tasks called")
         num_active = persistence.count_active_tasks()
-        logger.info(f"[TASK DEBUG] Current active tasks: {num_active}, max allowed: {self.max_active_tasks}")
+        logger.debug(f"[TASK DEBUG] Current active tasks: {num_active}, max allowed: {self.max_active_tasks}")
         can_activate = max(0, self.max_active_tasks - num_active)
 
         if can_activate == 0:
             logger.debug(f"Maximum active tasks ({self.max_active_tasks}) reached.")
             return 0
 
-        logger.info(f"[TASK DEBUG] Can activate up to {can_activate} tasks")
+        logger.debug(f"[TASK DEBUG] Can activate up to {can_activate} tasks")
         pending_tasks = persistence.get_pending_tasks_for_activation(limit=can_activate)
-        logger.info(f"[TASK DEBUG] Found {len(pending_tasks)} pending tasks")
+        logger.debug(f"[TASK DEBUG] Found {len(pending_tasks)} pending tasks")
         activated_count = 0
 
         for task in pending_tasks:
@@ -108,14 +108,14 @@ class TaskManager:
 
     def get_tasks_needing_seed(self, limit: int = 50) -> List[Task]:
         """Get active tasks that need seed thoughts."""
-        logger.info("[TASK DEBUG] get_tasks_needing_seed called")
+        logger.debug("[TASK DEBUG] get_tasks_needing_seed called")
         # Exclude special tasks that are handled separately
         excluded_tasks = {"WAKEUP_ROOT", "SYSTEM_TASK"}
 
         tasks = persistence.get_tasks_needing_seed_thought(limit)
-        logger.info(f"[TASK DEBUG] Found {len(tasks)} tasks from persistence")
+        logger.debug(f"[TASK DEBUG] Found {len(tasks)} tasks from persistence")
         filtered = [t for t in tasks if t.task_id not in excluded_tasks and t.parent_task_id != "WAKEUP_ROOT"]
-        logger.info(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need seed thoughts")
+        logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need seed thoughts")
         return filtered
 
     def complete_task(self, task_id: str, outcome: Optional[dict] = None) -> bool:

@@ -1,5 +1,6 @@
 """Docker container management for test execution."""
 
+import os
 import subprocess
 from pathlib import Path
 from typing import List, Optional
@@ -19,8 +20,13 @@ class DockerManager:
             Tuple of (success, message)
         """
         print("🔨 Rebuilding test container...")
+        # Set environment variables for UID/GID
+        env = os.environ.copy()
+        env["USER_UID"] = str(os.getuid())
+        env["USER_GID"] = str(os.getgid())
+
         cmd = ["docker", "compose", "-f", self.compose_file, "build", service]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
         if result.returncode != 0:
             return False, f"Failed to rebuild container:\n{result.stderr}"
@@ -39,6 +45,11 @@ class DockerManager:
         Returns:
             Popen process object
         """
+        # Set environment variables for UID/GID
+        env = os.environ.copy()
+        env["USER_UID"] = str(os.getuid())
+        env["USER_GID"] = str(os.getgid())
+
         cmd = [
             "docker",
             "compose",
@@ -56,7 +67,7 @@ class DockerManager:
         ]
 
         with open(output_file, "w") as outfile:
-            process = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, cwd=Path.cwd())
+            process = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, cwd=Path.cwd(), env=env)
 
         return process
 

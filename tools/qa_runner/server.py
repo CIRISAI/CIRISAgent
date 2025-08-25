@@ -95,7 +95,7 @@ class APIServerManager:
     def _is_server_running(self) -> bool:
         """Check if server is running on the configured port."""
         try:
-            response = requests.get(f"{self.config.base_url}/health", timeout=2)
+            response = requests.get(f"{self.config.base_url}/v1/system/health", timeout=2)
             return response.status_code == 200
         except:
             return False

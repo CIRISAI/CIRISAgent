@@ -4,6 +4,7 @@ QA Runner CLI interface.
 
 import argparse
 import sys
+from pathlib import Path
 from typing import List
 
 from .config import QAConfig, QAModule
@@ -116,7 +117,7 @@ def main():
         verbose=args.verbose,
         json_output=args.json,
         html_report=args.html,
-        report_dir=args.report_dir,
+        report_dir=Path(args.report_dir),
         auto_start_server=not args.no_auto_start,
         mock_llm=not args.no_mock_llm,
         adapter=args.adapter,

@@ -43,15 +43,7 @@ class APITestModule:
                 requires_auth=True,
                 description="Test getting current authenticated user",
             ),
-            QATestCase(
-                name="List all users",
-                module=QAModule.AUTH,
-                endpoint="/v1/auth/users",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test listing all users (admin only)",
-            ),
+            # Note: No user list endpoint exists, removed this test
         ]
 
     @staticmethod
@@ -70,7 +62,7 @@ class APITestModule:
             QATestCase(
                 name="Service health",
                 module=QAModule.TELEMETRY,
-                endpoint="/v1/telemetry/services",
+                endpoint="/v1/system/services",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
@@ -154,13 +146,13 @@ class APITestModule:
         """Get system management test cases."""
         return [
             QATestCase(
-                name="System status",
+                name="System health",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/status",
+                endpoint="/v1/system/health",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test system status endpoint",
+                description="Test system health endpoint",
             ),
             QATestCase(
                 name="List adapters",
@@ -174,7 +166,7 @@ class APITestModule:
             QATestCase(
                 name="Processing queue status",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/queue",
+                endpoint="/v1/system/runtime/queue",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
@@ -183,7 +175,7 @@ class APITestModule:
             QATestCase(
                 name="System configuration",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/config",
+                endpoint="/v1/config",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
@@ -198,7 +190,7 @@ class APITestModule:
             QATestCase(
                 name="Memory search",
                 module=QAModule.MEMORY,
-                endpoint="/v1/memory/search",
+                endpoint="/v1/memory/query",
                 method="POST",
                 payload={"query": "test", "limit": 10},
                 expected_status=200,
@@ -231,31 +223,32 @@ class APITestModule:
         """Get audit trail test cases."""
         return [
             QATestCase(
-                name="List audit events",
+                name="List audit entries",
                 module=QAModule.AUDIT,
-                endpoint="/v1/audit/events",
+                endpoint="/v1/audit/entries",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test listing audit events",
+                description="Test listing audit entries",
             ),
             QATestCase(
-                name="Verify audit chain",
+                name="Search audit entries",
                 module=QAModule.AUDIT,
-                endpoint="/v1/audit/verify",
-                method="GET",
+                endpoint="/v1/audit/search",
+                method="POST",
+                payload={"query": "test"},
                 expected_status=200,
                 requires_auth=True,
-                description="Test audit chain verification",
+                description="Test audit search functionality",
             ),
             QATestCase(
-                name="Get audit summary",
+                name="Export audit data",
                 module=QAModule.AUDIT,
-                endpoint="/v1/audit/summary",
+                endpoint="/v1/audit/export",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting audit summary",
+                description="Test audit data export",
             ),
         ]
 
@@ -266,7 +259,7 @@ class APITestModule:
             QATestCase(
                 name="List available tools",
                 module=QAModule.TOOLS,
-                endpoint="/v1/tools",
+                endpoint="/v1/system/tools",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,

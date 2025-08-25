@@ -1,0 +1,113 @@
+{
+  "timestamp": "20250825_073205",
+  "config": {
+    "base_url": "http://localhost:8000",
+    "modules": [
+      "telemetry",
+      "auth",
+      "system"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.20989680290222168,
+      "attempts": 1,
+      "response": {
+        "access_token": "ciris_system_admin_g4zBlUssvPm57Ck4OW9hhXhpcPehURdV6ECCQk3mGJo",
+        "token_type": "Bearer",
+        "expires_in": 86400,
+        "user_id": "wa-2025-08-19-EA3587",
+        "role": "SYSTEM_ADMIN"
+      }
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.21019840240478516,
+      "attempts": 1,
+      "response": {
+        "detail": "Invalid credentials"
+      }
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0020825862884521484,
+      "attempts": 1,
+      "response": {
+        "user_id": "wa-2025-08-19-EA3587",
+        "username": "wa-2025-08-19-EA3587",
+        "role": "SYSTEM_ADMIN",
+        "permissions": [
+          "manage_sensitive_config",
+          "full_access",
+          "emergency_shutdown"
+        ],
+        "created_at": "2025-08-25T12:31:28.789303Z",
+        "last_login": "2025-08-25T12:31:28.789303Z"
+      }
+    },
+    "auth::List all users": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/auth/users (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b077890>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.188391923904419,
+      "attempts": 3
+    },
+    "telemetry::Unified telemetry": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/telemetry/unified (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b076c00>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.007067918777466,
+      "attempts": 3
+    },
+    "telemetry::Service health": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/telemetry/services (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0abce0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.006983995437622,
+      "attempts": 3
+    },
+    "telemetry::System metrics": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/telemetry/metrics (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0c0cb0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.0072548389434814,
+      "attempts": 3
+    },
+    "telemetry::Resource usage": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/telemetry/resources (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0c0a40>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.005437135696411,
+      "attempts": 3
+    },
+    "system::System status": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/system/status (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0c3560>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.00792384147644,
+      "attempts": 3
+    },
+    "system::List adapters": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/system/adapters (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0e0920>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.005597114562988,
+      "attempts": 3
+    },
+    "system::Processing queue status": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/system/queue (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0e1550>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.007724046707153,
+      "attempts": 3
+    },
+    "system::System configuration": {
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/system/config (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x74688b0c05c0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "duration": 4.007938623428345,
+      "attempts": 3
+    }
+  },
+  "summary": {
+    "total": 12,
+    "passed": 3,
+    "failed": 9,
+    "success_rate": 25.0
+  }
+}

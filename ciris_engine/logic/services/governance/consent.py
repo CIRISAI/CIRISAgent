@@ -79,6 +79,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._consent_checks = 0
         self._consent_grants = 0
         self._consent_revokes = 0
+        self._tool_executions = 0
+        self._tool_failures = 0
         self._expired_cleanups = 0
 
         # Stream distribution metrics
@@ -661,12 +663,14 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         self._track_request()  # Track the tool execution
+        self._tool_executions += 1
 
         if tool_name == "upgrade_relationship":
             result = await self._upgrade_relationship_tool(parameters)
         elif tool_name == "degrade_relationship":
             result = await self._degrade_relationship_tool(parameters)
         else:
+            self._tool_failures += 1  # Unknown tool is a failure!
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.NOT_FOUND,
@@ -675,6 +679,10 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 error=f"Unknown tool: {tool_name}",
                 correlation_id=f"consent_{tool_name}_{self._now().timestamp()}",
             )
+
+        # Track failures
+        if not result.get("success", False):
+            self._tool_failures += 1
 
         return ToolExecutionResult(
             tool_name=tool_name,

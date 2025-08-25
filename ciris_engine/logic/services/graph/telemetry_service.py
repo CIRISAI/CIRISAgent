@@ -262,7 +262,7 @@ class TelemetryAggregator:
                     # Extract the class name without instance ID (e.g., "GraphConfigService_123456" -> "GraphConfigService")
                     provider_class_name = provider_name.split("_")[0] if "_" in provider_name else provider_name
 
-                    logger.info(
+                    logger.debug(
                         f"[TELEMETRY] Checking registry service: {service_type}.{provider_name} (class: {provider_class_name})"
                     )
 
@@ -291,7 +291,7 @@ class TelemetryAggregator:
                     # Check if this is a core service implementation (use class name without instance ID)
                     if provider_class_name in core_service_mappings:
                         already_collected = True
-                        logger.info(
+                        logger.debug(
                             f"[TELEMETRY] Skipping core service {provider_name} (class: {provider_class_name}) - already collected as {core_service_mappings[provider_class_name]}"
                         )
                     else:
@@ -299,7 +299,7 @@ class TelemetryAggregator:
                         for cat_services in self.CATEGORIES.values():
                             if provider_class_name.lower() in [s.lower() for s in cat_services]:
                                 already_collected = True
-                                logger.info(f"[TELEMETRY] Skipping {provider_name} - already in CATEGORIES")
+                                logger.debug(f"[TELEMETRY] Skipping {provider_name} - already in CATEGORIES")
                                 break
 
                     if not already_collected:

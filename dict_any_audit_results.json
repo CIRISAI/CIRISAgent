@@ -1,9 +1,9 @@
 {
   "production": {
-    "occurrences": 207,
-    "files_affected": 82,
+    "occurrences": 209,
+    "files_affected": 83,
     "categories": {
-      "generic_data": 185,
+      "generic_data": 187,
       "parameters": 5,
       "configuration": 3,
       "api_request": 1,
@@ -701,7 +701,7 @@
       },
       {
         "file": "ciris_engine/logic/adapters/discord/discord_tool_service.py",
-        "line": 396,
+        "line": 402,
         "class": "DiscordToolService",
         "function": "_get_user_info",
         "context": "variable_annotation",
@@ -1551,6 +1551,22 @@
         "file": "ciris_engine/schemas/runtime/manifest.py",
         "line": 100,
         "class": "ServiceManifest",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/adapter_management.py",
+        "line": 23,
+        "class": "ToolInfo",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/adapter_management.py",
+        "line": 77,
+        "class": "RuntimeAdapterStatus",
         "function": null,
         "context": "other",
         "usage_hint": "generic_data"
@@ -3024,7 +3040,7 @@
     ]
   },
   "total_all_code": {
-    "occurrences": 375,
-    "files_affected": 117
+    "occurrences": 377,
+    "files_affected": 118
   }
 }

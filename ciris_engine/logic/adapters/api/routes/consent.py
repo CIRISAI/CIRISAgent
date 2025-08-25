@@ -36,6 +36,66 @@ router = APIRouter(
     },
 )
 
+# Stream metadata definitions - eliminate duplication
+STREAM_METADATA = {
+    ConsentStream.TEMPORARY: {
+        "name": "Temporary",
+        "description": "We forget about you in 14 days unless you say otherwise",
+        "duration_days": 14,
+        "auto_forget": True,
+        "learning_enabled": False,
+    },
+    ConsentStream.PARTNERED: {
+        "name": "Partnered",
+        "description": "Explicit consent for mutual growth and learning",
+        "duration_days": None,
+        "auto_forget": False,
+        "learning_enabled": True,
+        "requires_categories": True,
+    },
+    ConsentStream.ANONYMOUS: {
+        "name": "Anonymous",
+        "description": "Statistics only, no identity retained",
+        "duration_days": None,
+        "auto_forget": False,
+        "learning_enabled": True,
+        "identity_removed": True,
+    },
+}
+
+# Category metadata definitions - eliminate duplication
+CATEGORY_METADATA = {
+    ConsentCategory.INTERACTION: {
+        "name": "Interaction",
+        "description": "Learn from our conversations",
+    },
+    ConsentCategory.PREFERENCE: {
+        "name": "Preference",
+        "description": "Learn preferences and patterns",
+    },
+    ConsentCategory.IMPROVEMENT: {
+        "name": "Improvement",
+        "description": "Use for self-improvement",
+    },
+    ConsentCategory.RESEARCH: {
+        "name": "Research",
+        "description": "Use for research purposes",
+    },
+    ConsentCategory.SHARING: {
+        "name": "Sharing",
+        "description": "Share learnings with others",
+    },
+}
+
+# Partnership status messages - eliminate duplication
+PARTNERSHIP_MESSAGES = {
+    "accepted": "Partnership approved! You now have PARTNERED consent.",
+    "rejected": "Partnership request was declined by the agent.",
+    "deferred": "Agent needs more information about the partnership.",
+    "pending": "Partnership request is being considered by the agent.",
+    "none": "No pending partnership request.",
+}
+
 
 def get_consent_manager(request: Request) -> ConsentService:
     """Get the consent manager instance from app state."""
@@ -47,6 +107,38 @@ def get_consent_manager(request: Request) -> ConsentService:
         request.app.state.consent_manager = ConsentService(time_service=time_service)
 
     return request.app.state.consent_manager
+
+
+def _build_consent_dict(consent_status, user_id: str, status_filter: Optional[str] = None) -> dict:
+    """
+    Build consent dictionary - eliminates duplication.
+
+    Args:
+        consent_status: The consent status object
+        user_id: User ID
+        status_filter: Optional status filter (ACTIVE/REVOKED/etc)
+
+    Returns:
+        Consent dictionary
+    """
+    is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]
+
+    # Determine status
+    if status_filter == "ACTIVE":
+        status = "ACTIVE"
+    else:
+        status = "ACTIVE" if is_active else "REVOKED"
+
+    return {
+        "id": f"consent_{user_id}",
+        "user_id": user_id,
+        "status": status,
+        "scope": "general",
+        "purpose": "Agent interaction and data processing",
+        "granted_at": (consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None),
+        "expires_at": consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
+        "metadata": {},
+    }
 
 
 @router.get("/status")
@@ -97,8 +189,6 @@ async def query_consents(
     """
     # For non-admin users, only show their own consents
     if auth.role != "ADMIN" and user_id and user_id != auth.user_id:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=403, detail="Cannot query other users' consents")
 
     # If no user_id specified, use authenticated user's ID
@@ -108,47 +198,14 @@ async def query_consents(
     # Get user's consent status
     try:
         consent_status = await manager.get_consent(user_id)
+        is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]
 
         # Filter by status if requested
-        if status and status == "ACTIVE":
-            # Check if consent is currently active
-            if consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]:
-                consents = [
-                    {
-                        "id": f"consent_{user_id}",
-                        "user_id": user_id,
-                        "status": "ACTIVE",
-                        "scope": "general",
-                        "purpose": "Agent interaction and data processing",
-                        "granted_at": (
-                            consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None
-                        ),
-                        "expires_at": consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
-                        "metadata": {},
-                    }
-                ]
-            else:
-                consents = []
+        if status == "ACTIVE" and not is_active:
+            consents = []
         else:
-            # Return all consents for user
-            consents = [
-                {
-                    "id": f"consent_{user_id}",
-                    "user_id": user_id,
-                    "status": (
-                        "ACTIVE"
-                        if consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]
-                        else "REVOKED"
-                    ),
-                    "scope": "general",
-                    "purpose": "Agent interaction and data processing",
-                    "granted_at": (
-                        consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None
-                    ),
-                    "expires_at": consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
-                    "metadata": {},
-                }
-            ]
+            consent_dict = _build_consent_dict(consent_status, user_id, status)
+            consents = [consent_dict]
     except Exception:
         # No consent found
         consents = []
@@ -271,31 +328,7 @@ async def get_consent_streams() -> dict:
     Get available consent streams and their descriptions.
     """
     return {
-        "streams": {
-            ConsentStream.TEMPORARY: {
-                "name": "Temporary",
-                "description": "We forget about you in 14 days unless you say otherwise",
-                "duration_days": 14,
-                "auto_forget": True,
-                "learning_enabled": False,
-            },
-            ConsentStream.PARTNERED: {
-                "name": "Partnered",
-                "description": "Explicit consent for mutual growth and learning",
-                "duration_days": None,
-                "auto_forget": False,
-                "learning_enabled": True,
-                "requires_categories": True,
-            },
-            ConsentStream.ANONYMOUS: {
-                "name": "Anonymous",
-                "description": "Statistics only, no identity retained",
-                "duration_days": None,
-                "auto_forget": False,
-                "learning_enabled": True,
-                "identity_removed": True,
-            },
-        },
+        "streams": STREAM_METADATA,
         "default": ConsentStream.TEMPORARY,
     }
 
@@ -306,28 +339,7 @@ async def get_consent_categories() -> dict:
     Get available consent categories for PARTNERED stream.
     """
     return {
-        "categories": {
-            ConsentCategory.INTERACTION: {
-                "name": "Interaction",
-                "description": "Learn from our conversations",
-            },
-            ConsentCategory.PREFERENCE: {
-                "name": "Preference",
-                "description": "Learn preferences and patterns",
-            },
-            ConsentCategory.IMPROVEMENT: {
-                "name": "Improvement",
-                "description": "Use for self-improvement",
-            },
-            ConsentCategory.RESEARCH: {
-                "name": "Research",
-                "description": "Use for research purposes",
-            },
-            ConsentCategory.SHARING: {
-                "name": "Sharing",
-                "description": "Share learnings with others",
-            },
-        },
+        "categories": CATEGORY_METADATA,
     }
 
 
@@ -358,16 +370,9 @@ async def check_partnership_status(
         "partnership_status": status or "none",
     }
 
-    if status == "accepted":
-        response["message"] = "Partnership approved! You now have PARTNERED consent."
-    elif status == "rejected":
-        response["message"] = "Partnership request was declined by the agent."
-    elif status == "deferred":
-        response["message"] = "Agent needs more information about the partnership."
-    elif status == "pending":
-        response["message"] = "Partnership request is being considered by the agent."
-    else:
-        response["message"] = "No pending partnership request."
+    # Use the message lookup to eliminate duplicate if/elif chains
+    message_key = status if status in PARTNERSHIP_MESSAGES else "none"
+    response["message"] = PARTNERSHIP_MESSAGES[message_key]
 
     return response
 

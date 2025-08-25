@@ -78,12 +78,21 @@ class CLIToolService(BaseService, ToolService):
         start_time = self._time_service.timestamp()
 
         if tool_name not in self._tools:
+            # Unknown tool - track as failure
+            # Note: _tool_executions already incremented above
+            self._tool_failures += 1
             result = {"error": f"Unknown tool: {tool_name}"}
             success = False
             error_msg: Optional[str] = f"Unknown tool: {tool_name}"
         else:
             try:
                 result = await self._tools[tool_name](parameters)
+                # FAIL FAST: Result MUST be a dict (until we have proper typed tool results)
+                if not isinstance(result, dict):
+                    raise TypeError(
+                        f"Tool {tool_name} returned non-dict result: {type(result).__name__}. "
+                        "Tools MUST return typed dict results!"
+                    )
                 success = result.get("error") is None
                 error_msg = result.get("error")
             except Exception as e:
@@ -378,7 +387,7 @@ class CLIToolService(BaseService, ToolService):
             actions=["execute_tool", "get_available_tools", "get_tool_schema", "get_tool_result"],
             version="1.0.0",
             dependencies=[],
-            resource_limits={"max_concurrent_tools": 10},
+            metadata={"resource_limits": {"max_concurrent_tools": 10}},
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

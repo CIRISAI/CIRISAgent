@@ -1,0 +1,149 @@
+{
+  "timestamp": "20250825_075504",
+  "config": {
+    "base_url": "http://localhost:8000",
+    "modules": [
+      "audit",
+      "auth",
+      "telemetry",
+      "memory",
+      "system"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.26900386810302734,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.9260272979736328,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.012100934982299805,
+      "attempts": 1
+    },
+    "auth::List all users": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 5.235245704650879,
+      "attempts": 3
+    },
+    "telemetry::Unified telemetry": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.13419580459594727,
+      "attempts": 1
+    },
+    "telemetry::Service health": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.019254684448242,
+      "attempts": 3
+    },
+    "telemetry::System metrics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.5889382362365723,
+      "attempts": 1
+    },
+    "telemetry::Resource usage": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.035661935806274414,
+      "attempts": 1
+    },
+    "system::System status": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.016463994979858,
+      "attempts": 3
+    },
+    "system::List adapters": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.011002779006958008,
+      "attempts": 1
+    },
+    "system::Processing queue status": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.0143256187438965,
+      "attempts": 3
+    },
+    "system::System configuration": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.012407064437866,
+      "attempts": 3
+    },
+    "memory::Memory search": {
+      "success": false,
+      "status_code": 405,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Method Not Allowed\"}",
+      "duration": 4.0086283683776855,
+      "attempts": 3
+    },
+    "memory::Memory statistics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.04294180870056152,
+      "attempts": 1
+    },
+    "memory::Store memory": {
+      "success": false,
+      "status_code": 422,
+      "expected_status": 200,
+      "error": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"node\"],\"msg\":\"Field required\",\"input\":{\"content\":\"Test memory entry\",\"tags\":[\"test\",\"qa\"],\"metadata\":{\"source\":\"qa_test\"}}}]}",
+      "duration": 4.083074569702148,
+      "attempts": 3
+    },
+    "audit::List audit events": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.009451150894165,
+      "attempts": 3
+    },
+    "audit::Verify audit chain": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.012048006057739,
+      "attempts": 3
+    },
+    "audit::Get audit summary": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.014026403427124,
+      "attempts": 3
+    }
+  },
+  "summary": {
+    "total": 18,
+    "passed": 8,
+    "failed": 10,
+    "success_rate": 44.44444444444444
+  }
+}

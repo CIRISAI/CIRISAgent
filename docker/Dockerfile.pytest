@@ -34,6 +34,14 @@ RUN pip install pytest pytest-cov
 # Cache bust arg to force rebuild
 ARG CACHEBUST=1
 
+# Accept UID/GID as build arguments (default to 1000 for standard Linux user)
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+# Create a non-root user with the specified UID/GID
+RUN groupadd -g ${USER_GID} cirisuser || true && \
+    useradd -m -u ${USER_UID} -g ${USER_GID} cirisuser || true
+
 # Copy only source code and tests (not data files)
 COPY ciris_engine/ ./ciris_engine/
 COPY tests/ ./tests/
@@ -41,7 +49,7 @@ COPY pytest.ini ./
 COPY mypy.ini ./
 COPY README.md ./
 
-# Ensure no database files exist
+# Ensure no database files exist and set correct ownership
 RUN find . -type f -name "*.db" -delete || true && \
     find . -type d -name __pycache__ -exec rm -rf {} + || true && \
     find . -type f -name "*.pyc" -delete || true && \
@@ -50,7 +58,11 @@ RUN find . -type f -name "*.db" -delete || true && \
     rm -rf .coverage* || true && \
     rm -rf htmlcov || true && \
     rm -rf data || true && \
-    mkdir -p data
+    mkdir -p data && \
+    chown -R cirisuser:cirisuser /app
+
+# Switch to non-root user
+USER cirisuser
 
 # Default command runs pytest with coverage (same as CI)
 CMD ["pytest", "--cov=./", "--cov-report=xml:coverage.xml"]

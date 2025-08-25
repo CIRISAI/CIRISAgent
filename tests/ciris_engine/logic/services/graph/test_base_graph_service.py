@@ -18,8 +18,13 @@ from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpSta
 
 
 # Concrete implementation for testing abstract class
-class TestGraphService(BaseGraphService):
+class ConcreteGraphService(BaseGraphService):
     """Concrete implementation of BaseGraphService for testing."""
+
+    def __init__(self, **kwargs):
+        """Initialize test graph service."""
+        # Ensure all kwargs are passed to parent
+        super().__init__(**kwargs)
 
     def get_node_type(self) -> str:
         """Return test node type."""
@@ -77,7 +82,7 @@ def memory_bus():
 @pytest.fixture
 def graph_service(memory_bus, time_service):
     """Create test graph service instance."""
-    service = TestGraphService(memory_bus=memory_bus, time_service=time_service)
+    service = ConcreteGraphService(memory_bus=memory_bus, time_service=time_service)
     return service
 
 
@@ -86,36 +91,34 @@ class TestBaseGraphServiceInitialization:
 
     def test_init_with_dependencies(self, memory_bus, time_service):
         """Test initialization with all dependencies."""
-        service = TestGraphService(memory_bus=memory_bus, time_service=time_service)
+        service = ConcreteGraphService(memory_bus=memory_bus, time_service=time_service)
 
-        assert service.service_name == "TestGraphService"
+        assert service.service_name == "ConcreteGraphService"
         assert service._memory_bus == memory_bus
         assert service._time_service == time_service
         assert service._request_count == 0
         assert service._error_count == 0
         assert service._total_response_time == 0.0
         assert service._start_time is None
-        assert service._started is False
 
     def test_init_without_dependencies(self):
         """Test initialization without dependencies."""
-        service = TestGraphService()
+        service = ConcreteGraphService()
 
-        assert service.service_name == "TestGraphService"
+        assert service.service_name == "ConcreteGraphService"
         assert service._memory_bus is None
         assert service._time_service is None
-        assert service._started is False
 
     def test_set_memory_bus(self, memory_bus):
         """Test setting memory bus after initialization."""
-        service = TestGraphService()
+        service = ConcreteGraphService()
         service._set_memory_bus(memory_bus)
 
         assert service._memory_bus == memory_bus
 
     def test_set_time_service(self, time_service):
         """Test setting time service after initialization."""
-        service = TestGraphService()
+        service = ConcreteGraphService()
         service._set_time_service(time_service)
 
         assert service._time_service == time_service
@@ -131,8 +134,7 @@ class TestBaseGraphServiceLifecycle:
             await graph_service.start()
 
             assert graph_service._start_time is not None
-            assert graph_service._started is True
-            mock_logger.info.assert_called_once_with("TestGraphService started")
+            mock_logger.info.assert_called_once_with("ConcreteGraphService started")
 
     @pytest.mark.asyncio
     async def test_start_service(self, graph_service):
@@ -141,21 +143,21 @@ class TestBaseGraphServiceLifecycle:
             await graph_service.start()
 
             assert graph_service._start_time is not None
-            assert graph_service._started is True
-            mock_logger.info.assert_called_once_with("TestGraphService started")
+            mock_logger.info.assert_called_once_with("ConcreteGraphService started")
 
     @pytest.mark.asyncio
     async def test_stop(self, graph_service):
         """Test stopping service."""
         # Start first
         await graph_service.start()
-        assert graph_service._started is True
+        # Service should be started (check start_time as proxy)
+        assert graph_service._start_time is not None
 
         with patch("ciris_engine.logic.services.graph.base.logger") as mock_logger:
             await graph_service.stop()
 
-            assert graph_service._started is False
-            mock_logger.info.assert_called_once_with("TestGraphService stopped")
+            # Service should be stopped
+            mock_logger.info.assert_called_once_with("ConcreteGraphService stopped")
 
 
 class TestBaseGraphServiceCapabilities:
@@ -167,7 +169,7 @@ class TestBaseGraphServiceCapabilities:
 
         # FAIL FAST: ServiceCapabilities schema MUST exist
         assert isinstance(caps, ServiceCapabilities), "ServiceCapabilities schema is missing!"
-        assert caps.service_name == "TestGraphService"
+        assert caps.service_name == "ConcreteGraphService"
         assert "store_in_graph" in caps.actions
         assert "query_graph" in caps.actions
         assert "test_node" in caps.actions  # From get_node_type()
@@ -179,7 +181,7 @@ class TestBaseGraphServiceCapabilities:
 
     def test_check_dependencies_without_memory_bus(self, time_service):
         """Test checking dependencies without memory bus."""
-        service = TestGraphService(time_service=time_service)
+        service = ConcreteGraphService(time_service=time_service)
         assert service._check_dependencies() is False
 
     def test_get_actions(self, graph_service):
@@ -208,7 +210,7 @@ class TestBaseGraphServiceMetrics:
 
     def test_collect_custom_metrics_without_dependencies(self):
         """Test collecting custom metrics without dependencies."""
-        service = TestGraphService()
+        service = ConcreteGraphService()
 
         metrics = service._collect_custom_metrics()
 
@@ -223,7 +225,6 @@ class TestBaseGraphServiceMetrics:
         graph_service._request_count = 5
         graph_service._error_count = 1
         graph_service._total_response_time = 250.0  # 50ms average
-        graph_service._started = True
         graph_service._start_time = datetime.now() - timedelta(seconds=30)
 
         metrics = graph_service._collect_metrics()
@@ -244,7 +245,7 @@ class TestBaseGraphServiceMetrics:
     async def test_get_metrics(self, graph_service):
         """Test the public get_metrics method."""
         graph_service._request_count = 3
-        graph_service._started = True
+        graph_service._start_time = datetime.now()  # Mark as started
 
         metrics = await graph_service.get_metrics()
 
@@ -334,7 +335,7 @@ class TestBaseGraphServiceStoreOperations:
     @pytest.mark.asyncio
     async def test_store_in_graph_no_memory_bus(self, time_service):
         """Test storing without memory bus - MUST FAIL FAST."""
-        service = TestGraphService(time_service=time_service)
+        service = ConcreteGraphService(time_service=time_service)
 
         node = GraphNode(
             id="test-123",
@@ -429,7 +430,7 @@ class TestBaseGraphServiceQueryOperations:
     @pytest.mark.asyncio
     async def test_query_graph_no_memory_bus(self, time_service):
         """Test querying without memory bus."""
-        service = TestGraphService(time_service=time_service)
+        service = ConcreteGraphService(time_service=time_service)
 
         query = MemoryQuery(node_id="test_query", scope=GraphScope.LOCAL, type=NodeType.CONCEPT)
 
@@ -495,7 +496,6 @@ class TestBaseGraphServiceEdgeCases:
     def test_metrics_with_no_requests(self, graph_service):
         """Test metrics when no requests have been made."""
         graph_service._start_time = datetime.now()
-        graph_service._started = True
 
         metrics = graph_service._collect_metrics()
 

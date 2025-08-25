@@ -107,12 +107,18 @@ class TestToolExecution:
     @pytest.mark.asyncio
     async def test_execute_unknown_tool(self, cli_tool_service):
         """Test executing unknown tool."""
+        # Record initial counter values
+        initial_executions = cli_tool_service._tool_executions
+        initial_failures = cli_tool_service._tool_failures
+
         result = await cli_tool_service.execute_tool("unknown_tool", {})
 
         assert result.status == ToolExecutionStatus.FAILED
         assert result.success is False
         assert "Unknown tool" in result.error
-        assert cli_tool_service._tool_executions == 1
+        # Unknown tools should increment both executions and failures
+        assert cli_tool_service._tool_executions == initial_executions + 1
+        assert cli_tool_service._tool_failures == initial_failures + 1
 
     @pytest.mark.asyncio
     async def test_execute_tool_with_correlation_id(self, cli_tool_service):

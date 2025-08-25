@@ -37,6 +37,10 @@ class APIAdapterConfig(BaseModel):
 
     # Timeout configuration
     interaction_timeout: float = Field(default=55.0, description="Timeout for agent interactions in seconds")
+    
+    # Proxy configuration
+    proxy_path: str = Field(default="", description="Base path when running behind reverse proxy (e.g., /api/sage-2wnuc8)")
+    agent_id: str = Field(default="", description="Agent ID when running in managed mode")
 
     def get_home_channel_id(self, host: str, port: int) -> str:
         """Get the home channel ID for this API adapter instance."""
@@ -80,3 +84,16 @@ class APIAdapterConfig(BaseModel):
                 self.cors_origins = json.loads(env_cors_origins)
             except (ValueError, json.JSONDecodeError):
                 pass
+        
+        # Check for proxy/managed mode configuration
+        env_agent_id = get_env_var("CIRIS_AGENT_ID")
+        if env_agent_id:
+            self.agent_id = env_agent_id
+            # When agent ID is set, we're likely behind a proxy
+            # Set the proxy path to the standard format
+            self.proxy_path = f"/api/{env_agent_id}"
+        
+        # Allow explicit override of proxy path
+        env_proxy_path = get_env_var("CIRIS_PROXY_PATH")
+        if env_proxy_path:
+            self.proxy_path = env_proxy_path

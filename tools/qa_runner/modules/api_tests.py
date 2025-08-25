@@ -130,15 +130,7 @@ class APITestModule:
                 requires_auth=True,
                 description="Test getting interaction history",
             ),
-            QATestCase(
-                name="Clear history",
-                module=QAModule.AGENT,
-                endpoint="/v1/agent/history/clear",
-                method="POST",
-                expected_status=200,
-                requires_auth=True,
-                description="Test clearing interaction history",
-            ),
+            # Clear history endpoint doesn't exist - removed
         ]
 
     @staticmethod
@@ -278,60 +270,14 @@ class APITestModule:
                 requires_auth=True,
                 description="Test listing available tools",
             ),
-            QATestCase(
-                name="Get tool info",
-                module=QAModule.TOOLS,
-                endpoint="/v1/tools/list_files",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test getting specific tool information",
-            ),
-            QATestCase(
-                name="Execute tool",
-                module=QAModule.TOOLS,
-                endpoint="/v1/tools/execute",
-                method="POST",
-                payload={"tool_name": "list_files", "parameters": {"path": "."}},
-                expected_status=200,
-                requires_auth=True,
-                description="Test tool execution",
-            ),
+            # Tools don't have individual info or execute endpoints - removed
         ]
 
     @staticmethod
     def get_task_tests() -> List[QATestCase]:
         """Get task management test cases."""
-        return [
-            QATestCase(
-                name="List tasks",
-                module=QAModule.TASKS,
-                endpoint="/v1/tasks",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test listing tasks",
-            ),
-            QATestCase(
-                name="Create task",
-                module=QAModule.TASKS,
-                endpoint="/v1/tasks",
-                method="POST",
-                payload={"description": "Test task from QA", "priority": 5, "tags": ["test", "qa"]},
-                expected_status=200,
-                requires_auth=True,
-                description="Test creating a new task",
-            ),
-            QATestCase(
-                name="Get task details",
-                module=QAModule.TASKS,
-                endpoint="/v1/tasks/latest",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test getting task details",
-            ),
-        ]
+        # Tasks API doesn't exist - returning empty list
+        return []
 
     @staticmethod
     def get_guidance_tests() -> List[QATestCase]:
@@ -340,24 +286,24 @@ class APITestModule:
             QATestCase(
                 name="Request guidance",
                 module=QAModule.GUIDANCE,
-                endpoint="/v1/guidance/request",
+                endpoint="/v1/wa/guidance",
                 method="POST",
                 payload={
-                    "thought_id": "test-thought-" + str(time.time()),
-                    "context": {"situation": "test", "question": "Should I proceed?"},
+                    "topic": "Test guidance request from QA",
+                    "context": "Testing the guidance system functionality",
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Test requesting guidance",
+                description="Test requesting guidance via WA endpoint",
             ),
             QATestCase(
-                name="Get guidance history",
+                name="Get deferrals (guidance history)",
                 module=QAModule.GUIDANCE,
-                endpoint="/v1/guidance/history",
+                endpoint="/v1/wa/deferrals",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting guidance history",
+                description="Test getting guidance deferrals",
             ),
         ]
 

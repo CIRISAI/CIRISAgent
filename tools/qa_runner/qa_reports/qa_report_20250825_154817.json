@@ -1,0 +1,170 @@
+{
+  "timestamp": "20250825_154817",
+  "config": {
+    "base_url": "http://localhost:8080",
+    "modules": [
+      "memory",
+      "telemetry",
+      "system",
+      "guidance",
+      "agent",
+      "auth",
+      "tools",
+      "audit"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.14022159576416016,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.13610243797302246,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0016248226165771484,
+      "attempts": 1
+    },
+    "telemetry::Unified telemetry": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.06783938407897949,
+      "attempts": 1
+    },
+    "telemetry::Service health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0024073123931884766,
+      "attempts": 1
+    },
+    "telemetry::System metrics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.30942606925964355,
+      "attempts": 1
+    },
+    "telemetry::Resource usage": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.017766237258911133,
+      "attempts": 1
+    },
+    "agent::Agent status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.015374183654785156,
+      "attempts": 1
+    },
+    "agent::Simple interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 1.6891331672668457,
+      "attempts": 1
+    },
+    "agent::Complex interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 3.6011035442352295,
+      "attempts": 1
+    },
+    "agent::Interaction history": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.41576671600341797,
+      "attempts": 1
+    },
+    "system::System health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.049103736877441406,
+      "attempts": 1
+    },
+    "system::List adapters": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0017821788787841797,
+      "attempts": 1
+    },
+    "system::Processing queue status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.02971959114074707,
+      "attempts": 1
+    },
+    "system::System configuration": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004352569580078125,
+      "attempts": 1
+    },
+    "memory::Memory search": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.016126155853271484,
+      "attempts": 1
+    },
+    "memory::Memory statistics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.024639368057250977,
+      "attempts": 1
+    },
+    "memory::Store memory": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004747629165649414,
+      "attempts": 1
+    },
+    "audit::List audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0054547786712646484,
+      "attempts": 1
+    },
+    "audit::Search audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004759788513183594,
+      "attempts": 1
+    },
+    "audit::Export audit data": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0050525665283203125,
+      "attempts": 1
+    },
+    "tools::List available tools": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0013546943664550781,
+      "attempts": 1
+    },
+    "guidance::Request guidance": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0014581680297851562,
+      "attempts": 1
+    },
+    "guidance::Get deferrals (guidance history)": {
+      "success": false,
+      "status_code": 500,
+      "expected_status": 200,
+      "error": "Internal Server Error",
+      "duration": 4.017251968383789,
+      "attempts": 3
+    }
+  },
+  "summary": {
+    "total": 24,
+    "passed": 23,
+    "failed": 1,
+    "success_rate": 95.83333333333334
+  }
+}

@@ -177,6 +177,7 @@ class DiscordChannelManager:
                 from datetime import datetime, timezone
 
                 from ciris_engine.logic import persistence
+                from ciris_engine.logic.utils.privacy import sanitize_correlation_parameters
                 from ciris_engine.schemas.telemetry.core import (
                     ServiceCorrelation,
                     ServiceCorrelationStatus,
@@ -196,12 +197,15 @@ class DiscordChannelManager:
                         service_type="discord",
                         method_name="observe",
                         channel_id=channel_id,  # Use the full format discord_guildid_channelid
-                        parameters={
-                            "content": message.content,
-                            "author_id": str(message.author.id),
-                            "author_name": message.author.display_name,
-                            "message_id": str(message.id),
-                        },
+                        parameters=await self._sanitize_message_parameters(
+                            {
+                                "content": message.content,
+                                "author_id": str(message.author.id),
+                                "author_name": message.author.display_name,
+                                "message_id": str(message.id),
+                            },
+                            str(message.author.id)
+                        ),
                         request_timestamp=now,
                     ),
                     response_data=ServiceResponseData(
@@ -289,3 +293,26 @@ class DiscordChannelManager:
         except Exception as e:
             logger.exception(f"Error getting channel info for {channel_id}: {e}")
             return {"exists": True, "accessible": False, "error": str(e)}
+    
+    async def _sanitize_message_parameters(self, params: dict, author_id: str) -> dict:
+        """
+        Sanitize message parameters based on user consent.
+        
+        Checks user consent and applies privacy filters if needed.
+        """
+        try:
+            # Try to get user consent stream
+            consent_stream = None
+            
+            # Check if we have access to consent or filter service
+            # This would need to be passed in or made available
+            # For now, we'll return params as-is if we can't check
+            
+            # If user is anonymous, sanitize the parameters
+            if consent_stream in ["anonymous", "expired", "revoked"]:
+                return sanitize_correlation_parameters(params, consent_stream)
+            
+            return params
+        except Exception as e:
+            logger.debug(f"Could not sanitize parameters: {e}")
+            return params

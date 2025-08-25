@@ -8,6 +8,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
+from ciris_engine.logic.utils.privacy import sanitize_thought_content, redact_personal_info
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -326,21 +327,45 @@ class BaseObserver(Generic[MessageT], ABC):
 
             await self._sign_and_add_task(task)
 
-            # Build conversation context for thought
-            thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
+            # Check user consent stream for privacy handling
+            user_consent_stream = await self._get_user_consent_stream(msg.author_id)  # type: ignore[attr-defined]
+            is_anonymous = user_consent_stream in ["anonymous", "expired", "revoked"]
+            
+            # Build conversation context for thought with privacy consideration
+            if is_anonymous:
+                # Sanitize for anonymous users
+                author_hash = f"anon_{hash(str(msg.author_id))%100000:05d}"  # type: ignore[attr-defined]
+                sanitized_content = redact_personal_info(str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content))  # type: ignore[attr-defined]
+                thought_lines = [f"You observed @{author_hash} in channel {msg.channel_id} say: {sanitized_content}"]  # type: ignore[attr-defined]
+            else:
+                thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
 
             thought_lines.append("\n=== CONVERSATION HISTORY (Last 10 messages) ===")
             for i, hist_msg in enumerate(history_context, 1):
                 author = hist_msg.get("author", "Unknown")
                 author_id = hist_msg.get("author_id", "unknown")
                 content = hist_msg.get("content", "")
+                
+                # Check if this historical message is from an anonymous user
+                hist_consent = await self._get_user_consent_stream(author_id)
+                if hist_consent in ["anonymous", "expired", "revoked"]:
+                    author = f"anon_{hash(str(author_id))%100000:05d}"
+                    author_id = f"hash_{hash(str(author_id))%100000:05d}"
+                    content = redact_personal_info(content[:200] if len(content) > 200 else content)
+                
                 hist_msg.get("timestamp", "")
                 thought_lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
 
             thought_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="
             )
-            thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {msg.content}")  # type: ignore[attr-defined]
+            
+            if is_anonymous:
+                author_hash = f"anon_{hash(str(msg.author_id))%100000:05d}"  # type: ignore[attr-defined]
+                sanitized_content = redact_personal_info(str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content))  # type: ignore[attr-defined]
+                thought_lines.append(f"@{author_hash}: {sanitized_content}")
+            else:
+                thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {msg.content}")  # type: ignore[attr-defined]
 
             thought_content = "\n".join(thought_lines)
 
@@ -497,3 +522,30 @@ class BaseObserver(Generic[MessageT], ABC):
     async def _should_process_message(self, msg: MessageT) -> bool:
         """Check if this observer should process the message - to be overridden by subclasses."""
         return True  # Default: process all messages
+    
+    async def _get_user_consent_stream(self, user_id: str) -> Optional[str]:
+        """
+        Get user's consent stream for privacy handling.
+        
+        Returns consent stream or None if not found.
+        """
+        try:
+            # Try to get consent from consent service if available
+            if hasattr(self, 'consent_service') and self.consent_service:
+                try:
+                    consent = await self.consent_service.get_consent(user_id)
+                    return consent.stream.value if consent else None
+                except Exception:
+                    return None
+            
+            # Try to get from filter service if available
+            if hasattr(self, 'filter_service') and self.filter_service:
+                if hasattr(self.filter_service, '_config') and self.filter_service._config:
+                    if user_id in self.filter_service._config.user_profiles:
+                        profile = self.filter_service._config.user_profiles[user_id]
+                        return profile.consent_stream
+            
+            return None
+        except Exception as e:
+            logger.debug(f"Could not get consent stream for {user_id}: {e}")
+            return None

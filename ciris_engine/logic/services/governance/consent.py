@@ -228,6 +228,20 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
             return pending_status
 
+        # Check for gaming behavior if switching to/from ANONYMOUS
+        if previous_status and request.stream != previous_status.stream:
+            # Notify adaptive filter about consent transition
+            if hasattr(self, "_filter_service"):
+                is_gaming = await self._filter_service.handle_consent_transition(
+                    request.user_id,
+                    previous_status.stream.value,
+                    request.stream.value
+                )
+                
+                if is_gaming:
+                    logger.warning(f"Gaming attempt detected for {request.user_id}: {previous_status.stream} -> {request.stream}")
+                    # Still allow the change but flag the user in filter service
+        
         # For TEMPORARY and ANONYMOUS - no bilateral agreement needed
         # Users can always downgrade unilaterally
         now = self._time_service.now()
@@ -305,6 +319,12 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         # Verify user exists
         status = await self.get_consent(user_id)
+
+        # Trigger anonymization in filter service
+        if hasattr(self, "_filter_service"):
+            # Anonymize user profile in filter service
+            await self._filter_service.anonymize_user_profile(user_id)
+            logger.info(f"Triggered filter profile anonymization for {user_id}")
 
         # Create decay status
         now = self._time_service.now()

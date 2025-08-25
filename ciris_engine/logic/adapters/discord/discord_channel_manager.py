@@ -20,6 +20,8 @@ class DiscordChannelManager:
         client: Optional[discord.Client] = None,
         on_message_callback: Optional[Callable[[DiscordMessage], Awaitable[None]]] = None,
         monitored_channel_ids: Optional[List[str]] = None,
+        filter_service: Optional[Any] = None,
+        consent_service: Optional[Any] = None,
     ) -> None:
         """Initialize the channel manager.
 
@@ -28,12 +30,15 @@ class DiscordChannelManager:
             client: Optional Discord client instance
             on_message_callback: Callback for message handling
             monitored_channel_ids: List of channel IDs to monitor
-            on_message_callback: Optional callback for message events
+            filter_service: Optional filter service for consent checking
+            consent_service: Optional consent service for privacy handling
         """
         self.token = token
         self.client = client
         self.on_message_callback = on_message_callback
         self.monitored_channel_ids = monitored_channel_ids or []
+        self.filter_service = filter_service
+        self.consent_service = consent_service
 
     def set_client(self, client: discord.Client) -> None:
         """Set the Discord client after initialization.
@@ -302,11 +307,7 @@ class DiscordChannelManager:
         """
         try:
             # Try to get user consent stream
-            consent_stream = None
-            
-            # Check if we have access to consent or filter service
-            # This would need to be passed in or made available
-            # For now, we'll return params as-is if we can't check
+            consent_stream = await self._get_user_consent_stream(author_id)
             
             # If user is anonymous, sanitize the parameters
             if consent_stream in ["anonymous", "expired", "revoked"]:
@@ -316,3 +317,30 @@ class DiscordChannelManager:
         except Exception as e:
             logger.debug(f"Could not sanitize parameters: {e}")
             return params
+    
+    async def _get_user_consent_stream(self, user_id: str) -> Optional[str]:
+        """
+        Get user's consent stream for privacy handling.
+        
+        Returns consent stream or None if not found.
+        """
+        try:
+            # Try to get consent from consent service if available
+            if self.consent_service:
+                try:
+                    consent = await self.consent_service.get_consent(user_id)
+                    return consent.stream.value if consent else None
+                except Exception:
+                    pass
+            
+            # Try to get from filter service if available
+            if self.filter_service:
+                if hasattr(self.filter_service, '_config') and self.filter_service._config:
+                    if user_id in self.filter_service._config.user_profiles:
+                        profile = self.filter_service._config.user_profiles[user_id]
+                        return profile.consent_stream
+            
+            return None
+        except Exception as e:
+            logger.debug(f"Could not get consent stream for {user_id}: {e}")
+            return None

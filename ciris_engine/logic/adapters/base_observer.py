@@ -8,7 +8,6 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
-from ciris_engine.logic.utils.privacy import sanitize_thought_content, redact_personal_info
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -327,18 +326,8 @@ class BaseObserver(Generic[MessageT], ABC):
 
             await self._sign_and_add_task(task)
 
-            # Check user consent stream for privacy handling
-            user_consent_stream = await self._get_user_consent_stream(msg.author_id)  # type: ignore[attr-defined]
-            is_anonymous = user_consent_stream in ["anonymous", "expired", "revoked"]
-            
-            # Build conversation context for thought with privacy consideration
-            if is_anonymous:
-                # Sanitize for anonymous users
-                author_hash = f"anon_{hash(str(msg.author_id))%100000:05d}"  # type: ignore[attr-defined]
-                sanitized_content = redact_personal_info(str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content))  # type: ignore[attr-defined]
-                thought_lines = [f"You observed @{author_hash} in channel {msg.channel_id} say: {sanitized_content}"]  # type: ignore[attr-defined]
-            else:
-                thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
+            # Build conversation context for thought - thoughts are NEVER sanitized
+            thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
 
             thought_lines.append("\n=== CONVERSATION HISTORY (Last 10 messages) ===")
             for i, hist_msg in enumerate(history_context, 1):
@@ -346,13 +335,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 author_id = hist_msg.get("author_id", "unknown")
                 content = hist_msg.get("content", "")
                 
-                # Check if this historical message is from an anonymous user
-                hist_consent = await self._get_user_consent_stream(author_id)
-                if hist_consent in ["anonymous", "expired", "revoked"]:
-                    author = f"anon_{hash(str(author_id))%100000:05d}"
-                    author_id = f"hash_{hash(str(author_id))%100000:05d}"
-                    content = redact_personal_info(content[:200] if len(content) > 200 else content)
-                
+                # Thoughts are NEVER sanitized - we see full content
                 hist_msg.get("timestamp", "")
                 thought_lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
 
@@ -361,9 +344,12 @@ class BaseObserver(Generic[MessageT], ABC):
             )
             
             if is_anonymous:
-                author_hash = f"anon_{hash(str(msg.author_id))%100000:05d}"  # type: ignore[attr-defined]
+                import hashlib
+                # Use same hash as earlier for consistency
+                content_hash = hashlib.sha256(str(msg.content).encode()).hexdigest()  # type: ignore[attr-defined]
+                author_hash = f"anon_{hashlib.sha256(str(msg.author_id).encode()).hexdigest()[:8]}"  # type: ignore[attr-defined]
                 sanitized_content = redact_personal_info(str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content))  # type: ignore[attr-defined]
-                thought_lines.append(f"@{author_hash}: {sanitized_content}")
+                thought_lines.append(f"@{author_hash}: {sanitized_content} [Hash: {content_hash[:16]}]")
             else:
                 thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {msg.content}")  # type: ignore[attr-defined]
 

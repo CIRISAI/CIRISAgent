@@ -5,6 +5,7 @@ Provides functions to sanitize data based on user consent stream.
 """
 
 import hashlib
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 
@@ -13,6 +14,7 @@ def sanitize_for_anonymous(data: Dict[str, Any], user_id: Optional[str] = None) 
     Sanitize data for anonymous users.
     
     Removes PII while preserving necessary audit information.
+    Stores content hash for future verification/refutation.
     """
     sanitized = data.copy()
     
@@ -46,14 +48,23 @@ def sanitize_for_anonymous(data: Dict[str, Any], user_id: Optional[str] = None) 
             value = str(sanitized[field])
             sanitized[field] = f"anon_{hashlib.sha256(value.encode()).hexdigest()[:8]}"
     
-    # Truncate content for anonymous users (keep first 50 chars for context)
+    # Handle content fields - hash original, store sanitized
     content_fields = ["content", "message", "text", "body"]
     for field in content_fields:
         if field in sanitized and sanitized[field]:
-            content = str(sanitized[field])
-            if len(content) > 50:
-                sanitized[field] = f"{content[:47]}..."
-            # Also redact any mentions or personal info patterns
+            original_content = str(sanitized[field])
+            
+            # Create hash of original content for verification
+            content_hash = hashlib.sha256(original_content.encode()).hexdigest()
+            sanitized[f"{field}_hash"] = content_hash
+            
+            # Store truncated/redacted version
+            if len(original_content) > 50:
+                sanitized[field] = f"{original_content[:47]}..."
+            else:
+                sanitized[field] = original_content
+            
+            # Redact any mentions or personal info patterns
             sanitized[field] = redact_personal_info(sanitized[field])
     
     return sanitized
@@ -128,17 +139,24 @@ def sanitize_audit_details(
     return sanitize_for_anonymous(details)
 
 
-def sanitize_thought_content(
+def sanitize_trace_content(
     content: str,
     consent_stream: Optional[str] = None
 ) -> str:
     """
-    Sanitize thought content based on consent.
+    Sanitize trace/audit content based on consent.
     
     Preserves semantic meaning while removing PII.
+    Returns sanitized content with hash appended for verification.
+    
+    Note: This is for audit trails and traces only.
+    Thoughts themselves are never sanitized.
     """
     if not should_sanitize_for_user(consent_stream):
         return content
+    
+    # Hash the original content for future verification
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
     
     # For anonymous users, redact personal info but keep semantic content
     sanitized = redact_personal_info(content)
@@ -147,4 +165,62 @@ def sanitize_thought_content(
     if len(sanitized) > 500:
         sanitized = f"{sanitized[:497]}..."
     
+    # Append hash for verification/refutation capability
+    sanitized += f" [Hash: {content_hash[:16]}]"
+    
     return sanitized
+
+
+def verify_content_hash(content: str, claimed_hash: str) -> bool:
+    """
+    Verify if content matches a claimed hash.
+    
+    Used for refutation - proving we did/didn't see specific content.
+    
+    Args:
+        content: The content to verify
+        claimed_hash: The hash to check against
+        
+    Returns:
+        True if content matches the hash
+    """
+    actual_hash = hashlib.sha256(content.encode()).hexdigest()
+    
+    # Support partial hash matching (first 8-16 chars often stored)
+    if len(claimed_hash) < len(actual_hash):
+        return actual_hash.startswith(claimed_hash)
+    
+    return actual_hash == claimed_hash
+
+
+def create_refutation_proof(
+    claimed_content: str,
+    stored_hash: str,
+    actual_content: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a refutation proof for disputed content.
+    
+    Args:
+        claimed_content: What someone claims was said
+        stored_hash: The hash we have stored
+        actual_content: The actual content if available
+        
+    Returns:
+        Proof dictionary with verification results
+    """
+    proof = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "stored_hash": stored_hash,
+        "claimed_content_hash": hashlib.sha256(claimed_content.encode()).hexdigest(),
+        "matches_stored": verify_content_hash(claimed_content, stored_hash),
+    }
+    
+    if actual_content:
+        proof["actual_content_hash"] = hashlib.sha256(actual_content.encode()).hexdigest()
+        proof["actual_matches_stored"] = verify_content_hash(actual_content, stored_hash)
+        proof["claimed_matches_actual"] = (
+            proof["claimed_content_hash"] == proof["actual_content_hash"]
+        )
+    
+    return proof

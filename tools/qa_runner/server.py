@@ -35,8 +35,9 @@ class APIServerManager:
 
         self.console.print("[cyan]🚀 Starting API server...[/cyan]")
 
-        # Build command
-        cmd = [sys.executable, "main.py", "--adapter", self.config.adapter, "--port", str(self.config.api_port)]
+        # Build command - main.py is in the root directory
+        main_path = Path(__file__).parent.parent.parent / "main.py"
+        cmd = [sys.executable, str(main_path), "--adapter", self.config.adapter, "--port", str(self.config.api_port)]
 
         if self.config.mock_llm:
             cmd.append("--mock-llm")

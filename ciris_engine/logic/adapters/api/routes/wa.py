@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.schemas.api.responses import ErrorCode, ErrorDetail, ErrorResponse, ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.wa import (
+    DeferralListResponse,
     PermissionsListResponse,
     ResolveDeferralRequest,
     ResolveDeferralResponse,
@@ -36,7 +37,7 @@ async def get_deferrals(
     request: Request,
     wa_id: Optional[str] = Query(None, description="Filter by WA ID"),
     auth: AuthContext = Depends(require_observer),
-) -> SuccessResponse[List[DeferralResponse]]:
+) -> SuccessResponse[DeferralListResponse]:
     """
     Get list of pending deferrals.
 
@@ -73,7 +74,10 @@ async def get_deferrals(
             deferral_dict["timeout_at"] = (d.created_at + timedelta(days=7)).isoformat()  # Default 7 day timeout
             transformed_deferrals.append(deferral_dict)
 
-        response = {"deferrals": transformed_deferrals, "total": len(transformed_deferrals)}
+        response = DeferralListResponse(
+            deferrals=transformed_deferrals,
+            total=len(transformed_deferrals)
+        )
 
         return SuccessResponse(
             data=response,

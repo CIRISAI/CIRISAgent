@@ -1,0 +1,373 @@
+{
+  "timestamp": "20250825_155917",
+  "config": {
+    "base_url": "http://localhost:8080",
+    "modules": [
+      "guidance",
+      "telemetry",
+      "handlers",
+      "auth",
+      "simple_handlers",
+      "system",
+      "agent",
+      "memory",
+      "audit",
+      "sdk",
+      "tools"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.13599491119384766,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.1371150016784668,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.00128936767578125,
+      "attempts": 1
+    },
+    "telemetry::Unified telemetry": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.07113456726074219,
+      "attempts": 1
+    },
+    "telemetry::Service health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.002957582473754883,
+      "attempts": 1
+    },
+    "telemetry::System metrics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.33995604515075684,
+      "attempts": 1
+    },
+    "telemetry::Resource usage": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.017786264419555664,
+      "attempts": 1
+    },
+    "agent::Agent status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.01860809326171875,
+      "attempts": 1
+    },
+    "agent::Simple interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 1.9043700695037842,
+      "attempts": 1
+    },
+    "agent::Complex interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 3.574622392654419,
+      "attempts": 1
+    },
+    "agent::Interaction history": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.4388725757598877,
+      "attempts": 1
+    },
+    "system::System health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0610051155090332,
+      "attempts": 1
+    },
+    "system::List adapters": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0019195079803466797,
+      "attempts": 1
+    },
+    "system::Processing queue status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.11889290809631348,
+      "attempts": 1
+    },
+    "system::System configuration": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0048940181732177734,
+      "attempts": 1
+    },
+    "memory::Memory search": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.01651740074157715,
+      "attempts": 1
+    },
+    "memory::Memory statistics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.026262521743774414,
+      "attempts": 1
+    },
+    "memory::Store memory": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.005293846130371094,
+      "attempts": 1
+    },
+    "audit::List audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0059626102447509766,
+      "attempts": 1
+    },
+    "audit::Search audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004922151565551758,
+      "attempts": 1
+    },
+    "audit::Export audit data": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0048253536224365234,
+      "attempts": 1
+    },
+    "tools::List available tools": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0014815330505371094,
+      "attempts": 1
+    },
+    "guidance::Request guidance": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0013997554779052734,
+      "attempts": 1
+    },
+    "guidance::Get deferrals (guidance history)": {
+      "success": false,
+      "status_code": 500,
+      "expected_status": 200,
+      "error": "Internal Server Error",
+      "duration": 4.019239902496338,
+      "attempts": 3
+    },
+    "handlers::Status request": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 5.21657395362854,
+      "attempts": 3
+    },
+    "handlers::System health check": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.0080859661102295,
+      "attempts": 3
+    },
+    "handlers::Simple conversation": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.0078113079071045,
+      "attempts": 3
+    },
+    "handlers::Question answering": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.007525444030762,
+      "attempts": 3
+    },
+    "handlers::Command execution": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.009433269500732,
+      "attempts": 3
+    },
+    "handlers::Tool invocation": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.007842540740967,
+      "attempts": 3
+    },
+    "handlers::Invalid handler type": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 400,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.011181592941284,
+      "attempts": 3
+    },
+    "handlers::Missing content": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 422,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.008251428604126,
+      "attempts": 3
+    },
+    "handlers::Multi-step processing": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 5.203327655792236,
+      "attempts": 3
+    },
+    "handlers::Async handler": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 202,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.007713794708252,
+      "attempts": 3
+    },
+    "simple_handlers::Ping handler": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.006600379943848,
+      "attempts": 3
+    },
+    "simple_handlers::Echo handler": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.008619070053101,
+      "attempts": 3
+    },
+    "simple_handlers::Version handler": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.008272647857666,
+      "attempts": 3
+    },
+    "sdk::SDK login flow": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.14429140090942383,
+      "attempts": 1
+    },
+    "sdk::SDK token refresh": {
+      "success": false,
+      "status_code": 422,
+      "expected_status": 200,
+      "error": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null}]}",
+      "duration": 4.011372327804565,
+      "attempts": 3
+    },
+    "sdk::SDK batch request": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.009517431259155,
+      "attempts": 3
+    },
+    "sdk::SDK WebSocket connection": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 101,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.006787061691284,
+      "attempts": 3
+    },
+    "sdk::SDK error response format": {
+      "success": true,
+      "status_code": 404,
+      "duration": 0.000957489013671875,
+      "attempts": 1
+    },
+    "sdk::SDK validation error": {
+      "success": true,
+      "status_code": 422,
+      "duration": 0.0014328956604003906,
+      "attempts": 1
+    },
+    "sdk::SDK rate limit headers": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 5.215596914291382,
+      "attempts": 3
+    },
+    "sdk::SDK pagination": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.010905742645264,
+      "attempts": 3
+    },
+    "sdk::SDK file upload": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.011248826980591,
+      "attempts": 3
+    },
+    "sdk::SDK file download": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.009547472000122,
+      "attempts": 3
+    },
+    "sdk::SDK nested object handling": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.7812943458557129,
+      "attempts": 1
+    },
+    "sdk::SDK async task submission": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 202,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.011102199554443,
+      "attempts": 3
+    },
+    "sdk::SDK async task status": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.007040739059448,
+      "attempts": 3
+    }
+  },
+  "summary": {
+    "total": 50,
+    "passed": 27,
+    "failed": 23,
+    "success_rate": 54.0
+  }
+}

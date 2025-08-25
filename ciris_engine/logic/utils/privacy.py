@@ -78,20 +78,28 @@ def redact_personal_info(text: str) -> str:
     """
     import re
     
-    # Discord mentions
+    # Discord mentions - simple and clear
     text = re.sub(r'<@!?\d+>', '[mention]', text)
     
-    # Email addresses
-    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[email]', text)
+    # Email addresses - basic pattern that works
+    text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[email]', text)
     
-    # Phone numbers (basic patterns)
-    text = re.sub(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', '[phone]', text)
-    text = re.sub(r'\b\d{10,}\b', '[number]', text)
+    # Phone numbers - handle multiple formats robustly
+    # Format: (555) 555-1234 or (555)555-1234
+    text = re.sub(r'\(\d{3}\)\s*\d{3}[-.]?\d{4}', '[phone]', text)
+    # Format: 555-555-1234 or 555.555.1234 or 555 555 1234
+    text = re.sub(r'\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b', '[phone]', text)
+    # Format: 5555551234 (10 digits together)
+    text = re.sub(r'\b\d{10}\b', '[phone]', text)
+    # Format: 555-1234 (7 digit local)
+    text = re.sub(r'\b\d{3}-\d{4}\b', '[phone]', text)
+    # Any other long number sequence (11+ digits)
+    text = re.sub(r'\b\d{11,}\b', '[number]', text)
     
-    # URLs that might contain personal info
+    # URLs - simple pattern
     text = re.sub(r'https?://[^\s]+', '[url]', text)
     
-    # Names after "I am" or "My name is"
+    # Names after common phrases - keep it simple
     text = re.sub(r'(I am|My name is|I\'m)\s+\w+(\s+\w+)?', r'\1 [name]', text, flags=re.IGNORECASE)
     
     return text

@@ -79,6 +79,7 @@ class CLIToolService(BaseService, ToolService):
 
         if tool_name not in self._tools:
             # Unknown tool - track as failure
+            self._tool_executions += 1  # Must increment total count
             self._tool_failures += 1
             result = {"error": f"Unknown tool: {tool_name}"}
             success = False

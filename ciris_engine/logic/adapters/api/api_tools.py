@@ -67,6 +67,7 @@ class APIToolService(BaseService, ToolService):
         correlation_id = parameters.get("correlation_id", str(uuid.uuid4()))
 
         if tool_name not in self._tools:
+            self._tool_executions += 1  # Must increment total count
             self._tool_failures += 1  # Unknown tool is a failure!
             return ToolExecutionResult(
                 tool_name=tool_name,

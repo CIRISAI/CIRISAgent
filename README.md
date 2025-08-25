@@ -24,12 +24,12 @@ CIRIS wraps LLM calls with:
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
 ### 🚀 Latest: v1.0.1-RC1-patch1
-**Major improvements in this patch:**
-- ✅ **2,766 passing tests** (up from 1,200)
-- 🧪 **Comprehensive QA runner** with modular testing framework
-- 🔧 **Reverse proxy support** for production deployments
-- 📉 **Reduced log spam** with proper debug levels
-- 🐛 **10+ critical bug fixes** for production stability
+**This branch contains (vs main):**
+- 🧪 **Comprehensive QA runner** - Complete testing framework (7,500+ lines)
+- 🔧 **Reverse proxy support** - FastAPI root_path for nginx/HAProxy
+- 📉 **Reduced log spam** - Proper debug logging levels
+- 🐛 **15+ bug fixes** - Tool services, Docker permissions, test fixes
+- 📁 **Better organization** - QA runner moved to tools/
 
 See [full release notes](RELEASE_NOTES_RC1_PATCH1.md) for details.
 

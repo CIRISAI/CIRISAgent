@@ -493,3 +493,30 @@ class TestAPIConcurrentHandling:
                 # Verify all messages were processed
                 assert len(call_order) == 5
                 assert all(f"msg-{i}" in call_order for i in range(5))
+
+    @pytest.mark.asyncio
+    async def test_app_creation_with_proxy_path(self):
+        """Test that FastAPI app is created with correct root_path for proxy support."""
+        from ciris_engine.logic.adapters.api.app import create_app
+        
+        # Test without proxy path
+        config_no_proxy = APIAdapterConfig()
+        app_no_proxy = create_app(adapter_config=config_no_proxy)
+        assert app_no_proxy.root_path in ("", "/", None)
+        
+        # Test with proxy path
+        config_with_proxy = APIAdapterConfig(proxy_path="/api/test-agent")
+        app_with_proxy = create_app(adapter_config=config_with_proxy)
+        assert app_with_proxy.root_path == "/api/test-agent"
+        
+        # Test that adapter config is loaded properly with env vars
+        with patch("ciris_engine.logic.config.env_utils.get_env_var") as mock_get_env:
+            mock_get_env.side_effect = lambda key: {
+                "CIRIS_AGENT_ID": "sage-123",
+                "CIRIS_PROXY_PATH": None,
+            }.get(key)
+            
+            config = APIAdapterConfig()
+            config.load_env_vars()
+            app = create_app(adapter_config=config)
+            assert app.root_path == "/api/sage-123"

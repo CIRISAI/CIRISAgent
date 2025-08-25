@@ -1,0 +1,123 @@
+{
+  "timestamp": "20250825_092420",
+  "config": {
+    "base_url": "http://localhost:8000",
+    "modules": [
+      "memory",
+      "system",
+      "audit",
+      "telemetry",
+      "auth"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.3499598503112793,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.45709848403930664,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 1.2309527397155762,
+      "attempts": 1
+    },
+    "telemetry::Unified telemetry": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.33722949028015137,
+      "attempts": 1
+    },
+    "telemetry::Service health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.006114006042480469,
+      "attempts": 1
+    },
+    "telemetry::System metrics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 6.76421046257019,
+      "attempts": 1
+    },
+    "telemetry::Resource usage": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.08865690231323242,
+      "attempts": 1
+    },
+    "system::System health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.10268068313598633,
+      "attempts": 1
+    },
+    "system::List adapters": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.023204326629638672,
+      "attempts": 1
+    },
+    "system::Processing queue status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 2.9600698947906494,
+      "attempts": 1
+    },
+    "system::System configuration": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.04260587692260742,
+      "attempts": 1
+    },
+    "memory::Memory search": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.07439494132995605,
+      "attempts": 1
+    },
+    "memory::Memory statistics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.09842801094055176,
+      "attempts": 1
+    },
+    "memory::Store memory": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.039530038833618164,
+      "attempts": 1
+    },
+    "audit::List audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.05816054344177246,
+      "attempts": 1
+    },
+    "audit::Search audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.03306078910827637,
+      "attempts": 1
+    },
+    "audit::Export audit data": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.05702543258666992,
+      "attempts": 1
+    }
+  },
+  "summary": {
+    "total": 17,
+    "passed": 17,
+    "failed": 0,
+    "success_rate": 100.0
+  }
+}

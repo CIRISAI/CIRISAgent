@@ -1,0 +1,35 @@
+{
+  "timestamp": "20250825_092452",
+  "config": {
+    "base_url": "http://localhost:8000",
+    "modules": [
+      "auth"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.3680894374847412,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.3576786518096924,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.09649777412414551,
+      "attempts": 1
+    }
+  },
+  "summary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "success_rate": 100.0
+  }
+}

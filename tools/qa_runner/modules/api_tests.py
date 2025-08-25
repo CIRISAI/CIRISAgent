@@ -215,8 +215,13 @@ class APITestModule:
                     "node": {
                         "id": "test-node-qa",
                         "type": "observation",
-                        "content": "Test memory entry from QA",
-                        "metadata": {"source": "qa_test", "tags": ["test", "qa"]},
+                        "scope": "local",
+                        "attributes": {
+                            "created_by": "qa_runner",
+                            "tags": ["test", "qa"],
+                            "content": "Test memory entry from QA",
+                            "source": "qa_test",
+                        },
                     }
                 },
                 expected_status=200,

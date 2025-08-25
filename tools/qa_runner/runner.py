@@ -71,6 +71,9 @@ class QARunner:
         else:
             success = self._run_sequential(all_tests)
 
+        # Check incidents log for errors
+        self._check_incidents_log()
+
         # Generate reports
         self._generate_reports()
 
@@ -83,6 +86,68 @@ class QARunner:
         self._print_summary(elapsed)
 
         return success
+
+    def _check_incidents_log(self):
+        """Check incidents log for critical errors."""
+        incidents_log = Path("logs/incidents_latest.log")
+
+        if not incidents_log.exists():
+            return
+
+        # Patterns to ignore (non-critical)
+        ignore_patterns = [
+            "MOCK_MODULE_LOADED",
+            "MOCK LLM",
+            "RUNTIME SHUTDOWN",
+            "SYSTEM SHUTDOWN",
+            "GRACEFUL SHUTDOWN",
+            "Edge already exists",
+            "duplicate edge",
+            "TSDB consolidation",
+            "APIToolService not started",
+            "APICommunicationService not started",
+        ]
+
+        critical_errors = []
+
+        try:
+            with open(incidents_log, "r") as f:
+                for line in f:
+                    # Check if line contains ERROR or CRITICAL
+                    if "ERROR" in line or "CRITICAL" in line:
+                        # Skip if it matches an ignore pattern
+                        if any(pattern in line for pattern in ignore_patterns):
+                            continue
+
+                        # Extract the error message
+                        if " - ERROR - " in line:
+                            parts = line.split(" - ERROR - ")
+                            if len(parts) > 1:
+                                error_msg = parts[-1].strip()
+                                # Skip very long errors (likely stack traces)
+                                if len(error_msg) < 500:
+                                    critical_errors.append(error_msg)
+                        elif " - CRITICAL - " in line:
+                            parts = line.split(" - CRITICAL - ")
+                            if len(parts) > 1:
+                                error_msg = parts[-1].strip()
+                                if len(error_msg) < 500:
+                                    critical_errors.append(error_msg)
+
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️  Could not read incidents log: {e}[/yellow]")
+            return
+
+        # Report unique errors
+        if critical_errors:
+            unique_errors = list(dict.fromkeys(critical_errors))  # Remove duplicates while preserving order
+            self.console.print("\n[bold red]⚠️  Critical Errors Found in Incidents Log:[/bold red]")
+            for i, error in enumerate(unique_errors[:5], 1):  # Show max 5 errors
+                self.console.print(f"  {i}. {error[:200]}")  # Truncate long messages
+
+            if len(unique_errors) > 5:
+                self.console.print(f"  ... and {len(unique_errors) - 5} more errors")
+            self.console.print()
 
     def _authenticate(self) -> bool:
         """Get authentication token."""

@@ -257,7 +257,9 @@ class TestGraphTelemetryServiceAggregation:
         )
         
         # This will exercise the code paths with debug logging
-        result = await aggregator.collect_telemetry()
+        # The method is collect_all_parallel, not collect_telemetry
+        result = await aggregator.collect_all_parallel()
         
         # Verify we got some result (doesn't matter what, we just want coverage)
         assert result is not None
+        assert isinstance(result, dict)

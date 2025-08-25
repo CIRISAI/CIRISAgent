@@ -211,7 +211,14 @@ class APITestModule:
                 module=QAModule.MEMORY,
                 endpoint="/v1/memory/store",
                 method="POST",
-                payload={"content": "Test memory entry", "tags": ["test", "qa"], "metadata": {"source": "qa_test"}},
+                payload={
+                    "node": {
+                        "id": "test-node-qa",
+                        "type": "observation",
+                        "content": "Test memory entry from QA",
+                        "metadata": {"source": "qa_test", "tags": ["test", "qa"]},
+                    }
+                },
                 expected_status=200,
                 requires_auth=True,
                 description="Test storing new memory",
@@ -245,7 +252,8 @@ class APITestModule:
                 name="Export audit data",
                 module=QAModule.AUDIT,
                 endpoint="/v1/audit/export",
-                method="GET",
+                method="POST",
+                payload={"format": "json", "include_system": False},
                 expected_status=200,
                 requires_auth=True,
                 description="Test audit data export",

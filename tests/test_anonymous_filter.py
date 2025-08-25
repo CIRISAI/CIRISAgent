@@ -30,9 +30,18 @@ class MockTimeService(TimeServiceProtocol):
     
     def __init__(self):
         self._current_time = datetime.now(timezone.utc)
+        self._start_time = self._current_time
     
     def now(self) -> datetime:
         return self._current_time
+    
+    def now_iso(self) -> str:
+        """Get current time as ISO string."""
+        return self._current_time.isoformat()
+    
+    def timestamp(self) -> float:
+        """Get current Unix timestamp."""
+        return self._current_time.timestamp()
     
     def advance_time(self, **kwargs):
         """Advance time for testing."""
@@ -43,6 +52,49 @@ class MockTimeService(TimeServiceProtocol):
     
     def parse_timestamp(self, timestamp: str) -> datetime:
         return datetime.fromisoformat(timestamp)
+    
+    # Required ServiceProtocol methods
+    async def start(self) -> None:
+        """Start the service."""
+        pass
+    
+    async def stop(self) -> None:
+        """Stop the service."""
+        pass
+    
+    def get_capabilities(self):
+        """Get service capabilities."""
+        from ciris_engine.schemas.services.core import ServiceCapabilities
+        from ciris_engine.schemas.runtime.enums import ServiceType
+        return ServiceCapabilities(
+            service_name="MockTimeService",
+            service_type=ServiceType.INFRASTRUCTURE,
+            supports_reasoning=False,
+            supports_wa_auth=False
+        )
+    
+    def get_status(self):
+        """Get current service status."""
+        from ciris_engine.schemas.services.core import ServiceStatus
+        return ServiceStatus(
+            healthy=True,
+            service_name="MockTimeService",
+            uptime=0.0,
+            message="Mock service"
+        )
+    
+    async def is_healthy(self) -> bool:
+        """Check if service is healthy."""
+        return True
+    
+    def get_service_type(self):
+        """Get the type of this service."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+        return ServiceType.INFRASTRUCTURE
+    
+    def get_uptime(self) -> float:
+        """Get service uptime in seconds."""
+        return (self._current_time - self._start_time).total_seconds()
 
 
 class MockConfigService:

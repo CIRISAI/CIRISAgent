@@ -343,6 +343,11 @@ class BaseObserver(Generic[MessageT], ABC):
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="
             )
             
+            # Check if user has anonymous consent
+            from ciris_engine.schemas.consent.core import ConsentStream
+            consent_stream = await self._get_user_consent_stream(msg.author_id)  # type: ignore[attr-defined]
+            is_anonymous = consent_stream == ConsentStream.ANONYMOUS.value
+            
             if is_anonymous:
                 import hashlib
                 # Use same hash as earlier for consistency

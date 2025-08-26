@@ -8,6 +8,14 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+# Redaction placeholders - constants to avoid duplication
+REDACTED_MENTION = "[mention]"
+REDACTED_EMAIL = "[email]"
+REDACTED_PHONE = "[phone]"
+REDACTED_NUMBER = "[number]"
+REDACTED_URL = "[url]"
+REDACTED_NAME = "[name]"
+
 
 def sanitize_for_anonymous(data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -79,28 +87,29 @@ def redact_personal_info(text: str) -> str:
     import re
     
     # Discord mentions - simple and clear
-    text = re.sub(r'<@!?\d+>', '[mention]', text)
+    text = re.sub(r'<@!?\d+>', REDACTED_MENTION, text)
     
-    # Email addresses - basic pattern that works
-    text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[email]', text)
+    # Email addresses - simplified to avoid backtracking DoS
+    # Limit length and use word boundaries to prevent ReDoS
+    text = re.sub(r'\b[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}@[a-zA-Z0-9][a-zA-Z0-9.-]{0,62}\.[a-zA-Z]{2,6}\b', REDACTED_EMAIL, text)
     
     # Phone numbers - handle multiple formats robustly
     # Format: (555) 555-1234 or (555)555-1234
-    text = re.sub(r'\(\d{3}\)\s*\d{3}[-.]?\d{4}', '[phone]', text)
+    text = re.sub(r'\(\d{3}\)\s*\d{3}[-.]?\d{4}', REDACTED_PHONE, text)
     # Format: 555-555-1234 or 555.555.1234 or 555 555 1234
-    text = re.sub(r'\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b', '[phone]', text)
+    text = re.sub(r'\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b', REDACTED_PHONE, text)
     # Format: 5555551234 (10 digits together)
-    text = re.sub(r'\b\d{10}\b', '[phone]', text)
+    text = re.sub(r'\b\d{10}\b', REDACTED_PHONE, text)
     # Format: 555-1234 (7 digit local)
-    text = re.sub(r'\b\d{3}-\d{4}\b', '[phone]', text)
+    text = re.sub(r'\b\d{3}-\d{4}\b', REDACTED_PHONE, text)
     # Any other long number sequence (11+ digits)
-    text = re.sub(r'\b\d{11,}\b', '[number]', text)
+    text = re.sub(r'\b\d{11,}\b', REDACTED_NUMBER, text)
     
     # URLs - simple pattern
-    text = re.sub(r'https?://[^\s]+', '[url]', text)
+    text = re.sub(r'https?://[^\s]+', REDACTED_URL, text)
     
     # Names after common phrases - keep it simple
-    text = re.sub(r'(I am|My name is|I\'m)\s+\w+(\s+\w+)?', r'\1 [name]', text, flags=re.IGNORECASE)
+    text = re.sub(r'(I am|My name is|I\'m)\s+\w+(\s+\w+)?', rf'\1 {REDACTED_NAME}', text, flags=re.IGNORECASE)
     
     return text
 

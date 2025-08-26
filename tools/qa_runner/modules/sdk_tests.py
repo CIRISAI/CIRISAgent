@@ -30,7 +30,7 @@ class SDKTestModule:
                 module=QAModule.SDK,
                 endpoint="/v1/auth/refresh",
                 method="POST",
-                payload={},  # Empty body for refresh
+                payload={"refresh_token": "dummy_refresh_token"},  # Required field
                 expected_status=200,
                 requires_auth=True,
                 description="Test SDK token refresh",
@@ -97,9 +97,9 @@ class SDKTestModule:
                 name="SDK agent stream endpoint check",
                 module=QAModule.SDK,
                 endpoint="/v1/agent/stream",
-                method="GET",
-                expected_status=403,  # Will fail auth without proper WebSocket upgrade
-                requires_auth=False,  # WebSocket auth is different
-                description="Test SDK stream endpoint exists",
+                method="WEBSOCKET",  # Special method for WebSocket testing
+                expected_status=101,  # 101 Switching Protocols for WebSocket
+                requires_auth=True,  # WebSocket requires auth in headers
+                description="Test SDK WebSocket stream endpoint",
             ),
         ]

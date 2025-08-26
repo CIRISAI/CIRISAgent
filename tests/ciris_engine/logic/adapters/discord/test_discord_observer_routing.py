@@ -481,7 +481,7 @@ class TestDiscordObserverTaskCreation:
     @pytest.fixture
     def mock_persistence(self):
         """Mock persistence module."""
-        with patch('ciris_engine.logic.adapters.discord.discord_observer.persistence') as mock:
+        with patch('ciris_engine.logic.persistence') as mock:
             mock.add_task = Mock()
             mock.add_thought = Mock()
             mock.get_thought_by_id = Mock(return_value=None)
@@ -521,7 +521,7 @@ class TestDiscordObserverTaskCreation:
 
         # Need to patch the base class method since it's inherited
         with patch('ciris_engine.logic.adapters.base_observer.persistence', mock_persistence):
-            with patch('ciris_engine.logic.adapters.base_observer.uuid.uuid4', return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')):
+            with patch('uuid.uuid4', return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')):
                 await observer_with_persistence._create_priority_observation_result(msg, filter_result)
 
                 # Should have added a task
@@ -553,7 +553,7 @@ class TestDiscordObserverTaskCreation:
 
         # Need to patch the base class method since it's inherited
         with patch('ciris_engine.logic.adapters.base_observer.persistence', mock_persistence):
-            with patch('ciris_engine.logic.adapters.base_observer.uuid.uuid4', return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')):
+            with patch('uuid.uuid4', return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')):
                 await observer_with_persistence._create_passive_observation_result(msg)
 
                 # Should have added a task

@@ -435,7 +435,7 @@ class BaseObserver(Generic[MessageT], ABC):
             logger.info(
                 f"[OBSERVER] PRIORITY TASK CREATED: {task.task_id} (priority={task.priority}) "
                 f"for message {msg.message_id} from @{msg.author_name} in channel {getattr(msg, 'channel_id', 'unknown')} "  # type: ignore[attr-defined]
-                f"(filters: {', '.join(filter_result.triggered_filters)})"
+                f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
             )
 
             thought = Thought(

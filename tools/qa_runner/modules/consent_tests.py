@@ -15,7 +15,7 @@ from rich.table import Table
 import traceback
 
 from ciris_sdk.client import CIRISClient
-from ciris_sdk.resources.consent import ConsentStream, ConsentCategory
+from ciris_sdk.resources.consent import ConsentStatus, ConsentScope
 
 
 class ConsentTests:

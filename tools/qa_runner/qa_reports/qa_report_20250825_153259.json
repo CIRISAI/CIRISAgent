@@ -1,0 +1,221 @@
+{
+  "timestamp": "20250825_153259",
+  "config": {
+    "base_url": "http://localhost:8080",
+    "modules": [
+      "tasks",
+      "memory",
+      "auth",
+      "tools",
+      "audit",
+      "guidance",
+      "agent",
+      "system",
+      "telemetry"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.14286184310913086,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.13925909996032715,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0014309883117675781,
+      "attempts": 1
+    },
+    "telemetry::Unified telemetry": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.06882715225219727,
+      "attempts": 1
+    },
+    "telemetry::Service health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.00225067138671875,
+      "attempts": 1
+    },
+    "telemetry::System metrics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.2087113857269287,
+      "attempts": 1
+    },
+    "telemetry::Resource usage": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.017457246780395508,
+      "attempts": 1
+    },
+    "agent::Agent status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.015797138214111328,
+      "attempts": 1
+    },
+    "agent::Simple interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 1.517549753189087,
+      "attempts": 1
+    },
+    "agent::Complex interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 3.5371878147125244,
+      "attempts": 1
+    },
+    "agent::Interaction history": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.4088587760925293,
+      "attempts": 1
+    },
+    "agent::Clear history": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.020491600036621,
+      "attempts": 3
+    },
+    "system::System health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.03753161430358887,
+      "attempts": 1
+    },
+    "system::List adapters": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.001867055892944336,
+      "attempts": 1
+    },
+    "system::Processing queue status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.03287696838378906,
+      "attempts": 1
+    },
+    "system::System configuration": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004921674728393555,
+      "attempts": 1
+    },
+    "memory::Memory search": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.017923355102539062,
+      "attempts": 1
+    },
+    "memory::Memory statistics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.026138782501220703,
+      "attempts": 1
+    },
+    "memory::Store memory": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004717826843261719,
+      "attempts": 1
+    },
+    "audit::List audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0056247711181640625,
+      "attempts": 1
+    },
+    "audit::Search audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0052585601806640625,
+      "attempts": 1
+    },
+    "audit::Export audit data": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0049266815185546875,
+      "attempts": 1
+    },
+    "tools::List available tools": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0016286373138427734,
+      "attempts": 1
+    },
+    "tools::Get tool info": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.0043981075286865,
+      "attempts": 3
+    },
+    "tools::Execute tool": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.004665851593018,
+      "attempts": 3
+    },
+    "tasks::List tasks": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.005968332290649,
+      "attempts": 3
+    },
+    "tasks::Create task": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 5.137487173080444,
+      "attempts": 3
+    },
+    "tasks::Get task details": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.004609107971191,
+      "attempts": 3
+    },
+    "guidance::Request guidance": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.004643678665161,
+      "attempts": 3
+    },
+    "guidance::Get guidance history": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.004609107971191,
+      "attempts": 3
+    }
+  },
+  "summary": {
+    "total": 30,
+    "passed": 22,
+    "failed": 8,
+    "success_rate": 73.33333333333333
+  }
+}

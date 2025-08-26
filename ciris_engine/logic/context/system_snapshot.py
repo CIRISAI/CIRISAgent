@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel
@@ -641,10 +641,34 @@ async def build_system_snapshot(
                             if "[insert" in last_seen_raw.lower() or "placeholder" in last_seen_raw.lower():
                                 logger.error(
                                     f"INVALID DATA: User node {user_id} has template placeholder in last_seen: '{last_seen_raw}'. "
-                                    f"This indicates LLM corruption of managed attributes. Setting to None."
+                                    f"This indicates LLM corruption of managed attributes. Setting to current time and fixing in graph."
                                 )
-                                # Don't fail the entire snapshot, but log the error loudly
-                                last_interaction = None
+                                # Set to current time instead of None
+                                last_interaction = datetime.now(timezone.utc)
+                                
+                                # Fix the corrupted node in the graph
+                                try:
+                                    # Update the node attributes to fix the corruption
+                                    attrs["last_seen"] = last_interaction.isoformat()
+                                    
+                                    # Create an update for the node
+                                    from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
+                                    update_node = MemoryNode(
+                                        id=f"user/{user_id}",
+                                        type=NodeType.USER,
+                                        attributes=attrs,
+                                        scope=GraphScope.LOCAL
+                                    )
+                                    memory_update = MemoryUpdate(
+                                        nodes=[update_node],
+                                        edges=[],
+                                        metadata={"reason": "Fixed template placeholder corruption in last_seen"}
+                                    )
+                                    await memory_service.store(memory_update)
+                                    logger.info(f"Successfully fixed corrupted last_seen for user {user_id}")
+                                except Exception as e:
+                                    logger.error(f"Failed to fix corrupted node for user {user_id}: {e}")
+                                    # Continue with the fixed value even if update fails
                             else:
                                 try:
                                     # Try to parse as ISO datetime
@@ -652,15 +676,53 @@ async def build_system_snapshot(
                                 except (ValueError, AttributeError) as e:
                                     logger.error(
                                         f"INVALID DATA: User node {user_id} has unparseable last_seen: '{last_seen_raw}'. "
-                                        f"Error: {e}. Setting to None."
+                                        f"Error: {e}. Setting to current time and fixing in graph."
                                     )
-                                    last_interaction = None
+                                    # Set to current time and fix the node
+                                    last_interaction = datetime.now(timezone.utc)
+                                    try:
+                                        attrs["last_seen"] = last_interaction.isoformat()
+                                        from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
+                                        update_node = MemoryNode(
+                                            id=f"user/{user_id}",
+                                            type=NodeType.USER,
+                                            attributes=attrs,
+                                            scope=GraphScope.LOCAL
+                                        )
+                                        memory_update = MemoryUpdate(
+                                            nodes=[update_node],
+                                            edges=[],
+                                            metadata={"reason": "Fixed unparseable last_seen"}
+                                        )
+                                        await memory_service.store(memory_update)
+                                        logger.info(f"Successfully fixed unparseable last_seen for user {user_id}")
+                                    except Exception as fix_e:
+                                        logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
                         else:
                             logger.error(
                                 f"INVALID DATA: User node {user_id} has non-string/non-datetime last_seen: {type(last_seen_raw)}. "
-                                f"Setting to None."
+                                f"Setting to current time and fixing in graph."
                             )
-                            last_interaction = None
+                            # Set to current time and fix the node
+                            last_interaction = datetime.now(timezone.utc)
+                            try:
+                                attrs["last_seen"] = last_interaction.isoformat()
+                                from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
+                                update_node = MemoryNode(
+                                    id=f"user/{user_id}",
+                                    type=NodeType.USER,
+                                    attributes=attrs,
+                                    scope=GraphScope.LOCAL
+                                )
+                                memory_update = MemoryUpdate(
+                                    nodes=[update_node],
+                                    edges=[],
+                                    metadata={"reason": f"Fixed invalid last_seen type: {type(last_seen_raw)}"}
+                                )
+                                await memory_service.store(memory_update)
+                                logger.info(f"Successfully fixed invalid last_seen type for user {user_id}")
+                            except Exception as fix_e:
+                                logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
 
                     # Validate and parse created_at/first_seen - use first_seen if available, else created_at, else now
                     created_at_raw = attrs.get("first_seen") or attrs.get("created_at")

@@ -193,7 +193,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             self._partnership_requests += 1
 
             # Create partnership task for agent approval
-            from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
+            from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
             handler = PartnershipRequestHandler(time_service=self._time_service)
             task = await handler.create_partnership_task(
@@ -228,6 +228,23 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
             return pending_status
 
+        # Check for gaming behavior if switching to/from ANONYMOUS
+        if previous_status and request.stream != previous_status.stream:
+            # Notify adaptive filter about consent transition
+            if hasattr(self, "_filter_service"):
+                # Handle both enum and string types for stream
+                prev_stream = previous_status.stream.value if hasattr(previous_status.stream, 'value') else previous_status.stream
+                req_stream = request.stream.value if hasattr(request.stream, 'value') else request.stream
+                is_gaming = await self._filter_service.handle_consent_transition(
+                    request.user_id,
+                    prev_stream,
+                    req_stream
+                )
+                
+                if is_gaming:
+                    logger.warning(f"Gaming attempt detected for {request.user_id}: {previous_status.stream} -> {request.stream}")
+                    # Still allow the change but flag the user in filter service
+        
         # For TEMPORARY and ANONYMOUS - no bilateral agreement needed
         # Users can always downgrade unilaterally
         now = self._time_service.now()
@@ -305,6 +322,12 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         # Verify user exists
         status = await self.get_consent(user_id)
+
+        # Trigger anonymization in filter service
+        if hasattr(self, "_filter_service"):
+            # Anonymize user profile in filter service
+            await self._filter_service.anonymize_user_profile(user_id)
+            logger.info(f"Triggered filter profile anonymization for {user_id}")
 
         # Create decay status
         now = self._time_service.now()
@@ -453,7 +476,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         task_id = pending["task_id"]
 
         # Check task outcome
-        from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
+        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
         handler = PartnershipRequestHandler(time_service=self._time_service)
         outcome, reason = handler.check_task_outcome(task_id)

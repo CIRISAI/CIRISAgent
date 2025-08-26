@@ -20,6 +20,8 @@ class DiscordChannelManager:
         client: Optional[discord.Client] = None,
         on_message_callback: Optional[Callable[[DiscordMessage], Awaitable[None]]] = None,
         monitored_channel_ids: Optional[List[str]] = None,
+        filter_service: Optional[Any] = None,
+        consent_service: Optional[Any] = None,
     ) -> None:
         """Initialize the channel manager.
 
@@ -28,12 +30,15 @@ class DiscordChannelManager:
             client: Optional Discord client instance
             on_message_callback: Callback for message handling
             monitored_channel_ids: List of channel IDs to monitor
-            on_message_callback: Optional callback for message events
+            filter_service: Optional filter service for consent checking
+            consent_service: Optional consent service for privacy handling
         """
         self.token = token
         self.client = client
         self.on_message_callback = on_message_callback
         self.monitored_channel_ids = monitored_channel_ids or []
+        self.filter_service = filter_service
+        self.consent_service = consent_service
 
     def set_client(self, client: discord.Client) -> None:
         """Set the Discord client after initialization.
@@ -177,6 +182,7 @@ class DiscordChannelManager:
                 from datetime import datetime, timezone
 
                 from ciris_engine.logic import persistence
+                from ciris_engine.logic.utils.privacy import sanitize_correlation_parameters
                 from ciris_engine.schemas.telemetry.core import (
                     ServiceCorrelation,
                     ServiceCorrelationStatus,
@@ -196,12 +202,15 @@ class DiscordChannelManager:
                         service_type="discord",
                         method_name="observe",
                         channel_id=channel_id,  # Use the full format discord_guildid_channelid
-                        parameters={
-                            "content": message.content,
-                            "author_id": str(message.author.id),
-                            "author_name": message.author.display_name,
-                            "message_id": str(message.id),
-                        },
+                        parameters=await self._sanitize_message_parameters(
+                            {
+                                "content": message.content,
+                                "author_id": str(message.author.id),
+                                "author_name": message.author.display_name,
+                                "message_id": str(message.id),
+                            },
+                            str(message.author.id)
+                        ),
                         request_timestamp=now,
                     ),
                     response_data=ServiceResponseData(
@@ -289,3 +298,49 @@ class DiscordChannelManager:
         except Exception as e:
             logger.exception(f"Error getting channel info for {channel_id}: {e}")
             return {"exists": True, "accessible": False, "error": str(e)}
+    
+    async def _sanitize_message_parameters(self, params: dict, author_id: str) -> dict:
+        """
+        Sanitize message parameters based on user consent.
+        
+        Checks user consent and applies privacy filters if needed.
+        """
+        try:
+            # Try to get user consent stream
+            consent_stream = await self._get_user_consent_stream(author_id)
+            
+            # If user is anonymous, sanitize the parameters
+            if consent_stream in ["anonymous", "expired", "revoked"]:
+                return sanitize_correlation_parameters(params, consent_stream)
+            
+            return params
+        except Exception as e:
+            logger.debug(f"Could not sanitize parameters: {e}")
+            return params
+    
+    async def _get_user_consent_stream(self, user_id: str) -> Optional[str]:
+        """
+        Get user's consent stream for privacy handling.
+        
+        Returns consent stream or None if not found.
+        """
+        try:
+            # Try to get consent from consent service if available
+            if self.consent_service:
+                try:
+                    consent = await self.consent_service.get_consent(user_id)
+                    return consent.stream.value if consent else None
+                except Exception:
+                    pass
+            
+            # Try to get from filter service if available
+            if self.filter_service:
+                if hasattr(self.filter_service, '_config') and self.filter_service._config:
+                    if user_id in self.filter_service._config.user_profiles:
+                        profile = self.filter_service._config.user_profiles[user_id]
+                        return profile.consent_stream
+            
+            return None
+        except Exception as e:
+            logger.debug(f"Could not get consent stream for {user_id}: {e}")
+            return None

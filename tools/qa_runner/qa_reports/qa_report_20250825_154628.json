@@ -1,0 +1,174 @@
+{
+  "timestamp": "20250825_154628",
+  "config": {
+    "base_url": "http://localhost:8080",
+    "modules": [
+      "memory",
+      "guidance",
+      "agent",
+      "system",
+      "telemetry",
+      "auth",
+      "audit",
+      "tools"
+    ]
+  },
+  "results": {
+    "auth::Login with valid credentials": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.13912439346313477,
+      "attempts": 1
+    },
+    "auth::Login with invalid credentials": {
+      "success": true,
+      "status_code": 401,
+      "duration": 0.14078855514526367,
+      "attempts": 1
+    },
+    "auth::Get current user": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.001672983169555664,
+      "attempts": 1
+    },
+    "telemetry::Unified telemetry": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.06839108467102051,
+      "attempts": 1
+    },
+    "telemetry::Service health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.002852916717529297,
+      "attempts": 1
+    },
+    "telemetry::System metrics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.21064472198486328,
+      "attempts": 1
+    },
+    "telemetry::Resource usage": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.01653265953063965,
+      "attempts": 1
+    },
+    "agent::Agent status": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.015399694442749023,
+      "attempts": 1
+    },
+    "agent::Simple interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 1.486015796661377,
+      "attempts": 1
+    },
+    "agent::Complex interaction": {
+      "success": true,
+      "status_code": 200,
+      "duration": 3.538400173187256,
+      "attempts": 1
+    },
+    "agent::Interaction history": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.43891048431396484,
+      "attempts": 1
+    },
+    "system::System health": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0461573600769043,
+      "attempts": 1
+    },
+    "system::List adapters": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0019142627716064453,
+      "attempts": 1
+    },
+    "system::Processing queue status": {
+      "success": false,
+      "status_code": 404,
+      "expected_status": 200,
+      "error": "{\"detail\":\"Not Found\"}",
+      "duration": 4.009965896606445,
+      "attempts": 3
+    },
+    "system::System configuration": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.011924266815185547,
+      "attempts": 1
+    },
+    "memory::Memory search": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.016540050506591797,
+      "attempts": 1
+    },
+    "memory::Memory statistics": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.027570009231567383,
+      "attempts": 1
+    },
+    "memory::Store memory": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.012476682662963867,
+      "attempts": 1
+    },
+    "audit::List audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.005995750427246094,
+      "attempts": 1
+    },
+    "audit::Search audit entries": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.004947662353515625,
+      "attempts": 1
+    },
+    "audit::Export audit data": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0051021575927734375,
+      "attempts": 1
+    },
+    "tools::List available tools": {
+      "success": true,
+      "status_code": 200,
+      "duration": 0.0014989376068115234,
+      "attempts": 1
+    },
+    "guidance::Request guidance": {
+      "success": false,
+      "status_code": 422,
+      "expected_status": 200,
+      "error": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"topic\"],\"msg\":\"Field required\",\"input\":{\"thought_id\":\"test-thought-1756154770.498668\",\"context\":{\"situation\":\"test\",\"question\":\"Should I proceed?\"}}},{\"type\":\"string_type\",\"loc\":[\"body\",\"context\"],\"msg\":\"Input should be a valid string\",\"input\":{\"situation\":\"test\",\"question\":\"Should I proceed?\"}}]}",
+      "duration": 4.009068727493286,
+      "attempts": 3
+    },
+    "guidance::Get deferrals (guidance history)": {
+      "success": false,
+      "status_code": 500,
+      "expected_status": 200,
+      "error": "Internal Server Error",
+      "duration": 4.022088050842285,
+      "attempts": 3
+    }
+  },
+  "summary": {
+    "total": 24,
+    "passed": 21,
+    "failed": 3,
+    "success_rate": 87.5
+  }
+}

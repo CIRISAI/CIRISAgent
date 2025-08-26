@@ -45,6 +45,8 @@ class NodeType(str, Enum):
     OBSERVATION = "observation"
     CONSENT = "consent"
     DECAY = "decay"
+    MODERATION = "moderation"
+    SAFETY_SCORE = "safety_score"
 
 
 class ConfigNodeType(str, Enum):

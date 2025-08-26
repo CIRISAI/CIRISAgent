@@ -60,9 +60,14 @@ class FilterTrigger(BaseModel):
 
 
 class UserTrustProfile(BaseModel):
-    """Track user behavior for adaptive filtering"""
+    """
+    Track user behavior for adaptive filtering.
+    
+    Works for both identified and anonymous users - when anonymized,
+    user_id becomes a hash and PII fields are cleared.
+    """
 
-    user_id: str = Field(description="Unique user identifier")
+    user_id: str = Field(description="User identifier or hash for anonymous")
     message_count: int = Field(default=0, description="Total messages from user")
     violation_count: int = Field(default=0, description="Count of policy violations")
     helpful_count: int = Field(default=0, description="Count of helpful interactions")
@@ -75,6 +80,21 @@ class UserTrustProfile(BaseModel):
     avg_message_length: float = Field(default=0.0, description="Average message length")
     avg_message_interval: float = Field(default=0.0, description="Average seconds between messages")
     common_triggers: List[str] = Field(default_factory=list, description="Commonly triggered filters")
+    
+    # Privacy-preserving fields
+    is_anonymous: bool = Field(default=False, description="User has anonymous consent")
+    user_hash: Optional[str] = Field(None, description="Stable hash for anonymous tracking")
+    consent_stream: str = Field(default="temporary", description="Current consent stream")
+    
+    # Anti-gaming measures
+    consent_transitions_24h: int = Field(default=0, description="Consent changes in 24 hours")
+    rapid_switching_flag: bool = Field(default=False, description="Detected rapid consent switching")
+    evasion_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Gaming detection score")
+    last_moderation: Optional[datetime] = Field(None, description="Last moderation action time")
+    
+    # Safety patterns (retained for anonymous)
+    safety_patterns: List[str] = Field(default_factory=list, description="Active safety pattern IDs")
+    pattern_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Pattern-based risk score")
 
     model_config = ConfigDict(extra="forbid")
 

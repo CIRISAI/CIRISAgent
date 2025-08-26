@@ -210,11 +210,22 @@ class CommunicationBus(BaseBus[CommunicationService]):
             if not messages:
                 return []
 
-            # Convert dict messages to FetchedMessage objects
+            # Convert messages to FetchedMessage objects
             fetched_messages = []
             for msg in messages:
-                # Messages are always dicts from adapters
-                fetched_messages.append(FetchedMessage(**msg))
+                # Handle both dict and FetchedMessage objects from adapters
+                if isinstance(msg, FetchedMessage):
+                    fetched_messages.append(msg)
+                elif isinstance(msg, dict):
+                    fetched_messages.append(FetchedMessage(**msg))
+                else:
+                    # Try to convert other message types to dict first
+                    try:
+                        msg_dict = msg.model_dump() if hasattr(msg, 'model_dump') else dict(msg)
+                        fetched_messages.append(FetchedMessage(**msg_dict))
+                    except Exception as e:
+                        logger.warning(f"Skipping message of type {type(msg)}: {e}")
+                        continue
 
             # Track messages received
             self._messages_received += len(fetched_messages)

@@ -1,1 +1,0 @@
-# Consent handlers module

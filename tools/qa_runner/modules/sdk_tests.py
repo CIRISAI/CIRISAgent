@@ -30,37 +30,10 @@ class SDKTestModule:
                 module=QAModule.SDK,
                 endpoint="/v1/auth/refresh",
                 method="POST",
+                payload={"refresh_token": "dummy_refresh_token"},  # Required field
                 expected_status=200,
                 requires_auth=True,
                 description="Test SDK token refresh",
-            ),
-            # Batch operations
-            QATestCase(
-                name="SDK batch request",
-                module=QAModule.SDK,
-                endpoint="/v1/batch",
-                method="POST",
-                payload={
-                    "requests": [
-                        {"method": "GET", "endpoint": "/v1/system/status"},
-                        {"method": "GET", "endpoint": "/v1/telemetry/unified"},
-                        {"method": "GET", "endpoint": "/v1/agent/status"},
-                    ]
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Test SDK batch operations",
-            ),
-            # Streaming operations
-            QATestCase(
-                name="SDK WebSocket connection",
-                module=QAModule.SDK,
-                endpoint="/v1/ws",
-                method="GET",
-                expected_status=101,  # WebSocket upgrade
-                requires_auth=True,
-                description="Test SDK WebSocket support",
-                timeout=10,
             ),
             # Error handling
             QATestCase(
@@ -82,49 +55,25 @@ class SDKTestModule:
                 requires_auth=True,
                 description="Test SDK validation error handling",
             ),
-            # Rate limiting
+            # Real endpoints that exist
             QATestCase(
-                name="SDK rate limit headers",
+                name="SDK system status",
                 module=QAModule.SDK,
-                endpoint="/v1/system/status",
+                endpoint="/v1/system/health",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test SDK rate limit header parsing",
+                description="Test SDK system status call",
             ),
-            # Pagination
+            # Pagination on real endpoint
             QATestCase(
                 name="SDK pagination",
                 module=QAModule.SDK,
-                endpoint="/v1/audit/events?limit=10&offset=0",
+                endpoint="/v1/audit/entries?limit=10",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
                 description="Test SDK pagination support",
-            ),
-            # File operations
-            QATestCase(
-                name="SDK file upload",
-                module=QAModule.SDK,
-                endpoint="/v1/files/upload",
-                method="POST",
-                payload={
-                    "filename": "test.txt",
-                    "content": "VGVzdCBmaWxlIGNvbnRlbnQ=",  # Base64 encoded
-                    "mime_type": "text/plain",
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Test SDK file upload",
-            ),
-            QATestCase(
-                name="SDK file download",
-                module=QAModule.SDK,
-                endpoint="/v1/files/download/test.txt",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test SDK file download",
             ),
             # Complex data structures
             QATestCase(
@@ -143,32 +92,14 @@ class SDKTestModule:
                 requires_auth=True,
                 description="Test SDK complex object serialization",
             ),
-            # Async operations
+            # WebSocket stream test (real endpoint)
             QATestCase(
-                name="SDK async task submission",
+                name="SDK agent stream endpoint check",
                 module=QAModule.SDK,
-                endpoint="/v1/tasks/async",
-                method="POST",
-                payload={
-                    "task": "process_data",
-                    "async": True,
-                    "callback": {
-                        "url": "http://localhost:8000/callback",
-                        "method": "POST",
-                        "headers": {"X-Callback-Token": "test123"},
-                    },
-                },
-                expected_status=202,
-                requires_auth=True,
-                description="Test SDK async task handling",
-            ),
-            QATestCase(
-                name="SDK async task status",
-                module=QAModule.SDK,
-                endpoint="/v1/tasks/async/status/test-task-id",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test SDK async task status polling",
+                endpoint="/v1/agent/stream",
+                method="WEBSOCKET",  # Special method for WebSocket testing
+                expected_status=101,  # 101 Switching Protocols for WebSocket
+                requires_auth=True,  # WebSocket requires auth in headers
+                description="Test SDK WebSocket stream endpoint",
             ),
         ]

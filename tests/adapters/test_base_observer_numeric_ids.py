@@ -162,6 +162,7 @@ class TestBaseObserverNumericIds:
         filter_result = Mock()
         filter_result.priority = Mock(value="high")
         filter_result.reasoning = "Urgent keyword detected"
+        filter_result.triggered_filters = ["urgent_keyword"]  # Add the missing attribute
 
         captured_task = None
         captured_thought = None

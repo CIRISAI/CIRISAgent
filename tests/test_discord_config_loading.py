@@ -156,9 +156,9 @@ class TestDiscordConfigLoading:
         observer._create_passive_observation_result.assert_not_called()
 
         # Should have logged that it's not routing
-        mock_logger.info.assert_called()
-        log_calls = [call[0][0] for call in mock_logger.info.call_args_list]
-        assert any("Not routing to WA feedback" in call for call in log_calls)
+        mock_logger.warning.assert_called()
+        log_calls = [call[0][0] for call in mock_logger.warning.call_args_list]
+        assert any("NO TASK CREATED" in call for call in log_calls)
 
 
 class TestDiscordAdapterInitialization:

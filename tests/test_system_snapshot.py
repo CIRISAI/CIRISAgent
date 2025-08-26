@@ -18,30 +18,29 @@ from ciris_engine.logic.context.system_snapshot import build_system_snapshot
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.runtime.models import Task, TaskStatus
 from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot, ThoughtSummary, UserProfile
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+from tests.fixtures.mocks import (
+    MockTelemetryService,
+    MockResourceMonitor, 
+    MockMemoryService,
+    MockRuntime,
+    MockSecretsService,
+    MockServiceRegistry,
+    create_mock_thought,
+    create_mock_task
+)
 
 
 @pytest.fixture
 def mock_resource_monitor():
     """Create a mock resource monitor (REQUIRED for system snapshots)."""
-    monitor = MagicMock()
-    snapshot = MagicMock()
-    snapshot.healthy = True
-    snapshot.critical = []
-    snapshot.warnings = []
-    snapshot.cpu_percent = 45.0
-    snapshot.memory_percent = 60.0
-    snapshot.disk_usage_gb = 100.0
-    monitor.snapshot = snapshot
-    return monitor
+    return MockResourceMonitor()
 
 
 @pytest.fixture
 def mock_memory_service():
     """Create a mock memory service."""
-    service = AsyncMock()
-    service.recall = AsyncMock(return_value=[])
-    return service
+    return MockMemoryService()
 
 
 @pytest.fixture
@@ -247,26 +246,7 @@ class TestBuildSystemSnapshot:
     @pytest.mark.asyncio
     async def test_telemetry_summary_integration(self, mock_resource_monitor):
         """Test telemetry service integration."""
-        from ciris_engine.schemas.runtime.system_context import TelemetrySummary
-
-        mock_telemetry = AsyncMock()
-        telemetry_summary = TelemetrySummary(
-            window_start=datetime.now(timezone.utc),
-            window_end=datetime.now(timezone.utc),
-            uptime_seconds=3600.0,
-            messages_processed_24h=100,
-            thoughts_processed_24h=50,
-            tasks_completed_24h=25,
-            errors_24h=2,
-            messages_current_hour=10,
-            thoughts_current_hour=5,
-            errors_current_hour=0,
-            tokens_last_hour=1000.0,
-            cost_last_hour_cents=15.0,
-            carbon_last_hour_grams=0.3,
-            energy_last_hour_kwh=0.0005,
-        )
-        mock_telemetry.get_telemetry_summary = AsyncMock(return_value=telemetry_summary)
+        mock_telemetry = MockTelemetryService()
 
         snapshot = await build_system_snapshot(
             task=None, thought=None, resource_monitor=mock_resource_monitor, telemetry_service=mock_telemetry
@@ -405,9 +385,10 @@ class TestUserProfileEnrichment:
         mock_thought.thought_depth = None  # Optional field
         mock_thought.context = None  # No context to avoid MagicMock user_id extraction
 
-        # Mock task with channel context
+        # Mock task with channel context - set user_id to None to avoid extraction
         mock_task = MagicMock()
         mock_task.context = MagicMock()
+        mock_task.context.user_id = None  # Explicitly set to None
         mock_task.context.system_snapshot = MagicMock()
         mock_task.context.system_snapshot.channel_id = "current_channel"
         mock_task.context.system_snapshot.channel_context = None  # Avoid MagicMock validation issues

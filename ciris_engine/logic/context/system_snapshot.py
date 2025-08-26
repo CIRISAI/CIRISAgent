@@ -13,13 +13,22 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot, UserProfile
 from ciris_engine.schemas.services.core.runtime import ServiceHealthStatus
-from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+from ciris_engine.schemas.services.graph_core import GraphScope, NodeType, GraphNode, GraphNodeAttributes
 from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.services.runtime_control import CircuitBreakerStatus
 
 from .secrets_snapshot import build_secrets_snapshot
 
 logger = logging.getLogger(__name__)
+
+
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    return str(obj)
 
 
 async def build_system_snapshot(
@@ -515,34 +524,70 @@ async def build_system_snapshot(
             #     context_data["community_context"] = enriched_context.community_context
 
     # Enrich user profiles from memory graph (supplement or replace GraphQL data)
-    if memory_service and thought:
-        # Extract user IDs from the thought content and context
+    if memory_service:
+        logger.debug(f"[USER EXTRACTION] Starting user extraction. Memory service: {memory_service}")
+        # Extract user IDs from ALL available sources
         user_ids_to_enrich = set()
-
-        # Look for user mentions in thought content (Discord format: <@USER_ID> or @username)
         import re
 
-        thought_content = getattr(thought, "content", "")
-        # Discord user ID pattern
-        discord_mentions = re.findall(r"<@(\d+)>", thought_content)
-        user_ids_to_enrich.update(discord_mentions)
-        # Also look for "ID: <number>" pattern
-        id_mentions = re.findall(r"ID:\s*(\d+)", thought_content)
-        user_ids_to_enrich.update(id_mentions)
+        # 1. From task context (PRIMARY SOURCE - the user who initiated the task)
+        if task and task.context and task.context.user_id:
+            user_ids_to_enrich.add(str(task.context.user_id))
+            logger.debug(f"[USER EXTRACTION] Found user {task.context.user_id} from task context")
 
-        # Also check the current channel context for the message author
-        if hasattr(thought, "context") and thought.context:
-            if hasattr(thought.context, "user_id") and thought.context.user_id:
-                user_ids_to_enrich.add(str(thought.context.user_id))
+        # 2. From thought content (mentions in the message)
+        if thought:
+            thought_content = getattr(thought, "content", "")
+            # Discord user ID pattern
+            discord_mentions = re.findall(r"<@(\d+)>", thought_content)
+            if discord_mentions:
+                user_ids_to_enrich.update(discord_mentions)
+                logger.debug(f"[USER EXTRACTION] Found {len(discord_mentions)} users from Discord mentions: {discord_mentions}")
+            # Also look for "ID: <number>" pattern
+            id_mentions = re.findall(r"ID:\s*(\d+)", thought_content)
+            if id_mentions:
+                user_ids_to_enrich.update(id_mentions)
+                logger.debug(f"[USER EXTRACTION] Found {len(id_mentions)} users from ID patterns: {id_mentions}")
+            
+            # 3. From thought context (may have user_id)
+            if hasattr(thought, "context") and thought.context:
+                if hasattr(thought.context, "user_id") and thought.context.user_id:
+                    user_ids_to_enrich.add(str(thought.context.user_id))
+                    logger.debug(f"[USER EXTRACTION] Found user {thought.context.user_id} from thought context")
 
-        logger.info(f"Enriching user profiles for users: {user_ids_to_enrich}")
+        # 4. From correlation history (get ALL users who participated in the conversation)
+        if task and task.context and task.context.correlation_id:
+            try:
+                with persistence.get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    # Query for all messages in this correlation
+                    cursor.execute(
+                        """
+                        SELECT DISTINCT json_extract(tags, '$.user_id') as user_id
+                        FROM service_correlations
+                        WHERE correlation_id = ?
+                        AND json_extract(tags, '$.user_id') IS NOT NULL
+                        """,
+                        (task.context.correlation_id,)
+                    )
+                    correlation_users = cursor.fetchall()
+                    for row in correlation_users:
+                        if row["user_id"]:
+                            user_ids_to_enrich.add(str(row["user_id"]))
+                            logger.debug(f"[USER EXTRACTION] Found user {row['user_id']} from correlation history")
+            except Exception as e:
+                logger.warning(f"[USER EXTRACTION] Failed to extract users from correlation history: {e}")
+
+        logger.info(f"[USER EXTRACTION] Total users to enrich: {len(user_ids_to_enrich)} users: {user_ids_to_enrich}")
 
         # Get existing user profiles or create new list
         existing_profiles = context_data.get("user_profiles", [])
         existing_user_ids = {p.user_id for p in existing_profiles}
 
         for user_id in user_ids_to_enrich:
+            logger.debug(f"[USER EXTRACTION] Processing user {user_id}")
             if user_id in existing_user_ids:
+                logger.debug(f"[USER EXTRACTION] User {user_id} already exists, skipping")
                 continue  # Already have profile from GraphQL
 
             try:
@@ -556,6 +601,7 @@ async def build_system_snapshot(
                 )
                 logger.info(f"[DEBUG] Querying memory for user/{user_id}")
                 user_results = await memory_service.recall(user_query)
+                logger.debug(f"[USER EXTRACTION] Query returned {len(user_results) if user_results else 0} results for user {user_id}")
 
                 if user_results:
                     user_node = user_results[0]
@@ -618,14 +664,6 @@ async def build_system_snapshot(
 
                     # Create UserProfile with all available data
                     # Use json.dumps with default handler for datetime objects
-                    def json_serial(obj):
-                        """JSON serializer for objects not serializable by default json code"""
-                        if hasattr(obj, "isoformat"):
-                            return obj.isoformat()
-                        if hasattr(obj, "model_dump"):
-                            return obj.model_dump()
-                        return str(obj)
-
                     notes_content = f"All attributes: {json.dumps(attrs, default=json_serial)}"
                     if connected_nodes_info:
                         notes_content += f"\nConnected nodes: {json.dumps(connected_nodes_info, default=json_serial)}"
@@ -652,19 +690,15 @@ async def build_system_snapshot(
                                     attrs["last_seen"] = last_interaction.isoformat()
                                     
                                     # Create an update for the node
-                                    from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
-                                    update_node = MemoryNode(
+                                    update_node = GraphNode(
                                         id=f"user/{user_id}",
                                         type=NodeType.USER,
-                                        attributes=attrs,
+                                        attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
                                         scope=GraphScope.LOCAL
                                     )
-                                    memory_update = MemoryUpdate(
-                                        nodes=[update_node],
-                                        edges=[],
-                                        metadata={"reason": "Fixed template placeholder corruption in last_seen"}
-                                    )
-                                    await memory_service.store(memory_update)
+                                    
+                                    # Use memorize to update the node
+                                    await memory_service.memorize(update_node)
                                     logger.info(f"Successfully fixed corrupted last_seen for user {user_id}")
                                 except Exception as e:
                                     logger.error(f"Failed to fix corrupted node for user {user_id}: {e}")
@@ -682,19 +716,15 @@ async def build_system_snapshot(
                                     last_interaction = datetime.now(timezone.utc)
                                     try:
                                         attrs["last_seen"] = last_interaction.isoformat()
-                                        from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
-                                        update_node = MemoryNode(
+                                        
+                                        update_node = GraphNode(
                                             id=f"user/{user_id}",
                                             type=NodeType.USER,
-                                            attributes=attrs,
+                                            attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
                                             scope=GraphScope.LOCAL
                                         )
-                                        memory_update = MemoryUpdate(
-                                            nodes=[update_node],
-                                            edges=[],
-                                            metadata={"reason": "Fixed unparseable last_seen"}
-                                        )
-                                        await memory_service.store(memory_update)
+                                        
+                                        await memory_service.memorize(update_node)
                                         logger.info(f"Successfully fixed unparseable last_seen for user {user_id}")
                                     except Exception as fix_e:
                                         logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
@@ -707,19 +737,15 @@ async def build_system_snapshot(
                             last_interaction = datetime.now(timezone.utc)
                             try:
                                 attrs["last_seen"] = last_interaction.isoformat()
-                                from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
-                                update_node = MemoryNode(
+                                
+                                update_node = GraphNode(
                                     id=f"user/{user_id}",
                                     type=NodeType.USER,
-                                    attributes=attrs,
+                                    attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
                                     scope=GraphScope.LOCAL
                                 )
-                                memory_update = MemoryUpdate(
-                                    nodes=[update_node],
-                                    edges=[],
-                                    metadata={"reason": f"Fixed invalid last_seen type: {type(last_seen_raw)}"}
-                                )
-                                await memory_service.store(memory_update)
+                                
+                                await memory_service.memorize(update_node)
                                 logger.info(f"Successfully fixed invalid last_seen type for user {user_id}")
                             except Exception as fix_e:
                                 logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
@@ -867,9 +893,36 @@ async def build_system_snapshot(
         # Update context data with enriched profiles
         if existing_profiles:
             context_data["user_profiles"] = existing_profiles
+            # Log comprehensive user profile stats
+            total_user_bytes = 0
+            for profile in existing_profiles:
+                profile_bytes = len(json.dumps(profile.model_dump(), default=json_serial))
+                total_user_bytes += profile_bytes
+            logger.info(f"[CONTEXT BUILD] {len(existing_profiles)} User Profiles queried - {total_user_bytes:,} bytes added to context")
+
+    # Log channel context size
+    if "channel_context" in context_data and context_data["channel_context"]:
+        channel_bytes = len(json.dumps(context_data["channel_context"].model_dump() if hasattr(context_data["channel_context"], "model_dump") else context_data["channel_context"], default=json_serial))
+        logger.info(f"[CONTEXT BUILD] 1 Channel queried - {channel_bytes:,} bytes added to context")
 
     # Create the snapshot - FAIL FAST AND LOUD if there's any problem
     snapshot = SystemSnapshot(**context_data)
+
+    # Calculate and log total snapshot size
+    snapshot_json = snapshot.model_dump_json()
+    snapshot_bytes = len(snapshot_json)
+    
+    # Check for any validation errors or missing critical data
+    errors = []
+    if not context_data.get("user_profiles"):
+        errors.append("No user profiles")
+    if not context_data.get("channel_context"):
+        errors.append("No channel context")
+    
+    if errors:
+        logger.warning(f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes:,} bytes total, WARNINGS: {', '.join(errors)}")
+    else:
+        logger.info(f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes:,} bytes total, no errors")
 
     # Note: GraphTelemetryService doesn't need update_system_snapshot
     # as it stores telemetry data directly in the graph

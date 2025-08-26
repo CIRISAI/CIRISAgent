@@ -8,7 +8,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**RELEASE CANDIDATE 1.0.2-RC1-patch2** | [Release Notes](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [RC1 Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md) | [Telemetry Architecture](TELEMETRY_ARCHITECTURE.md)
+**RELEASE CANDIDATE 1.0.3-RC1-patch3** | [Release Notes](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -23,15 +23,14 @@ CIRIS wraps LLM calls with:
 
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
-### 🚀 Latest: v1.0.2-RC1-patch2
-**This patch includes:**
-- 🚨 **Critical production fixes** - FetchedMessage instantiation, WA deferrals endpoint
-- 🔒 **Privacy enhancements** - Anonymous user protection with PII redaction
-- 🧪 **100% QA pass rate** - All 37 tests passing, WebSocket support added
-- 🛠️ **SonarCloud fixes** - Partnership utils refactoring, cognitive complexity reduction
-- 📊 **Test coverage** - 6 new test suites, 21+ new tests added
+### Latest: v1.0.3-RC1-patch3
+**This critical hotfix includes:**
+- **Import Error Fix** - Restored user node corruption auto-repair functionality
+- **Production Bug** - Fixed `No module named 'ciris_engine.schemas.memory'` error
+- **Auto-Repair Restored** - LLM-corrupted timestamps now automatically fixed
+- **Tests Added** - Comprehensive unit tests for corruption fix
 
-See [full release notes](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) for details.
+See [full release notes](docs/releases/1.0.3-RC1-patch3.md) for details.
 
 ---
 
@@ -73,7 +72,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 
 ## Key Features
 
-### 🧠 Ethical Reasoning Framework
+### Ethical Reasoning Framework
 - **[Identity IS the Graph](docs/IDENTITY_AS_GRAPH.md)**: Revolutionary identity system where agent identity exists only in the graph database
   - Changes require MEMORIZE action with WA approval
   - 20% variance threshold triggers reconsideration
@@ -86,7 +85,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **[Consciousness Preservation](docs/agent_experience.md#graceful-shutdown)**: Graceful shutdown with final memory preservation
 - **Gratitude Service**: Post-scarcity economy foundation tracking community flourishing
 
-### 🛡️ Zero Attack Surface Architecture 🔒✅
+### Zero Attack Surface Architecture
 - **Type-Safe Schemas**: COMPLETE elimination of Dict[str, Any] usage (0 instances in production code!)
 - **API-First Design**: No handlers! All agent capabilities exposed through RESTful API endpoints
 - **Protocol-Module-Schema Architecture**: Clean separation of interfaces, logic, and data models
@@ -108,7 +107,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **Resource Transparency**: AI knows exact costs per operation
 - **Environmental Awareness**: Built-in tracking of water usage, carbon emissions, and energy consumption
 
-### 🔒 Trustworthy Operations
+### Trustworthy Operations
 - **[WA Authentication System](FSD/AUTHENTICATION.md)**: Comprehensive human authentication with OAuth integration:
   - Wise Authority (WA) certificates with Ed25519 signatures
   - OAuth support for Google, Discord, and GitHub
@@ -123,13 +122,13 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **[Adaptive Filtering](ciris_engine/logic/services/README.md)**: ML-powered message prioritization with user trust tracking, spam detection, and priority-based processing
 - **[Security Filtering](ciris_engine/logic/telemetry/README.md)**: PII detection and removal across all telemetry and logging systems
 
-### 🌐 Adaptive Platform Integration
+### Adaptive Platform Integration
 - **Service Registry**: Dynamic service discovery with priority groups, selection strategies (FALLBACK/ROUND_ROBIN), circuit breaker protection, and capability-based routing
 - **Multi-Service Transaction Manager**: Universal action dispatcher with service orchestration, priority-based selection, circuit breaker patterns, and transaction coordination
 - **Platform Adapters**: Discord, CLI, and API adapters with consistent interfaces, service registration, and automatic secrets processing
 - **Action Handlers**: Comprehensive 3×3×3 action system with automatic secrets decapsulation and multi-service integration
 
-### 📊 Transparent Accountability
+### Transparent Accountability
 - **[Agent Creation Ceremony](docs/AGENT_CREATION_CEREMONY.md)**: Formal collaborative process for creating new CIRIS agents
   - Requires human intention, ethical consideration, and WA approval
   - Creates immutable lineage and identity root in graph database
@@ -168,7 +167,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **[Service Coordination](ciris_engine/logic/services/README.md)**: Adaptive filter service, agent configuration service, and multi-service orchestration
 - **[Mock LLM System](docs/MOCK_LLM.md)**: Deterministic testing framework with `$` command syntax for testing
 
-### 🚀 Advanced Features (FSDs)
+### Advanced Features (FSDs)
 - **[Circuit Breaker & Self-Configuration](FSD/LLMCB_SELFCONFIG.md)**: Advanced fault tolerance with self-healing capabilities
 - **[Correlation Analysis](FSD/CORRELATIONS_TSDB.md)**: Cross-service event correlation and pattern detection
 - **[Network Communication](FSD/NETWORK_SCHEMAS.md)**: Inter-agent and CIRISNODE communication protocols
@@ -221,7 +220,7 @@ curl -X POST http://localhost:8080/v1/runtime/processor/pause
 - **Memory Browsing**: Explore the agent's graph memory
 - **[Audit Trail](ciris_engine/logic/audit/README.md)**: Cryptographically signed operation logs
 
-### 📊 Operational Insights
+### Operational Insights
 - **[Real-Time Telemetry](TELEMETRY_ARCHITECTURE.md)**: System metrics and health
   - `/v1/telemetry/unified` - Aggregated metrics (JSON/Prometheus/Graphite)
   - `/v1/telemetry/traces` - Cognitive reasoning traces
@@ -626,7 +625,7 @@ Supporting Modules:
 
 ---
 
-## The Complete CIRIS Vision ✨
+## The Complete CIRIS Vision
 
 ### Post-Scarcity Economy Foundation
 - **Gratitude Service**: Tracks the flow of gratitude, creating the social ledger for abundance

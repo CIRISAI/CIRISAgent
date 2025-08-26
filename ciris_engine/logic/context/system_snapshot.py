@@ -652,19 +652,17 @@ async def build_system_snapshot(
                                     attrs["last_seen"] = last_interaction.isoformat()
                                     
                                     # Create an update for the node
-                                    from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
-                                    update_node = MemoryNode(
+                                    from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+                                    
+                                    update_node = GraphNode(
                                         id=f"user/{user_id}",
                                         type=NodeType.USER,
-                                        attributes=attrs,
+                                        attributes=GraphNodeAttributes(**attrs),
                                         scope=GraphScope.LOCAL
                                     )
-                                    memory_update = MemoryUpdate(
-                                        nodes=[update_node],
-                                        edges=[],
-                                        metadata={"reason": "Fixed template placeholder corruption in last_seen"}
-                                    )
-                                    await memory_service.store(memory_update)
+                                    
+                                    # Use memorize to update the node
+                                    await memory_service.memorize(update_node)
                                     logger.info(f"Successfully fixed corrupted last_seen for user {user_id}")
                                 except Exception as e:
                                     logger.error(f"Failed to fix corrupted node for user {user_id}: {e}")
@@ -682,19 +680,16 @@ async def build_system_snapshot(
                                     last_interaction = datetime.now(timezone.utc)
                                     try:
                                         attrs["last_seen"] = last_interaction.isoformat()
-                                        from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
-                                        update_node = MemoryNode(
+                                        from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+                                        
+                                        update_node = GraphNode(
                                             id=f"user/{user_id}",
                                             type=NodeType.USER,
-                                            attributes=attrs,
+                                            attributes=GraphNodeAttributes(**attrs),
                                             scope=GraphScope.LOCAL
                                         )
-                                        memory_update = MemoryUpdate(
-                                            nodes=[update_node],
-                                            edges=[],
-                                            metadata={"reason": "Fixed unparseable last_seen"}
-                                        )
-                                        await memory_service.store(memory_update)
+                                        
+                                        await memory_service.memorize(update_node)
                                         logger.info(f"Successfully fixed unparseable last_seen for user {user_id}")
                                     except Exception as fix_e:
                                         logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
@@ -707,19 +702,16 @@ async def build_system_snapshot(
                             last_interaction = datetime.now(timezone.utc)
                             try:
                                 attrs["last_seen"] = last_interaction.isoformat()
-                                from ciris_engine.schemas.memory.core import MemoryNode, MemoryUpdate
-                                update_node = MemoryNode(
+                                from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+                                
+                                update_node = GraphNode(
                                     id=f"user/{user_id}",
                                     type=NodeType.USER,
-                                    attributes=attrs,
+                                    attributes=GraphNodeAttributes(**attrs),
                                     scope=GraphScope.LOCAL
                                 )
-                                memory_update = MemoryUpdate(
-                                    nodes=[update_node],
-                                    edges=[],
-                                    metadata={"reason": f"Fixed invalid last_seen type: {type(last_seen_raw)}"}
-                                )
-                                await memory_service.store(memory_update)
+                                
+                                await memory_service.memorize(update_node)
                                 logger.info(f"Successfully fixed invalid last_seen type for user {user_id}")
                             except Exception as fix_e:
                                 logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")

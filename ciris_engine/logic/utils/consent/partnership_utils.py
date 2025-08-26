@@ -1,8 +1,10 @@
 """
-Partnership request handler for Consensual Evolution Protocol.
+Partnership utilities for Consensual Evolution Protocol.
 
-Handles bilateral consent for PARTNERED stream upgrades.
-Agent must approve through thought system (REJECT/DEFER/TASK_COMPLETE).
+Helper functions for managing bilateral consent for PARTNERED stream upgrades.
+Creates tasks that the agent can approve through thought system (REJECT/DEFER/TASK_COMPLETE).
+
+Note: This is NOT a handler - it's a utility class used by ConsentService.
 """
 
 import logging
@@ -18,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 class PartnershipRequestHandler:
-    """Handles partnership consent requests requiring bilateral agreement."""
+    """Utility class for creating and checking partnership consent tasks.
+    
+    This is NOT a handler - it's a helper used by ConsentService to create
+    tasks that actual handlers (REJECT/DEFER/TASK_COMPLETE) will process.
+    """
 
     def __init__(self, time_service: TimeServiceProtocol, auth_service: Optional[object] = None):
         self.time_service = time_service
@@ -116,6 +122,12 @@ class PartnershipRequestHandler:
         if task.status == TaskStatus.COMPLETED:
             return ("accepted", "Partnership approved by agent")
 
+        if task.status == TaskStatus.REJECTED:
+            return ("rejected", "Request was rejected")
+
+        if task.status == TaskStatus.DEFERRED:
+            return ("deferred", "Request was deferred")
+
         if task.status == TaskStatus.FAILED:
             # Check if it was a REJECT or DEFER
             thoughts = persistence.get_thoughts_by_task_id(task_id)
@@ -137,8 +149,5 @@ class PartnershipRequestHandler:
                             return ("deferred", reason)
 
             return ("failed", "Task failed without clear reason")
-
-        if task.status == TaskStatus.CANCELLED:
-            return ("rejected", "Request was cancelled")
 
         return ("pending", None)

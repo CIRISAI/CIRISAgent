@@ -193,7 +193,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             self._partnership_requests += 1
 
             # Create partnership task for agent approval
-            from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
+            from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
             handler = PartnershipRequestHandler(time_service=self._time_service)
             task = await handler.create_partnership_task(
@@ -476,7 +476,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         task_id = pending["task_id"]
 
         # Check task outcome
-        from ciris_engine.logic.handlers.consent.partnership_handler import PartnershipRequestHandler
+        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
         handler = PartnershipRequestHandler(time_service=self._time_service)
         outcome, reason = handler.check_task_outcome(task_id)

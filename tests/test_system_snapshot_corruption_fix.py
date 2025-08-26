@@ -21,6 +21,17 @@ from ciris_engine.schemas.services.graph_core import (
     GraphScope,
     NodeType,
 )
+from tests.fixtures.mocks import (
+    MockTelemetryService,
+    MockResourceMonitor,
+    MockMemoryService,
+    MockRuntime,
+    MockSecretsService,
+    MockServiceRegistry,
+    MockPersistence,
+    create_mock_thought,
+    create_mock_task
+)
 
 
 class MockThought:
@@ -67,24 +78,12 @@ class TestUserNodeCorruptionFix:
     @pytest.fixture
     def mock_resource_monitor(self):
         """Create a mock resource monitor."""
-        mock = MagicMock()
-        mock.get_current_resources = MagicMock(return_value={
-            "cpu": {"usage_percent": 10.0},
-            "memory": {"used_mb": 100, "available_mb": 4000},
-            "disk": {"used_gb": 10, "available_gb": 100}
-        })
-        mock.current_memory = 100
-        mock.current_memory_percent = 2.5
-        return mock
+        return MockResourceMonitor()
 
     @pytest.fixture
     def mock_memory_service(self):
         """Create a mock memory service."""
-        mock = AsyncMock()
-        mock.memorize = AsyncMock(return_value=MagicMock(success=True))
-        mock.query = AsyncMock(return_value=[])
-        mock.query_nodes = AsyncMock(return_value=[])
-        return mock
+        return MockMemoryService()
 
     @pytest.fixture
     def mock_graphql_provider(self):
@@ -97,40 +96,22 @@ class TestUserNodeCorruptionFix:
     @pytest.fixture
     def mock_telemetry_service(self):
         """Create a mock telemetry service."""
-        mock = AsyncMock()
-        mock.capture_service_metrics = AsyncMock(return_value={})
-        mock.get_operational_context = AsyncMock(return_value={
-            "status": "online",
-            "overall_health": "healthy",
-            "services_total": 25,
-            "services_online": 25,
-            "memory_used_mb": 100,
-            "memory_percent": 2.5
-        })
-        mock.record_thought = AsyncMock()
-        return mock
+        return MockTelemetryService()
 
     @pytest.fixture
     def mock_secrets_service(self):
         """Create a mock secrets service."""
-        mock = MagicMock()
-        mock.list_secrets = MagicMock(return_value=[])
-        mock.get_secret = MagicMock(return_value=None)
-        return mock
+        return MockSecretsService()
 
     @pytest.fixture
     def mock_runtime(self):
         """Create a mock runtime."""
-        mock = MagicMock()
-        mock.agent_id = "test_agent"
-        return mock
+        return MockRuntime()
 
     @pytest.fixture
     def mock_service_registry(self):
         """Create a mock service registry."""
-        mock = MagicMock()
-        mock.get_all = MagicMock(return_value={})
-        return mock
+        return MockServiceRegistry()
 
     @pytest.mark.asyncio
     async def test_fix_template_placeholder_in_last_seen(
@@ -164,6 +145,24 @@ class TestUserNodeCorruptionFix:
         
         # Mock memory service query to return corrupted node
         mock_memory_service.query_nodes = AsyncMock(return_value=[mock_user_node])
+        
+        # Override recall to return our corrupted node
+        original_recall = mock_memory_service.recall
+        async def mock_recall_with_corruption(query):
+            node_id = query.node_id if hasattr(query, "node_id") else str(query)
+            if f"user/{user_id}" in node_id:
+                return [mock_user_node]
+            # Fall back to original behavior for non-user nodes
+            return await original_recall(query)
+        mock_memory_service.recall = AsyncMock(side_effect=mock_recall_with_corruption)
+        
+        # Also mock recall to return the corrupted node when queried
+        async def mock_recall(query):
+            node_id = query.node_id if hasattr(query, "node_id") else str(query)
+            if f"user/{user_id}" in node_id:
+                return [mock_user_node]
+            return []
+        mock_memory_service.recall = AsyncMock(side_effect=mock_recall)
         
         # Build system snapshot
         with patch('ciris_engine.logic.context.system_snapshot.logger') as mock_logger, \
@@ -256,6 +255,16 @@ class TestUserNodeCorruptionFix:
         # Mock memory service query to return corrupted node
         mock_memory_service.query_nodes = AsyncMock(return_value=[mock_user_node])
         
+        # Override recall to return our corrupted node
+        original_recall = mock_memory_service.recall
+        async def mock_recall_with_corruption(query):
+            node_id = query.node_id if hasattr(query, "node_id") else str(query)
+            if f"user/{user_id}" in node_id:
+                return [mock_user_node]
+            # Fall back to original behavior for non-user nodes
+            return await original_recall(query)
+        mock_memory_service.recall = AsyncMock(side_effect=mock_recall_with_corruption)
+        
         # Build system snapshot
         with patch('ciris_engine.logic.context.system_snapshot.logger') as mock_logger, \
              patch('ciris_engine.logic.context.system_snapshot.build_secrets_snapshot', return_value={}), \
@@ -321,6 +330,16 @@ class TestUserNodeCorruptionFix:
         # Mock memory service query to return corrupted node
         mock_memory_service.query_nodes = AsyncMock(return_value=[mock_user_node])
         
+        # Override recall to return our corrupted node
+        original_recall = mock_memory_service.recall
+        async def mock_recall_with_corruption(query):
+            node_id = query.node_id if hasattr(query, "node_id") else str(query)
+            if f"user/{user_id}" in node_id:
+                return [mock_user_node]
+            # Fall back to original behavior for non-user nodes
+            return await original_recall(query)
+        mock_memory_service.recall = AsyncMock(side_effect=mock_recall_with_corruption)
+        
         # Build system snapshot
         with patch('ciris_engine.logic.context.system_snapshot.logger') as mock_logger, \
              patch('ciris_engine.logic.context.system_snapshot.build_secrets_snapshot', return_value={}), \
@@ -378,6 +397,16 @@ class TestUserNodeCorruptionFix:
         
         # Mock memory service query to return corrupted node
         mock_memory_service.query_nodes = AsyncMock(return_value=[mock_user_node])
+        
+        # Override recall to return our corrupted node
+        original_recall = mock_memory_service.recall
+        async def mock_recall_with_corruption(query):
+            node_id = query.node_id if hasattr(query, "node_id") else str(query)
+            if f"user/{user_id}" in node_id:
+                return [mock_user_node]
+            # Fall back to original behavior for non-user nodes
+            return await original_recall(query)
+        mock_memory_service.recall = AsyncMock(side_effect=mock_recall_with_corruption)
         
         # Make memorize fail
         mock_memory_service.memorize = AsyncMock(side_effect=Exception("Update failed"))
@@ -442,6 +471,16 @@ class TestUserNodeCorruptionFix:
         
         # Mock memory service query to return valid node
         mock_memory_service.query_nodes = AsyncMock(return_value=[mock_user_node])
+        
+        # Override recall to return our valid node
+        original_recall = mock_memory_service.recall
+        async def mock_recall_with_valid(query):
+            node_id = query.node_id if hasattr(query, "node_id") else str(query)
+            if f"user/{user_id}" in node_id:
+                return [mock_user_node]
+            # Fall back to original behavior for non-user nodes
+            return await original_recall(query)
+        mock_memory_service.recall = AsyncMock(side_effect=mock_recall_with_valid)
         
         # Build system snapshot
         with patch('ciris_engine.logic.context.system_snapshot.logger') as mock_logger, \

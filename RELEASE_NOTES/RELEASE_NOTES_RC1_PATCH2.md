@@ -45,6 +45,21 @@ This patch release includes critical bug fixes for production issues, comprehens
 - System snapshot corruption handling: Added edge case coverage
 - Base observer filter and signing: Previously uncovered error paths now tested
 
+## 🛠️ Testing Infrastructure Improvements
+
+### QA Runner Enhancements
+- **Fixed**: WebSocket test hanging issue preventing test completion
+- **Fixed**: SDK token refresh test failing due to missing `refresh_token` field
+- **Fixed**: Token persistence - QA runner now updates token after refresh to prevent 401 errors
+- **Fixed**: Server shutdown hanging on `psutil.net_connections()` call
+- **Achievement**: 100% pass rate on all 37 QA runner tests across all modules
+
+### Partnership Utilities Refactoring
+- **Moved**: `partnership_handler.py` from handlers to utils (not an actual handler)
+- **Fixed**: Removed async keyword from `create_partnership_task()` (not using async features)
+- **Refactored**: Reduced cognitive complexity of `check_task_outcome()` from 35 to 15
+- **Added**: 21 comprehensive tests achieving 100% coverage
+
 ## 🐛 Bug Fixes
 
 ### Discord Adapter
@@ -67,10 +82,11 @@ This patch release includes critical bug fixes for production issues, comprehens
 - Resolved circular import problems in tests
 
 ## 📊 Statistics
-- **Files Changed**: 28
-- **Lines Added**: 3,068
-- **Lines Removed**: 1,060
-- **Test Files Added**: 5 new comprehensive test suites
+- **Files Changed**: 35
+- **Lines Added**: 3,435
+- **Lines Removed**: 1,200
+- **Test Files Added**: 6 new comprehensive test suites
+- **Tests Added**: 21 new tests for partnership utilities
 - **Documentation Added**: 456 lines of privacy documentation
 
 ## 🔄 Breaking Changes
@@ -93,7 +109,7 @@ Anonymous user handling is automatic when consent stream is set to:
 - `EXPIRED`  
 - `REVOKED`
 
-## 📝 Commit Summary (13 commits since main)
+## 📝 Commit Summary (15 commits since main)
 
 - `7c4d8e83` fix: Fix FetchedMessage import errors in tests
 - `ea457a20` fix: Fix FetchedMessage instantiation error in production
@@ -108,6 +124,8 @@ Anonymous user handling is automatic when consent stream is set to:
 - `ba25aeac` fix: Add privacy protection for anonymous users in audit trails
 - `73e4f4dc` feat: Enhance AdaptiveFilterService with privacy-preserving anonymous user handling
 - `2c90bd2e` fix: Define constants for redaction placeholders to avoid code duplication
+- `79f7cc54` fix: Fix QA runner WebSocket test hanging and achieve 100% pass rate
+- `f6ca1457` fix: Resolve SonarCloud issues in partnership_utils.py
 
 ## 🙏 Acknowledgments
 Thanks to the production users who reported the FetchedMessage and deferrals endpoint issues, enabling quick resolution.

@@ -8,7 +8,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**RELEASE CANDIDATE 1.0.1-RC1-patch1** | [Release Notes](RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES_1.0.0-RC1.md) | [Telemetry Architecture](TELEMETRY_ARCHITECTURE.md)
+**RELEASE CANDIDATE 1.0.2-RC1-patch2** | [Release Notes](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [RC1 Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md) | [Telemetry Architecture](TELEMETRY_ARCHITECTURE.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -23,15 +23,15 @@ CIRIS wraps LLM calls with:
 
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
-### 🚀 Latest: v1.0.1-RC1-patch1
-**This branch contains (vs main):**
-- 🧪 **Comprehensive QA runner** - Complete testing framework (7,500+ lines)
-- 🔧 **Reverse proxy support** - FastAPI root_path for nginx/HAProxy
-- 📉 **Reduced log spam** - Proper debug logging levels
-- 🐛 **15+ bug fixes** - Tool services, Docker permissions, test fixes
-- 📁 **Better organization** - QA runner moved to tools/
+### 🚀 Latest: v1.0.2-RC1-patch2
+**This patch includes:**
+- 🚨 **Critical production fixes** - FetchedMessage instantiation, WA deferrals endpoint
+- 🔒 **Privacy enhancements** - Anonymous user protection with PII redaction
+- 🧪 **100% QA pass rate** - All 37 tests passing, WebSocket support added
+- 🛠️ **SonarCloud fixes** - Partnership utils refactoring, cognitive complexity reduction
+- 📊 **Test coverage** - 6 new test suites, 21+ new tests added
 
-See [full release notes](RELEASE_NOTES_RC1_PATCH1.md) for details.
+See [full release notes](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) for details.
 
 ---
 

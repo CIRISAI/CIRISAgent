@@ -90,8 +90,7 @@ class APIServerManager:
             except Exception as e:
                 self.console.print(f"[red]Error stopping server: {e}[/red]")
 
-        # Also try to kill by port if process tracking failed
-        self._kill_by_port()
+        # Skip port cleanup - it's causing hangs
 
     def _is_server_running(self) -> bool:
         """Check if server is running on the configured port."""
@@ -123,14 +122,34 @@ class APIServerManager:
 
     def _kill_by_port(self):
         """Kill any process using the configured port."""
+        import signal
+        from contextlib import contextmanager
+        
+        @contextmanager
+        def timeout(seconds):
+            def timeout_handler(signum, frame):
+                raise TimeoutError()
+            
+            # Set the timeout handler
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+            try:
+                yield
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+        
         try:
-            for conn in psutil.net_connections():
-                if conn.laddr.port == self.config.api_port and conn.status == "LISTEN":
-                    try:
-                        process = psutil.Process(conn.pid)
-                        process.terminate()
-                        self.console.print(f"[yellow]Killed process {conn.pid} on port {self.config.api_port}[/yellow]")
-                    except:
-                        pass
+            with timeout(2):  # 2 second timeout for port cleanup
+                for conn in psutil.net_connections():
+                    if conn.laddr.port == self.config.api_port and conn.status == "LISTEN":
+                        try:
+                            process = psutil.Process(conn.pid)
+                            process.terminate()
+                            self.console.print(f"[yellow]Killed process {conn.pid} on port {self.config.api_port}[/yellow]")
+                        except:
+                            pass
+        except TimeoutError:
+            self.console.print("[yellow]⚠️  Port cleanup timed out[/yellow]")
         except:
             pass

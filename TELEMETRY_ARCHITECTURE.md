@@ -1,6 +1,6 @@
 # CIRIS Telemetry Architecture Documentation
-*Version: 1.4.5*
-*Last Updated: 2025-08-21*
+*Version: 1.0.2-RC1*
+*Last Updated: 2025-08-26*
 
 ## Executive Summary
 

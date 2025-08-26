@@ -41,10 +41,10 @@ class TestPartnershipUtils:
         with patch('ciris_engine.logic.utils.consent.partnership_utils.persistence') as mock:
             yield mock
     
-    async def test_create_partnership_task_basic(self, handler, mock_persistence):
+    def test_create_partnership_task_basic(self, handler, mock_persistence):
         """Test basic partnership task creation."""
         # Create task
-        task = await handler.create_partnership_task(
+        task = handler.create_partnership_task(
             user_id="test_user",
             categories=["data", "telemetry"],
             reason="For mutual learning",
@@ -65,9 +65,9 @@ class TestPartnershipUtils:
         # Verify persistence was called
         mock_persistence.add_task.assert_called_once_with(task)
     
-    async def test_create_partnership_task_no_reason(self, handler, mock_persistence):
+    def test_create_partnership_task_no_reason(self, handler, mock_persistence):
         """Test task creation without reason."""
-        task = await handler.create_partnership_task(
+        task = handler.create_partnership_task(
             user_id="user2",
             categories=["memory"],
             reason=None,
@@ -78,9 +78,9 @@ class TestPartnershipUtils:
         assert "Reason:" not in task.description
         assert task.channel_id == ""
     
-    async def test_create_partnership_task_empty_categories(self, handler, mock_persistence):
+    def test_create_partnership_task_empty_categories(self, handler, mock_persistence):
         """Test task creation with empty categories."""
-        task = await handler.create_partnership_task(
+        task = handler.create_partnership_task(
             user_id="user3",
             categories=[],
             reason="Testing",
@@ -90,9 +90,9 @@ class TestPartnershipUtils:
         assert "all categories" in task.description
         assert "Testing" in task.description
     
-    async def test_create_partnership_task_context(self, handler, mock_persistence):
+    def test_create_partnership_task_context(self, handler, mock_persistence):
         """Test task context creation."""
-        task = await handler.create_partnership_task(
+        task = handler.create_partnership_task(
             user_id="context_user",
             categories=["audit"],
             reason="Context test",
@@ -302,16 +302,16 @@ class TestPartnershipUtils:
         assert outcome == "rejected"
         assert reason == "No reason provided"
     
-    async def test_create_partnership_task_uuid_generation(self, handler, mock_persistence):
+    def test_create_partnership_task_uuid_generation(self, handler, mock_persistence):
         """Test that task IDs are unique."""
-        task1 = await handler.create_partnership_task(
+        task1 = handler.create_partnership_task(
             user_id="same_user",
             categories=["test"],
             reason=None,
             channel_id=None
         )
         
-        task2 = await handler.create_partnership_task(
+        task2 = handler.create_partnership_task(
             user_id="same_user",
             categories=["test"],
             reason=None,
@@ -332,7 +332,7 @@ class TestPartnershipUtilsEdgeCases:
         """Create handler with mock time service."""
         return PartnershipRequestHandler(time_service=MockTimeService())
     
-    async def test_create_task_with_auth_service(self):
+    def test_create_task_with_auth_service(self):
         """Test that auth_service parameter is accepted but not used."""
         mock_auth = Mock()
         handler = PartnershipRequestHandler(
@@ -343,7 +343,7 @@ class TestPartnershipUtilsEdgeCases:
         assert handler.auth_service == mock_auth
         
         with patch('ciris_engine.logic.utils.consent.partnership_utils.persistence'):
-            task = await handler.create_partnership_task(
+            task = handler.create_partnership_task(
                 user_id="auth_test",
                 categories=["test"],
                 reason=None,

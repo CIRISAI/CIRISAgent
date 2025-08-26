@@ -30,7 +30,7 @@ class PartnershipRequestHandler:
         self.time_service = time_service
         self.auth_service = auth_service
 
-    async def create_partnership_task(
+    def create_partnership_task(
         self,
         user_id: str,
         categories: list[str],
@@ -115,39 +115,58 @@ class PartnershipRequestHandler:
         if not task:
             return ("failed", "Task not found")
 
-        # Check task status
-        if task.status == TaskStatus.PENDING or task.status == TaskStatus.ACTIVE:
-            return ("pending", None)
+        # Map simple status cases
+        outcome = self._map_task_status(task.status)
+        if outcome[0] != "check_thoughts":
+            return outcome
 
-        if task.status == TaskStatus.COMPLETED:
-            return ("accepted", "Partnership approved by agent")
+        # For FAILED status, check thoughts for actual outcome
+        return self._check_thoughts_for_outcome(task_id)
 
-        if task.status == TaskStatus.REJECTED:
-            return ("rejected", "Request was rejected")
+    def _map_task_status(self, status: TaskStatus) -> tuple[str, Optional[str]]:
+        """Map task status to outcome, returning special marker for complex cases."""
+        status_map = {
+            TaskStatus.PENDING: ("pending", None),
+            TaskStatus.ACTIVE: ("pending", None),
+            TaskStatus.COMPLETED: ("accepted", "Partnership approved by agent"),
+            TaskStatus.REJECTED: ("rejected", "Request was rejected"),
+            TaskStatus.DEFERRED: ("deferred", "Request was deferred"),
+            TaskStatus.FAILED: ("check_thoughts", None),  # Special marker
+        }
+        return status_map.get(status, ("pending", None))
 
-        if task.status == TaskStatus.DEFERRED:
-            return ("deferred", "Request was deferred")
-
-        if task.status == TaskStatus.FAILED:
-            # Check if it was a REJECT or DEFER
-            thoughts = persistence.get_thoughts_by_task_id(task_id)
-            if thoughts:
-                for thought in reversed(thoughts):
-                    if hasattr(thought, "final_action") and thought.final_action:
-                        action = thought.final_action
-
-                        if action.action_type == "REJECT":
-                            reason = "No reason provided"
-                            if isinstance(action.action_params, dict):
-                                reason = action.action_params.get("reason", reason)
-                            return ("rejected", reason)
-
-                        elif action.action_type == "DEFER":
-                            reason = "More information needed"
-                            if isinstance(action.action_params, dict):
-                                reason = action.action_params.get("reason", reason)
-                            return ("deferred", reason)
-
+    def _check_thoughts_for_outcome(self, task_id: str) -> tuple[str, Optional[str]]:
+        """Check thoughts to determine outcome for failed tasks."""
+        thoughts = persistence.get_thoughts_by_task_id(task_id)
+        if not thoughts:
             return ("failed", "Task failed without clear reason")
 
-        return ("pending", None)
+        for thought in reversed(thoughts):
+            outcome = self._extract_action_from_thought(thought)
+            if outcome:
+                return outcome
+
+        return ("failed", "Task failed without clear reason")
+
+    def _extract_action_from_thought(self, thought) -> Optional[tuple[str, str]]:
+        """Extract action outcome from a single thought."""
+        if not hasattr(thought, "final_action") or not thought.final_action:
+            return None
+
+        action = thought.final_action
+        
+        if action.action_type == "REJECT":
+            reason = self._extract_reason_from_params(action.action_params, "No reason provided")
+            return ("rejected", reason)
+        
+        if action.action_type == "DEFER":
+            reason = self._extract_reason_from_params(action.action_params, "More information needed")
+            return ("deferred", reason)
+        
+        return None
+
+    def _extract_reason_from_params(self, params, default: str) -> str:
+        """Extract reason from action params safely."""
+        if isinstance(params, dict):
+            return params.get("reason", default)
+        return default

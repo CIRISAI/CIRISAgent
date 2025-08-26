@@ -313,9 +313,10 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
     async def fetch_messages(
         self, channel_id: str, *, limit: int = 50, before: Optional[datetime] = None
-    ) -> List[DiscordMessageData]:
+    ) -> List[FetchedMessage]:
         """Implementation of CommunicationService.fetch_messages - fetches from correlations"""
         from ciris_engine.logic.persistence import get_correlations_by_channel
+        from ciris_engine.schemas.runtime.messages import FetchedMessage
 
         try:
             # Get correlations for this channel
@@ -331,8 +332,8 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                         content = corr.request_data.parameters.get("content", "")
 
                     messages.append(
-                        DiscordMessageData(
-                            id=corr.correlation_id,
+                        FetchedMessage(
+                            message_id=corr.correlation_id,
                             author_id="ciris",
                             author_name="CIRIS",
                             content=content,
@@ -341,7 +342,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                                 if corr.timestamp or corr.created_at
                                 else None
                             ),
-                            channel_id=channel_id,
                             is_bot=True,
                         )
                     )
@@ -358,8 +358,8 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                         author_name = params.get("author_name", "User")
 
                     messages.append(
-                        DiscordMessageData(
-                            id=corr.correlation_id,
+                        FetchedMessage(
+                            message_id=corr.correlation_id,
                             author_id=author_id,
                             author_name=author_name,
                             content=content,
@@ -368,7 +368,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                                 if corr.timestamp or corr.created_at
                                 else None
                             ),
-                            channel_id=channel_id,
                             is_bot=False,
                         )
                     )
@@ -390,9 +389,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                         operation_name="fetch_messages",
                         config_key="discord_api",
                     )
-                    # Convert raw dicts to DiscordMessageData
+                    # Messages from handler are already FetchedMessage objects
                     if messages_result:
-                        return [DiscordMessageData(**msg) if isinstance(msg, dict) else msg for msg in messages_result]
+                        return messages_result
                     return []
                 except Exception as e2:
                     logger.exception(f"Failed to fetch messages from Discord API: {e2}")

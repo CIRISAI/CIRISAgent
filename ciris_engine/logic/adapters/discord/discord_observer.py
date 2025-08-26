@@ -89,11 +89,15 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         logger.info("DiscordObserver stopped")
 
     def _extract_channel_id(self, full_channel_id: str) -> str:
-        """Extract the raw channel ID from discord_guildid_channelid format."""
-        if full_channel_id.startswith("discord_") and full_channel_id.count("_") == 2:
-            # Format: discord_guildid_channelid
+        """Extract the raw channel ID from discord_channelid or discord_guildid_channelid format."""
+        if full_channel_id.startswith("discord_"):
             parts = full_channel_id.split("_")
-            return parts[2]  # Return just the channel ID part
+            if len(parts) == 2:
+                # Format: discord_channelid
+                return parts[1]
+            elif len(parts) == 3:
+                # Format: discord_guildid_channelid
+                return parts[2]
         return full_channel_id  # Return as-is if not in expected format
 
     def _should_process_message(self, msg: DiscordMessage) -> bool:
@@ -172,18 +176,22 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
 
+        # First check if it's a monitored channel - create task regardless of author
         if raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids:
             await self._create_priority_observation_result(msg, filter_result)
+        # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
             msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
         ):
             logger.info(f"[PRIORITY] Routing message to WA feedback queue - author {msg.author_name} is WA")
             await self._add_to_feedback_queue(msg)
         else:
-            logger.info("[PRIORITY] Not routing to WA feedback - checking conditions:")
+            logger.info("[PRIORITY] Not processing - not in monitored or deferral channels:")
+            logger.info(f"  - Channel {msg.channel_id} monitored: {raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids}")
             logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id}")
-            logger.info(f"  - Author ID in WA list: {msg.author_id in self.wa_user_ids}")
-            logger.info(f"  - Author name matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
+            if msg.channel_id == self.deferral_channel_id:
+                logger.info(f"  - Author ID in WA list: {msg.author_id in self.wa_user_ids}")
+                logger.info(f"  - Author name matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
             logger.debug(
                 "Ignoring priority message from channel %s, author %s (ID: %s)",
                 msg.channel_id,
@@ -206,18 +214,22 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
 
+        # First check if it's a monitored channel - create task regardless of author
         if raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids:
             await self._create_passive_observation_result(msg)
+        # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
             msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
         ):
             logger.info(f"Routing message to WA feedback queue - author {msg.author_name} is WA")
             await self._add_to_feedback_queue(msg)
         else:
-            logger.info("Not routing to WA feedback - checking conditions:")
+            logger.info("Not processing - not in monitored or deferral channels:")
+            logger.info(f"  - Channel {msg.channel_id} monitored: {raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids}")
             logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id}")
-            logger.info(f"  - Author ID in WA list: {msg.author_id in self.wa_user_ids}")
-            logger.info(f"  - Author name matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
+            if msg.channel_id == self.deferral_channel_id:
+                logger.info(f"  - Author ID in WA list: {msg.author_id in self.wa_user_ids}")
+                logger.info(f"  - Author name matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
             logger.debug(
                 "Ignoring message from channel %s, author %s (ID: %s)", msg.channel_id, msg.author_name, msg.author_id
             )

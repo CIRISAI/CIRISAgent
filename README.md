@@ -160,7 +160,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **[Configuration Management](ciris_engine/logic/config/README.md)**: Multi-source configuration with agent self-configuration through graph memory operations and WA approval workflows
 - **Data Persistence**: Robust SQLite storage with migrations, maintenance automation, and integrity verification
 
-### 🛠 Principled Infrastructure
+### Principled Infrastructure
 - **Epistemic Faculties**: Advanced content evaluation through specialized entropy, coherence, and decision analysis capabilities
 - **[Utility Framework](ciris_engine/logic/utils/README.md)**: Comprehensive infrastructure including logging, context management, shutdown coordination, and task formatting
 - **[Prompt Engineering](ciris_engine/logic/formatters/README.md)**: Composable text formatting utilities for consistent LLM prompt engineering
@@ -186,13 +186,13 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 
 CIRIS includes comprehensive **runtime control capabilities** for system management and debugging.
 
-### 🎛️ System Management
+### System Management
 - **Dynamic Adapter Management**: Load, unload, and reconfigure adapters at runtime
 - **Multi-Instance Support**: Run multiple instances of the same adapter type
 - **[Live Configuration Updates](ciris_engine/logic/config/README.md)**: Change system settings with validation
 - **[Service Management](ciris_engine/registries/README.md)**: Monitor and control service health
 
-### 🔧 Key API Capabilities
+### Key API Capabilities
 The API exposes agent capabilities, not controllers:
 
 ```bash
@@ -214,7 +214,7 @@ curl http://localhost:8080/v1/telemetry/resources
 curl -X POST http://localhost:8080/v1/runtime/processor/pause
 ```
 
-### 🐛 Debugging & Observability
+### Debugging & Observability
 - **Processor Control**: Single-step execution, pause/resume
 - **Visibility Windows**: See agent thoughts and decisions
 - **Memory Browsing**: Explore the agent's graph memory
@@ -231,7 +231,7 @@ curl -X POST http://localhost:8080/v1/runtime/processor/pause
 - **Memory Timeline**: Time-based memory queries
 - **Audit Statistics**: Action patterns and compliance
 
-> **📖 API Documentation**: Complete endpoint reference available in the API system.
+> **API Documentation**: Complete endpoint reference available in the API system.
 
 ---
 

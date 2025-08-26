@@ -1,6 +1,7 @@
 """
 Comprehensive tests for Discord observer routing logic.
 Tests that messages are properly routed to task creation or WA feedback based on channel and author.
+Also tests that proper logging occurs for all decision paths.
 """
 
 import uuid
@@ -336,6 +337,142 @@ class TestDiscordObserverRouting:
             assert mock_create.call_count == 2
             assert mock_create.call_args_list[0][0][0] == msg1
             assert mock_create.call_args_list[1][0][0] == msg2
+
+
+class TestDiscordObserverLogging:
+    """Test that proper logging occurs for all routing decisions."""
+
+    @pytest.fixture
+    def observer(self):
+        """Create observer instance for logging tests."""
+        observer = DiscordObserver(
+            agent_id="test_agent",
+            monitored_channel_ids=["1396158748606726354"],  # ai-social
+            deferral_channel_id="1382008300576702565",
+            wa_user_ids=["537080239679864862"],
+        )
+        return observer
+
+    @pytest.mark.asyncio
+    async def test_monitored_channel_task_creation_logged(self, observer, caplog):
+        """Test that task creation for monitored channels is properly logged."""
+        msg = DiscordMessage(
+            message_id="test_msg_log1",
+            content="Test message",
+            author_id="123456789",
+            author_name="TestUser",
+            channel_id="1396158748606726354",  # Monitored channel
+            is_bot=False,
+            is_dm=False,
+        )
+
+        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock):
+            import logging
+            with caplog.at_level(logging.INFO):
+                await observer._handle_passive_observation(msg)
+                
+                # Check for routing log
+                assert any("[DISCORD-PASSIVE] Routing message test_msg_log1" in record.message 
+                          for record in caplog.records)
+                # Check for task creation log
+                assert any("IS MONITORED - CREATING PASSIVE TASK" in record.message 
+                          for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_unmonitored_channel_rejection_logged(self, observer, caplog):
+        """Test that rejection of unmonitored channel messages is properly logged."""
+        msg = DiscordMessage(
+            message_id="test_msg_log2",
+            content="Test message",
+            author_id="123456789",
+            author_name="TestUser",
+            channel_id="9999999999",  # Unmonitored channel
+            is_bot=False,
+            is_dm=False,
+        )
+
+        import logging
+        with caplog.at_level(logging.WARNING):
+            await observer._handle_passive_observation(msg)
+            
+            # Check for warning about no task created
+            assert any("NO TASK CREATED" in record.message and "test_msg_log2" in record.message
+                      for record in caplog.records)
+            # Check for reason
+            assert any("Channel not monitored" in record.message 
+                      for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_filter_rejection_logged_in_base_observer(self, observer, caplog):
+        """Test that adaptive filter rejections are properly logged."""
+        msg = DiscordMessage(
+            message_id="test_msg_filter",
+            content="spam spam spam",
+            author_id="123456789",
+            author_name="Spammer",
+            channel_id="1396158748606726354",
+            is_bot=False,
+            is_dm=False,
+        )
+
+        # Mock secrets service (required by base observer)
+        mock_secrets_service = AsyncMock()
+        mock_secrets_service.process_incoming_text = AsyncMock(return_value=(msg.content, []))
+        observer.secrets_service = mock_secrets_service
+
+        # Mock filter service to reject the message
+        mock_filter_service = AsyncMock()
+        mock_filter_service.filter_message = AsyncMock(return_value=FilterResult(
+            message_id=msg.message_id,
+            priority=FilterPriority.LOW,
+            triggered_filters=["spam_filter"],
+            should_process=False,
+            reasoning="Message identified as spam"
+        ))
+        observer.filter_service = mock_filter_service
+
+        import logging
+        with caplog.at_level(logging.WARNING):
+            await observer.handle_incoming_message(msg)
+            
+            # Check for filter rejection log
+            assert any("FILTERED OUT by adaptive filter" in record.message 
+                      and "spam_filter" in record.message
+                      for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_priority_message_logging_with_filters(self, observer, caplog):
+        """Test that priority messages log their filter information."""
+        msg = DiscordMessage(
+            message_id="test_msg_priority_log",
+            content="@Echo urgent help",
+            author_id="123456789",
+            author_name="TestUser",
+            channel_id="1396158748606726354",
+            is_bot=False,
+            is_dm=False,
+        )
+
+        filter_result = FilterResult(
+            message_id=msg.message_id,
+            priority=FilterPriority.CRITICAL,
+            triggered_filters=["at_mention", "urgent_keyword"],
+            should_process=True,
+            reasoning="Critical priority due to @mention and urgent keyword"
+        )
+
+        with patch.object(observer, '_create_priority_observation_result', new_callable=AsyncMock):
+            import logging
+            with caplog.at_level(logging.INFO):
+                await observer._handle_priority_observation(msg, filter_result)
+                
+                # Check for priority routing log
+                assert any("[DISCORD-PRIORITY]" in record.message 
+                          and "test_msg_priority_log" in record.message
+                          for record in caplog.records)
+                # Check for filter info in log
+                assert any("at_mention" in record.message and "urgent_keyword" in record.message
+                          for record in caplog.records)
 
 
 class TestDiscordObserverTaskCreation:

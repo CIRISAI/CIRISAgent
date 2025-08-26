@@ -325,6 +325,11 @@ class BaseObserver(Generic[MessageT], ABC):
             )
 
             await self._sign_and_add_task(task)
+            
+            logger.info(
+                f"[OBSERVER] PASSIVE TASK CREATED: {task.task_id} for message {msg.message_id} "  # type: ignore[attr-defined]
+                f"from @{msg.author_name} in channel {channel_id}"  # type: ignore[attr-defined]
+            )
 
             # Build conversation context for thought - thoughts are NEVER sanitized
             thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
@@ -426,6 +431,12 @@ class BaseObserver(Generic[MessageT], ABC):
                 ),
             )
             await self._sign_and_add_task(task)
+            
+            logger.info(
+                f"[OBSERVER] PRIORITY TASK CREATED: {task.task_id} (priority={task.priority}) "
+                f"for message {msg.message_id} from @{msg.author_name} in channel {getattr(msg, 'channel_id', 'unknown')} "  # type: ignore[attr-defined]
+                f"(filters: {', '.join(filter_result.triggered_filters)})"
+            )
 
             thought = Thought(
                 thought_id=generate_thought_id(thought_type=ThoughtType.OBSERVATION, task_id=task.task_id),
@@ -456,6 +467,12 @@ class BaseObserver(Generic[MessageT], ABC):
 
     async def handle_incoming_message(self, msg: MessageT) -> None:
         """Standard message handling flow for all observers."""
+        msg_id = getattr(msg, "message_id", "unknown")
+        channel_id = getattr(msg, "channel_id", "unknown")
+        author = f"{getattr(msg, 'author_name', 'unknown')} (ID: {getattr(msg, 'author_id', 'unknown')})"
+        
+        logger.info(f"[OBSERVER] Processing message {msg_id} from {author} in channel {channel_id}")
+        
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
 
@@ -467,14 +484,22 @@ class BaseObserver(Generic[MessageT], ABC):
 
         # If it's the agent's message, stop here (no task creation)
         if is_agent_message:
-            logger.debug("Added agent's own message to history (no task created)")
+            logger.info(f"[OBSERVER] Message {msg_id} is from agent itself - NO TASK CREATED")
             return
 
         # Apply adaptive filtering to determine message priority and processing
         filter_result = await self._apply_message_filtering(msg, self.origin_service)
         if not filter_result.should_process:
-            logger.debug(f"Message filtered out: {filter_result.reasoning}")
+            logger.warning(
+                f"[OBSERVER] Message {msg_id} from {author} in channel {channel_id} FILTERED OUT by adaptive filter: "
+                f"{filter_result.reasoning} (triggered filters: {', '.join(filter_result.triggered_filters) or 'none'})"
+            )
             return
+        
+        logger.info(
+            f"[OBSERVER] Message {msg_id} PASSED filter with priority {filter_result.priority.value}: "
+            f"{filter_result.reasoning}"
+        )
 
         # Add filter context to message for downstream processing
         setattr(processed_msg, "_filter_priority", filter_result.priority)

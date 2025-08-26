@@ -15,11 +15,10 @@ from ciris_engine.schemas.adapters.discord import (
     DiscordApprovalData,
     DiscordChannelInfo,
     DiscordGuidanceData,
-    DiscordMessageData,
 )
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.runtime.messages import IncomingMessage
+from ciris_engine.schemas.runtime.messages import FetchedMessage, IncomingMessage
 from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
@@ -316,7 +315,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
     ) -> List[FetchedMessage]:
         """Implementation of CommunicationService.fetch_messages - fetches from correlations"""
         from ciris_engine.logic.persistence import get_correlations_by_channel
-        from ciris_engine.schemas.runtime.messages import FetchedMessage
 
         try:
             # Get correlations for this channel

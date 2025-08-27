@@ -8,7 +8,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**RELEASE CANDIDATE 1.0.4-RC1-patch4** | [Release Notes](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
+**RELEASE CANDIDATE 1.0.5-RC1-patch5** | [Release Notes](docs/releases/1.0.5-RC1-patch5.md) | [Patch 4](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -23,14 +23,14 @@ CIRIS wraps LLM calls with:
 
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
-### Latest: v1.0.4-RC1-patch4
-**This critical patch includes:**
-- **Discord Observer Fix** - WA users' messages now properly create tasks in monitored channels
-- **Enhanced Logging** - Comprehensive observability for message routing decisions
-- **Channel ID Extraction** - Now handles both discord_channelid and discord_guildid_channelid formats
-- **Test Coverage** - 16 new tests covering all routing scenarios
+### Latest: v1.0.5-RC1-patch5
+**This patch focuses on test coverage and code quality:**
+- **Discord Tool Handler Tests** - Added 37 comprehensive unit tests achieving 100% pass rate
+- **Production Code Fixes** - Fixed validation errors in correlation tracking
+- **Robust Mocking Strategy** - Implemented clean autouse fixtures for persistence
+- **Coverage Improvement** - Increased discord_tool_handler.py coverage from 27% to ~73%
 
-See [full release notes](docs/releases/1.0.4-RC1-patch4.md) for details.
+See [full release notes](docs/releases/1.0.5-RC1-patch5.md) for details.
 
 ---
 

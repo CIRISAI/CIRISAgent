@@ -63,7 +63,11 @@ class MockMemoryBus:
     def __init__(self):
         self.stored_nodes = []
         self.queries = []
-        self.memorize = AsyncMock(return_value=MagicMock(success=True))
+        # Create a custom side effect for memorize
+        async def memorize_side_effect(node, *args, **kwargs):
+            self.stored_nodes.append(node)
+            return MagicMock(success=True)
+        self.memorize = AsyncMock(side_effect=memorize_side_effect)
         self.query = AsyncMock(return_value=[])
         self.recall = AsyncMock(return_value=[])
 
@@ -92,6 +96,10 @@ class MockIdentityVarianceMonitor:
         self.measure_variance = AsyncMock(return_value=0.05)
         self.get_variance_report = AsyncMock()
         self.is_stable = AsyncMock(return_value=True)
+        self.start = AsyncMock()
+        self.stop = AsyncMock()
+        self.is_healthy = AsyncMock(return_value=True)
+        self.is_healthy = AsyncMock(return_value=True)
         
         # Mock check_variance to return a VarianceReport
         self.check_variance = AsyncMock(return_value=VarianceReport(
@@ -133,7 +141,15 @@ class MockPatternAnalysisLoop:
         self.patterns = []
         self.insights = []
         self.is_running = False
+        self._detected_patterns = {}  # Service expects dict, not list
         self.analyze = AsyncMock(return_value=AnalysisResult(
+            status="completed",
+            patterns_detected=2,
+            insights_stored=1,
+            timestamp=datetime.now(timezone.utc),
+            next_analysis_in=3600.0
+        ))
+        self.analyze_and_adapt = AsyncMock(return_value=AnalysisResult(
             status="completed",
             patterns_detected=2,
             insights_stored=1,
@@ -144,6 +160,7 @@ class MockPatternAnalysisLoop:
         self.get_insights = AsyncMock(return_value=[])
         self.start = AsyncMock()
         self.stop = AsyncMock()
+        self.is_healthy = AsyncMock(return_value=True)
 
     async def add_pattern(self, pattern: DetectedPattern):
         """Add a detected pattern."""
@@ -166,6 +183,7 @@ class MockTelemetryService:
         self._service_registry = None
         self.start = AsyncMock()
         self.stop = AsyncMock()
+        self.is_healthy = AsyncMock(return_value=True)
         self.is_healthy = AsyncMock(return_value=True)
 
     def _set_service_registry(self, registry):
@@ -431,6 +449,7 @@ class MockSelfObservationService:
         self.emergency_stop = AsyncMock()
         self.start = AsyncMock()
         self.stop = AsyncMock()
+        self.is_healthy = AsyncMock(return_value=True)
         self.is_healthy = AsyncMock(return_value=True)
         self.get_capabilities = Mock()
         self.get_status = Mock()

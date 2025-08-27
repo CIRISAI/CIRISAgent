@@ -312,7 +312,7 @@ grep -r "class.*YourThingHere" --include="*.py"
 
 ### In Progress 🚧
 - Wisdom Extension System (FSD-019)
-- Test coverage improvement (currently 54%, target 80%)
+- Test coverage improvement (target 80%)
 - CIRISManager canary deployments
 
 ## Service Architecture
@@ -484,7 +484,7 @@ python -m pytest tests/                 # timeout: 300000ms
 ## Quality Standards
 
 - **Type Safety**: Zero Dict[str, Any]
-- **Test Coverage**: Target 80% (currently 54%)
+- **Test Coverage**: Target 80%
 - **Response Time**: <1s API responses
 - **Memory**: 4GB RAM maximum
 - **Security**: Ed25519 signatures throughout

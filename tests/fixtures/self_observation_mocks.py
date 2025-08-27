@@ -113,10 +113,11 @@ class MockPatternAnalysisLoop:
         self.insights = []
         self.is_running = False
         self.analyze = AsyncMock(return_value=AnalysisResult(
-            patterns_found=2,
-            insights_generated=1,
-            confidence_score=0.85,
-            timestamp=datetime.now(timezone.utc)
+            status="completed",
+            patterns_detected=2,
+            insights_stored=1,
+            timestamp=datetime.now(timezone.utc),
+            next_analysis_in=3600.0
         ))
         self.get_patterns = AsyncMock(return_value=[])
         self.get_insights = AsyncMock(return_value=[])
@@ -141,6 +142,13 @@ class MockTelemetryService:
         self.capture_metrics = AsyncMock()
         self.record_event = AsyncMock()
         self.get_metrics = AsyncMock(return_value={})
+        self._service_registry = None
+        self.stop = AsyncMock()
+        self.is_healthy = AsyncMock(return_value=True)
+
+    def _set_service_registry(self, registry):
+        """Set the service registry."""
+        self._service_registry = registry
 
     async def record_metric(self, name: str, value: float, tags: Optional[Dict[str, str]] = None):
         """Record a metric."""
@@ -167,17 +175,35 @@ class MockServiceRegistry:
 
 
 def create_agent_identity(
-    identity_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
     core_values: Optional[List[str]] = None,
     capabilities: Optional[List[str]] = None,
     constraints: Optional[List[str]] = None,
 ) -> AgentIdentityRoot:
     """Create an agent identity for testing."""
+    from ciris_engine.schemas.runtime.core import CoreProfile, IdentityMetadata
+    
+    now = datetime.now(timezone.utc)
+    agent_id = agent_id or str(uuid.uuid4())
+    
     return AgentIdentityRoot(
-        identity_id=identity_id or str(uuid.uuid4()),
-        core_values=core_values or ["honesty", "helpfulness", "safety"],
-        capabilities=capabilities or ["text_processing", "reasoning", "learning"],
-        behavioral_constraints=constraints or ["no_harm", "respect_privacy"],
+        agent_id=agent_id,
+        identity_hash=f"hash_{agent_id}",
+        core_profile=CoreProfile(
+            description="Test AI Assistant",
+            role_description="Test agent for unit testing",
+            domain_specific_knowledge={"testing": "Unit test knowledge"},
+            areas_of_expertise=["testing", "validation"],
+        ),
+        identity_metadata=IdentityMetadata(
+            created_at=now,
+            last_modified=now,
+            modification_count=0,
+            creator_agent_id="system",
+            version="1.0.0",
+        ),
+        permitted_actions=capabilities or ["text_processing", "reasoning", "learning"],
+        trust_level=0.8,
     )
 
 
@@ -283,36 +309,51 @@ def create_detected_pattern(
     occurrences: int = 5,
 ) -> DetectedPattern:
     """Create a detected pattern for testing."""
+    from ciris_engine.schemas.infrastructure.feedback_loop import PatternMetrics
+    
     return DetectedPattern(
         pattern_id=str(uuid.uuid4()),
         pattern_type=pattern_type,
         description="Test detected pattern",
-        confidence_score=confidence,
-        evidence=["event_001", "event_002"],
-        first_occurrence=datetime.now(timezone.utc) - timedelta(hours=1),
-        last_occurrence=datetime.now(timezone.utc),
-        frequency=occurrences,
-        metadata={},
+        evidence_nodes=["event_001", "event_002"],
+        detected_at=datetime.now(timezone.utc),
+        metrics=PatternMetrics(
+            occurrence_count=occurrences,
+            average_value=0.75,
+            peak_value=0.95,
+            time_range_hours=24.0,
+            data_points=100,
+            trend="stable",
+        ),
     )
 
 
 def create_system_snapshot() -> SystemSnapshot:
     """Create a system snapshot for testing."""
+    from ciris_engine.schemas.runtime.system_context import ChannelContext
+    
     return SystemSnapshot(
-        timestamp=datetime.now(timezone.utc),
-        processor_state="WORK",
-        active_services=20,
-        total_services=25,
-        memory_usage_mb=512.5,
-        cpu_usage_percent=35.2,
-        active_thoughts=3,
-        pending_tasks=5,
-        messages_processed_hour=100,
-        errors_last_hour=2,
-        variance_from_baseline=0.05,
-        current_priorities=["task_001", "task_002"],
+        channel_id="test_channel",
+        channel_context=ChannelContext(
+            channel_id="test_channel",
+            channel_type="test",
+            created_at=datetime.now(timezone.utc),
+            channel_name="Test Channel",
+            is_active=True,
+        ),
+        system_counts={
+            "total_tasks": 10,
+            "total_thoughts": 5,
+            "pending_tasks": 3,
+            "pending_thoughts": 2,
+        },
+        agent_identity={"agent_id": "test_agent"},
+        agent_version="1.0.0",
+        service_health={"SelfObservationService": True},
+        circuit_breaker_status={},
         resource_alerts=[],
-        service_health={},
+        detected_secrets=[],
+        user_profiles=[],
     )
 
 

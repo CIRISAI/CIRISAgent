@@ -107,6 +107,13 @@ class MockIdentityVarianceMonitor:
     async def establish_baseline(self, identity: AgentIdentityRoot) -> str:
         """Establish identity baseline."""
         self.baseline_established = True
+        self._baseline_snapshot_id = "baseline_123"
+        return "baseline_123"
+    
+    async def initialize_baseline(self, identity: AgentIdentityRoot) -> str:
+        """Initialize identity baseline."""
+        self.baseline_established = True
+        self._baseline_snapshot_id = "baseline_123"
         return "baseline_123"
 
     async def get_current_variance(self) -> float:
@@ -281,6 +288,7 @@ def create_review_outcome(
     decision: str = "approve",
     approved_changes: Optional[List[str]] = None,
     resume_observation: bool = True,
+    new_variance_limit: Optional[float] = None,
 ) -> ReviewOutcome:
     """Create a review outcome for testing."""
     return ReviewOutcome(
@@ -293,7 +301,7 @@ def create_review_outcome(
         feedback="Changes look safe and appropriate",
         new_constraints=[],
         resume_observation=resume_observation,
-        new_variance_limit=None,
+        new_variance_limit=new_variance_limit,
     )
 
 
@@ -371,24 +379,19 @@ def create_system_snapshot() -> SystemSnapshot:
 
 def create_observability_analysis(
     window_hours: int = 6,
-    patterns_detected: int = 5,
-    anomalies_found: int = 1,
+    patterns_count: int = 5,
+    anomalies_count: int = 1,
 ) -> ObservabilityAnalysis:
     """Create an observability analysis for testing."""
     now = datetime.now(timezone.utc)
     return ObservabilityAnalysis(
         window_start=now - timedelta(hours=window_hours),
         window_end=now,
-        patterns_detected=patterns_detected,
-        anomalies_found=anomalies_found,
-        key_metrics={
-            "avg_response_time": 150.5,
-            "error_rate": 0.02,
-            "throughput": 1000.0,
-        },
-        recommendations=["Increase monitoring frequency"] if anomalies_found > 0 else [],
-        confidence_score=0.9,
-        metadata={},
+        total_signals=100,
+        signals_by_type={"behavioral": 30, "temporal": 40, "performance": 30},
+        patterns_detected=["behavioral", "temporal"] if patterns_count > 0 else [],
+        anomalies_detected=["high_variance"] if anomalies_count > 0 else [],
+        observation_opportunities=[],
     )
 
 

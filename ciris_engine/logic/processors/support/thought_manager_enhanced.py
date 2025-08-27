@@ -46,7 +46,7 @@ def generate_seed_thought_enhanced(self: Any, task: Task, round_number: int = 0)
 
             correlations = get_correlations_by_channel(
                 channel_id=task.channel_id,  # Use task's channel_id, not the extracted channel name
-                limit=10,  # Last 10 messages
+                limit=20,  # Last 20 messages
             )
 
             # Build conversation history

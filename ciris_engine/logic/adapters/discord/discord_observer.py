@@ -11,7 +11,7 @@ from ciris_engine.schemas.runtime.models import TaskContext, ThoughtType
 
 logger = logging.getLogger(__name__)
 
-PASSIVE_CONTEXT_LIMIT = 10
+PASSIVE_CONTEXT_LIMIT = 20
 
 
 class DiscordObserver(BaseObserver[DiscordMessage]):

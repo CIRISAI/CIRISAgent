@@ -458,7 +458,7 @@ class TestDiscordContextPersistence:
 
             thought_lines = [
                 f"You observed @{new_msg.author_name} (ID: {new_msg.author_id}) in channel {new_msg.channel_id} say: {new_msg.content}",
-                "\n=== CONVERSATION HISTORY (Last 10 messages) ===",
+                "\n=== CONVERSATION HISTORY (Last 20 messages) ===",
             ]
 
             for i, hist_msg in enumerate(history, 1):

@@ -18,7 +18,33 @@ logger = logging.getLogger(__name__)
 
 MessageT = TypeVar("MessageT", bound=BaseModel)
 
-PASSIVE_CONTEXT_LIMIT = 10
+PASSIVE_CONTEXT_LIMIT = 20
+
+
+def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] = None) -> str:
+    """Format Discord mentions to include username alongside numeric IDs.
+    
+    Args:
+        content: The message content containing Discord mentions like <@123456789>
+        user_lookup: Optional dict mapping user IDs to usernames
+    
+    Returns:
+        Content with mentions formatted as <@123456789> (username: UserName)
+    """
+    import re
+    
+    if not user_lookup:
+        return content
+    
+    # Pattern to match Discord mentions: <@USER_ID> or <@!USER_ID>
+    mention_pattern = r'<@!?(\d+)>'
+    
+    def replace_mention(match):
+        user_id = match.group(1)
+        username = user_lookup.get(user_id, "Unknown")
+        return f"{match.group(0)} (username: {username})"
+    
+    return re.sub(mention_pattern, replace_mention, content)
 
 
 class BaseObserver(Generic[MessageT], ABC):
@@ -308,10 +334,16 @@ class BaseObserver(Generic[MessageT], ABC):
                 f"total context size: {sum(len(str(m)) for m in history_context)} chars"
             )
 
+            # Format mentions for task description
+            passive_task_lookup = {}
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                passive_task_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
+            
             task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
-                description=f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{msg.content}'",  # type: ignore[attr-defined]
+                description=f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'",  # type: ignore[attr-defined]
                 status=TaskStatus.PENDING,
                 priority=0,
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
@@ -332,13 +364,33 @@ class BaseObserver(Generic[MessageT], ABC):
             )
 
             # Build conversation context for thought - thoughts are NEVER sanitized
-            thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
+            # Build user lookup for the current message
+            initial_user_lookup = {}
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                initial_user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
+            thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {formatted_msg_content}"]  # type: ignore[attr-defined]
 
-            thought_lines.append("\n=== CONVERSATION HISTORY (Last 10 messages) ===")
+            thought_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
+            
+            # Build user lookup for mention resolution
+            user_lookup = {}
+            for hist_msg in history_context:
+                aid = hist_msg.get("author_id")
+                aname = hist_msg.get("author")
+                if aid and aname:
+                    user_lookup[str(aid)] = aname
+            # Also add current message author
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            
             for i, hist_msg in enumerate(history_context, 1):
                 author = hist_msg.get("author", "Unknown")
                 author_id = hist_msg.get("author_id", "unknown")
                 content = hist_msg.get("content", "")
+                
+                # Format mentions in content to include usernames
+                content = format_discord_mentions(content, user_lookup)
                 
                 # Thoughts are NEVER sanitized - we see full content
                 hist_msg.get("timestamp", "")
@@ -361,7 +413,9 @@ class BaseObserver(Generic[MessageT], ABC):
                 sanitized_content = redact_personal_info(str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content))  # type: ignore[attr-defined]
                 thought_lines.append(f"@{author_hash}: {sanitized_content} [Hash: {content_hash[:16]}]")
             else:
-                thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {msg.content}")  # type: ignore[attr-defined]
+                # Format mentions in the current message too
+                formatted_content = format_discord_mentions(str(msg.content), user_lookup)  # type: ignore[attr-defined]
+                thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {formatted_content}")  # type: ignore[attr-defined]  # type: ignore[attr-defined]
 
             thought_content = "\n".join(thought_lines)
 
@@ -415,10 +469,16 @@ class BaseObserver(Generic[MessageT], ABC):
 
             task_priority = 10 if getattr(filter_result.priority, "value", "") == "critical" else 5
 
+            # Format mentions for task description
+            task_user_lookup = {}
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                task_user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            formatted_task_content = format_discord_mentions(str(msg.content), task_user_lookup)  # type: ignore[attr-defined]
+            
             task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
-                description=f"PRIORITY: Respond to {filter_result.priority.value} message from @{msg.author_name} (ID: {msg.author_id}): '{msg.content}'",  # type: ignore[attr-defined]
+                description=f"PRIORITY: Respond to {filter_result.priority.value} message from @{msg.author_name} (ID: {msg.author_id}): '{formatted_task_content}'",  # type: ignore[attr-defined]
                 status=TaskStatus.PENDING,
                 priority=task_priority,
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
@@ -438,6 +498,12 @@ class BaseObserver(Generic[MessageT], ABC):
                 f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
             )
 
+            # Build user lookup for mention formatting
+            user_lookup_priority = {}
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                user_lookup_priority[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            formatted_priority_content = format_discord_mentions(str(msg.content), user_lookup_priority)  # type: ignore[attr-defined]
+            
             thought = Thought(
                 thought_id=generate_thought_id(thought_type=ThoughtType.OBSERVATION, task_id=task.task_id),
                 source_task_id=task.task_id,
@@ -447,7 +513,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 round_number=0,
-                content=f"PRIORITY ({filter_result.priority.value}): User @{msg.author_name} (ID: {msg.author_id}) said: {msg.content} | Filter: {filter_result.reasoning}",  # type: ignore[attr-defined]
+                content=f"PRIORITY ({filter_result.priority.value}): User @{msg.author_name} (ID: {msg.author_id}) said: {formatted_priority_content} | Filter: {filter_result.reasoning}",  # type: ignore[attr-defined]
                 thought_depth=0,
                 ponder_notes=None,
                 parent_thought_id=None,

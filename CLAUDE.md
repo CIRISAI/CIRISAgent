@@ -2,11 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with the CIRIS codebase.
 
-## 🎯 CURRENT FOCUS: Wisdom Extension System (January 2025)
+## 🎯 CURRENT FOCUS: Release Candidate Quality & Stability (January 2025)
 
-**Branch**: `wisdom-extension`
-**FSD**: `FSD/019_WISDOM_EXTENSION_CAPABILITY_SYSTEM.md`
-**Goal**: Enable specialized wisdom providers (geo, weather, sensor) WITHOUT medical liability
+**Status**: Release Candidate 1 (RC1) - Production Ready
+**Branch**: `1.0-RC1-patch*` branches for fixes
+**Goal**: Achieve production-grade quality, stability, and test coverage
+
+### Priority Areas for RC1
+
+1. **Test Coverage** - Target 80% (currently ~68%)
+   - Focus on critical path services
+   - Integration tests for complex flows
+   - Edge case coverage
+
+2. **Bug Fixes & Stability**
+   - Address any production issues from agents.ciris.ai
+   - Fix flaky tests
+   - Resolve memory leaks or performance issues
+
+3. **Documentation & Code Quality**
+   - Update outdated documentation
+   - Remove dead code and TODOs
+   - Ensure all APIs are properly documented
+
+4. **Security Hardening**
+   - Review authentication flows
+   - Audit secret handling
+   - Validate input sanitization
 
 ### ⚠️ CRITICAL: Medical Domain Prohibition
 
@@ -17,14 +39,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 - Clinical decision support
 
 **These are BLOCKED at the bus level.** See `PROHIBITED_CAPABILITIES` in `wise_bus.py`.
-
-### Current Tasks (wisdom-extension branch)
-1. Implement medical capability blocklist in WiseBus
-2. Add optional capability fields to GuidanceRequest/Response schemas
-3. Create WisdomAdvice model with liability disclaimers
-4. Add multi-provider support to ServiceRegistry
-5. Implement request_guidance() with fan-out and arbitration
-6. Create SAFE examples: GeoWisdomAdapter, WeatherWisdomAdapter
 
 ---
 
@@ -299,7 +313,7 @@ grep -r "class.*YourThingHere" --include="*.py"
 - `ThoughtSchema` - Thoughts
 - `GuidanceRequest/Response` - WA guidance
 
-## Current Status (January 2025)
+## Current Status (January 2025) - Release Candidate 1
 
 ### Completed ✅
 - 82 API endpoints fully operational
@@ -309,11 +323,16 @@ grep -r "class.*YourThingHere" --include="*.py"
 - 1,180+ tests with Docker CI/CD
 - DSAR compliance and transparency feeds
 - Book VI stewardship implementation
+- Discord mention formatting with usernames
+- Increased chat history context (20 messages)
 
-### In Progress 🚧
-- Wisdom Extension System (FSD-019)
-- Test coverage improvement (currently 54%, target 80%)
-- CIRISManager canary deployments
+### RC1 Quality Focus 🚧
+- Test coverage improvement (~68% → target 80%)
+- Bug fixes and stability improvements
+- Performance optimization
+- Security hardening
+- Documentation updates
+- Production issue resolution
 
 ## Service Architecture
 
@@ -484,7 +503,7 @@ python -m pytest tests/                 # timeout: 300000ms
 ## Quality Standards
 
 - **Type Safety**: Zero Dict[str, Any]
-- **Test Coverage**: Target 80% (currently 54%)
+- **Test Coverage**: Target 80%
 - **Response Time**: <1s API responses
 - **Memory**: 4GB RAM maximum
 - **Security**: Ed25519 signatures throughout

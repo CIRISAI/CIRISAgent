@@ -483,7 +483,7 @@ class TestThoughtManagerEnhanced:
             )
 
         with patch("ciris_engine.logic.persistence.get_correlations_by_channel") as mock_get_corr:
-            mock_get_corr.return_value = large_history[:10]  # Only last 10
+            mock_get_corr.return_value = large_history[:20]  # Return 20 messages now
 
             start_time = time.time()
 
@@ -496,4 +496,4 @@ class TestThoughtManagerEnhanced:
             # Should complete quickly even with large history
             assert execution_time < 0.1
             assert thought is not None
-            assert "CONVERSATION HISTORY (Last 10 messages)" in thought.content
+            assert "CONVERSATION HISTORY (Last 20 messages)" in thought.content

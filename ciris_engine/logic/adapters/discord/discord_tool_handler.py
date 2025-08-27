@@ -156,10 +156,12 @@ class DiscordToolHandler:
 
         if correlation_id:
             self._tool_results[correlation_id] = execution_result
+            # Convert response_data to Dict[str, str] as required by schema
+            response_data_str = {k: str(v) for k, v in result_dict.items()} if result_dict else {}
             persistence.update_correlation(
                 CorrelationUpdateRequest(
                     correlation_id=correlation_id,
-                    response_data=result_dict,
+                    response_data=response_data_str,
                     status=ServiceCorrelationStatus.COMPLETED,
                     metric_value=None,
                     tags=None,
@@ -185,10 +187,11 @@ class DiscordToolHandler:
         error_result = {"error": str(error), "tool_name": tool_name}
 
         if correlation_id:
+            # Convert to Dict[str, str] as required by schema
             persistence.update_correlation(
                 CorrelationUpdateRequest(
                     correlation_id=correlation_id,
-                    response_data=error_result,
+                    response_data={k: str(v) for k, v in error_result.items()},
                     status=ServiceCorrelationStatus.FAILED,
                     metric_value=None,
                     tags=None,

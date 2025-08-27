@@ -16,9 +16,36 @@ from ciris_engine.schemas.services.filters_core import FilterPriority, FilterRes
 
 logger = logging.getLogger(__name__)
 
+# Using TypeVar for backward compatibility - will migrate to PEP 695 syntax when Python 3.12+ is required
 MessageT = TypeVar("MessageT", bound=BaseModel)
 
-PASSIVE_CONTEXT_LIMIT = 10
+PASSIVE_CONTEXT_LIMIT = 20
+
+
+def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] = None) -> str:
+    """Format Discord mentions to include username alongside numeric IDs.
+    
+    Args:
+        content: The message content containing Discord mentions like <@123456789>
+        user_lookup: Optional dict mapping user IDs to usernames
+    
+    Returns:
+        Content with mentions formatted as <@123456789> (username: UserName)
+    """
+    import re
+    
+    if not user_lookup:
+        return content
+    
+    # Pattern to match Discord mentions: <@USER_ID> or <@!USER_ID>
+    mention_pattern = r'<@!?(\d+)>'
+    
+    def replace_mention(match):
+        user_id = match.group(1)
+        username = user_lookup.get(user_id, "Unknown")
+        return f"{match.group(0)} (username: {username})"
+    
+    return re.sub(mention_pattern, replace_mention, content)
 
 
 class BaseObserver(Generic[MessageT], ABC):
@@ -268,18 +295,63 @@ class BaseObserver(Generic[MessageT], ABC):
 
         persistence.add_task(task)
 
-    async def _create_passive_observation_result(self, msg: MessageT) -> None:
-        try:
-            import uuid
-            from datetime import datetime, timezone
+    def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[Dict]) -> Dict[str, str]:
+        """Build a user lookup dictionary for mention resolution."""
+        user_lookup = {}
+        
+        # Add users from history
+        for hist_msg in history_context:
+            aid = hist_msg.get("author_id")
+            aname = hist_msg.get("author")
+            if aid and aname:
+                user_lookup[str(aid)] = aname
+        
+        # Add current message author
+        if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+            user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+        
+        return user_lookup
 
-            from ciris_engine.logic import persistence
-            from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
-            from ciris_engine.schemas.runtime.models import Task, Thought
-            from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot
+    def _format_history_lines(self, history_context: List[Dict], user_lookup: Dict[str, str]) -> List[str]:
+        """Format conversation history lines with mentions."""
+        lines = []
+        for i, hist_msg in enumerate(history_context, 1):
+            author = hist_msg.get("author", "Unknown")
+            author_id = hist_msg.get("author_id", "unknown")
+            content = hist_msg.get("content", "")
+            
+            # Format mentions in content to include usernames
+            content = format_discord_mentions(content, user_lookup)
+            lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+        
+        return lines
+    
+    async def _append_consent_aware_content(self, task_lines: List[str], msg: MessageT, user_lookup: Dict[str, str]) -> None:
+        """Append current message content with consent awareness."""
+        from ciris_engine.schemas.consent.core import ConsentStream
+        import hashlib
+        
+        consent_stream = await self._get_user_consent_stream(msg.author_id)  # type: ignore[attr-defined]
+        is_anonymous = consent_stream == ConsentStream.ANONYMOUS.value
+        
+        if is_anonymous:
+            content_hash = hashlib.sha256(str(msg.content).encode()).hexdigest()  # type: ignore[attr-defined]
+            author_hash = f"anon_{hashlib.sha256(str(msg.author_id).encode()).hexdigest()[:8]}"  # type: ignore[attr-defined]
+            from ciris_engine.logic.utils.privacy import redact_personal_info
+            sanitized_content = redact_personal_info(
+                str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content)  # type: ignore[attr-defined]
+            )
+            task_lines.append(f"@{author_hash}: {sanitized_content} [Hash: {content_hash[:16]}]")
+        else:
+            formatted_content = format_discord_mentions(str(msg.content), user_lookup)  # type: ignore[attr-defined]
+            task_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {formatted_content}")  # type: ignore[attr-defined]
 
-            # Create minimal system snapshot for passive observation
-            channel_context = ChannelContext(
+    async def _create_channel_snapshot(self, msg: MessageT) -> None:
+        """Create channel context and system snapshot for observation."""
+        from datetime import datetime, timezone
+        from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot
+        
+        channel_context = ChannelContext(
                 channel_id=getattr(msg, "channel_id", "system"),
                 channel_name=getattr(msg, "channel_name", f"Channel {getattr(msg, 'channel_id', 'system')}"),
                 channel_type="text",
@@ -292,11 +364,23 @@ class BaseObserver(Generic[MessageT], ABC):
                 moderation_level="standard",
             )
 
-            SystemSnapshot(
-                channel_context=channel_context,
-                channel_id=getattr(msg, "channel_id", "system"),
-                agent_identity={"agent_id": self.agent_id or "ciris", "purpose": "Process and respond to messages"},
-            )
+        SystemSnapshot(
+            channel_context=channel_context,
+            channel_id=getattr(msg, "channel_id", "system"),
+            agent_identity={"agent_id": self.agent_id or "ciris", "purpose": "Process and respond to messages"},
+        )
+    
+    async def _create_passive_observation_result(self, msg: MessageT, priority: int = 0, filter_result: Optional[Any] = None) -> None:
+        try:
+            import uuid
+            from datetime import datetime, timezone
+
+            from ciris_engine.logic import persistence
+            from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
+            from ciris_engine.schemas.runtime.models import Task, Thought
+            
+            # Create channel snapshot
+            await self._create_channel_snapshot(msg)
 
             # Get message history from correlations instead of in-memory
             channel_id = getattr(msg, "channel_id", "system")
@@ -308,12 +392,24 @@ class BaseObserver(Generic[MessageT], ABC):
                 f"total context size: {sum(len(str(m)) for m in history_context)} chars"
             )
 
+            # Format mentions for task description
+            passive_task_lookup = {}
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                passive_task_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
+            
+            # Build description based on whether this is priority or passive
+            if filter_result and priority > 0:
+                description = f"PRIORITY: Respond to {getattr(filter_result.priority, 'value', 'high')} message from @{msg.author_name} (ID: {msg.author_id}): '{formatted_passive_content}'"  # type: ignore[attr-defined]
+            else:
+                description = f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'"  # type: ignore[attr-defined]
+            
             task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
-                description=f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{msg.content}'",  # type: ignore[attr-defined]
+                description=description,
                 status=TaskStatus.PENDING,
-                priority=0,
+                priority=priority,
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 context=TaskContext(
@@ -332,46 +428,43 @@ class BaseObserver(Generic[MessageT], ABC):
             )
 
             # Build conversation context for thought - thoughts are NEVER sanitized
-            thought_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {msg.content}"]  # type: ignore[attr-defined]
+            # Build user lookup for the current message
+            initial_user_lookup = {}
+            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+                initial_user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
+            # Build thought content based on priority vs passive
+            if filter_result and priority > 0:
+                priority_level = getattr(filter_result.priority, 'value', 'high')
+                filter_reasoning = getattr(filter_result, 'reasoning', 'Priority message detected')
+                task_lines = [f"PRIORITY ({priority_level}): @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} said: {formatted_msg_content}"]  # type: ignore[attr-defined]
+                task_lines.append(f"Filter: {filter_reasoning}")
+            else:
+                task_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {formatted_msg_content}"]  # type: ignore[attr-defined]
 
-            thought_lines.append("\n=== CONVERSATION HISTORY (Last 10 messages) ===")
-            for i, hist_msg in enumerate(history_context, 1):
-                author = hist_msg.get("author", "Unknown")
-                author_id = hist_msg.get("author_id", "unknown")
-                content = hist_msg.get("content", "")
-                
-                # Thoughts are NEVER sanitized - we see full content
-                hist_msg.get("timestamp", "")
-                thought_lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+            task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
+            
+            # Build user lookup and format history lines
+            user_lookup = self._build_user_lookup_from_history(msg, history_context)
+            history_lines = self._format_history_lines(history_context, user_lookup)
+            task_lines.extend(history_lines)
 
-            thought_lines.append(
+            task_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="
             )
             
-            # Check if user has anonymous consent
-            from ciris_engine.schemas.consent.core import ConsentStream
-            consent_stream = await self._get_user_consent_stream(msg.author_id)  # type: ignore[attr-defined]
-            is_anonymous = consent_stream == ConsentStream.ANONYMOUS.value
-            
-            if is_anonymous:
-                import hashlib
-                # Use same hash as earlier for consistency
-                content_hash = hashlib.sha256(str(msg.content).encode()).hexdigest()  # type: ignore[attr-defined]
-                author_hash = f"anon_{hashlib.sha256(str(msg.author_id).encode()).hexdigest()[:8]}"  # type: ignore[attr-defined]
-                sanitized_content = redact_personal_info(str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content))  # type: ignore[attr-defined]
-                thought_lines.append(f"@{author_hash}: {sanitized_content} [Hash: {content_hash[:16]}]")
-            else:
-                thought_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {msg.content}")  # type: ignore[attr-defined]
+            # Handle consent-aware content formatting
+            await self._append_consent_aware_content(task_lines, msg, user_lookup)  # type: ignore[attr-defined]
 
-            thought_content = "\n".join(thought_lines)
+            task_content = "\n".join(task_lines)
 
             # Log context building details
             history_line_count = len(
-                [line for line in thought_lines for i in range(1, 11) if line.startswith(f"{i}. @")]
+                [line for line in task_lines for i in range(1, 11) if line.startswith(f"{i}. @")]
             )
             logger.info(
                 f"[CONTEXT] Built thought context with {history_line_count} history messages, "
-                f"total thought size: {len(thought_content)} chars"
+                f"total thought size: {len(task_content)} chars"
             )
 
             thought = Thought(
@@ -383,7 +476,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 round_number=0,
-                content=thought_content,
+                content=task_content,
                 thought_depth=0,
                 ponder_notes=None,
                 parent_thought_id=None,
@@ -405,63 +498,20 @@ class BaseObserver(Generic[MessageT], ABC):
             logger.error("Error creating observation task: %s", e, exc_info=True)
 
     async def _create_priority_observation_result(self, msg: MessageT, filter_result: Any) -> None:
+        """Create priority observation by delegating to passive observation with higher priority."""
         try:
-            import uuid
-            from datetime import datetime, timezone
-
-            from ciris_engine.logic import persistence
-            from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
-            from ciris_engine.schemas.runtime.models import Task, Thought
-
+            # Determine priority based on filter result
             task_priority = 10 if getattr(filter_result.priority, "value", "") == "critical" else 5
-
-            task = Task(
-                task_id=str(uuid.uuid4()),
-                channel_id=getattr(msg, "channel_id", "system"),
-                description=f"PRIORITY: Respond to {filter_result.priority.value} message from @{msg.author_name} (ID: {msg.author_id}): '{msg.content}'",  # type: ignore[attr-defined]
-                status=TaskStatus.PENDING,
-                priority=task_priority,
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                context=TaskContext(
-                    channel_id=getattr(msg, "channel_id", None),
-                    user_id=msg.author_id,  # type: ignore[attr-defined]
-                    correlation_id=msg.message_id,  # type: ignore[attr-defined]
-                    parent_task_id=None,
-                ),
-            )
-            await self._sign_and_add_task(task)
+            
+            # Delegate to passive observation with priority and filter information
+            await self._create_passive_observation_result(msg, priority=task_priority, filter_result=filter_result)
             
             logger.info(
-                f"[OBSERVER] PRIORITY TASK CREATED: {task.task_id} (priority={task.priority}) "
-                f"for message {msg.message_id} from @{msg.author_name} in channel {getattr(msg, 'channel_id', 'unknown')} "  # type: ignore[attr-defined]
+                f"[OBSERVER] PRIORITY OBSERVATION: Message {msg.message_id} from @{msg.author_name} "  # type: ignore[attr-defined]
+                f"triggered {filter_result.priority.value} priority "
                 f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
             )
-
-            thought = Thought(
-                thought_id=generate_thought_id(thought_type=ThoughtType.OBSERVATION, task_id=task.task_id),
-                source_task_id=task.task_id,
-                channel_id=getattr(msg, "channel_id", None),
-                thought_type=ThoughtType.OBSERVATION,
-                status=ThoughtStatus.PENDING,
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                round_number=0,
-                content=f"PRIORITY ({filter_result.priority.value}): User @{msg.author_name} (ID: {msg.author_id}) said: {msg.content} | Filter: {filter_result.reasoning}",  # type: ignore[attr-defined]
-                thought_depth=0,
-                ponder_notes=None,
-                parent_thought_id=None,
-                final_action=None,
-                context=ThoughtModelContext(
-                    task_id=task.task_id,
-                    channel_id=getattr(msg, "channel_id", None),
-                    round_number=0,
-                    depth=0,
-                    parent_thought_id=None,
-                    correlation_id=msg.message_id,  # type: ignore[attr-defined]
-                ),
-            )
-            persistence.add_thought(thought)
+            
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error creating priority observation task: %s", e, exc_info=True)
 

@@ -294,6 +294,37 @@ class BaseObserver(Generic[MessageT], ABC):
 
         persistence.add_task(task)
 
+    def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[Dict]) -> Dict[str, str]:
+        """Build a user lookup dictionary for mention resolution."""
+        user_lookup = {}
+        
+        # Add users from history
+        for hist_msg in history_context:
+            aid = hist_msg.get("author_id")
+            aname = hist_msg.get("author")
+            if aid and aname:
+                user_lookup[str(aid)] = aname
+        
+        # Add current message author
+        if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+            user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+        
+        return user_lookup
+
+    def _format_history_lines(self, history_context: List[Dict], user_lookup: Dict[str, str]) -> List[str]:
+        """Format conversation history lines with mentions."""
+        lines = []
+        for i, hist_msg in enumerate(history_context, 1):
+            author = hist_msg.get("author", "Unknown")
+            author_id = hist_msg.get("author_id", "unknown")
+            content = hist_msg.get("content", "")
+            
+            # Format mentions in content to include usernames
+            content = format_discord_mentions(content, user_lookup)
+            lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+        
+        return lines
+
     async def _create_passive_observation_result(self, msg: MessageT) -> None:
         try:
             import uuid
@@ -373,28 +404,10 @@ class BaseObserver(Generic[MessageT], ABC):
 
             thought_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
             
-            # Build user lookup for mention resolution
-            user_lookup = {}
-            for hist_msg in history_context:
-                aid = hist_msg.get("author_id")
-                aname = hist_msg.get("author")
-                if aid and aname:
-                    user_lookup[str(aid)] = aname
-            # Also add current message author
-            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
-                user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
-            
-            for i, hist_msg in enumerate(history_context, 1):
-                author = hist_msg.get("author", "Unknown")
-                author_id = hist_msg.get("author_id", "unknown")
-                content = hist_msg.get("content", "")
-                
-                # Format mentions in content to include usernames
-                content = format_discord_mentions(content, user_lookup)
-                
-                # Thoughts are NEVER sanitized - we see full content
-                hist_msg.get("timestamp", "")
-                thought_lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+            # Build user lookup and format history lines
+            user_lookup = self._build_user_lookup_from_history(msg, history_context)
+            history_lines = self._format_history_lines(history_context, user_lookup)
+            thought_lines.extend(history_lines)
 
             thought_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="

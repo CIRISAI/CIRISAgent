@@ -82,13 +82,27 @@ class MockIdentityVarianceMonitor:
     """Mock identity variance monitor sub-service."""
 
     def __init__(self):
+        from ciris_engine.schemas.infrastructure.identity_variance import VarianceReport
+        
         self.baseline_established = False
         self.current_variance = 0.0
         self.variance_history = []
+        self._baseline_snapshot_id = "baseline_123"
         self.initialize = AsyncMock(return_value="baseline_123")
         self.measure_variance = AsyncMock(return_value=0.05)
         self.get_variance_report = AsyncMock()
         self.is_stable = AsyncMock(return_value=True)
+        
+        # Mock check_variance to return a VarianceReport
+        self.check_variance = AsyncMock(return_value=VarianceReport(
+            timestamp=datetime.now(timezone.utc),
+            baseline_snapshot_id="baseline_123",
+            current_snapshot_id="current_123",
+            total_variance=0.05,
+            differences=[],
+            requires_wa_review=False,
+            recommendations=[]
+        ))
 
     async def establish_baseline(self, identity: AgentIdentityRoot) -> str:
         """Establish identity baseline."""
@@ -143,6 +157,7 @@ class MockTelemetryService:
         self.record_event = AsyncMock()
         self.get_metrics = AsyncMock(return_value={})
         self._service_registry = None
+        self.start = AsyncMock()
         self.stop = AsyncMock()
         self.is_healthy = AsyncMock(return_value=True)
 
@@ -293,12 +308,9 @@ def create_pattern_insight(
         pattern_id=pattern_id or str(uuid.uuid4()),
         pattern_type=pattern_type,
         description="Test pattern description",
-        confidence_score=confidence,
-        occurrence_count=occurrences,
-        first_seen=datetime.now(timezone.utc) - timedelta(days=7),
+        confidence=confidence,
+        occurrences=occurrences,
         last_seen=datetime.now(timezone.utc),
-        impact_assessment="low",
-        recommended_actions=["monitor", "analyze"],
         metadata={},
     )
 

@@ -198,7 +198,7 @@ stewardship:
 Templates require Ed25519 signatures. Use the signing tool:
 
 ```bash
-python tools/sign_template.py ciris_templates/your-template.yaml
+python tools/templates/generate_manifest.py
 ```
 
 This will:
@@ -241,22 +241,22 @@ Must contain:
 ### Generate Keypair (First Time)
 
 ```bash
-python tools/generate_keys.py
-# Creates: ~/.ciris/creator_key.pem and creator_key.pub
+python tools/security/generate_wa_keypair.py
+# Creates: ~/.ciris/wa_keys/root_wa.key and metadata
 ```
 
 ### Sign Template
 
 ```bash
-python tools/sign_template.py ciris_templates/your-template.yaml
-# Updates template with signature and fingerprint
+python tools/templates/generate_manifest.py
+# Signs all templates and creates manifest
 ```
 
 ### Verify Signature
 
 ```bash
-python tools/verify_template.py ciris_templates/your-template.yaml
-# Confirms signature validity
+# Signature verification is built into the manifest generation
+python tools/templates/generate_manifest.py
 ```
 
 ---
@@ -290,13 +290,10 @@ The system enforces:
 
 ```bash
 # Validate template structure
-python tools/validate_template.py ciris_templates/your-template.yaml
+python tools/templates/validate_templates.py
 
 # Test with mock agent
 python main.py --template your-template --mock-llm --timeout 60
-
-# Full validation suite
-python tools/test_template.py ciris_templates/your-template.yaml
 ```
 
 ---

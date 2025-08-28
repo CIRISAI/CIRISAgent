@@ -263,24 +263,23 @@ class TestDiscordObserverRouting:
             mock_create.assert_called_once_with(msg)
 
     @pytest.mark.asyncio
-    async def test_default_wa_user_name_check(self, observer):
-        """Test that DEFAULT_WA username 'somecomputerguy' is recognized."""
+    async def test_wa_user_id_only_check(self, observer):
+        """Test that only numeric WA user IDs are checked, not usernames for security."""
         msg = DiscordMessage(
             message_id="test_msg_9",
             content="Guidance message",
             author_id="999999999",  # Not in WA list by ID
-            author_name="somecomputerguy",  # But matches DEFAULT_WA
+            author_name="somecomputerguy",  # Username doesn't matter anymore
             channel_id="1382008300576702565",  # Deferral channel
             is_bot=False,
             is_dm=False,
         )
 
-        with patch('ciris_engine.logic.utils.constants.DEFAULT_WA', 'somecomputerguy'):
-            with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
-                await observer._handle_passive_observation(msg)
-                
-                # Should route to feedback because username matches DEFAULT_WA
-                mock_feedback.assert_called_once_with(msg)
+        with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
+            await observer._handle_passive_observation(msg)
+            
+            # Should NOT route to feedback because ID doesn't match (usernames are ignored for security)
+            mock_feedback.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_wa_feedback_validation_rejects_non_wa_user(self, observer):

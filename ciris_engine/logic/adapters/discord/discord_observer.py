@@ -191,7 +191,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             await self._create_priority_observation_result(msg, filter_result)
         # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
-            msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
+            msg.author_id in self.wa_user_ids
         ):
             logger.info(
                 f"[DISCORD-PRIORITY] Channel {msg.channel_id} is DEFERRAL channel and author {msg.author_name} "
@@ -210,7 +210,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}")
             if msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id:
                 logger.info(f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}")
-                logger.info(f"  - Author name '{msg.author_name}' matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
+                # Username matching removed for security - only numeric IDs are checked
 
     def _create_task_context_with_extras(self, msg: DiscordMessage) -> TaskContext:
         """Create a TaskContext from a Discord message."""
@@ -241,7 +241,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             await self._create_passive_observation_result(msg)
         # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
-            msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
+            msg.author_id in self.wa_user_ids
         ):
             logger.info(
                 f"[DISCORD-PASSIVE] Channel {msg.channel_id} is DEFERRAL channel and author {msg.author_name} "
@@ -260,7 +260,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}")
             if msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id:
                 logger.info(f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}")
-                logger.info(f"  - Author name '{msg.author_name}' matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
+                # Username matching removed for security - only numeric IDs are checked
 
     async def _add_to_feedback_queue(self, msg: DiscordMessage) -> None:
         """Process guidance/feedback from WA in deferral channel."""
@@ -270,7 +270,8 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
             wa_discord_user = DEFAULT_WA
 
-            is_wise_authority = msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
+            # Only check numeric IDs for security - usernames can be spoofed
+            is_wise_authority = msg.author_id in self.wa_user_ids
 
             if not is_wise_authority:
                 error_msg = f"🚫 **Not Authorized**: User `{msg.author_name}` (ID: `{msg.author_id}`) is not a Wise Authority. Not proceeding with guidance processing."

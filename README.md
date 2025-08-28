@@ -31,17 +31,29 @@ Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
 ### Latest: v1.0.7-RC1-patch7 - Agent Self-Configuration
 **This patch enables agents to configure themselves through MEMORIZE (August 28, 2025):**
-- **Self-Configuration** - Agents can now update configuration via CONFIG nodes
-- **Bug Fixes** - Fixed SecretReference and SystemSnapshot type issues
-- **Filter Tests** - Added comprehensive QA runner module for filter testing
-- **Error Messages** - Detailed, actionable error messages for config failures
+- ✅ **Self-Configuration** - Agents can now update configuration via CONFIG nodes
+- ✅ **100% Test Pass Rate** - 36 comprehensive filter tests, all passing
+- ✅ **Bug Fixes** - Fixed SecretReference and SystemSnapshot type issues
+- ✅ **Error Messages** - Detailed, actionable error messages with examples
 
-**Key Feature**: Agents can now configure both adaptive and secrets filters:
-- Adaptive: `$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8`
-- Secrets: `$memorize secrets_filter/entropy_threshold CONFIG LOCAL value=4.0`
-- Recall: `$recall adaptive_filter/spam_threshold CONFIG LOCAL`
+**Key Features:**
+```bash
+# Configure adaptive filters
+$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8
+$memorize adaptive_filter/caps_threshold CONFIG LOCAL value=0.7
 
-See [full release notes](docs/releases/1.0.7-RC1-patch7.md) for technical details.
+# Configure secrets filters
+$memorize secrets_filter/jwt_detection_enabled CONFIG LOCAL value=true
+$memorize secrets_filter/custom_patterns CONFIG LOCAL value=['PROJ-[0-9]{4}']
+
+# Recall configurations
+$recall adaptive_filter/spam_threshold CONFIG LOCAL
+$recall secrets_filter/jwt_detection_enabled CONFIG LOCAL
+```
+
+**Test Results:** 36/36 tests passed (100% success rate) in 94.12s
+
+See [full release notes](docs/releases/1.0.7-RC1-patch7.md) for comprehensive examples and technical details.
 
 ---
 

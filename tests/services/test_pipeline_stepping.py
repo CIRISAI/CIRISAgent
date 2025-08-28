@@ -454,7 +454,7 @@ class TestStepResultSchemas:
         ethical_result = EthicalDMAResult(
             decision="approve",
             reasoning="Action aligns with ethical principles",
-            alignment_check={"benevolence": True, "integrity": True},
+            alignment_check=\"Benevolence and integrity principles satisfied. Action aligns with ethical guidelines.\" # {"benevolence": True, "integrity": True},
         )
 
         csdma_result = CSDMAResult(

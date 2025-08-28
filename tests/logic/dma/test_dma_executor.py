@@ -95,7 +95,7 @@ def ethical_evaluator(service_registry):
         return_value=EthicalDMAResult(
             decision="approve",
             reasoning="Test ethical reasoning",
-            alignment_check={"aligned": True, "confidence": 0.9},
+            alignment_check="Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
         )
     )
     return evaluator
@@ -219,7 +219,7 @@ class TestEthicalPDMA:
 
             assert result.decision == "approve"
             assert result.reasoning == "Test ethical reasoning"
-            assert result.alignment_check["aligned"] is True
+            assert "alignment confirmed" in result.alignment_check.lower()
 
             # Verify correlation was tracked
             assert mock_persistence.add_correlation.called
@@ -270,7 +270,7 @@ class TestActionSelectionPDMA:
             ethical_pdma_result=EthicalDMAResult(
                 decision="approve",
                 reasoning="Ethical approval",
-                alignment_check={"aligned": True},
+                alignment_check="Ethical alignment confirmed. All principles satisfied.",
             ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.85,
@@ -315,7 +315,7 @@ class TestActionSelectionPDMA:
             ethical_pdma_result=EthicalDMAResult(
                 decision="approve",
                 reasoning="Approved",
-                alignment_check={},
+                alignment_check="Basic ethical approval.",
             ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.8,
@@ -356,7 +356,7 @@ class TestDMAIntegration:
             EthicalDMAResult(
                 decision="approve",
                 reasoning="Success after retry",
-                alignment_check={},
+                alignment_check="Basic ethical approval.",
             ),
         ]
 

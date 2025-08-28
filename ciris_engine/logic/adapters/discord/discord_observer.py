@@ -169,7 +169,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
     async def _handle_priority_observation(self, msg: DiscordMessage, filter_result: Any) -> None:
         """Handle high-priority messages with immediate processing"""
+        from ciris_engine.logic.utils.constants import DEFAULT_WA
+
         monitored_channel_ids = self.monitored_channel_ids or []
+        wa_discord_user = DEFAULT_WA
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
         
@@ -188,7 +191,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             await self._create_priority_observation_result(msg, filter_result)
         # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
-            msg.author_id in self.wa_user_ids
+            msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
         ):
             logger.info(
                 f"[DISCORD-PRIORITY] Channel {msg.channel_id} is DEFERRAL channel and author {msg.author_name} "
@@ -207,6 +210,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}")
             if msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id:
                 logger.info(f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}")
+                logger.info(f"  - Author name '{msg.author_name}' matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
 
     def _create_task_context_with_extras(self, msg: DiscordMessage) -> TaskContext:
         """Create a TaskContext from a Discord message."""
@@ -216,7 +220,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
     async def _handle_passive_observation(self, msg: DiscordMessage) -> None:
         """Handle passive observation - routes to WA feedback queue if appropriate."""
+        from ciris_engine.logic.utils.constants import DEFAULT_WA
+
         monitored_channel_ids = self.monitored_channel_ids or []
+        wa_discord_user = DEFAULT_WA
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
         
@@ -234,7 +241,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             await self._create_passive_observation_result(msg)
         # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
-            msg.author_id in self.wa_user_ids
+            msg.author_id in self.wa_user_ids or msg.author_name == wa_discord_user
         ):
             logger.info(
                 f"[DISCORD-PASSIVE] Channel {msg.channel_id} is DEFERRAL channel and author {msg.author_name} "
@@ -253,6 +260,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}")
             if msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id:
                 logger.info(f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}")
+                logger.info(f"  - Author name '{msg.author_name}' matches DEFAULT_WA '{wa_discord_user}': {msg.author_name == wa_discord_user}")
 
     async def _add_to_feedback_queue(self, msg: DiscordMessage) -> None:
         """Process guidance/feedback from WA in deferral channel."""

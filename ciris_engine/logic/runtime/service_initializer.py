@@ -722,7 +722,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2"
             ),
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
             timeout_seconds=(
                 config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
             ),
@@ -781,7 +780,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE_2", "JSON"),
             timeout_seconds=(
                 config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
             ),

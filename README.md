@@ -1,7 +1,10 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![RC1](https://img.shields.io/badge/Status-RC1-yellow.svg)](NOTICE)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=bugs)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/CIRISAI/CIRISAgent)
 
 # CIRIS Engine (CIRISAgent)

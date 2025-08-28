@@ -29,7 +29,7 @@ ERROR_CREATE_USER_FAILED = "Failed to create user"
 ERROR_CHANGE_PASSWORD_FAILED = "Failed to change password. Check current password."
 ERROR_CANNOT_DEMOTE_SELF = "Cannot demote your own role"
 ERROR_CANNOT_DEACTIVATE_SELF = "Cannot deactivate your own account"
-ERROR_ONLY_ADMIN_MINT_WA = "Only SYSTEM_ADMIN can mint Wise Authorities"
+ERROR_ONLY_ADMIN_MINT_WA = "Only ADMIN or higher can mint Wise Authorities"
 ERROR_CANNOT_MINT_ROOT = "Cannot mint new ROOT authorities. ROOT is singular."
 ERROR_INVALID_SIGNATURE = "Invalid ROOT signature"
 ERROR_SIGNATURE_OR_KEY_REQUIRED = "Either signature or private_key_path must be provided"
@@ -455,7 +455,7 @@ async def mint_wise_authority(
     """
     Mint a user as a Wise Authority.
 
-    Requires: SYSTEM_ADMIN role and valid Ed25519 signature from ROOT private key.
+    Requires: ADMIN role or higher and valid Ed25519 signature from ROOT private key.
 
     The signature should be over the message:
     "MINT_WA:{user_id}:{wa_role}:{timestamp}"
@@ -463,8 +463,8 @@ async def mint_wise_authority(
     If no signature is provided and private_key_path is specified, will attempt
     to sign automatically using the key at that path.
     """
-    # Check if user is SYSTEM_ADMIN
-    if auth.role != APIRole.SYSTEM_ADMIN:
+    # Check if user is ADMIN or higher
+    if auth.role.level < APIRole.ADMIN.level:
         raise HTTPException(status_code=403, detail=ERROR_ONLY_ADMIN_MINT_WA)
 
     # Validate that request.wa_role is not ROOT

@@ -429,7 +429,7 @@ class TestFilterTestModule:
         from tools.qa_runner.modules.filter_tests import FilterTestModule
         
         tests = FilterTestModule.get_filter_tests()
-        assert len(tests) == 24  # Should have 24 filter tests (including CONFIG recall tests)
+        assert len(tests) == 36  # Should have 36 filter tests (comprehensive RECALL/MEMORIZE and secrets tests)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """
 Filter configuration and testing module - uses agent/interact endpoint with mock LLM.
 Tests adaptive and secrets filters by configuring them via MEMORIZE actions.
+Includes comprehensive RECALL before/after tests and secrets tool functionality.
 """
 
 from typing import List
@@ -15,11 +16,69 @@ class FilterTestModule:
     def get_filter_tests() -> List[QATestCase]:
         """Get filter configuration and behavior test cases using mock LLM."""
         return [
-            # === Adaptive Filter Configuration Tests ===
+            # === RECALL Before MEMORIZE Tests (should return not found) ===
+            
+            # Try to recall non-existent adaptive filter config
+            QATestCase(
+                name="Recall non-existent adaptive filter config",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall adaptive_filter/test_threshold CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="RECALL before MEMORIZE - should indicate not found",
+            ),
+            
+            # Try to recall non-existent secrets filter config
+            QATestCase(
+                name="Recall non-existent secrets filter config",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall secrets_filter/test_pattern CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="RECALL before MEMORIZE - should indicate not found",
+            ),
+            
+            # === Adaptive Filter MEMORIZE Tests ===
+            
+            # Configure spam threshold
+            QATestCase(
+                name="Memorize adaptive filter spam threshold",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Configure spam detection threshold via MEMORIZE",
+            ),
+            
+            # Immediately recall to verify storage
+            QATestCase(
+                name="Recall spam threshold after memorize",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall adaptive_filter/spam_threshold CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify spam threshold was stored (should show 0.8)",
+            ),
             
             # Configure caps detection threshold
             QATestCase(
-                name="Configure caps filter threshold",
+                name="Memorize caps detection threshold",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
@@ -31,23 +90,23 @@ class FilterTestModule:
                 description="Configure caps detection threshold via MEMORIZE",
             ),
             
-            # Test caps detection behavior after configuration
+            # Recall caps threshold
             QATestCase(
-                name="Test caps detection with configured threshold",
+                name="Recall caps threshold after memorize",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "THIS IS A TEST MESSAGE WITH LOTS OF CAPS"
+                    "message": "$recall adaptive_filter/caps_threshold CONFIG LOCAL"
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Verify caps filter triggers with configured threshold",
+                description="Verify caps threshold was stored (should show 0.7)",
             ),
             
-            # Configure trust score thresholds
+            # Configure trust threshold
             QATestCase(
-                name="Configure trust score thresholds",
+                name="Memorize trust threshold",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
@@ -61,7 +120,7 @@ class FilterTestModule:
             
             # Configure DM detection
             QATestCase(
-                name="Configure DM detection settings",
+                name="Memorize DM detection enabled",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
@@ -70,84 +129,28 @@ class FilterTestModule:
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Configure DM detection via MEMORIZE",
+                description="Enable DM detection via MEMORIZE",
             ),
             
-            # Test DM detection behavior
+            # Recall DM detection setting
             QATestCase(
-                name="Test DM detection after configuration",
+                name="Recall DM detection setting",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "Hey, DM me for more info about this private matter"
+                    "message": "$recall adaptive_filter/dm_detection_enabled CONFIG LOCAL"
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Verify DM filter triggers after configuration",
+                description="Verify DM detection was enabled (should show true)",
             ),
             
-            # Configure spam detection
-            QATestCase(
-                name="Configure spam detection parameters",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Configure spam detection via MEMORIZE",
-            ),
-            
-            # Test spam detection
-            QATestCase(
-                name="Test spam detection with repetition",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "Buy now! Buy now! Buy now! Limited offer! Buy now!"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Verify spam filter triggers on repetition",
-            ),
-            
-            # === Secrets Filter Configuration Tests ===
-            
-            # Configure custom secret pattern
-            QATestCase(
-                name="Add custom secret pattern",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$memorize secrets_filter/custom_patterns CONFIG LOCAL value=['PROJ-[0-9]{4}']"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Add custom secret pattern via MEMORIZE",
-            ),
-            
-            # Test custom secret pattern detection
-            QATestCase(
-                name="Test custom secret pattern detection",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "The project code is PROJ-1234 and should be kept confidential"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Verify custom secret pattern is detected",
-            ),
+            # === Secrets Filter MEMORIZE Tests ===
             
             # Configure API key detection
             QATestCase(
-                name="Configure API key detection strictness",
+                name="Memorize API key detection mode",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
@@ -156,8 +159,152 @@ class FilterTestModule:
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Configure API key detection via MEMORIZE",
+                description="Configure API key detection strictness via MEMORIZE",
             ),
+            
+            # Recall API key detection mode
+            QATestCase(
+                name="Recall API key detection mode",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall secrets_filter/api_key_detection CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify API key detection mode (should show strict)",
+            ),
+            
+            # Configure JWT detection
+            QATestCase(
+                name="Memorize JWT detection enabled",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize secrets_filter/jwt_detection_enabled CONFIG LOCAL value=true"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Enable JWT token filtering via MEMORIZE",
+            ),
+            
+            # Recall JWT detection setting
+            QATestCase(
+                name="Recall JWT detection setting",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall secrets_filter/jwt_detection_enabled CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify JWT detection enabled (should show true)",
+            ),
+            
+            # Configure custom patterns
+            QATestCase(
+                name="Memorize custom secret patterns",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize secrets_filter/custom_patterns CONFIG LOCAL value=['PROJ-[0-9]{4}','SECRET-[A-Z]+']"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Add custom secret patterns via MEMORIZE",
+            ),
+            
+            # Recall custom patterns
+            QATestCase(
+                name="Recall custom secret patterns",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall secrets_filter/custom_patterns CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify custom patterns stored (should show list)",
+            ),
+            
+            # Configure entropy threshold
+            QATestCase(
+                name="Memorize entropy threshold",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize secrets_filter/entropy_threshold CONFIG LOCAL value=4.0"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Configure entropy threshold via MEMORIZE",
+            ),
+            
+            # === CONFIG Update Tests (Version Increment) ===
+            
+            # Update existing spam threshold
+            QATestCase(
+                name="Update spam threshold to new value",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.9"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Update existing CONFIG node (should increment version)",
+            ),
+            
+            # Verify updated value
+            QATestCase(
+                name="Recall updated spam threshold",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall adaptive_filter/spam_threshold CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify spam threshold updated to 0.9",
+            ),
+            
+            # Update boolean value
+            QATestCase(
+                name="Update DM detection to false",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize adaptive_filter/dm_detection_enabled CONFIG LOCAL value=false"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Update boolean CONFIG from true to false",
+            ),
+            
+            # Verify boolean update
+            QATestCase(
+                name="Recall updated DM detection",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall adaptive_filter/dm_detection_enabled CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify DM detection updated to false",
+            ),
+            
+            # === Secrets Tool Tests ===
             
             # Test API key detection
             QATestCase(
@@ -170,21 +317,7 @@ class FilterTestModule:
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Verify API key detection works",
-            ),
-            
-            # Configure JWT token detection
-            QATestCase(
-                name="Configure JWT token filtering",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$memorize secrets_filter/jwt_detection_enabled CONFIG LOCAL value=true"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Configure JWT token filtering via MEMORIZE",
+                description="Verify API key is detected and filtered",
             ),
             
             # Test JWT token detection
@@ -201,9 +334,93 @@ class FilterTestModule:
                 description="Verify JWT token is detected and filtered",
             ),
             
-            # === Combined Filter Tests ===
+            # Test custom pattern detection
+            QATestCase(
+                name="Test custom pattern detection",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "The project code is PROJ-1234 and SECRET-ABC for internal use"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify custom patterns are detected",
+            ),
             
-            # Test multiple filter triggers
+            # List detected secrets
+            QATestCase(
+                name="List detected secrets via tool",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$tool secrets list"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="List all detected secrets using secrets tool",
+            ),
+            
+            # Test AWS key detection
+            QATestCase(
+                name="Test AWS key detection",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "AWS Access Key: AKIAIOSFODNN7EXAMPLE"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify AWS keys are detected",
+            ),
+            
+            # === Filter Behavior Tests ===
+            
+            # Test caps detection with configured threshold
+            QATestCase(
+                name="Test caps filter with threshold",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "THIS IS A TEST MESSAGE WITH LOTS OF CAPS"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify caps filter triggers with configured threshold",
+            ),
+            
+            # Test spam detection
+            QATestCase(
+                name="Test spam detection with repetition",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "Buy now! Buy now! Buy now! Limited offer! Buy now!"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify spam filter triggers on repetition",
+            ),
+            
+            # Test DM detection
+            QATestCase(
+                name="Test DM detection",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "Hey, DM me for more info about this private matter"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify DM filter triggers",
+            ),
+            
+            # Test multiple filters
             QATestCase(
                 name="Test multiple filter triggers",
                 module=QAModule.FILTERS,
@@ -217,23 +434,41 @@ class FilterTestModule:
                 description="Test message triggering caps, DM, and secrets filters",
             ),
             
-            # Configure filter priority
+            # === Error Handling Tests ===
+            
+            # Test CONFIG without value
             QATestCase(
-                name="Configure filter processing priority",
+                name="Test CONFIG missing value error",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize adaptive_filter/priority CONFIG LOCAL value=HIGH"
+                    "message": "$memorize test/missing_value CONFIG LOCAL"
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Configure filter processing order via MEMORIZE",
+                description="Should return detailed error with examples",
             ),
             
-            # Test filter bypass for trusted users
+            # Test invalid CONFIG scope
             QATestCase(
-                name="Configure trusted user bypass",
+                name="Test CONFIG with IDENTITY scope",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize agent/core_identity CONFIG IDENTITY value='Test Agent'"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="IDENTITY scope should require WA approval",
+            ),
+            
+            # === User Trust Configuration ===
+            
+            # Configure trusted user
+            QATestCase(
+                name="Configure trusted user",
                 module=QAModule.FILTERS,
                 endpoint="/v1/agent/interact",
                 method="POST",
@@ -242,10 +477,10 @@ class FilterTestModule:
                 },
                 expected_status=200,
                 requires_auth=True,
-                description="Configure trusted user filter bypass",
+                description="Configure trusted user for filter bypass",
             ),
             
-            # Verify filter bypass works
+            # Test trusted user bypass
             QATestCase(
                 name="Test trusted user filter bypass",
                 module=QAModule.FILTERS,
@@ -260,9 +495,9 @@ class FilterTestModule:
                 description="Verify trusted users bypass filters",
             ),
             
-            # === Filter Statistics and Monitoring ===
+            # === Statistics and Monitoring ===
             
-            # Request filter statistics
+            # Get filter statistics
             QATestCase(
                 name="Get filter statistics",
                 module=QAModule.FILTERS,
@@ -290,7 +525,7 @@ class FilterTestModule:
                 description="Reset filter statistics via MEMORIZE",
             ),
             
-            # Configure filter logging
+            # Configure verbose logging
             QATestCase(
                 name="Configure filter logging level",
                 module=QAModule.FILTERS,
@@ -302,63 +537,5 @@ class FilterTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Configure filter logging via MEMORIZE",
-            ),
-            
-            # === CONFIG Recall Tests ===
-            
-            # Recall adaptive filter config
-            QATestCase(
-                name="Recall adaptive filter spam threshold",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$recall adaptive_filter/spam_threshold CONFIG LOCAL"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Recall adaptive filter spam threshold configuration",
-            ),
-            
-            # Recall secrets filter config
-            QATestCase(
-                name="Recall secrets filter API key detection",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$recall secrets_filter/api_key_detection CONFIG LOCAL"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Recall secrets filter API key detection mode",
-            ),
-            
-            # Test CONFIG node update with version increment
-            QATestCase(
-                name="Update existing CONFIG with new value",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.9"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Update existing CONFIG node (should increment version)",
-            ),
-            
-            # Verify updated CONFIG value
-            QATestCase(
-                name="Verify updated CONFIG value",
-                module=QAModule.FILTERS,
-                endpoint="/v1/agent/interact",
-                method="POST",
-                payload={
-                    "message": "$recall adaptive_filter/spam_threshold CONFIG LOCAL"
-                },
-                expected_status=200,
-                requires_auth=True,
-                description="Verify CONFIG was updated to new value",
             ),
         ]

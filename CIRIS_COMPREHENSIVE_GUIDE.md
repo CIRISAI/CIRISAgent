@@ -34,7 +34,7 @@ CIRIS (Covenant-Integrated Responsible Intelligence System) is an ethical AI pla
 - Resource-constrained design (4GB RAM, offline-capable)
 - Zero attack surface architecture
 - Formal agent creation ceremonies
-- Book VI compliance for ethical AI
+- Human Attributable Agent Creation compliance for ethical AI
 
 **Production Status**: Running at agents.ciris.ai with multiple agents
 
@@ -80,7 +80,7 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 3. **API v1.0**: 99 endpoints across 15 modules, 100% critical path coverage
 4. **Typed Graph Nodes**: 11 active classes with validation
 5. **Production Deployment**: agents.ciris.ai running multiple agents
-6. **Book VI Compliance**: Full stewardship implementation
+6. **Human Attributable Agent Creation**: Full stewardship implementation
 7. **Privacy Safeguards**: 14-day retention, DSAR compliance, transparency feed
 8. **Stop Conditions**: Clear red lines, sunset triggers, "when we pause" policy
 
@@ -406,7 +406,7 @@ response = requests.post(
    - Docker container configuration
 5. Agent awakens with creation knowledge
 
-### Book VI Compliance
+### Human Attributable Agent Creation
 
 All templates include stewardship sections:
 - Creator Intent Statement

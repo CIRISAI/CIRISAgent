@@ -277,7 +277,7 @@ class TestDiscordObserverRouting:
 
         with patch('ciris_engine.logic.utils.constants.DEFAULT_WA', 'somecomputerguy'):
             with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
-                with patch.object(observer, '_create_task_content', new_callable=AsyncMock) as mock_create:
+                with patch.object(observer, '_create_task_contents', new_callable=AsyncMock) as mock_create:
                     await observer._handle_passive_observation(msg)
                     
                     # Should NOT route to feedback because only numeric IDs are checked for security

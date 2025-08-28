@@ -251,40 +251,43 @@ def ethical_dma(context: List[str] = None) -> EthicalDMAResult:
     # Check for error injection
     if _mock_config.inject_error:
         decision = "defer"
-        alignment_check = {"ethical_uncertainty": True, "context": context, "requires_wisdom_based_deferral": True}
+        alignment_check = "Ethical uncertainty detected. Context indicates potential conflict requiring wisdom-based deferral for proper resolution."
         rationale = "Injected ethical uncertainty for testing purposes."
     else:
         decision = "proceed"
 
         # Provide CIRIS-aligned ethical evaluation
         if is_wakeup:
-            alignment_check = {
-                "beneficence": True,
-                "non_maleficence": True,
-                "integrity": True,
-                "autonomy_respect": True,
-                "justice": True,
-                "transparency": True,
-                "covenant_alignment": "wakeup_ritual_proceeding",
-            }
+            alignment_check = (
+                "Wakeup ritual aligns with all CIRIS principles: "
+                "Beneficence - promotes agent integrity and proper functioning. "
+                "Non-maleficence - causes no harm. "
+                "Integrity - maintains system coherence. "
+                "Autonomy - respects user and agent autonomy. "
+                "Justice - treats all fairly. "
+                "Transparency - openly declares identity and purpose. "
+                "Covenant alignment - wakeup ritual proceeding as designed."
+            )
             rationale = "Wakeup ritual thought aligns with CIRIS covenant principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
         elif is_user_question:
-            alignment_check = {
-                "beneficence": True,
-                "non_maleficence": True,
-                "integrity": True,
-                "autonomy_respect": True,
-                "transparency": True,
-                "promotes_flourishing": True,
-            }
+            alignment_check = (
+                "User interaction aligns with CIRIS principles: "
+                "Beneficence - provides helpful response. "
+                "Non-maleficence - avoids harmful content. "
+                "Integrity - maintains honest communication. "
+                "Autonomy - respects user's agency and choice. "
+                "Transparency - clear and truthful response. "
+                "Promotes flourishing through beneficial dialogue."
+            )
             rationale = "User interaction promotes beneficial dialogue and respects human autonomy. Response will be honest, helpful, and transparent per CIRIS principles."
         else:
-            alignment_check = {
-                "beneficence": True,
-                "non_maleficence": True,
-                "integrity": True,
-                "general_alignment": "proceeding_with_caution",
-            }
+            alignment_check = (
+                "General thought processing aligns with ethical guidelines: "
+                "Beneficence - action promotes positive outcomes. "
+                "Non-maleficence - no harm identified. "
+                "Integrity - maintains system coherence. "
+                "General alignment - proceeding with appropriate caution."
+            )
             rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS covenant principles detected."
 
     # Use string for decision field per new schema

@@ -203,13 +203,10 @@ Adhere strictly to the schema for your JSON output.
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
         """Build ethical DMA summary."""
-        conflicts_str = "None"
-        resolution_str = "None"
-        if isinstance(ethical_pdma_result.alignment_check, dict):
-            conflicts_str = str(ethical_pdma_result.alignment_check.get("conflicts", "None"))
-            resolution_str = str(ethical_pdma_result.alignment_check.get("resolution", "None"))
-
-        return f"Ethical PDMA Stance: {ethical_pdma_result.decision}. Key Conflicts: {conflicts_str}. Resolution: {resolution_str}."
+        # Extract key information from the alignment check text
+        alignment_summary = ethical_pdma_result.alignment_check[:100] + "..." if len(ethical_pdma_result.alignment_check) > 100 else ethical_pdma_result.alignment_check
+        
+        return f"Ethical PDMA Stance: {ethical_pdma_result.decision}. Analysis: {alignment_summary}"
 
     def _build_csdma_summary(self, csdma_result: CSDMAResult) -> str:
         """Build CSDMA summary."""

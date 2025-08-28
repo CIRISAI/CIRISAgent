@@ -59,7 +59,7 @@ class TestActionSelectionPDMAEvaluator:
         pdma_result = EthicalDMAResult(
             decision="approve",
             reasoning="Action is ethically sound",
-            alignment_check={"beneficence": True, "non_maleficence": True},
+            alignment_check="Ethical analysis: Beneficence - action promotes positive outcomes. Non-maleficence - no harm identified.",
         )
 
         csdma_result = CSDMAResult(plausibility_score=0.9, flags=[], reasoning="Makes common sense")
@@ -158,7 +158,7 @@ class TestActionSelectionPDMAEvaluator:
             }
         )
 
-        pdma_result = EthicalDMAResult(decision="approve", reasoning="OK", alignment_check={})
+        pdma_result = EthicalDMAResult(decision="approve", reasoning="OK", alignment_check="Basic ethical approval without detailed analysis.")
 
         # Need a valid CSDMA result even for this test
         csdma_result = CSDMAResult(plausibility_score=0.5, flags=[], reasoning="Test")

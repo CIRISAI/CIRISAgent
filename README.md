@@ -31,10 +31,10 @@ Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
 ### Latest: v1.0.6-RC1-patch6 - CRITICAL SECURITY FIX
 **This patch contains critical security and production fixes (August 27, 2025):**
-- **🔒 Security Fix** - Removed Discord username validation to prevent WA impersonation
-- **🛠️ DMA Fix** - Changed alignment_check from Dict to str for GPT-OSS-120B compatibility
-- **⚙️ Instructor Mode** - Added INSTRUCTOR_MODE env var for frontier model support
-- **📊 Impact** - Fixed datum agent pondering loops, DMA validation failures (0%→100% success)
+- **Security Fix** - Removed Discord username validation to prevent WA impersonation
+- **DMA Fix** - Changed alignment_check from Dict to str for GPT-OSS-120B compatibility
+- **Instructor Mode** - Added INSTRUCTOR_MODE env var for frontier model support
+- **Impact** - Fixed datum agent pondering loops, DMA validation failures (0%→100% success)
 
 **IMPORTANT**: Deploy immediately if running Discord agents. Set `INSTRUCTOR_MODE=TOOLS` for GPT-OSS-120B.
 
@@ -161,7 +161,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **Circuit Breaker Protection**: Automatic service protection with graceful degradation, health monitoring, and runtime reset capabilities
 - **Service Management**: Comprehensive service registry management with priority configuration, health monitoring, circuit breaker control, and selection strategy tuning
 
-### 🧩 Ethical Memory & Context
+### Ethical Memory & Context
 - **Graph Memory**: SQLite-backed graph storage with automatic secrets encryption, scope-based access control, and WA-authorized updates
 - **[Context Management](ciris_engine/logic/context/README.md)**: Multi-source context aggregation with system snapshots, user profile enrichment, and GraphQL integration
 - **Context Builder**: Snapshot helpers and comprehensive channel resolution logic
@@ -182,7 +182,7 @@ It's technically sophisticated ([22 microservices](docs/ARCHITECTURE.md#services
 - **Final Features Roadmap**: Complete feature set and architectural decisions
 - **[Secrets Management Deep Dive](FSD/SECRETS.md)**: Comprehensive secrets handling architecture
 
-### 🚧 Features in Development
+### Features in Development
 
 - **Multi-Modal Reasoning**: Memory graph visualizations as context alongside structured context objects to DMAs, enabling richer understanding through visual representation of relationships and patterns
 - **Localized Reasoning**: Native translations of all agent reasoning prompts for deployments, ensuring 100% contextual responses with in-line translations optional for international visibility
@@ -393,7 +393,7 @@ CIRIS Agent/
 ```bash
 python main.py --adapter api --template datum --host 0.0.0.0 --port 8080
 ```
-📚 **Interactive API Documentation**: Once running, visit http://localhost:8080/docs or [Production Docs](https://agents.ciris.ai/api/datum/docs)
+**Interactive API Documentation**: Once running, visit http://localhost:8080/docs or [Production Docs](https://agents.ciris.ai/api/datum/docs)
 
 **Discord community moderator (production pilot):**
 ```bash
@@ -596,7 +596,7 @@ Apache-2.0 © 2025 CIRIS AI Project
 - **[Context Dumps](tests/context_dumps/README.md)** - Understanding agent decision processes
 
 ### Technical Documentation
-- **[The Agent Experience](docs/agent_experience.md)** - Comprehensive self-reference guide for agents ⭐ **ESSENTIAL**
+- **[The Agent Experience](docs/agent_experience.md)** - Comprehensive self-reference guide for agents **ESSENTIAL**
   - Complete memory system documentation with RECALL/MEMORIZE/FORGET examples
   - Self-configuration and telemetry introspection capabilities
   - Task scheduling and future planning through MEMORIZE

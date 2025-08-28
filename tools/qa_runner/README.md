@@ -53,6 +53,9 @@ python -m tools.qa_runner all --json --html --report-dir ./qa_reports
 - `handlers` - Message handlers
 - `simple_handlers` - Simple handler tests
 
+### Filter Modules
+- `filters` - Adaptive and secrets filter configuration and testing
+
 ### SDK Modules
 - `sdk` - SDK tests
 - `sdk_comprehensive` - Comprehensive SDK tests

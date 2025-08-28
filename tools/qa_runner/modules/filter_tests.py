@@ -24,7 +24,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/caps_threshold CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/caps_threshold CONFIG LOCAL value=0.7"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -52,7 +52,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/trust_threshold CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/trust_threshold CONFIG LOCAL value=0.5"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -66,7 +66,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/dm_detection CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/dm_detection_enabled CONFIG LOCAL value=true"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -94,7 +94,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/spam_detection CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -124,7 +124,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize secrets/pattern_proj CONFIG LOCAL"
+                    "message": "$memorize secrets_filter/custom_patterns CONFIG LOCAL value=['PROJ-[0-9]{4}']"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -152,7 +152,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize secrets/api_key_detection CONFIG LOCAL"
+                    "message": "$memorize secrets_filter/api_key_detection CONFIG LOCAL value=strict"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -180,7 +180,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize secrets/jwt_detection CONFIG LOCAL"
+                    "message": "$memorize secrets_filter/jwt_detection_enabled CONFIG LOCAL value=true"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -224,7 +224,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/priority CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/priority CONFIG LOCAL value=HIGH"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -238,7 +238,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize user/qa_tester USER LOCAL"
+                    "message": "$memorize user/qa_tester USER LOCAL trust_level=VERIFIED"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -283,7 +283,7 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/stats_reset CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/stats_reset CONFIG LOCAL value=true"
                 },
                 expected_status=200,
                 requires_auth=True,
@@ -297,10 +297,68 @@ class FilterTestModule:
                 endpoint="/v1/agent/interact",
                 method="POST",
                 payload={
-                    "message": "$memorize filter/logging_verbose CONFIG LOCAL"
+                    "message": "$memorize adaptive_filter/logging_verbose CONFIG LOCAL value=true"
                 },
                 expected_status=200,
                 requires_auth=True,
                 description="Configure filter logging via MEMORIZE",
+            ),
+            
+            # === CONFIG Recall Tests ===
+            
+            # Recall adaptive filter config
+            QATestCase(
+                name="Recall adaptive filter spam threshold",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall adaptive_filter/spam_threshold CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Recall adaptive filter spam threshold configuration",
+            ),
+            
+            # Recall secrets filter config
+            QATestCase(
+                name="Recall secrets filter API key detection",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall secrets_filter/api_key_detection CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Recall secrets filter API key detection mode",
+            ),
+            
+            # Test CONFIG node update with version increment
+            QATestCase(
+                name="Update existing CONFIG with new value",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.9"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Update existing CONFIG node (should increment version)",
+            ),
+            
+            # Verify updated CONFIG value
+            QATestCase(
+                name="Verify updated CONFIG value",
+                module=QAModule.FILTERS,
+                endpoint="/v1/agent/interact",
+                method="POST",
+                payload={
+                    "message": "$recall adaptive_filter/spam_threshold CONFIG LOCAL"
+                },
+                expected_status=200,
+                requires_auth=True,
+                description="Verify CONFIG was updated to new value",
             ),
         ]

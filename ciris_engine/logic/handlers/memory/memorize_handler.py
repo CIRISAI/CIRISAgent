@@ -271,6 +271,10 @@ class MemorizeHandler(BaseActionHandler):
                 
                 # Create ConfigNode with proper structure
                 config_node = ConfigNode(
+                    id=node.id,  # Use the original node id
+                    type=NodeType.CONFIG,
+                    scope=scope,  # Use the original scope (LOCAL)
+                    attributes={},  # Will be populated by to_graph_node()
                     key=config_key,
                     value=config_val,
                     version=1,  # Start at version 1

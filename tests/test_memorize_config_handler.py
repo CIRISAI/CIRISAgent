@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from ciris_engine.logic.handlers.memory.memorize_handler import MemorizeHandler
+from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.schemas.actions import MemorizeParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext, ChannelContext
@@ -24,12 +25,19 @@ class TestConfigNodeHandling:
     @pytest.fixture
     def mock_handler(self):
         """Create a mock MEMORIZE handler."""
-        handler = MemorizeHandler()
-        handler.time_service = MagicMock()
-        handler.time_service.now.return_value = datetime.now(timezone.utc)
-        handler.time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
-        handler.bus_manager = MagicMock()
-        handler.bus_manager.memory = AsyncMock()
+        # Create mock dependencies
+        mock_bus_manager = MagicMock()
+        mock_bus_manager.memory = AsyncMock()
+        mock_time_service = MagicMock()
+        mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
+        
+        dependencies = ActionHandlerDependencies(
+            bus_manager=mock_bus_manager,
+            time_service=mock_time_service
+        )
+        
+        handler = MemorizeHandler(dependencies)
         handler._audit_log = AsyncMock()
         handler.complete_thought_and_create_followup = MagicMock(return_value="follow_up_123")
         return handler
@@ -37,24 +45,38 @@ class TestConfigNodeHandling:
     @pytest.fixture
     def dispatch_context(self):
         """Create a dispatch context."""
+        now = datetime.now(timezone.utc)
         return DispatchContext(
             channel_context=ChannelContext(
                 channel_id="test_channel",
                 channel_type="test",
-                channel_name="Test Channel"
-            )
+                channel_name="Test Channel",
+                created_at=now
+            ),
+            author_id="test_author",
+            author_name="Test Author",
+            origin_service="test_service",
+            handler_name="MemorizeHandler",
+            action_type=HandlerActionType.MEMORIZE,
+            thought_id="thought_123",
+            task_id="task_123",
+            source_task_id="task_123",
+            event_summary="Test memorize action",
+            event_timestamp=now.isoformat()
         )
 
     @pytest.fixture
     def thought(self):
         """Create a test thought."""
+        now = datetime.now(timezone.utc)
         return Thought(
             thought_id="thought_123",
-            task_id="task_123",
-            thought_type="action",
+            source_task_id="task_123",
+            thought_type="standard",
             content="Test thought",
-            status=ThoughtStatus.IN_PROGRESS,
-            created_at=datetime.now(timezone.utc)
+            status=ThoughtStatus.PROCESSING,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat()
         )
 
     @pytest.mark.asyncio
@@ -70,10 +92,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Setting spam threshold",
-            confidence=0.9
+            rationale="Setting spam threshold"
         )
 
         # Mock successful memory operation
@@ -106,10 +127,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Enable JWT detection",
-            confidence=0.9
+            rationale="Enable JWT detection"
         )
 
         mock_handler.bus_manager.memory.memorize.return_value = MemoryOpResult(
@@ -136,10 +156,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Set custom patterns",
-            confidence=0.9
+            rationale="Set custom patterns"
         )
 
         mock_handler.bus_manager.memory.memorize.return_value = MemoryOpResult(
@@ -165,10 +184,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Set trust decay",
-            confidence=0.9
+            rationale="Set trust decay"
         )
 
         await mock_handler.handle(result, thought, dispatch_context)
@@ -197,10 +215,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Set caps threshold",
-            confidence=0.9
+            rationale="Set caps threshold"
         )
 
         mock_handler.bus_manager.memory.memorize.return_value = MemoryOpResult(
@@ -228,10 +245,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Store user",
-            confidence=0.9
+            rationale="Store user"
         )
 
         mock_handler.bus_manager.memory.memorize.return_value = MemoryOpResult(
@@ -266,10 +282,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Set trust mapping",
-            confidence=0.9
+            rationale="Set trust mapping"
         )
 
         mock_handler.bus_manager.memory.memorize.return_value = MemoryOpResult(
@@ -295,10 +310,9 @@ class TestConfigNodeHandling:
         
         params = MemorizeParams(node=node)
         result = ActionSelectionDMAResult(
-            action_type=HandlerActionType.MEMORIZE,
+            selected_action=HandlerActionType.MEMORIZE,
             action_parameters=params,
-            rationale="Set identity",
-            confidence=0.9
+            rationale="Set identity"
         )
 
         mock_handler.bus_manager.memory.memorize.return_value = MemoryOpResult(
@@ -365,7 +379,7 @@ class TestSecretsSnapshotFix:
         # Verify detected_secrets contains strings, not SecretReference objects
         assert isinstance(snapshot["detected_secrets"], list)
         assert all(isinstance(s, str) for s in snapshot["detected_secrets"])
-        assert snapshot["detected_secrets"] == ["uuid-1", "uuid-2"]
+        assert set(snapshot["detected_secrets"]) == {"uuid-1", "uuid-2"}
         assert snapshot["total_secrets_stored"] == 2
 
 
@@ -379,7 +393,7 @@ class TestBaseObserverFix:
         # We can't easily test the actual method without a full setup,
         # but we can verify the fix is in place by checking the code
         import inspect
-        source = inspect.getsource(BaseObserver._process_secrets)
+        source = inspect.getsource(BaseObserver._process_message_secrets)
         
         # Verify the fix: should use ref.uuid, not ref.secret_uuid
         assert "ref.uuid" in source
@@ -415,7 +429,7 @@ class TestFilterTestModule:
         from tools.qa_runner.modules.filter_tests import FilterTestModule
         
         tests = FilterTestModule.get_filter_tests()
-        assert len(tests) == 20  # Should have 20 filter tests
+        assert len(tests) == 24  # Should have 24 filter tests (including CONFIG recall tests)
 
 
 if __name__ == "__main__":

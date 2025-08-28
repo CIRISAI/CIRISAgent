@@ -778,6 +778,7 @@ docker restart ciris-agent-datum
 ### Production
 - **Main**: https://agents.ciris.ai
 - **Datum API**: https://agents.ciris.ai/api/datum/v1/
+- **API Documentation**: https://agents.ciris.ai/api/datum/docs
 - **OAuth Callback**: https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
 
 ### GitHub

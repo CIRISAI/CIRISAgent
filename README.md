@@ -236,7 +236,7 @@ curl -X POST http://localhost:8080/v1/runtime/processor/pause
 - **Memory Timeline**: Time-based memory queries
 - **Audit Statistics**: Action patterns and compliance
 
-> **API Documentation**: 99 endpoints across 15 modules - see CIRIS_COMPREHENSIVE_GUIDE.md
+> **API Documentation**: 99 endpoints across 15 modules - [Interactive Docs](https://agents.ciris.ai/api/datum/docs) | [Comprehensive Guide](CIRIS_COMPREHENSIVE_GUIDE.md)
 
 ---
 
@@ -387,6 +387,7 @@ CIRIS Agent/
 ```bash
 python main.py --adapter api --template datum --host 0.0.0.0 --port 8080
 ```
+📚 **Interactive API Documentation**: Once running, visit http://localhost:8080/docs or [Production Docs](https://agents.ciris.ai/api/datum/docs)
 
 **Discord community moderator (production pilot):**
 ```bash

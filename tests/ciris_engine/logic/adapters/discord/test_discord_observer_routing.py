@@ -277,13 +277,13 @@ class TestDiscordObserverRouting:
 
         with patch('ciris_engine.logic.utils.constants.DEFAULT_WA', 'somecomputerguy'):
             with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
-                with patch.object(observer, '_create_task_contents', new_callable=AsyncMock) as mock_create:
+                with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
                     await observer._handle_passive_observation(msg)
                     
                     # Should NOT route to feedback because only numeric IDs are checked for security
                     mock_feedback.assert_not_called()
-                    # Should route to normal passive observation instead
-                    mock_create.assert_called_once_with(msg)
+                    # Should NOT create task either - message is ignored in deferral channel from non-WA user
+                    mock_create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_wa_feedback_validation_rejects_non_wa_user(self, observer):

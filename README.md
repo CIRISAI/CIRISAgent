@@ -224,16 +224,19 @@ curl -X POST http://localhost:8080/v1/runtime/processor/pause
 
 ### Operational Insights
 - **[Real-Time Telemetry](TELEMETRY_ARCHITECTURE.md)**: System metrics and health
-  - `/v1/telemetry/unified` - Aggregated metrics (JSON/Prometheus/Graphite)
+  - `/v1/telemetry/unified` - **Single endpoint for all telemetry** (replaces 78+ routes)
+    - Views: summary, health, operational, detailed, performance, reliability  
+    - Formats: JSON, Prometheus, Graphite
+  - `/v1/telemetry/otlp/{signal}` - OpenTelemetry export (metrics/traces/logs)
   - `/v1/telemetry/traces` - Cognitive reasoning traces
   - `/v1/telemetry/logs` - System logs with filtering
   - `/v1/telemetry/metrics` - Detailed service metrics
-- **Service Health**: 41 services with circuit breaker states
+- **Service Health**: 22 core + adapter services with circuit breaker states
 - **Monitoring Tool**: `python tools/api_telemetry_tool.py --monitor`
 - **Memory Timeline**: Time-based memory queries
 - **Audit Statistics**: Action patterns and compliance
 
-> **API Documentation**: Complete endpoint reference available in the API system.
+> **API Documentation**: 99 endpoints across 15 modules - see CIRIS_COMPREHENSIVE_GUIDE.md
 
 ---
 

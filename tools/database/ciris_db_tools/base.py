@@ -17,7 +17,7 @@ class BaseDBTool:
             # Import locally to avoid circular imports
             import sys
 
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
             from ciris_engine.logic.config import get_sqlite_db_full_path
 
             db_path = get_sqlite_db_full_path()

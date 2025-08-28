@@ -120,8 +120,8 @@ def update_template_stewardship(template_path, signing_key=None):
 
 
 def main():
-    # Change to project root
-    project_root = Path(__file__).parent.parent
+    # Change to project root (tools/templates/ -> project root)
+    project_root = Path(__file__).parent.parent.parent
     os.chdir(project_root)
 
     # Check templates directory exists

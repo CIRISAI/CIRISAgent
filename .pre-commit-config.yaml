@@ -9,7 +9,7 @@ repos:
     hooks:
       - id: grace-gatekeeper
         name: Grace Smart Gatekeeper
-        entry: python tools/grace_precommit.py
+        entry: python tools/dev/grace_precommit.py
         language: python
         pass_filenames: false
         always_run: true
@@ -81,7 +81,7 @@ repos:
       # Dict[str, Any] audit - Informational
       - id: dict-any-audit
         name: Dict[str, Any] Audit (Info Only)
-        entry: python tools/audit_dict_any_usage.py
+        entry: python tools/quality/audit_dict_any_usage.py
         language: python
         pass_filenames: false
         always_run: false
@@ -91,7 +91,7 @@ repos:
       # Version reminder - Gentle nudge
       - id: version-check
         name: Version Reminder
-        entry: tools/check_version_reminder.sh
+        entry: tools/dev/check_version_reminder.sh
         language: system
         pass_filenames: false
         always_run: false

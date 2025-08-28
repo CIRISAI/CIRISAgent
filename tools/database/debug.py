@@ -25,8 +25,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Add the project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add the project root to path (tools/database/ -> project root)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.db.core import get_db_connection

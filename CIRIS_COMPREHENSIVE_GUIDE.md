@@ -30,7 +30,7 @@
 CIRIS (Covenant-Integrated Responsible Intelligence System) is an ethical AI platform designed for progressive deployment, starting with Discord community moderation and scaling to critical applications like healthcare triage.
 
 **Key Features:**
-- 21 core services with strict type safety
+- 22 core services with strict type safety
 - Resource-constrained design (4GB RAM, offline-capable)
 - Zero attack surface architecture
 - Formal agent creation ceremonies
@@ -76,8 +76,8 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 ### Major Achievements
 
 1. **Complete Type Safety**: Zero `Dict[str, Any]` in production
-2. **Service Architecture**: 21 Core + Adapter Services operational
-3. **API v1.0**: 78 endpoints, 100% test coverage
+2. **Service Architecture**: 22 Core + Adapter Services operational
+3. **API v1.0**: 99 endpoints across 15 modules, 100% critical path coverage
 4. **Typed Graph Nodes**: 11 active classes with validation
 5. **Production Deployment**: agents.ciris.ai running multiple agents
 6. **Book VI Compliance**: Full stewardship implementation
@@ -98,13 +98,13 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 
 ## Architecture Overview
 
-### 21 Core Services
+### 22 Core Services
 
 **Graph Services (6):**
 - memory, config, telemetry, audit, incident_management, tsdb_consolidation
 
-**Infrastructure Services (7):**
-- time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
+**Infrastructure Services (8):**
+- time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets, consent
 
 **Governance Services (4):**
 - wise_authority, adaptive_filter, visibility, self_observation
@@ -215,7 +215,7 @@ Services NEVER create other services. All creation happens in ServiceInitializer
 
 ## API v1.0 Complete Reference
 
-### 82 Endpoints Across 13 Modules
+### 99 Endpoints Across 15 Modules
 
 #### 1. Agent Module (`/v1/agent/*`)
 - `POST /interact` - Send message to agent
@@ -245,10 +245,21 @@ Service management:
 - `DELETE /{node_id}` - Delete node
 
 #### 4. Telemetry Module (`/v1/telemetry/*`)
+- `GET /unified` - **Single unified endpoint for all telemetry** (replaces 78+ individual routes)
+  - Views: summary, health, operational, detailed, performance, reliability
+  - Formats: json, prometheus, graphite
+  - Categories: buses, graph, infrastructure, governance, runtime, adapters
+- `GET /otlp/metrics` - OpenTelemetry metrics export
+- `GET /otlp/traces` - OpenTelemetry traces export
+- `GET /otlp/logs` - OpenTelemetry logs export
 - `GET /metrics` - System metrics
-- `GET /logs` - System logs
+- `GET /metrics/{name}` - Detailed metric info
+- `GET /logs` - System logs with filtering
 - `GET /traces` - Request traces
 - `GET /resources` - Resource metrics
+- `GET /resources/history` - Historical resource data
+- `GET /overview` - System overview
+- `POST /query` - Advanced telemetry queries
 
 #### 5. Config Module (`/v1/config/*`)
 - `GET /` - Get all config
@@ -273,13 +284,78 @@ Default dev credentials: `admin/ciris_admin_password`
 #### 8. Transparency (`/v1/transparency/*`)
 - `GET /feed` - Public transparency statistics (no auth required)
 - `GET /policy` - Privacy policy and commitments
+- `GET /accountability` - Accountability metrics
 
-#### 9. Emergency (`/emergency/*`)
+#### 9. Consent Module (`/v1/consent/*`)
+- `POST /stream` - Set consent stream
+- `GET /status/{user_id}` - Get user consent status
+- `POST /partnership/request` - Request partnership
+- `POST /partnership/accept` - Accept partnership
+- `GET /partnerships` - List partnerships
+- `DELETE /partnership/{partner_id}` - Revoke partnership
+- Additional endpoints for consent management
+
+#### 10. Users Module (`/v1/users/*`)
+- `GET /me` - Current user profile
+- `GET /{user_id}` - Get user info
+- `PUT /{user_id}` - Update user profile
+- `GET /` - List users (admin)
+- `POST /` - Create user
+- `DELETE /{user_id}` - Delete user
+- Additional user management endpoints
+
+#### 11. System Extensions (`/v1/system/*`)
+- `GET /runtime/queue` - Processing queue status
+- `POST /runtime/single-step` - Single-step processor
+- `GET /services/health` - Detailed service health
+- `GET /services/selection-logic` - Service selection explanation
+- `GET /processors` - Processor states
+- `PUT /services/{service}/priority` - Update service priority
+- `POST /services/circuit-breakers/reset` - Reset circuit breakers
+
+#### 12. Emergency (`/emergency/*`)
 - `POST /shutdown` - Emergency shutdown (requires Ed25519 signature)
 - Bypasses normal auth
 
-#### 10. WebSocket (`/v1/ws`)
+#### 13. Audit Module (`/v1/audit/*`)
+- `GET /logs` - Get audit logs
+- `GET /trail/{entity_id}` - Get audit trail for entity
+- `POST /verify` - Verify signature
+- `GET /stats` - Audit statistics
+- `GET /roots` - Get audit roots
+
+#### 14. WA (Wise Authority) Module (`/v1/wa/*`)
+- `GET /status` - WA status
+- `POST /defer` - Submit deferred decision
+- `GET /pending` - Get pending deferrals
+- `POST /guidance` - Submit guidance
+- `GET /authorities` - List authorized WAs
+
+#### 15. WebSocket (`/v1/ws`)
 - Real-time updates and streaming
+
+### Unified Telemetry Features
+
+- **Parallel collection** from all 22 services (10x faster)
+- **Smart caching** with 30-second TTL
+- **Multiple export formats**: JSON, Prometheus, Graphite
+- **OpenTelemetry support**: Full OTLP JSON export for metrics, traces, logs
+- **Enterprise views**: Executive dashboard, ops monitoring, reliability scoring
+
+Example usage:
+```bash
+# Executive summary
+curl -H "Authorization: Bearer $TOKEN" \
+  https://agents.ciris.ai/api/datum/v1/telemetry/unified?view=summary
+
+# Prometheus export for monitoring
+curl -H "Authorization: Bearer $TOKEN" \
+  https://agents.ciris.ai/api/datum/v1/telemetry/unified?format=prometheus
+
+# OpenTelemetry metrics export
+curl -H "Authorization: Bearer $TOKEN" \
+  https://agents.ciris.ai/api/datum/v1/telemetry/otlp/metrics
+```
 
 ### Authentication Flow
 
@@ -783,11 +859,13 @@ CIRISAgent/
 
 ### Current Achievements
 - ✅ Zero `Dict[str, Any]` in production
-- ✅ 78 API endpoints operational
-- ✅ 100% test coverage on API
+- ✅ **99 API endpoints** operational (was 78)
+- ✅ **22 core services** + adapter services
+- ✅ **Unified telemetry** with OTLP export
+- ✅ 100% test coverage on critical paths
 - ✅ 11 typed graph node classes
 - ✅ Book VI compliance
-- ✅ Production deployment
+- ✅ Production deployment at agents.ciris.ai
 - ✅ Grace sustainable development
 
 ### Quality Metrics

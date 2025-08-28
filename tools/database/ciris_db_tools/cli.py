@@ -9,8 +9,8 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add project root to path (tools/database/ciris_db_tools/ -> project root)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from .audit_verifier import AuditVerifierWrapper
 from .consolidation_monitor import ConsolidationMonitor

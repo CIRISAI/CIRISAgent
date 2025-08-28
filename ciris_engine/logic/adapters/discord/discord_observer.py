@@ -169,10 +169,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
     async def _handle_priority_observation(self, msg: DiscordMessage, filter_result: Any) -> None:
         """Handle high-priority messages with immediate processing"""
-        from ciris_engine.logic.utils.constants import DEFAULT_WA
-
         monitored_channel_ids = self.monitored_channel_ids or []
-        wa_discord_user = DEFAULT_WA
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
         
@@ -220,10 +217,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
     async def _handle_passive_observation(self, msg: DiscordMessage) -> None:
         """Handle passive observation - routes to WA feedback queue if appropriate."""
-        from ciris_engine.logic.utils.constants import DEFAULT_WA
-
         monitored_channel_ids = self.monitored_channel_ids or []
-        wa_discord_user = DEFAULT_WA
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
         
@@ -266,10 +260,6 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         """Process guidance/feedback from WA in deferral channel."""
         try:
             # First validate that the user is a wise authority
-            from ciris_engine.logic.utils.constants import DEFAULT_WA
-
-            wa_discord_user = DEFAULT_WA
-
             # Only check numeric IDs for security - usernames can be spoofed
             is_wise_authority = msg.author_id in self.wa_user_ids
 

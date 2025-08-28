@@ -4,7 +4,7 @@
 
 # CIRIS Engine (CIRISAgent)
 
-**Copyright © 2025 Eric Moore and CIRIS L3C** | **Apache 2.0 License** | **PATENT PENDING**
+**Copyright © 2025 Eric Moore and CIRIS L3C** | **Apache 2.0 License**
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
@@ -331,7 +331,7 @@ CIRIS Agent/
 │   ├── sinks/             # Multi-service action coordination
 │   ├── telemetry/         # Observability and resource monitoring
 │   └── utils/             # Core infrastructure utilities
-├── ciris_profiles/        # Agent creation templates (see docs/CIRIS_PROFILES.md)
+├── ciris_templates/       # Agent creation templates (see CIRIS_TEMPLATE_GUIDE.md)
 ├── CIRISVoice/           # Home Assistant voice integration (Wyoming protocol)
 ├── ciris_sdk/            # Client SDK for external integrations
 ├── CIRISVoice/           # Voice interaction capabilities
@@ -414,6 +414,8 @@ Templates in `ciris_templates/` are used when creating new agents:
 - **echo**: Ubuntu-inspired community guardian for Discord
 
 **Note**: These are templates for agent creation. Once created, the agent's identity and configuration live in the graph memory and evolve through the agent's own decisions (with WA approval for identity changes).
+
+**See [CIRIS Template Guide](ciris_templates/CIRIS_TEMPLATE_GUIDE.md)** for detailed instructions on creating Book VI compliant agent templates with proper stewardship and signing.
 
 ---
 
@@ -551,82 +553,6 @@ Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guideli
 ## License
 
 Apache-2.0 © 2025 CIRIS AI Project
-
----
-
-## Module Documentation Tree 🌳
-
-Comprehensive documentation is available in README files throughout the codebase:
-
-```
-ciris_engine/
-├── README.md                    # Engine overview and architecture
-├── action_handlers/
-│   └── README.md                # 3×3×3 action system documentation
-├── adapters/
-│   ├── README.md                # Platform adapter architecture
-│   ├── api/
-│   │   ├── README.md            # API adapter implementation
-│   │   └── API_ENDPOINTS.md    # Endpoint reference
-│   └── cli/
-│       └── README.md            # CLI adapter documentation
-├── audit/
-│   └── README.md                # Triple audit system architecture
-├── config/
-│   └── README.md                # Configuration management (identity-based)
-├── context/
-│   ├── README.md                # Context aggregation system
-│   └── builder_README.md        # Context builder patterns
-├── data/
-│   └── README.md                # Database and persistence layer
-├── dma/
-│   └── README.md                # Decision Making Algorithms
-├── formatters/
-│   └── README.md                # Prompt engineering utilities
-├── conscience/
-│   └── README.md                # Ethical evaluation system with epistemic faculties
-├── persistence/
-│   ├── README.md                # Persistence architecture
-│   └── models/
-│       └── identity.py          # Graph-based identity system
-├── processor/
-│   └── README.md                # Thought processing pipeline
-├── protocols/
-│   └── README.md                # Service interface protocols
-├── registries/
-│   └── README.md                # Service discovery & circuit breakers
-├── runtime/
-│   └── README.md                # Runtime control & hot-swapping
-├── schemas/
-│   └── README.md                # Data schemas with identity system
-├── secrets/
-│   └── README.md                # Secrets detection & encryption
-├── services/
-│   ├── README.md                # Service implementations
-│   └── memory_service/
-│       └── README.md            # Graph memory service
-├── sinks/
-│   └── README.md                # Multi-service action coordination
-├── telemetry/
-│   └── README.md                # Observability & hot/cold paths
-└── utils/
-    └── README.md                # Utility infrastructure
-
-Supporting Modules:
-├── CIRISVoice/
-│   └── README.md                # Adapter Development Kit
-├── ciris_sdk/
-│   └── README.md                # Client SDK documentation
-├── ciris_mypy_toolkit/
-│   └── README.md                # Type checking utilities
-├── CIRISVoice/
-│   ├── README.md                # Voice interaction system
-│   └── APIMODE.md               # Voice API integration
-├── CIRISGUI/
-│   └── README.md                # Web management interface
-└── docker/
-    └── README.md                # Container deployment guide
-```
 
 ---
 

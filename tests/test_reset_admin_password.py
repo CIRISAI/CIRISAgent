@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import bcrypt
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "tools" / "ops"))
 from reset_admin_password import generate_secure_password, hash_password, update_admin_password, verify_password
 
 

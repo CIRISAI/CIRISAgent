@@ -211,11 +211,9 @@ class MemorizeHandler(BaseActionHandler):
             node_attrs = node.attributes if hasattr(node, "attributes") else {}
             if isinstance(node_attrs, dict):
                 config_value = node_attrs.get("value")
-                config_description = node_attrs.get("description", f"Configuration for {config_key}")
             else:
                 # For non-dict attributes, try to extract value
                 config_value = getattr(node_attrs, "value", None) if node_attrs else None
-                config_description = getattr(node_attrs, "description", f"Configuration for {config_key}") if node_attrs else f"Configuration for {config_key}"
             
             # Validate we have the minimum required data
             if config_value is None:

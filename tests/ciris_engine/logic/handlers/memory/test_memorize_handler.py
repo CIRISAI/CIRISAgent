@@ -294,26 +294,29 @@ class TestMemorizeHandler:
     ) -> None:
         """Test memorizing different types of nodes."""
         node_types = [
-            (NodeType.IDENTITY, "I am CIRIS, an ethical AI"),
-            (NodeType.TASK_SUMMARY, "Help user debug Python code"),
-            (NodeType.OBSERVATION, "User is frustrated"),
-            (NodeType.BEHAVIORAL, "User likes concise answers"),
-            (NodeType.CONVERSATION_SUMMARY, "Discussion about ethics"),
-            (NodeType.CONFIG, "Temperature setting: 0.7"),
+            (NodeType.IDENTITY, "I am CIRIS, an ethical AI", {}),
+            (NodeType.TASK_SUMMARY, "Help user debug Python code", {}),
+            (NodeType.OBSERVATION, "User is frustrated", {}),
+            (NodeType.BEHAVIORAL, "User likes concise answers", {}),
+            (NodeType.CONVERSATION_SUMMARY, "Discussion about ethics", {}),
+            (NodeType.CONFIG, "Temperature setting: 0.7", {"value": 0.7}),  # CONFIG needs value
         ]
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            for node_type, content in node_types:
+            for node_type, content, extra_attrs in node_types:
                 # Reset mocks
                 mock_memory_bus.memorize.reset_mock()
                 mock_persistence.add_thought.reset_mock()
 
                 # Create params for this node type
+                attributes = {"content": content, "created_by": "test_handler", "tags": [node_type.value.lower()]}
+                attributes.update(extra_attrs)  # Add any extra attributes (like value for CONFIG)
+                
                 node = GraphNode(
                     id=f"test_{node_type.value}_node",
                     type=node_type,
                     scope=GraphScope.LOCAL,
-                    attributes={"content": content, "created_by": "test_handler", "tags": [node_type.value.lower()]},
+                    attributes=attributes,
                 )
                 params = MemorizeParams(node=node)
 
@@ -333,7 +336,17 @@ class TestMemorizeHandler:
                 # Verify correct node type was used
                 memorize_call = mock_memory_bus.memorize.call_args
                 assert memorize_call.kwargs["node"].type == node_type
-                assert memorize_call.kwargs["node"].attributes["content"] == content
+                
+                # For CONFIG nodes, the structure is transformed
+                if node_type == NodeType.CONFIG:
+                    # CONFIG nodes get special handling - check for the value
+                    attrs = memorize_call.kwargs["node"].attributes
+                    assert "key" in attrs
+                    assert attrs["key"] == "test_config_node"
+                    assert "value" in attrs
+                    assert attrs["value"]["float_value"] == 0.7
+                else:
+                    assert memorize_call.kwargs["node"].attributes["content"] == content
 
     @pytest.mark.asyncio
     async def test_scope_assignment(

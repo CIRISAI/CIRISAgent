@@ -294,26 +294,29 @@ class TestMemorizeHandler:
     ) -> None:
         """Test memorizing different types of nodes."""
         node_types = [
-            (NodeType.IDENTITY, "I am CIRIS, an ethical AI"),
-            (NodeType.TASK_SUMMARY, "Help user debug Python code"),
-            (NodeType.OBSERVATION, "User is frustrated"),
-            (NodeType.BEHAVIORAL, "User likes concise answers"),
-            (NodeType.CONVERSATION_SUMMARY, "Discussion about ethics"),
-            (NodeType.CONFIG, "Temperature setting: 0.7"),
+            (NodeType.IDENTITY, "I am CIRIS, an ethical AI", {}),
+            (NodeType.TASK_SUMMARY, "Help user debug Python code", {}),
+            (NodeType.OBSERVATION, "User is frustrated", {}),
+            (NodeType.BEHAVIORAL, "User likes concise answers", {}),
+            (NodeType.CONVERSATION_SUMMARY, "Discussion about ethics", {}),
+            (NodeType.CONFIG, "Temperature setting: 0.7", {"value": 0.7}),  # CONFIG needs value
         ]
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            for node_type, content in node_types:
+            for node_type, content, extra_attrs in node_types:
                 # Reset mocks
                 mock_memory_bus.memorize.reset_mock()
                 mock_persistence.add_thought.reset_mock()
 
                 # Create params for this node type
+                attributes = {"content": content, "created_by": "test_handler", "tags": [node_type.value.lower()]}
+                attributes.update(extra_attrs)  # Add any extra attributes (like value for CONFIG)
+                
                 node = GraphNode(
                     id=f"test_{node_type.value}_node",
                     type=node_type,
                     scope=GraphScope.LOCAL,
-                    attributes={"content": content, "created_by": "test_handler", "tags": [node_type.value.lower()]},
+                    attributes=attributes,
                 )
                 params = MemorizeParams(node=node)
 
@@ -333,7 +336,17 @@ class TestMemorizeHandler:
                 # Verify correct node type was used
                 memorize_call = mock_memory_bus.memorize.call_args
                 assert memorize_call.kwargs["node"].type == node_type
-                assert memorize_call.kwargs["node"].attributes["content"] == content
+                
+                # For CONFIG nodes, the structure is transformed
+                if node_type == NodeType.CONFIG:
+                    # CONFIG nodes get special handling - check for the value
+                    attrs = memorize_call.kwargs["node"].attributes
+                    assert "key" in attrs
+                    assert attrs["key"] == "test_config_node"
+                    assert "value" in attrs
+                    assert attrs["value"]["float_value"] == 0.7
+                else:
+                    assert memorize_call.kwargs["node"].attributes["content"] == content
 
     @pytest.mark.asyncio
     async def test_scope_assignment(
@@ -737,3 +750,409 @@ class TestMemorizeHandler:
                 # Verify content was passed unchanged
                 memorize_call = mock_memory_bus.memorize.call_args
                 assert memorize_call.kwargs["node"].attributes["content"] == content
+
+    # USER NODE CONSENT HANDLING TESTS
+    @pytest.mark.asyncio
+    async def test_user_node_with_valid_temporary_consent(
+        self,
+        memorize_handler: MemorizeHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_memory_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Test USER node with valid TEMPORARY consent."""
+        from datetime import timedelta
+        from ciris_engine.logic.services.governance.consent import ConsentService
+        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
+
+        # Create USER node
+        node = GraphNode(
+            id="user/test_user_123",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "content": "User prefers morning meetings",
+                "created_by": "test_handler",
+                "tags": ["preference"],
+            },
+        )
+        params = MemorizeParams(node=node)
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.MEMORIZE,
+            action_parameters=params,
+            rationale="Store user preference",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+        # Mock consent service with valid TEMPORARY consent
+        future_date = datetime.now(timezone.utc) + timedelta(days=10)
+        mock_consent_status = ConsentStatus(
+            user_id="test_user_123",
+            stream=ConsentStream.TEMPORARY,
+            categories=[],
+            granted_at=datetime.now(timezone.utc),
+            expires_at=future_date,
+            last_modified=datetime.now(timezone.utc),
+        )
+
+        with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
+            with patch.object(ConsentService, '__init__', return_value=None):
+                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+                    # Execute handler
+                    follow_up_id = await memorize_handler.handle(result, test_thought, dispatch_context)
+
+                    # Verify consent was checked
+                    mock_get_consent.assert_called_once_with("test_user_123")
+
+                    # Verify memory was stored with consent metadata
+                    memorize_call = mock_memory_bus.memorize.call_args
+                    node_attrs = memorize_call.kwargs["node"].attributes
+                    assert node_attrs["consent_stream"] == ConsentStream.TEMPORARY
+                    assert node_attrs["consent_expires_at"] == future_date.isoformat()
+                    assert "consent_granted_at" in node_attrs
+
+                    # Verify thought was completed successfully
+                    mock_base_persistence.update_thought_status.assert_called_with(
+                        thought_id="thought_123", status=ThoughtStatus.COMPLETED, final_action=result
+                    )
+
+    @pytest.mark.asyncio
+    async def test_user_node_with_expired_temporary_consent(
+        self,
+        memorize_handler: MemorizeHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_memory_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Test USER node with expired TEMPORARY consent - should be blocked."""
+        from datetime import timedelta
+        from ciris_engine.logic.services.governance.consent import ConsentService
+        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
+
+        # Create USER node
+        node = GraphNode(
+            id="user/expired_user_456",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "content": "User's expired data",
+                "created_by": "test_handler",
+                "tags": ["expired"],
+            },
+        )
+        params = MemorizeParams(node=node)
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.MEMORIZE,
+            action_parameters=params,
+            rationale="Attempt to store expired user data",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+        # Mock consent service with expired TEMPORARY consent
+        expired_date = datetime.now(timezone.utc) - timedelta(days=1)
+        mock_consent_status = ConsentStatus(
+            user_id="expired_user_456",
+            stream=ConsentStream.TEMPORARY,
+            categories=[],
+            granted_at=datetime.now(timezone.utc) - timedelta(days=15),
+            expires_at=expired_date,
+            last_modified=datetime.now(timezone.utc) - timedelta(days=15),
+        )
+
+        with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
+            with patch.object(ConsentService, '__init__', return_value=None):
+                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+                    with patch.object(ConsentService, 'revoke_consent', return_value=None) as mock_revoke_consent:
+                        # Execute handler
+                        follow_up_id = await memorize_handler.handle(result, test_thought, dispatch_context)
+
+                        # Verify consent was checked
+                        mock_get_consent.assert_called_once_with("expired_user_456")
+
+                        # Verify consent was revoked due to expiration
+                        mock_revoke_consent.assert_called_once_with("expired_user_456", "TEMPORARY consent expired (14 days)")
+
+                        # Verify memory was NOT stored
+                        mock_memory_bus.memorize.assert_not_called()
+
+                        # Verify thought was marked as FAILED
+                        mock_base_persistence.update_thought_status.assert_called_with(
+                            thought_id="thought_123", status=ThoughtStatus.FAILED, final_action=result
+                        )
+
+                        # Verify error follow-up was created
+                        assert follow_up_id is not None
+                        follow_up_call = mock_base_persistence.add_thought.call_args[0][0]
+                        assert "MEMORIZE BLOCKED: User consent expired" in follow_up_call.content
+                        assert "expired_user_456" in follow_up_call.content
+                        assert "Decay protocol initiated" in follow_up_call.content
+
+    @pytest.mark.asyncio
+    async def test_user_node_without_consent_creates_default_temporary(
+        self,
+        memorize_handler: MemorizeHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_memory_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Test USER node without consent - should create default TEMPORARY consent."""
+        from datetime import timedelta
+        from ciris_engine.logic.services.governance.consent import ConsentService, ConsentNotFoundError
+        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream, ConsentRequest
+
+        # Create USER node
+        node = GraphNode(
+            id="user/new_user_789",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "content": "New user's first interaction",
+                "created_by": "test_handler",
+                "tags": ["first_interaction"],
+            },
+        )
+        params = MemorizeParams(node=node)
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.MEMORIZE,
+            action_parameters=params,
+            rationale="Store new user data",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+        # Mock consent service to raise ConsentNotFoundError first, then return created consent
+        future_date = datetime.now(timezone.utc) + timedelta(days=14)
+        mock_created_consent = ConsentStatus(
+            user_id="new_user_789",
+            stream=ConsentStream.TEMPORARY,
+            categories=[],
+            granted_at=datetime.now(timezone.utc),
+            expires_at=future_date,
+            last_modified=datetime.now(timezone.utc),
+        )
+
+        with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
+            with patch.object(ConsentService, '__init__', return_value=None):
+                with patch.object(ConsentService, 'get_consent', side_effect=ConsentNotFoundError("No consent found")) as mock_get_consent:
+                    with patch.object(ConsentService, 'grant_consent', return_value=mock_created_consent) as mock_grant_consent:
+                        # Execute handler
+                        follow_up_id = await memorize_handler.handle(result, test_thought, dispatch_context)
+
+                        # Verify consent was checked
+                        mock_get_consent.assert_called_once_with("new_user_789")
+
+                        # Verify default TEMPORARY consent was created
+                        mock_grant_consent.assert_called_once()
+                        consent_request = mock_grant_consent.call_args[0][0]
+                        assert consent_request.user_id == "new_user_789"
+                        assert consent_request.stream == ConsentStream.TEMPORARY
+                        assert consent_request.categories == []
+                        assert "Default TEMPORARY consent on first interaction" in consent_request.reason
+
+                        # Verify memory was stored with consent metadata
+                        memorize_call = mock_memory_bus.memorize.call_args
+                        node_attrs = memorize_call.kwargs["node"].attributes
+                        assert node_attrs["consent_stream"] == ConsentStream.TEMPORARY
+                        assert "consent_expires_at" in node_attrs
+                        assert "consent_granted_at" in node_attrs
+                        assert "We forget about you in 14 days unless you say otherwise" in node_attrs["consent_notice"]
+
+                        # Verify thought was completed successfully
+                        mock_base_persistence.update_thought_status.assert_called_with(
+                            thought_id="thought_123", status=ThoughtStatus.COMPLETED, final_action=result
+                        )
+
+    @pytest.mark.asyncio
+    async def test_user_node_with_user_prefix_variant(
+        self,
+        memorize_handler: MemorizeHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_memory_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Test USER node with user_ prefix variant."""
+        from datetime import timedelta
+        from ciris_engine.logic.services.governance.consent import ConsentService
+        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
+
+        # Create USER node with user_ prefix
+        node = GraphNode(
+            id="user_variant_123",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "content": "User data with underscore prefix",
+                "created_by": "test_handler",
+                "tags": ["variant_test"],
+            },
+        )
+        params = MemorizeParams(node=node)
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.MEMORIZE,
+            action_parameters=params,
+            rationale="Store user variant data",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+        # Mock consent service with valid consent
+        future_date = datetime.now(timezone.utc) + timedelta(days=7)
+        mock_consent_status = ConsentStatus(
+            user_id="variant_123",
+            stream=ConsentStream.TEMPORARY,
+            categories=[],
+            granted_at=datetime.now(timezone.utc),
+            expires_at=future_date,
+            last_modified=datetime.now(timezone.utc),
+        )
+
+        with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
+            with patch.object(ConsentService, '__init__', return_value=None):
+                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+                    # Execute handler
+                    await memorize_handler.handle(result, test_thought, dispatch_context)
+
+                    # Verify consent was checked with correct user_id (without prefix)
+                    mock_get_consent.assert_called_once_with("variant_123")
+
+                    # Verify memory was stored
+                    assert mock_memory_bus.memorize.called
+
+    @pytest.mark.asyncio
+    async def test_user_node_with_partnered_consent(
+        self,
+        memorize_handler: MemorizeHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_memory_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Test USER node with PARTNERED consent stream."""
+        from ciris_engine.logic.services.governance.consent import ConsentService
+        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream, ConsentCategory
+
+        # Create USER node
+        node = GraphNode(
+            id="user/partner_user_999",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "content": "Partner user's valuable feedback",
+                "created_by": "test_handler",
+                "tags": ["feedback", "partnership"],
+            },
+        )
+        params = MemorizeParams(node=node)
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.MEMORIZE,
+            action_parameters=params,
+            rationale="Store partner feedback",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+        # Mock consent service with PARTNERED consent (no expiration)
+        mock_consent_status = ConsentStatus(
+            user_id="partner_user_999",
+            stream=ConsentStream.PARTNERED,
+            categories=[ConsentCategory.INTERACTION, ConsentCategory.IMPROVEMENT],
+            granted_at=datetime.now(timezone.utc),
+            expires_at=None,  # PARTNERED consent doesn't expire
+            last_modified=datetime.now(timezone.utc),
+        )
+
+        with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
+            with patch.object(ConsentService, '__init__', return_value=None):
+                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+                    # Execute handler
+                    await memorize_handler.handle(result, test_thought, dispatch_context)
+
+                    # Verify consent was checked
+                    mock_get_consent.assert_called_once_with("partner_user_999")
+
+                    # Verify memory was stored with PARTNERED consent metadata
+                    memorize_call = mock_memory_bus.memorize.call_args
+                    node_attrs = memorize_call.kwargs["node"].attributes
+                    assert node_attrs["consent_stream"] == ConsentStream.PARTNERED
+                    assert node_attrs["consent_expires_at"] is None  # PARTNERED doesn't expire
+                    assert "consent_granted_at" in node_attrs
+
+                    # Verify thought was completed successfully
+                    mock_base_persistence.update_thought_status.assert_called_with(
+                        thought_id="thought_123", status=ThoughtStatus.COMPLETED, final_action=result
+                    )
+
+    @pytest.mark.asyncio
+    async def test_non_user_node_skips_consent_check(
+        self,
+        memorize_handler: MemorizeHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_memory_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Test that non-USER nodes skip consent checking entirely."""
+        from ciris_engine.logic.services.governance.consent import ConsentService
+
+        # Create non-USER node
+        node = GraphNode(
+            id="system/config_node",
+            type=NodeType.CONFIG,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "key": "test_config",
+                "value": {"setting": "enabled"},
+                "created_by": "test_handler",
+                "tags": ["system"],
+            },
+        )
+        params = MemorizeParams(node=node)
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.MEMORIZE,
+            action_parameters=params,
+            rationale="Store system config",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+        with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
+            with patch.object(ConsentService, '__init__', return_value=None) as mock_init:
+                with patch.object(ConsentService, 'get_consent') as mock_get_consent:
+                    # Execute handler
+                    await memorize_handler.handle(result, test_thought, dispatch_context)
+
+                    # Verify ConsentService was never instantiated or called
+                    mock_init.assert_not_called()
+                    mock_get_consent.assert_not_called()
+
+                    # Verify memory was stored normally
+                    assert mock_memory_bus.memorize.called
+
+                    # Verify thought was completed successfully
+                    mock_base_persistence.update_thought_status.assert_called_with(
+                        thought_id="thought_123", status=ThoughtStatus.COMPLETED, final_action=result
+                    )

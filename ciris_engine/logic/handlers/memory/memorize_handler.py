@@ -199,6 +199,113 @@ class MemorizeHandler(BaseActionHandler):
                 status=ThoughtStatus.FAILED,
             )
 
+        # Special handling for CONFIG nodes
+        if node.type == NodeType.CONFIG and scope == GraphScope.LOCAL:
+            # CONFIG nodes need special structure for the config service
+            # Extract key and value from node attributes or id
+            
+            # Try to parse key from node id (e.g., "filter/caps_threshold" -> "filter.caps_threshold")
+            config_key = node.id.replace("/", ".")
+            
+            # Check if attributes contain the required data
+            node_attrs = node.attributes if hasattr(node, "attributes") else {}
+            if isinstance(node_attrs, dict):
+                config_value = node_attrs.get("value")
+            else:
+                # For non-dict attributes, try to extract value
+                config_value = getattr(node_attrs, "value", None) if node_attrs else None
+            
+            # Validate we have the minimum required data
+            if config_value is None:
+                # Provide detailed error message with examples
+                error_msg = (
+                    f"MEMORIZE CONFIG FAILED: Missing required 'value' field for configuration '{config_key}'\n\n"
+                    "CONFIG nodes require both a key and a value. The key was extracted from the node ID, "
+                    "but no value was provided in the attributes.\n\n"
+                    "To set a configuration value, include it in the node attributes. Examples:\n\n"
+                    "For numeric values:\n"
+                    "  $memorize filter/spam_threshold CONFIG LOCAL value=0.8\n"
+                    "  $memorize filter/trust_decay CONFIG LOCAL value=0.05\n\n"
+                    "For boolean values:\n"
+                    "  $memorize filter/enabled CONFIG LOCAL value=true\n"
+                    "  $memorize filter/debug_mode CONFIG LOCAL value=false\n\n"
+                    "For string values:\n"
+                    "  $memorize filter/mode CONFIG LOCAL value=strict\n"
+                    "  $memorize agent/name CONFIG LOCAL value='CIRIS Agent'\n\n"
+                    "For list values:\n"
+                    "  $memorize filter/keywords CONFIG LOCAL value=['spam','scam','phishing']\n\n"
+                    "Note: The mock LLM currently only supports simple node creation. "
+                    "For actual configuration updates, you may need to use the config service directly."
+                )
+                
+                logger.warning(f"CONFIG node missing value: key={config_key}")
+                
+                return self.complete_thought_and_create_followup(
+                    thought=thought,
+                    follow_up_content=error_msg,
+                    action_result=result,
+                    status=ThoughtStatus.FAILED,
+                )
+            
+            # Try to create a proper ConfigNode
+            try:
+                from ciris_engine.schemas.services.nodes import ConfigNode, ConfigValue
+                
+                # Determine value type and create ConfigValue
+                config_val = ConfigValue()
+                if isinstance(config_value, bool):
+                    config_val.bool_value = config_value
+                elif isinstance(config_value, int):
+                    config_val.int_value = config_value
+                elif isinstance(config_value, float):
+                    config_val.float_value = config_value
+                elif isinstance(config_value, list):
+                    config_val.list_value = config_value
+                elif isinstance(config_value, dict):
+                    config_val.dict_value = config_value
+                else:
+                    # Default to string
+                    config_val.string_value = str(config_value)
+                
+                # Create ConfigNode with proper structure
+                config_node = ConfigNode(
+                    id=node.id,  # Use the original node id
+                    type=NodeType.CONFIG,
+                    scope=scope,  # Use the original scope (LOCAL)
+                    attributes={},  # Will be populated by to_graph_node()
+                    key=config_key,
+                    value=config_val,
+                    version=1,  # Start at version 1
+                    updated_by="agent",  # Default to agent
+                )
+                
+                # Convert to GraphNode for storage
+                node = config_node.to_graph_node()
+                
+                logger.info(f"Created proper ConfigNode for key={config_key}, value={config_value}")
+                
+            except Exception as e:
+                # Provide detailed error about what went wrong
+                error_msg = (
+                    f"MEMORIZE CONFIG FAILED: Error creating ConfigNode for '{config_key}'\n\n"
+                    f"Error: {str(e)}\n\n"
+                    "This typically happens when:\n"
+                    "1. The value type is not supported (must be: bool, int, float, string, list, or dict)\n"
+                    "2. The value format is invalid\n"
+                    "3. The key contains invalid characters\n\n"
+                    f"Attempted to set: key='{config_key}', value='{config_value}' (type: {type(config_value).__name__})\n\n"
+                    "Please ensure your value is properly formatted and try again."
+                )
+                
+                logger.error(f"Failed to create ConfigNode: {e}")
+                
+                return self.complete_thought_and_create_followup(
+                    thought=thought,
+                    follow_up_content=error_msg,
+                    action_result=result,
+                    status=ThoughtStatus.FAILED,
+                )
+
         # Perform the memory operation through the bus
         try:
             memory_result = await self.bus_manager.memory.memorize(node=node, handler_name=self.__class__.__name__)

@@ -2,7 +2,6 @@ import logging
 from typing import List
 
 from ciris_engine.logic.secrets.service import SecretsService
-from ciris_engine.schemas.secrets.core import SecretReference
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +13,8 @@ async def build_secrets_snapshot(secrets_service: SecretsService) -> dict:
         all_secrets = await secrets_service.store.list_all_secrets()
         recent_secrets = sorted(all_secrets, key=lambda s: s.created_at, reverse=True)[:10]
 
-        # The list_all_secrets() already returns SecretReference objects, so just use them directly
-        detected_secrets: List[SecretReference] = recent_secrets
+        # Convert SecretReference objects to strings for SystemSnapshot compatibility
+        detected_secrets: List[str] = [str(s.uuid) for s in recent_secrets]
 
         # Get filter version
         filter_config = secrets_service.filter.get_filter_config()

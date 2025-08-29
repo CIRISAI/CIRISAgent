@@ -135,7 +135,7 @@ class BaseObserver(Generic[MessageT], ABC):
             if secret_refs:
                 processed_msg._detected_secrets = [  # type: ignore[attr-defined]
                     {
-                        "uuid": ref.secret_uuid,  # type: ignore[attr-defined]
+                        "uuid": ref.uuid,
                         "context_hint": ref.context_hint,
                         "sensitivity": ref.sensitivity,
                     }

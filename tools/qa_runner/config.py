@@ -27,6 +27,9 @@ class QAModule(Enum):
     HANDLERS = "handlers"
     SIMPLE_HANDLERS = "simple_handlers"
 
+    # Filter modules
+    FILTERS = "filters"
+
     # SDK modules
     SDK = "sdk"
 
@@ -89,6 +92,7 @@ class QAConfig:
         """Get test cases for a specific module."""
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
+        from .modules.filter_tests import FilterTestModule
 
         # API test modules
         if module == QAModule.AUTH:
@@ -118,6 +122,10 @@ class QAConfig:
             return HandlerTestModule.get_handler_tests()
         elif module == QAModule.SIMPLE_HANDLERS:
             return HandlerTestModule.get_simple_handler_tests()
+
+        # Filter test modules
+        elif module == QAModule.FILTERS:
+            return FilterTestModule.get_filter_tests()
 
         # SDK test modules
         elif module == QAModule.SDK:
@@ -152,7 +160,7 @@ class QAConfig:
 
         elif module == QAModule.ALL:
             tests = []
-            for m in [QAModule.API_FULL, QAModule.HANDLERS_FULL, QAModule.SDK]:
+            for m in [QAModule.API_FULL, QAModule.HANDLERS_FULL, QAModule.FILTERS, QAModule.SDK]:
                 tests.extend(self.get_module_tests(m))
             return tests
 

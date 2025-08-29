@@ -14,7 +14,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**RELEASE CANDIDATE 1.0.6-RC1-patch6** | [Release Notes](docs/releases/1.0.6-RC1-patch6.md) | [Patch 5](docs/releases/1.0.5-RC1-patch5.md) | [Patch 4](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
+**RELEASE CANDIDATE 1.0.7-RC1-patch7** | [Release Notes](docs/releases/1.0.7-RC1-patch7.md) | [Patch 6](docs/releases/1.0.6-RC1-patch6.md) | [Patch 5](docs/releases/1.0.5-RC1-patch5.md) | [Patch 4](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -29,16 +29,31 @@ CIRIS wraps LLM calls with:
 
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
-### Latest: v1.0.6-RC1-patch6 - CRITICAL SECURITY FIX
-**This patch contains critical security and production fixes (August 27, 2025):**
-- **Security Fix** - Removed Discord username validation to prevent WA impersonation
-- **DMA Fix** - Changed alignment_check from Dict to str for GPT-OSS-120B compatibility
-- **Instructor Mode** - Added INSTRUCTOR_MODE env var for frontier model support
-- **Impact** - Fixed datum agent pondering loops, DMA validation failures (0%→100% success)
+### Latest: v1.0.7-RC1-patch7 - Agent Self-Configuration
+**This patch enables agents to configure themselves through MEMORIZE (August 28, 2025):**
+- ✅ **Self-Configuration** - Agents can now update configuration via CONFIG nodes
+- ✅ **100% Test Pass Rate** - 36 comprehensive filter tests, all passing
+- ✅ **Bug Fixes** - Fixed SecretReference and SystemSnapshot type issues
+- ✅ **Error Messages** - Detailed, actionable error messages with examples
 
-**IMPORTANT**: Deploy immediately if running Discord agents. Set `INSTRUCTOR_MODE=TOOLS` for GPT-OSS-120B.
+**Key Features:**
+```bash
+# Configure adaptive filters
+$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8
+$memorize adaptive_filter/caps_threshold CONFIG LOCAL value=0.7
 
-See [full release notes](docs/releases/1.0.6-RC1-patch6.md) for deployment instructions.
+# Configure secrets filters
+$memorize secrets_filter/jwt_detection_enabled CONFIG LOCAL value=true
+$memorize secrets_filter/custom_patterns CONFIG LOCAL value=['PROJ-[0-9]{4}']
+
+# Recall configurations
+$recall adaptive_filter/spam_threshold CONFIG LOCAL
+$recall secrets_filter/jwt_detection_enabled CONFIG LOCAL
+```
+
+**Test Results:** 36/36 tests passed (100% success rate) in 94.12s
+
+See [full release notes](docs/releases/1.0.7-RC1-patch7.md) for comprehensive examples and technical details.
 
 ---
 

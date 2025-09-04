@@ -411,7 +411,14 @@ async def control_runtime(
 
         # Execute action
         if action == "pause":
-            success = await runtime_control.pause_processing(body.reason or "API request")
+            # Check if the service expects a reason parameter (API runtime control) or not (main runtime control)
+            import inspect
+            sig = inspect.signature(runtime_control.pause_processing)
+            if len(sig.parameters) > 0:  # API runtime control service
+                success = await runtime_control.pause_processing(body.reason or "API request")
+            else:  # Main runtime control service
+                control_response = await runtime_control.pause_processing()
+                success = control_response.success
             result = RuntimeControlResponse(
                 success=success,
                 message="Processing paused" if success else "Already paused",
@@ -420,7 +427,12 @@ async def control_runtime(
                 queue_depth=0,
             )
         elif action == "resume":
-            success = await runtime_control.resume_processing()
+            # Check if the service returns a control response or just boolean
+            resume_result = await runtime_control.resume_processing()
+            if hasattr(resume_result, 'success'):  # Main runtime control service
+                success = resume_result.success
+            else:  # API runtime control service
+                success = resume_result
             result = RuntimeControlResponse(
                 success=success,
                 message="Processing resumed" if success else "Not paused",

@@ -297,6 +297,42 @@ class QARunner:
         return all_passed
 
     def _run_single_test(self, test: QATestCase) -> Tuple[bool, Dict]:
+        """Run a single test case with enhanced validation support."""
+        # Handle repeat_count for multi-execution tests
+        if hasattr(test, 'repeat_count') and test.repeat_count > 1:
+            return self._run_repeated_test(test)
+        
+        return self._execute_single_test(test)
+    
+    def _run_repeated_test(self, test: QATestCase) -> Tuple[bool, Dict]:
+        """Run a test multiple times and aggregate results."""
+        results = []
+        all_passed = True
+        
+        # Store auth token in config for custom validators
+        if hasattr(self.config, '_auth_token') is False:
+            self.config._auth_token = self.token
+        
+        for i in range(test.repeat_count):
+            passed, result = self._execute_single_test(test)
+            result["execution_number"] = i + 1
+            results.append(result)
+            
+            if not passed:
+                all_passed = False
+        
+        # Aggregate results
+        aggregated_result = {
+            "success": all_passed,
+            "executions": results,
+            "total_executions": len(results),
+            "successful_executions": sum(1 for r in results if r.get("success")),
+            "duration": sum(r.get("duration", 0) for r in results),
+        }
+        
+        return all_passed, aggregated_result
+    
+    def _execute_single_test(self, test: QATestCase) -> Tuple[bool, Dict]:
         """Run a single test case."""
         headers = {}
         if test.requires_auth and self.token:
@@ -465,6 +501,16 @@ class QARunner:
                             if self.config.verbose:
                                 self.console.print(f"[yellow]⚠️ Failed to update token: {e}[/yellow]")
 
+                    # Enhanced validation support
+                    validation_passed, validation_result = self._validate_response(test, response)
+                    result.update(validation_result)
+                    
+                    if not validation_passed:
+                        result["success"] = False
+                        if self.config.verbose:
+                            self.console.print(f"[red]❌ {test.name}: Validation failed[/red]")
+                        return False, result
+
                     if self.config.verbose:
                         self.console.print(f"[green]✅ {test.name}[/green]")
 
@@ -510,6 +556,58 @@ class QARunner:
             return result.get("success", False), result
         
         return False, {"success": False, "error": "Max retries exceeded"}
+    
+    def _validate_response(self, test: QATestCase, response) -> Tuple[bool, Dict]:
+        """Validate response using validation rules and custom validation."""
+        validation_result = {
+            "validation": {"passed": True, "details": {}, "errors": []}
+        }
+        
+        try:
+            # Get response data for validation
+            response_data = None
+            try:
+                response_data = response.json()
+            except:
+                response_data = {"raw_text": response.text}
+            
+            # Apply validation rules
+            if hasattr(test, 'validation_rules') and test.validation_rules:
+                for rule_name, rule_func in test.validation_rules.items():
+                    try:
+                        rule_passed = rule_func(response_data)
+                        validation_result["validation"]["details"][rule_name] = rule_passed
+                        
+                        if not rule_passed:
+                            validation_result["validation"]["errors"].append(f"Rule '{rule_name}' failed")
+                            validation_result["validation"]["passed"] = False
+                    except Exception as e:
+                        validation_result["validation"]["errors"].append(f"Rule '{rule_name}' error: {str(e)}")
+                        validation_result["validation"]["passed"] = False
+            
+            # Apply custom validation
+            if hasattr(test, 'custom_validation') and test.custom_validation:
+                # Store auth token in config for custom validators  
+                if hasattr(self.config, '_auth_token') is False:
+                    self.config._auth_token = self.token
+                
+                try:
+                    custom_result = test.custom_validation(response, self.config)
+                    validation_result["validation"]["custom"] = custom_result
+                    
+                    if not custom_result.get("passed", True):
+                        validation_result["validation"]["passed"] = False
+                        validation_result["validation"]["errors"].extend(custom_result.get("errors", []))
+                
+                except Exception as e:
+                    validation_result["validation"]["errors"].append(f"Custom validation error: {str(e)}")
+                    validation_result["validation"]["passed"] = False
+            
+        except Exception as e:
+            validation_result["validation"]["errors"].append(f"Validation framework error: {str(e)}")
+            validation_result["validation"]["passed"] = False
+        
+        return validation_result["validation"]["passed"], validation_result
 
     def _generate_reports(self):
         """Generate test reports."""

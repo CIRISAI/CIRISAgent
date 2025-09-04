@@ -5,7 +5,7 @@ QA Runner configuration and module definitions.
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class QAModule(Enum):
@@ -35,6 +35,7 @@ class QAModule(Enum):
 
     # Extended modules
     EXTENDED_API = "extended_api"
+    PAUSE_STEP = "pause_step"
 
     # Full suites
     API_FULL = "api_full"
@@ -55,6 +56,13 @@ class QATestCase:
     requires_auth: bool = True
     description: Optional[str] = None
     timeout: float = 30.0
+    
+    # Advanced validation
+    validation_rules: Optional[Dict[str, Callable[[Dict], bool]]] = None
+    custom_validation: Optional[Callable] = None
+    
+    # Test execution options
+    repeat_count: int = 1
 
 
 @dataclass
@@ -93,6 +101,7 @@ class QAConfig:
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
         from .modules.filter_tests import FilterTestModule
+        from .modules.pause_step_tests import PauseStepTestModule
 
         # API test modules
         if module == QAModule.AUTH:
@@ -134,6 +143,10 @@ class QAConfig:
         # Extended API tests
         elif module == QAModule.EXTENDED_API:
             return ComprehensiveAPITestModule.get_all_extended_tests()
+        
+        # Pause/step testing
+        elif module == QAModule.PAUSE_STEP:
+            return PauseStepTestModule.get_all_pause_step_tests()
 
         # Aggregate modules
         elif module == QAModule.API_FULL:

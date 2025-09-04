@@ -6,11 +6,14 @@ Simplified to 3 core endpoints: query, get specific entry, and export.
 """
 
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import Path as FastAPIPath
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
@@ -37,6 +40,7 @@ class AuditEntryResponse(BaseModel):
     context: AuditContext = Field(..., description="Action context")
     signature: Optional[str] = Field(None, description="Cryptographic signature")
     hash_chain: Optional[str] = Field(None, description="Previous hash for chain")
+    storage_sources: List[str] = Field(default_factory=list, description="Storage locations: graph, jsonl, sqlite")
 
     @field_serializer("timestamp")
     def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
@@ -107,6 +111,7 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         context=context,
         signature=entry.signature,
         hash_chain=entry.hash_chain,
+        storage_sources=["graph"]  # Graph entries come from graph by definition
     )
 
 
@@ -116,6 +121,170 @@ def _get_audit_service(request: Request) -> AuditServiceProtocol:
     if not audit_service:
         raise HTTPException(status_code=503, detail=ERROR_AUDIT_SERVICE_NOT_AVAILABLE)
     return audit_service  # type: ignore[no-any-return]
+
+
+async def _query_sqlite_audit(
+    db_path: str, 
+    start_time: Optional[datetime] = None, 
+    end_time: Optional[datetime] = None,
+    limit: int = 100,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
+    """Query SQLite audit database directly."""
+    if not Path(db_path).exists():
+        return []
+    
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Build query with time filters
+            query = "SELECT * FROM audit_log WHERE 1=1"
+            params = []
+            
+            if start_time:
+                query += " AND event_timestamp >= ?"
+                params.append(start_time.isoformat())
+            
+            if end_time:
+                query += " AND event_timestamp <= ?"
+                params.append(end_time.isoformat())
+            
+            query += " ORDER BY event_timestamp DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        return []
+
+
+async def _query_jsonl_audit(
+    jsonl_path: str,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    limit: int = 100,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
+    """Query JSONL audit file directly."""
+    if not Path(jsonl_path).exists():
+        return []
+    
+    try:
+        entries = []
+        with open(jsonl_path, 'r') as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        entry = json.loads(line)
+                        
+                        # Apply time filters
+                        if start_time or end_time:
+                            entry_time_str = entry.get('timestamp') or entry.get('event_timestamp')
+                            if entry_time_str:
+                                entry_time = datetime.fromisoformat(entry_time_str.replace('Z', '+00:00'))
+                                if start_time and entry_time < start_time:
+                                    continue
+                                if end_time and entry_time > end_time:
+                                    continue
+                        
+                        entries.append(entry)
+                    except json.JSONDecodeError:
+                        continue
+        
+        # Sort by timestamp (newest first) and apply pagination
+        entries.sort(key=lambda x: x.get('timestamp') or x.get('event_timestamp') or '', reverse=True)
+        return entries[offset:offset+limit]
+    except Exception:
+        return []
+
+
+async def _merge_audit_sources(
+    graph_entries: List[AuditEntry],
+    sqlite_entries: List[Dict[str, Any]],
+    jsonl_entries: List[Dict[str, Any]]
+) -> List[AuditEntryResponse]:
+    """Merge audit entries from all sources and track storage locations."""
+    merged = {}  # Dict[str, Dict] to track entries by ID
+    
+    # Process graph entries
+    for entry in graph_entries:
+        entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
+        if entry_id not in merged:
+            merged[entry_id] = {
+                "entry": _convert_audit_entry(entry),
+                "sources": ["graph"]
+            }
+        else:
+            merged[entry_id]["sources"].append("graph")
+    
+    # Process SQLite entries
+    for sqlite_entry in sqlite_entries:
+        entry_id = sqlite_entry.get("event_id") or f"audit_{sqlite_entry['event_timestamp']}_{sqlite_entry['originator_id']}"
+        
+        if entry_id not in merged:
+            # Convert SQLite entry to AuditEntryResponse format
+            timestamp = datetime.fromisoformat(sqlite_entry["event_timestamp"].replace('Z', '+00:00'))
+            context = AuditContext(
+                description=sqlite_entry.get("event_payload"),
+                entity_id=sqlite_entry.get("originator_id")
+            )
+            
+            merged[entry_id] = {
+                "entry": AuditEntryResponse(
+                    id=entry_id,
+                    action=sqlite_entry["event_type"],
+                    actor=sqlite_entry["originator_id"],
+                    timestamp=timestamp,
+                    context=context,
+                    signature=sqlite_entry.get("signature"),
+                    hash_chain=sqlite_entry.get("previous_hash"),
+                    storage_sources=["sqlite"]
+                ),
+                "sources": ["sqlite"]
+            }
+        else:
+            merged[entry_id]["sources"].append("sqlite")
+    
+    # Process JSONL entries
+    for jsonl_entry in jsonl_entries:
+        entry_id = jsonl_entry.get("id") or f"audit_{jsonl_entry.get('timestamp', '')}_{jsonl_entry.get('actor', '')}"
+        
+        if entry_id not in merged:
+            # Convert JSONL entry to AuditEntryResponse format
+            timestamp_str = jsonl_entry.get("timestamp") or jsonl_entry.get("event_timestamp")
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')) if timestamp_str else datetime.now(timezone.utc)
+            
+            context = AuditContext(
+                description=jsonl_entry.get("description") or jsonl_entry.get("event_payload")
+            )
+            
+            merged[entry_id] = {
+                "entry": AuditEntryResponse(
+                    id=entry_id,
+                    action=jsonl_entry.get("action") or jsonl_entry.get("event_type", "unknown"),
+                    actor=jsonl_entry.get("actor") or jsonl_entry.get("originator_id", "unknown"),
+                    timestamp=timestamp,
+                    context=context,
+                    signature=jsonl_entry.get("signature"),
+                    hash_chain=jsonl_entry.get("hash_chain") or jsonl_entry.get("previous_hash"),
+                    storage_sources=["jsonl"]
+                ),
+                "sources": ["jsonl"]
+            }
+        else:
+            merged[entry_id]["sources"].append("jsonl")
+    
+    # Update storage_sources for all merged entries
+    result = []
+    for entry_data in merged.values():
+        entry_data["entry"].storage_sources = sorted(entry_data["sources"])
+        result.append(entry_data["entry"])
+    
+    # Sort by timestamp (newest first)
+    result.sort(key=lambda x: x.timestamp, reverse=True)
+    return result
 
 
 # Endpoints
@@ -167,17 +336,42 @@ async def query_audit_entries(
     )
 
     try:
-        entries = await audit_service.query_audit_trail(query)
-
-        # Convert to response format
-        response_entries = [_convert_audit_entry(entry) for entry in entries]
-
-        # Get total count (in production, service would return this)
-        # For now, if we got limit results, assume there are more
-        total = len(entries) if len(entries) < limit else offset + len(entries) + 1
+        # Query all 3 audit sources concurrently
+        import asyncio
+        
+        # Query graph memory (existing functionality)
+        graph_entries = await audit_service.query_audit_trail(query)
+        
+        # Query SQLite database directly (hardcoded paths for now - should be configurable)
+        sqlite_task = _query_sqlite_audit(
+            "data/ciris_audit.db",  # Default SQLite path
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit * 3,  # Get more to account for merging
+            offset=0  # We'll handle pagination after merging
+        )
+        
+        # Query JSONL file directly
+        jsonl_task = _query_jsonl_audit(
+            "audit_logs.jsonl",  # Default JSONL path
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit * 3,  # Get more to account for merging
+            offset=0  # We'll handle pagination after merging
+        )
+        
+        # Execute SQLite and JSONL queries concurrently
+        sqlite_entries, jsonl_entries = await asyncio.gather(sqlite_task, jsonl_task)
+        
+        # Merge all sources and track storage locations
+        response_entries = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
+        
+        # Apply final pagination after merging
+        paginated_entries = response_entries[offset:offset+limit]
+        total = len(response_entries)
 
         return SuccessResponse(
-            data=AuditEntriesResponse(entries=response_entries, total=total, offset=offset, limit=limit),
+            data=AuditEntriesResponse(entries=paginated_entries, total=total, offset=offset, limit=limit),
             metadata=ResponseMetadata(
                 timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
             ),
@@ -189,7 +383,7 @@ async def query_audit_entries(
 @router.get("/entries/{entry_id}", response_model=SuccessResponse[AuditEntryDetailResponse])
 async def get_audit_entry(
     request: Request,
-    entry_id: str = Path(..., description="Audit entry ID"),
+    entry_id: str = FastAPIPath(..., description="Audit entry ID"),
     auth: AuthContext = Depends(require_observer),
     verify: bool = Query(False, description="Include verification information"),
 ) -> SuccessResponse[AuditEntryDetailResponse]:
@@ -313,7 +507,7 @@ async def search_audit_trails(
 @router.post("/verify/{entry_id}", response_model=SuccessResponse[VerificationReport])
 async def verify_audit_entry(
     request: Request,
-    entry_id: str = Path(..., description="Audit entry ID to verify"),
+    entry_id: str = FastAPIPath(..., description="Audit entry ID to verify"),
     auth: AuthContext = Depends(require_admin),
 ) -> SuccessResponse[VerificationReport]:
     """

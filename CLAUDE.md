@@ -436,6 +436,33 @@ python tools/bump_version.py major     # Breaking changes
 - **API**: https://agents.ciris.ai/api/datum/v1/
 - **OAuth**: https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
 
+### Production Server Access
+- **SSH**: `ssh -i ~/.ssh/ciris_deploy root@108.61.119.117`
+- **Agent Locations**: `/opt/ciris/agents/`
+- **Common Commands**:
+  ```bash
+  # Find agent containers
+  cd /opt/ciris/agents && ls -la
+  
+  # Check specific agent status
+  cd /opt/ciris/agents/echo-speculative-4fc6ru
+  docker-compose ps
+  
+  # View agent logs
+  docker-compose logs --tail=50 echo-speculative-4fc6ru
+  
+  # Execute commands in container
+  docker-compose exec echo-speculative-4fc6ru python -c "print('hello')"
+  
+  # Check database files
+  docker-compose exec echo-speculative-4fc6ru find /app -name '*.db'
+  ```
+
+**Service Tokens** (for API access):
+- Use format: `Authorization: Bearer service:TOKEN_VALUE`
+- Manager tokens found in agent deployment configs
+- Example: `curl -H "Authorization: Bearer service:abc123..." https://agents.ciris.ai/api/agent-id/v1/system/health`
+
 ### Repository Structure
 ```
 CIRISAgent/

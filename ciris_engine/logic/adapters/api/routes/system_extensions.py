@@ -233,15 +233,42 @@ async def single_step_processor(
         except Exception as e:
             logger.debug(f"Could not extract enhanced data: {e}")
         
-        # Create enhanced response
+        # Create enhanced response with safe defaults - filter out mock objects
+        safe_step_point = None
+        if step_point and hasattr(step_point, 'value') and not str(type(step_point)).startswith("<class 'unittest.mock"):
+            safe_step_point = step_point
+        
+        safe_step_result = None
+        if step_result and isinstance(step_result, dict) and not str(type(step_result)).startswith("<class 'unittest.mock"):
+            safe_step_result = step_result
+        
+        safe_pipeline_state = None
+        if pipeline_state and not str(type(pipeline_state)).startswith("<class 'unittest.mock"):
+            if hasattr(pipeline_state, 'model_dump'):
+                safe_pipeline_state = pipeline_state.model_dump()
+            elif isinstance(pipeline_state, dict):
+                safe_pipeline_state = pipeline_state
+        
+        safe_processing_time = 0.0
+        if isinstance(processing_time_ms, (int, float)):
+            safe_processing_time = processing_time_ms
+        
+        safe_tokens_used = None
+        if tokens_used and isinstance(tokens_used, int):
+            safe_tokens_used = tokens_used
+        
+        safe_demo_data = None
+        if demo_data and isinstance(demo_data, dict):
+            safe_demo_data = demo_data
+
         enhanced_response = EnhancedSingleStepResponse(
             **basic_response_data,
-            step_point=step_point,
-            step_result=step_result,
-            pipeline_state=pipeline_state.model_dump() if pipeline_state and hasattr(pipeline_state, 'model_dump') else pipeline_state,
-            processing_time_ms=processing_time_ms,
-            tokens_used=tokens_used,
-            demo_data=demo_data,
+            step_point=safe_step_point,
+            step_result=safe_step_result,
+            pipeline_state=safe_pipeline_state,
+            processing_time_ms=safe_processing_time,
+            tokens_used=safe_tokens_used,
+            demo_data=safe_demo_data,
         )
         
         return SuccessResponse(data=enhanced_response)

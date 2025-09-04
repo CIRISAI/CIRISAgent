@@ -263,7 +263,7 @@ class TestMergeAuditSources:
         merged = await _merge_audit_sources(mock_graph_entries, sqlite_entries, jsonl_entries)
         
         # Should have all entries from all sources (no duplicates in this test)
-        assert len(merged) == 7  # 2 graph + 3 sqlite + 3 jsonl - 1 duplicate
+        assert len(merged) == 8  # 2 graph + 3 sqlite + 3 jsonl (no duplicates)
         
         # Check storage sources are properly tracked
         storage_sources = [entry.storage_sources for entry in merged]
@@ -301,8 +301,8 @@ class TestMergeAuditSources:
         
         merged = await _merge_audit_sources(mock_graph_entries[:1], sqlite_entries, jsonl_entries)
         
-        # Should have only 2 unique entries (graph_001 and graph_002)
-        assert len(merged) == 2
+        # Should have only 1 unique entry (graph_001 merged from all 3 sources)
+        assert len(merged) == 1
         
         # graph_001 should have all 3 storage sources
         graph_001_entry = next(entry for entry in merged if entry.id == "graph_001")

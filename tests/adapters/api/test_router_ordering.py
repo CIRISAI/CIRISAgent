@@ -17,7 +17,15 @@ class TestRouterOrdering:
     @pytest.fixture
     def test_app(self):
         """Create a test app with the fixed router ordering."""
-        return create_app()
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+        
+        app = create_app()
+        
+        # Initialize auth service (required for auth endpoints)
+        app.state.auth_service = APIAuthService()
+        app.state.auth_service._dev_mode = True
+        
+        return app
 
     @pytest.fixture
     def client(self, test_app):

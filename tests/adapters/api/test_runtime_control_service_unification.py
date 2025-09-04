@@ -27,8 +27,19 @@ def mock_request():
     """Create a mock request with app state."""
     request = MagicMock()
     state = MagicMock()
+    
+    # Create a proper runtime mock with agent_processor
+    mock_runtime = MagicMock()
+    mock_agent_processor = MagicMock()
+    mock_agent_processor.get_current_state.return_value = "WORK"  # Return string, not MagicMock
+    mock_runtime.agent_processor = mock_agent_processor
+    
     state.configure_mock(
-        **{"main_runtime_control_service": None, "runtime_control_service": None}
+        **{
+            "main_runtime_control_service": None, 
+            "runtime_control_service": None,
+            "runtime": mock_runtime
+        }
     )
     request.app.state = state
     return request

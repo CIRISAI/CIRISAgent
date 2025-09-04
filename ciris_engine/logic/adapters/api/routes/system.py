@@ -396,7 +396,10 @@ async def control_runtime(
 
     Requires ADMIN role.
     """
-    runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    # Try main runtime control service first (has all methods), fall back to API runtime control
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 

@@ -149,8 +149,8 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     v1_routers = [
         agent.router,  # Agent interaction
         memory.router,  # Memory operations
+        system_extensions.router,  # Extended system operations (queue, services, processors) - MUST be before system.router
         system.router,  # System operations (includes health, time, resources, runtime)
-        system_extensions.router,  # Extended system operations (queue, services, processors)
         config.router,  # Configuration management
         telemetry.router,  # Telemetry & observability
         audit.router,  # Audit trail

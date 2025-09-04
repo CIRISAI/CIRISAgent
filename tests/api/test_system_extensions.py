@@ -110,9 +110,34 @@ class TestProcessingQueueEndpoint:
         mock_runtime_control.get_processor_queue_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_queue_status_no_service(self, mock_request, mock_auth_context):
-        """Test when runtime control service is not available."""
+    async def test_get_queue_status_fallback_service(self, mock_request, mock_auth_context, mock_runtime_control):
+        """Test fallback to runtime_control_service when main_runtime_control_service is not available."""
         # Setup
+        expected_status = ProcessorQueueStatus(
+            processor_name="agent",
+            queue_size=3,
+            max_size=1000,
+            processing_rate=1.0,
+            average_latency_ms=150.0,
+            oldest_message_age_seconds=45.0,
+        )
+        mock_runtime_control.get_processor_queue_status.return_value = expected_status
+        mock_request.app.state.main_runtime_control_service = None  # Not available
+        mock_request.app.state.runtime_control_service = mock_runtime_control  # Use fallback
+
+        # Execute
+        result = await get_processing_queue_status(mock_request, mock_auth_context)
+
+        # Verify
+        assert isinstance(result, SuccessResponse)
+        assert result.data == expected_status
+        mock_runtime_control.get_processor_queue_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_no_service(self, mock_request, mock_auth_context):
+        """Test when no runtime control service is available."""
+        # Setup
+        mock_request.app.state.main_runtime_control_service = None
         mock_request.app.state.runtime_control_service = None
 
         # Execute & Verify
@@ -158,6 +183,30 @@ class TestSingleStepEndpoint:
         assert result.data.success is True
         assert "completed" in result.data.message
         assert result.data.processor_state == "running"
+        mock_runtime_control.single_step.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_single_step_fallback_service(self, mock_request, mock_admin_auth_context, mock_runtime_control):
+        """Test single step with fallback to runtime_control_service."""
+        # Setup
+        control_response = ProcessorControlResponse(
+            success=True,
+            processor_name="agent",
+            operation="single_step",
+            new_status=ProcessorStatus.RUNNING,
+            message="Processed 1 thought via fallback",
+        )
+        mock_runtime_control.single_step.return_value = control_response
+        mock_request.app.state.main_runtime_control_service = None  # Not available
+        mock_request.app.state.runtime_control_service = mock_runtime_control  # Use fallback
+
+        # Execute
+        result = await single_step_processor(mock_request, mock_admin_auth_context)
+
+        # Verify
+        assert isinstance(result, SuccessResponse)
+        assert result.data.success is True
+        assert "completed" in result.data.message
         mock_runtime_control.single_step.assert_called_once()
 
     @pytest.mark.asyncio

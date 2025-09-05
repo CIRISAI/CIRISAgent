@@ -14,7 +14,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**RELEASE CANDIDATE 1.0.8-RC1-patch8** | [Release Notes](docs/releases/1.0.8-RC1-patch8.md) | [Patch 7](docs/releases/1.0.7-RC1-patch7.md) | [Patch 6](docs/releases/1.0.6-RC1-patch6.md) | [Patch 5](docs/releases/1.0.5-RC1-patch5.md) | [Patch 4](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
+**RELEASE CANDIDATE 1.0.9-RC1-patch9** | [Release Notes](docs/releases/1.0.9-RC1-patch9.md) | [Patch 8](docs/releases/1.0.8-RC1-patch8.md) | [Patch 7](docs/releases/1.0.7-RC1-patch7.md) | [Patch 6](docs/releases/1.0.6-RC1-patch6.md) | [Patch 5](docs/releases/1.0.5-RC1-patch5.md) | [Patch 4](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 

@@ -157,8 +157,11 @@ class AgentProcessor:
         # Pause/resume control for single-stepping
         self._is_paused = False
         self._pause_event: Optional[asyncio.Event] = None
-        self._pipeline_controller: Optional[Any] = None  # PipelineController when paused
         self._single_step_mode = False
+        
+        # Initialize pipeline controller for single-step debugging
+        from ciris_engine.protocols.pipeline_control import PipelineController
+        self._pipeline_controller = PipelineController(is_paused=False)
 
         # Track processing time for thoughts
         self._thought_processing_callback: Optional[Any] = None  # Callback for thought timing
@@ -753,29 +756,32 @@ class AgentProcessor:
             logger.info(f"[DEBUG] Returning True from pause_processing, _is_paused: {self._is_paused}")
             return True  # Already paused, still in desired state
 
-        logger.info("Pausing AgentProcessor")
-        self._is_paused = True
-        logger.info(f"[DEBUG] Set _is_paused to True: {self._is_paused}")
+        try:
+            logger.info("Pausing AgentProcessor")
+            self._is_paused = True
+            logger.info(f"[DEBUG] Set _is_paused to True: {self._is_paused}")
 
-        # Create pause event if needed
-        if self._pause_event is None:
-            self._pause_event = asyncio.Event()
+            # Create pause event if needed
+            if self._pause_event is None:
+                self._pause_event = asyncio.Event()
 
-        # Create pipeline controller for single-stepping
-        if self._pipeline_controller is None:
-            from ciris_engine.protocols.pipeline_control import PipelineController
+            # Update pipeline controller state for paused mode
+            self._pipeline_controller.is_paused = True
 
-            self._pipeline_controller = PipelineController(is_paused=True)
+            # Inject pipeline controller into thought processor
+            if hasattr(self.thought_processor, "set_pipeline_controller"):
+                self.thought_processor.set_pipeline_controller(self._pipeline_controller)
+            else:
+                logger.warning("Thought processor does not support pipeline controller injection")
+                # Still return True as pause was successful even without controller
 
-        # Inject pipeline controller into thought processor
-        if hasattr(self.thought_processor, "set_pipeline_controller"):
-            self.thought_processor.set_pipeline_controller(self._pipeline_controller)
-        else:
-            logger.warning("Thought processor does not support pipeline controller injection")
-            # Still return True as pause was successful even without controller
-
-        logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
-        return True  # Successfully paused
+            logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
+            return True  # Successfully paused
+            
+        except Exception as e:
+            logger.error(f"Failed to pause processor: {e}")
+            self._is_paused = False  # Reset state on error
+            return False
 
     async def resume_processing(self) -> bool:
         """
@@ -796,9 +802,9 @@ class AgentProcessor:
         self._single_step_mode = False
         logger.info(f"[DEBUG] Set _is_paused to False: {self._is_paused}")
 
-        # Resume all paused thoughts in pipeline
-        if self._pipeline_controller:
-            self._pipeline_controller.resume_all()
+        # Update pipeline controller state and resume all paused thoughts
+        self._pipeline_controller.is_paused = False
+        self._pipeline_controller.resume_all()
 
         # Signal pause event to continue
         if self._pause_event:
@@ -838,9 +844,6 @@ class AgentProcessor:
             logger.info(f"[DEBUG] single_step() failed - processor not paused, _is_paused: {self._is_paused}")
             return {"success": False, "error": "Cannot single-step unless paused"}
 
-        if not self._pipeline_controller:
-            logger.info(f"[DEBUG] single_step() failed - no pipeline controller")
-            return {"success": False, "error": "Pipeline controller not initialized"}
 
         start_time = self._time_service.now()
 
@@ -850,7 +853,7 @@ class AgentProcessor:
 
         try:
             # Execute single step point via pipeline controller
-            logger.info(f"[DEBUG] Executing single step point via pipeline controller")
+            logger.info("[DEBUG] Executing single step point via pipeline controller")
             
             if hasattr(self._pipeline_controller, 'execute_single_step_point'):
                 step_result = await self._pipeline_controller.execute_single_step_point()
@@ -891,8 +894,7 @@ class AgentProcessor:
         finally:
             # Disable single-step mode
             self._single_step_mode = False
-            if self._pipeline_controller:
-                self._pipeline_controller._single_step_mode = False
+            self._pipeline_controller._single_step_mode = False
 
     async def _fallback_single_step(self, start_time) -> dict:
         """

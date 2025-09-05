@@ -519,12 +519,12 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         if guild_id:
             moderators = await self._get_guild_moderators(guild_id)
             if moderators:
-                task_lines.append(f"\n=== ACTIVE MODS ===")
+                task_lines.append("\n=== ACTIVE MODS ===")
                 for mod in moderators:
                     nickname = mod.get('nickname') or mod.get('display_name') or mod.get('username')
                     task_lines.append(f"ID: {mod['user_id']} | Nick: {nickname}")
                 task_lines.append("=== END ACTIVE MODS ===")
             else:
-                task_lines.append(f"\n=== ACTIVE MODS ===")
+                task_lines.append("\n=== ACTIVE MODS ===")
                 task_lines.append("No moderators available or unable to retrieve moderator list")
                 task_lines.append("=== END ACTIVE MODS ===")

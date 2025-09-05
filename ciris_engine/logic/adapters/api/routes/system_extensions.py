@@ -560,6 +560,50 @@ class ProcessorStateInfo(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="What this state can do")
 
 
+def _get_current_state_name(runtime) -> Optional[str]:
+    """Extract current state name from runtime."""
+    if not hasattr(runtime.agent_processor, "state_manager") or not runtime.agent_processor.state_manager:
+        return None
+        
+    current_state = runtime.agent_processor.state_manager.get_state()
+    if not current_state:
+        return None
+        
+    # Handle both enum objects and string representations like "AgentState.WORK"
+    current_state_str = str(current_state)
+    return current_state_str.split(".")[-1] if "." in current_state_str else current_state_str
+
+def _create_processor_state(name: str, description: str, capabilities: List[str], is_active: bool) -> ProcessorStateInfo:
+    """Create a ProcessorStateInfo object."""
+    return ProcessorStateInfo(
+        name=name,
+        is_active=is_active,
+        description=description,
+        capabilities=capabilities,
+    )
+
+def _get_processor_state_definitions(current_state_name: Optional[str]) -> List[ProcessorStateInfo]:
+    """Get all processor state definitions."""
+    states = [
+        ("WAKEUP", "Initial state for identity confirmation and system initialization",
+         ["identity_confirmation", "system_checks", "initial_setup"]),
+        ("WORK", "Normal task processing and interaction state",
+         ["task_processing", "user_interaction", "tool_usage", "memory_operations"]),
+        ("DREAM", "Deep introspection and memory consolidation state",
+         ["memory_consolidation", "pattern_analysis", "self_reflection"]),
+        ("PLAY", "Creative exploration and experimentation state",
+         ["creative_tasks", "exploration", "learning", "experimentation"]),
+        ("SOLITUDE", "Quiet reflection and planning state",
+         ["planning", "reflection", "goal_setting", "strategy_development"]),
+        ("SHUTDOWN", "Graceful shutdown and cleanup state",
+         ["cleanup", "final_messages", "state_persistence", "resource_release"]),
+    ]
+    
+    return [
+        _create_processor_state(name, description, capabilities, current_state_name == name)
+        for name, description, capabilities in states
+    ]
+
 @router.get("/processors", response_model=SuccessResponse[List[ProcessorStateInfo]])
 async def get_processor_states(
     request: Request, auth: AuthContext = Depends(require_observer)
@@ -575,59 +619,8 @@ async def get_processor_states(
         raise HTTPException(status_code=503, detail="Agent processor not available")
 
     try:
-        # Get current state from agent processor
-        current_state = None
-        current_state_name = None
-        if hasattr(runtime.agent_processor, "state_manager") and runtime.agent_processor.state_manager:
-            current_state = runtime.agent_processor.state_manager.get_state()
-            if current_state:
-                # Handle both enum objects and string representations like "AgentState.WORK"
-                current_state_str = str(current_state)
-                if "." in current_state_str:
-                    current_state_name = current_state_str.split(".")[-1]  # Extract "WORK" from "AgentState.WORK"
-                else:
-                    current_state_name = current_state_str
-
-        # Define all processor states with descriptions
-        processor_states = [
-            ProcessorStateInfo(
-                name="WAKEUP",
-                is_active=current_state_name == "WAKEUP" if current_state_name else False,
-                description="Initial state for identity confirmation and system initialization",
-                capabilities=["identity_confirmation", "system_checks", "initial_setup"],
-            ),
-            ProcessorStateInfo(
-                name="WORK",
-                is_active=current_state_name == "WORK" if current_state_name else False,
-                description="Normal task processing and interaction state",
-                capabilities=["task_processing", "user_interaction", "tool_usage", "memory_operations"],
-            ),
-            ProcessorStateInfo(
-                name="DREAM",
-                is_active=current_state_name == "DREAM" if current_state_name else False,
-                description="Deep introspection and memory consolidation state",
-                capabilities=["memory_consolidation", "pattern_analysis", "self_reflection"],
-            ),
-            ProcessorStateInfo(
-                name="PLAY",
-                is_active=current_state_name == "PLAY" if current_state_name else False,
-                description="Creative exploration and experimentation state",
-                capabilities=["creative_tasks", "exploration", "learning", "experimentation"],
-            ),
-            ProcessorStateInfo(
-                name="SOLITUDE",
-                is_active=current_state_name == "SOLITUDE" if current_state_name else False,
-                description="Quiet reflection and planning state",
-                capabilities=["planning", "reflection", "goal_setting", "strategy_development"],
-            ),
-            ProcessorStateInfo(
-                name="SHUTDOWN",
-                is_active=current_state_name == "SHUTDOWN" if current_state_name else False,
-                description="Graceful shutdown and cleanup state",
-                capabilities=["cleanup", "final_messages", "state_persistence", "resource_release"],
-            ),
-        ]
-
+        current_state_name = _get_current_state_name(runtime)
+        processor_states = _get_processor_state_definitions(current_state_name)
         return SuccessResponse(data=processor_states)
 
     except Exception as e:

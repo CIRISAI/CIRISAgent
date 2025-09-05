@@ -492,16 +492,21 @@ class TestAgentProcessor:
         assert "Cannot single-step unless paused" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_single_step_no_pipeline_controller(self, main_processor):
-        """Test single_step fails without pipeline controller."""
-        # Manually set paused without proper initialization
-        main_processor._is_paused = True
-        main_processor._pipeline_controller = None
+    async def test_single_step_pipeline_controller_error(self, main_processor):
+        """Test single_step handles pipeline controller errors gracefully."""
+        # Properly pause processor (pipeline controller is always initialized now)
+        await main_processor.pause_processing()
+        assert main_processor.is_paused()
         
-        # Single step should fail
+        # Make pipeline controller's execute method raise an error
+        main_processor._pipeline_controller.execute_single_step_point = AsyncMock(
+            side_effect=Exception("Pipeline error")
+        )
+        
+        # Single step should handle the error gracefully
         result = await main_processor.single_step()
         assert result["success"] is False
-        assert "Pipeline controller not initialized" in result["error"]
+        assert "Pipeline error" in result["error"]
 
     @pytest.mark.asyncio
     async def test_single_step_fallback_mode(self, main_processor):

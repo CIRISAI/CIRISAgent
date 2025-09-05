@@ -27,6 +27,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
 )
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.utils.serialization import serialize_timestamp
 
@@ -100,6 +101,11 @@ class RuntimeControlResponse(BaseModel):
     processor_state: str = Field(..., description="Current processor state")
     cognitive_state: Optional[str] = Field(None, description=DESC_CURRENT_COGNITIVE_STATE)
     queue_depth: int = Field(0, description="Number of items in processing queue")
+    
+    # Enhanced pause response fields for UI display
+    current_step: Optional[str] = Field(None, description="Current pipeline step when paused")
+    current_step_schema: Optional[Dict[str, Any]] = Field(None, description="Full schema object for current step")
+    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Complete pipeline state when paused")
 
 
 class ServiceStatus(BaseModel):
@@ -419,13 +425,54 @@ async def control_runtime(
             else:  # Main runtime control service
                 control_response = await runtime_control.pause_processing()
                 success = control_response.success
+            
+            # Get current pipeline state and step information for UI display
+            current_step = None
+            current_step_schema = None
+            pipeline_state = None
+            
+            try:
+                # Try to get current pipeline state from the runtime
+                runtime = getattr(request.app.state, "runtime", None)
+                if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
+                    pipeline_controller = runtime.pipeline_controller
+                    
+                    # Get current pipeline state
+                    try:
+                        pipeline_state = pipeline_controller.get_current_state()
+                        if pipeline_state and hasattr(pipeline_state, 'current_step'):
+                            current_step = pipeline_state.current_step
+                    except Exception as e:
+                        logger.debug(f"Could not get current step from pipeline: {e}")
+                    
+                    # Get the full step schema/metadata
+                    if current_step:
+                        try:
+                            # Get step schema - this would include all step metadata
+                            current_step_schema = {
+                                "step_point": current_step,
+                                "description": f"System paused at step: {current_step}",
+                                "timestamp": datetime.now().isoformat(),
+                                "can_single_step": True,
+                                "next_actions": ["single_step", "resume"]
+                            }
+                        except Exception as e:
+                            logger.debug(f"Could not get step schema: {e}")
+            except Exception as e:
+                logger.debug(f"Could not get pipeline information: {e}")
+            
             result = RuntimeControlResponse(
                 success=success,
-                message="Processing paused" if success else "Already paused",
+                message=f"Processing paused{f' at step: {current_step}' if current_step else ''}" if success else "Already paused",
                 processor_state="paused" if success else "unknown",
                 cognitive_state="UNKNOWN",
-                queue_depth=0,
             )
+            
+            # Add current step information to response for UI
+            if current_step:
+                result.current_step = current_step
+                result.current_step_schema = current_step_schema
+                result.pipeline_state = pipeline_state
         elif action == "resume":
             # Check if the service returns a control response or just boolean
             resume_result = await runtime_control.resume_processing()
@@ -442,13 +489,13 @@ async def control_runtime(
             )
         elif action == "state":
             # Get current state without changing it
-            status = runtime_control.get_runtime_status()
+            status = await runtime_control.get_runtime_status()
             result = RuntimeControlResponse(
                 success=True,
                 message="Current runtime state retrieved",
-                processor_state="paused" if status.get("paused", False) else "active",
-                cognitive_state=status.get("cognitive_state", "UNKNOWN"),
-                queue_depth=0,  # Not tracked in simplified version
+                processor_state="paused" if status.processor_status == ProcessorStatus.PAUSED else "active",
+                cognitive_state=status.cognitive_state or "UNKNOWN", 
+                queue_depth=status.queue_depth,
             )
             return SuccessResponse(data=result)
 

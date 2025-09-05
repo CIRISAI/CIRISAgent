@@ -12,12 +12,20 @@ from ciris_engine.schemas.runtime.models import Thought
 logger = logging.getLogger(__name__)
 
 
-def get_thoughts_by_status(status: ThoughtStatus, db_path: Optional[str] = None) -> List[Thought]:
-    """Returns all thoughts with the given status from the thoughts table as Thought objects."""
+def get_thoughts_by_status(status: ThoughtStatus, db_path: Optional[str] = None, limit: Optional[int] = None) -> List[Thought]:
+    """Returns all thoughts with the given status from the thoughts table as Thought objects.
+    
+    Args:
+        status: The ThoughtStatus to filter by
+        db_path: Optional database path override
+        limit: Optional maximum number of thoughts to return
+    """
     if not isinstance(status, ThoughtStatus):
         raise TypeError(f"Expected ThoughtStatus enum, got {type(status)}: {status}")
     status_val = status.value
     sql = "SELECT * FROM thoughts WHERE status = ? ORDER BY created_at ASC"
+    if limit is not None:
+        sql += f" LIMIT {limit}"
     thoughts: List[Any] = []
     try:
         with get_db_connection(db_path=db_path) as conn:

@@ -188,7 +188,7 @@ class TestSingleStepEndpoint:
     def test_basic_single_step_backward_compatibility(self, client, auth_headers, mock_app_with_services):
         """Test that basic single-step endpoint remains unchanged for existing clients."""
         response = client.post(
-            "/v1/system/runtime/single-step",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -215,7 +215,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_single_step_with_details_parameter(self, client, auth_headers, mock_app_with_services):
         """Test enhanced single-step with ?include_details=true parameter."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -241,7 +241,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_step_point_data(self, client, auth_headers, mock_app_with_services):
         """Test that step point data is correctly included in enhanced response."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -272,7 +272,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_pipeline_state(self, client, auth_headers, mock_app_with_services):
         """Test that pipeline state is correctly included in enhanced response."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -302,7 +302,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_performance_metrics(self, client, auth_headers, mock_app_with_services):
         """Test that performance metrics are included in enhanced response."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -323,7 +323,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_demo_data_structure(self, client, auth_headers, mock_app_with_services):
         """Test that demo data has proper structure for presentation."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -368,7 +368,7 @@ class TestSingleStepEndpoint:
         runtime.pipeline_controller.get_latest_step_result.return_value = mock_build_context_result
         
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -395,7 +395,7 @@ class TestSingleStepEndpoint:
         mock_app_with_services.state.runtime.pipeline_controller = None
         
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -420,7 +420,7 @@ class TestSingleStepEndpoint:
         runtime.pipeline_controller.get_latest_step_result.side_effect = Exception("Step result error")
         
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -437,7 +437,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_queue_depth_accuracy(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response provides accurate queue depth."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -454,7 +454,7 @@ class TestSingleStepEndpoint:
     def test_response_schema_validation(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response validates against schema."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )
@@ -474,7 +474,7 @@ class TestSingleStepEndpoint:
         """Test handling of invalid include_details parameter values."""
         # Test with invalid boolean string - FastAPI will return 422
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=invalid",
+            "/v1/system/runtime/step?include_details=invalid",
             headers=auth_headers,
             json={}
         )
@@ -484,7 +484,7 @@ class TestSingleStepEndpoint:
         
         # Test with valid false value
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=false",
+            "/v1/system/runtime/step?include_details=false",
             headers=auth_headers,
             json={}
         )
@@ -504,7 +504,7 @@ class TestSingleStepEndpoint:
         
         def make_request():
             response = client.post(
-                "/v1/system/runtime/single-step?include_details=true",
+                "/v1/system/runtime/step?include_details=true",
                 headers=auth_headers,
                 json={}
             )
@@ -528,7 +528,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_memory_efficiency(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response doesn't include excessive data."""
         response = client.post(
-            "/v1/system/runtime/single-step?include_details=true",
+            "/v1/system/runtime/step?include_details=true",
             headers=auth_headers,
             json={}
         )

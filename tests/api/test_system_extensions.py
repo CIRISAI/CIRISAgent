@@ -35,6 +35,7 @@ from ciris_engine.schemas.services.core.runtime import (
     ServiceSelectionExplanation,
 )
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.processors.states import AgentState
 
 
 @pytest.fixture
@@ -255,6 +256,7 @@ class TestSingleStepEndpoint:
             processor_name="agent",
             is_paused=True,
             queue_size=2,
+            max_size=1000,
             processing_rate=0.0,
             average_latency_ms=0.0,
             oldest_message_age_seconds=0.0,
@@ -331,6 +333,7 @@ class TestSingleStepEndpoint:
             processor_name="agent",
             is_paused=False,
             queue_size=1,
+            max_size=1000,
             processing_rate=1.5,
             average_latency_ms=100.0,
             oldest_message_age_seconds=30.0,
@@ -377,7 +380,7 @@ class TestHelperFunctions:
         mock_runtime = MagicMock()
         mock_agent_processor = MagicMock()
         mock_state_manager = MagicMock()
-        mock_state_manager.get_state.return_value = StepPoint.WORK
+        mock_state_manager.get_state.return_value = AgentState.WORK
         mock_agent_processor.state_manager = mock_state_manager
         mock_runtime.agent_processor = mock_agent_processor
 
@@ -385,7 +388,7 @@ class TestHelperFunctions:
         result = _extract_cognitive_state(mock_runtime)
 
         # Verify
-        assert result == str(StepPoint.WORK)
+        assert result == str(AgentState.WORK)
 
     def test_extract_cognitive_state_no_runtime(self):
         """Test cognitive state extraction with no runtime."""
@@ -430,6 +433,7 @@ class TestHelperFunctions:
             processor_name="agent",
             is_paused=False,
             queue_size=5,
+            max_size=1000,
             processing_rate=1.2,
             average_latency_ms=100.0,
             oldest_message_age_seconds=30.0,

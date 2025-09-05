@@ -13,27 +13,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from ciris_engine.logic.adapters.api.adapter import ApiPlatform
 from ciris_engine.schemas.services.core.runtime import RuntimeStatusResponse
+from tests.fixtures.runtime_control import mock_main_runtime_control_service
+from tests.fixtures.authentication import mock_authentication_service, mock_api_auth_service
 
 
-@pytest.fixture
-def mock_runtime_control():
-    """Mock runtime control service."""
-    mock = AsyncMock()
-    mock.pause_processing = AsyncMock(return_value=AsyncMock(success=True))
-    mock.get_runtime_status = AsyncMock(return_value=RuntimeStatusResponse(
-        is_running=True,
-        uptime_seconds=100.0,
-        processor_count=1,
-        adapter_count=1,
-        total_messages_processed=0,
-        current_load=0.1
-    ))
-    return mock
+# Using fixtures from tests/fixtures/ instead of inline mocks
 
 
 @pytest.fixture
 def mock_communication_service():
-    """Mock communication service."""
+    """Mock communication service with proper typed responses."""
     mock = AsyncMock()
     mock.process_message = AsyncMock(return_value={
         "message_id": "test-123",
@@ -48,29 +37,49 @@ class TestPauseInteractionContract:
     """Test the pause→interact contract for COVENANT compliance."""
 
     @pytest.mark.asyncio
-    async def test_pause_blocks_interaction_processing(self, mock_runtime_control, mock_communication_service):
+    async def test_pause_blocks_interaction_processing(self, mock_main_runtime_control_service, mock_communication_service, mock_authentication_service, mock_api_auth_service):
         """
         CRITICAL TEST: Verify that paused processor does not process interactions immediately.
         
         This test validates the core COVENANT transparency requirement:
         When paused, the ethical reasoning pipeline must be inspectable step-by-step.
         """
-        # Setup API with mocked services
+        # Setup API with comprehensive mocked services
         with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb, \
-             patch('ciris_engine.logic.buses.CommunicationBus') as mock_cb:
+             patch('ciris_engine.logic.buses.CommunicationBus') as mock_cb, \
+             patch.object(ApiPlatform, 'start') as mock_start:
             
             # Configure runtime control bus
-            mock_rcb.return_value.get_service.return_value = mock_runtime_control
+            mock_rcb.return_value.get_service.return_value = mock_main_runtime_control_service
             
             # Configure communication bus 
             mock_cb.return_value.get_service.return_value = mock_communication_service
             
-            # Create API platform
-            # Create mock runtime
-            mock_runtime = MagicMock()
+            # Create real APIAuthService in dev mode
+            from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+            real_auth_service = APIAuthService()
+            real_auth_service._dev_mode = True
             
+            # Create API platform with mocked services
+            mock_runtime = MagicMock()
+            # Add pipeline_controller to mock_runtime
+            mock_runtime.pipeline_controller = MagicMock()
+            mock_runtime.pipeline_controller.get_current_state = MagicMock(return_value=None)
             api_platform = ApiPlatform(mock_runtime)
-            await api_platform.start()
+            
+            # Mock the start method to avoid real service initialization
+            mock_start.return_value = None
+            
+            # Set up the app directly without starting services
+            from ciris_engine.logic.adapters.api.app import create_app
+            api_platform.app = create_app()
+            
+            # Mock all the services that would be injected
+            api_platform.app.state.main_runtime_control_service = mock_main_runtime_control_service
+            api_platform.app.state.runtime_control_service = None
+            api_platform.app.state.runtime = mock_runtime
+            api_platform.app.state.authentication_service = mock_authentication_service
+            api_platform.app.state.auth_service = real_auth_service
             
             app = api_platform.app
             client = TestClient(app)
@@ -80,6 +89,9 @@ class TestPauseInteractionContract:
                 "username": "admin",
                 "password": "ciris_admin_password"
             })
+            if login_response.status_code != 200:
+                print(f"Login failed: {login_response.status_code}")
+                print(f"Response: {login_response.text}")
             assert login_response.status_code == 200
             token = login_response.json()["access_token"]
             headers = {"Authorization": f"Bearer {token}"}
@@ -92,7 +104,7 @@ class TestPauseInteractionContract:
             assert pause_response.json()["data"]["processor_state"] == "paused"
             
             # Verify pause was actually called
-            mock_runtime_control.pause_processing.assert_called_once()
+            mock_main_runtime_control_service.pause_processing.assert_called_once()
             
             # Step 2: Modify the mock to simulate paused state
             # The processor should now be paused and NOT process interactions
@@ -127,26 +139,41 @@ class TestPauseInteractionContract:
                     f"Error should mention paused state: {error_msg}"
 
     @pytest.mark.asyncio
-    async def test_state_endpoint_reflects_pause_status(self, mock_runtime_control):
+    async def test_state_endpoint_reflects_pause_status(self, mock_main_runtime_control_service, mock_authentication_service, mock_api_auth_service):
         """
         Test that the state endpoint correctly reflects pause status.
         
         This ensures the RuntimeStatusResponse includes pause state information.
         """
-        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb:
-            mock_rcb.return_value.get_service.return_value = mock_runtime_control
+        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb, \
+             patch.object(ApiPlatform, 'start') as mock_start:
+            mock_rcb.return_value.get_service.return_value = mock_main_runtime_control_service
             
             # Mock a paused runtime status
-            mock_runtime_control.get_runtime_status.return_value = MagicMock()
-            mock_runtime_control.get_runtime_status.return_value.paused = True
-            mock_runtime_control.get_runtime_status.return_value.cognitive_state = "PAUSED"
-            mock_runtime_control.get_runtime_status.return_value.queue_depth = 1
+            mock_main_runtime_control_service.get_runtime_status.return_value = MagicMock()
+            mock_main_runtime_control_service.get_runtime_status.return_value.paused = True
+            mock_main_runtime_control_service.get_runtime_status.return_value.cognitive_state = "PAUSED"
+            mock_main_runtime_control_service.get_runtime_status.return_value.queue_depth = 1
             
             # Create mock runtime
             mock_runtime = MagicMock()
+            # Add pipeline_controller to mock_runtime
+            mock_runtime.pipeline_controller = MagicMock()
+            mock_runtime.pipeline_controller.get_current_state = MagicMock(return_value=None)
             
             api_platform = ApiPlatform(mock_runtime)
-            await api_platform.start()
+            # Mock the start method to avoid real service initialization
+            mock_start.return_value = None
+            
+            # Set up the app directly without starting services
+            from ciris_engine.logic.adapters.api.app import create_app
+            api_platform.app = create_app()
+            
+            # Mock all required services
+            api_platform.app.state.main_runtime_control_service = mock_main_runtime_control_service
+            api_platform.app.state.authentication_service = mock_authentication_service
+            api_platform.app.state.auth_service = mock_api_auth_service
+            api_platform.app.state.runtime = mock_runtime
             
             app = api_platform.app
             client = TestClient(app)
@@ -169,20 +196,35 @@ class TestPauseInteractionContract:
                 f"Expected paused state but got: {data['processor_state']}"
 
     @pytest.mark.asyncio  
-    async def test_queue_depth_increases_when_paused(self, mock_runtime_control):
+    async def test_queue_depth_increases_when_paused(self, mock_main_runtime_control_service, mock_authentication_service, mock_api_auth_service):
         """
         Test that queue depth increases when interactions are sent to paused processor.
         
         This validates the queuing mechanism for step-by-step debugging.
         """
-        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb:
-            mock_rcb.return_value.get_service.return_value = mock_runtime_control
+        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb, \
+             patch.object(ApiPlatform, 'start') as mock_start:
+            mock_rcb.return_value.get_service.return_value = mock_main_runtime_control_service
             
             # Create mock runtime
             mock_runtime = MagicMock()
+            # Add pipeline_controller to mock_runtime
+            mock_runtime.pipeline_controller = MagicMock()
+            mock_runtime.pipeline_controller.get_current_state = MagicMock(return_value=None)
             
             api_platform = ApiPlatform(mock_runtime)
-            await api_platform.start()
+            # Mock the start method to avoid real service initialization
+            mock_start.return_value = None
+            
+            # Set up the app directly without starting services
+            from ciris_engine.logic.adapters.api.app import create_app
+            api_platform.app = create_app()
+            
+            # Mock all required services
+            api_platform.app.state.main_runtime_control_service = mock_main_runtime_control_service
+            api_platform.app.state.authentication_service = mock_authentication_service
+            api_platform.app.state.auth_service = mock_api_auth_service
+            api_platform.app.state.runtime = mock_runtime
             
             app = api_platform.app
             client = TestClient(app)

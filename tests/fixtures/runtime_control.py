@@ -136,12 +136,14 @@ def mock_main_runtime_control_service():
     mock.get_runtime_status = AsyncMock(return_value=running_status)
     
     # Create AsyncMock with empty signature for main service
-    pause_mock = AsyncMock(return_value=pause_response)
-    pause_mock.__signature__ = inspect.signature(lambda: None)
+    # Use spec=[] to ensure no parameters are expected
+    pause_mock = AsyncMock(return_value=pause_response, spec=[])
+    # Explicitly set the signature to ensure parameter detection works
+    pause_mock.__signature__ = inspect.Signature([])
     mock.pause_processing = pause_mock
     
-    resume_mock = AsyncMock(return_value=resume_response) 
-    resume_mock.__signature__ = inspect.signature(lambda: None)
+    resume_mock = AsyncMock(return_value=resume_response, spec=[])
+    resume_mock.__signature__ = inspect.Signature([])
     mock.resume_processing = resume_mock
     
     # Add queue status mock

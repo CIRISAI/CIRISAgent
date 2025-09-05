@@ -512,155 +512,19 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 return parts[1]
         return None
 
-    async def _create_passive_observation_result(self, msg: DiscordMessage, priority: int = 0, filter_result: Optional[Any] = None) -> None:
-        """Override to add Discord-specific ACTIVE MODS information."""
-        try:
-            import uuid
-            from datetime import datetime, timezone
-
-            from ciris_engine.logic import persistence
-            from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
-            from ciris_engine.schemas.runtime.models import Task, Thought
-            from ciris_engine.schemas.runtime.models import TaskContext, ThoughtContext as ThoughtModelContext
-            from ciris_engine.logic.utils.thought_utils import generate_thought_id
-            from ciris_engine.logic.adapters.base_observer import format_discord_mentions
-            
-            # Create channel snapshot
-            await self._create_channel_snapshot(msg)
-
-            # Get message history from correlations instead of in-memory
-            channel_id = getattr(msg, "channel_id", "system")
-            history_context = await self._get_correlation_history(channel_id, PASSIVE_CONTEXT_LIMIT)
-
-            # Log context retrieval details
-            logger.info(
-                f"[CONTEXT] Retrieved {len(history_context)} messages for channel {channel_id}, "
-                f"total context size: {sum(len(str(m)) for m in history_context)} chars"
-            )
-
-            # Format mentions for task description
-            passive_task_lookup = {}
-            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
-                passive_task_lookup[str(msg.author_id)] = msg.author_name
-            formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)
-            
-            # Build description based on whether this is priority or passive
-            if filter_result and priority > 0:
-                description = f"PRIORITY: Respond to {getattr(filter_result.priority, 'value', 'high')} message from @{msg.author_name} (ID: {msg.author_id}): '{formatted_passive_content}'"
+    async def _add_custom_context_sections(self, task_lines: List[str], msg: DiscordMessage, history_context: List[Dict]) -> None:
+        """Add Discord-specific ACTIVE MODS section to context."""
+        # Add ACTIVE MODS section for Discord
+        guild_id = self._extract_guild_id_from_channel(msg.channel_id)
+        if guild_id:
+            moderators = await self._get_guild_moderators(guild_id)
+            if moderators:
+                task_lines.append(f"\n=== ACTIVE MODS ===")
+                for mod in moderators:
+                    nickname = mod.get('nickname') or mod.get('display_name') or mod.get('username')
+                    task_lines.append(f"ID: {mod['user_id']} | Nick: {nickname}")
+                task_lines.append("=== END ACTIVE MODS ===")
             else:
-                description = f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'"
-            
-            task = Task(
-                task_id=str(uuid.uuid4()),
-                channel_id=getattr(msg, "channel_id", "system"),
-                description=description,
-                status=TaskStatus.PENDING,
-                priority=priority,
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                context=TaskContext(
-                    channel_id=getattr(msg, "channel_id", None),
-                    user_id=msg.author_id,
-                    correlation_id=msg.message_id,
-                    parent_task_id=None,
-                ),
-            )
-
-            await self._sign_and_add_task(task)
-            
-            logger.info(
-                f"[OBSERVER] DISCORD PASSIVE TASK CREATED: {task.task_id} for message {msg.message_id} "
-                f"from @{msg.author_name} in channel {channel_id}"
-            )
-
-            # Build conversation context for thought - thoughts are NEVER sanitized
-            # Build user lookup for the current message
-            initial_user_lookup = {}
-            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
-                initial_user_lookup[str(msg.author_id)] = msg.author_name
-            formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)
-
-            # Build thought content based on priority vs passive
-            if filter_result and priority > 0:
-                priority_level = getattr(filter_result.priority, 'value', 'high')
-                filter_reasoning = getattr(filter_result, 'reasoning', 'Priority message detected')
-                task_lines = [f"PRIORITY ({priority_level}): @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} said: {formatted_msg_content}"]
-                task_lines.append(f"Filter: {filter_reasoning}")
-            else:
-                task_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {formatted_msg_content}"]
-
-            # Add ACTIVE MODS section for Discord
-            guild_id = self._extract_guild_id_from_channel(msg.channel_id)
-            if guild_id:
-                moderators = await self._get_guild_moderators(guild_id)
-                if moderators:
-                    task_lines.append(f"\n=== ACTIVE MODS ===")
-                    for mod in moderators:
-                        nickname = mod.get('nickname') or mod.get('display_name') or mod.get('username')
-                        task_lines.append(f"ID: {mod['user_id']} | Nick: {nickname}")
-                    task_lines.append("=== END ACTIVE MODS ===")
-                else:
-                    task_lines.append(f"\n=== ACTIVE MODS ===")
-                    task_lines.append("No moderators available or unable to retrieve moderator list")
-                    task_lines.append("=== END ACTIVE MODS ===")
-
-            task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
-            task_lines.append("CIRIS_OBSERVATION_START")
-            
-            # Build user lookup and format history lines
-            user_lookup = self._build_user_lookup_from_history(msg, history_context)
-            history_lines = self._format_history_lines(history_context, user_lookup)
-            task_lines.extend(history_lines)
-            
-            task_lines.append("CIRIS_OBSERVATION_END")
-
-            task_lines.append(
-                "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="
-            )
-            
-            # Handle consent-aware content formatting
-            await self._append_consent_aware_content(task_lines, msg, user_lookup)
-
-            task_content = "\n".join(task_lines)
-
-            # Log context building details
-            history_line_count = len(
-                [line for line in task_lines for i in range(1, 11) if line.startswith(f"{i}. @")]
-            )
-            logger.info(
-                f"[CONTEXT] Built Discord thought context with {history_line_count} history messages, "
-                f"total thought size: {len(task_content)} chars"
-            )
-
-            thought = Thought(
-                thought_id=generate_thought_id(thought_type=ThoughtType.OBSERVATION, task_id=task.task_id),
-                source_task_id=task.task_id,
-                channel_id=getattr(msg, "channel_id", None),
-                thought_type=ThoughtType.OBSERVATION,
-                status=ThoughtStatus.PENDING,
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                round_number=0,
-                content=task_content,
-                thought_depth=0,
-                ponder_notes=None,
-                parent_thought_id=None,
-                final_action=None,
-                context=ThoughtModelContext(
-                    task_id=task.task_id,
-                    channel_id=getattr(msg, "channel_id", None),
-                    round_number=0,
-                    depth=0,
-                    parent_thought_id=None,
-                    correlation_id=str(uuid.uuid4()),
-                ),
-            )
-
-            persistence.add_thought(thought)
-
-            logger.info(
-                f"[OBSERVER] DISCORD THOUGHT CREATED: {thought.thought_id} for task {task.task_id}"
-            )
-
-        except Exception as e:
-            logger.error(f"Error creating Discord passive observation task: {e}", exc_info=True)
+                task_lines.append(f"\n=== ACTIVE MODS ===")
+                task_lines.append("No moderators available or unable to retrieve moderator list")
+                task_lines.append("=== END ACTIVE MODS ===")

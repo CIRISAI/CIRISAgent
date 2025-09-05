@@ -149,6 +149,11 @@ class TestPauseInteractionContract:
              patch.object(ApiPlatform, 'start') as mock_start:
             mock_rcb.return_value.get_service.return_value = mock_main_runtime_control_service
             
+            # Create real APIAuthService in dev mode
+            from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+            real_auth_service = APIAuthService()
+            real_auth_service._dev_mode = True
+            
             # Mock a paused runtime status
             mock_main_runtime_control_service.get_runtime_status.return_value = MagicMock()
             mock_main_runtime_control_service.get_runtime_status.return_value.paused = True
@@ -172,7 +177,7 @@ class TestPauseInteractionContract:
             # Mock all required services
             api_platform.app.state.main_runtime_control_service = mock_main_runtime_control_service
             api_platform.app.state.authentication_service = mock_authentication_service
-            api_platform.app.state.auth_service = mock_api_auth_service
+            api_platform.app.state.auth_service = real_auth_service
             api_platform.app.state.runtime = mock_runtime
             
             app = api_platform.app
@@ -223,7 +228,7 @@ class TestPauseInteractionContract:
             # Mock all required services
             api_platform.app.state.main_runtime_control_service = mock_main_runtime_control_service
             api_platform.app.state.authentication_service = mock_authentication_service
-            api_platform.app.state.auth_service = mock_api_auth_service
+            api_platform.app.state.auth_service = real_auth_service
             api_platform.app.state.runtime = mock_runtime
             
             app = api_platform.app

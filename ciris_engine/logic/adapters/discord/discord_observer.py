@@ -522,8 +522,8 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
             from ciris_engine.schemas.runtime.models import Task, Thought
             from ciris_engine.schemas.runtime.models import TaskContext, ThoughtContext as ThoughtModelContext
-            from ciris_engine.logic.utils.thought_id_generator import generate_thought_id
-            from ciris_engine.logic.utils.discord_mention_formatter import format_discord_mentions
+            from ciris_engine.logic.utils.thought_utils import generate_thought_id
+            from ciris_engine.logic.adapters.base_observer import format_discord_mentions
             
             # Create channel snapshot
             await self._create_channel_snapshot(msg)

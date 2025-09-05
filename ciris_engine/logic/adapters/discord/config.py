@@ -125,40 +125,49 @@ class DiscordAdapterConfig(BaseModel):
         """Load configuration from environment variables if present."""
         from ciris_engine.logic.config.env_utils import get_env_var
 
-        # Bot token
+        self._load_bot_token(get_env_var)
+        self._load_channel_configuration(get_env_var)
+        self._load_user_permissions(get_env_var)
+
+    def _load_bot_token(self, get_env_var):
+        """Load bot token from environment variables."""
         env_token = get_env_var("DISCORD_BOT_TOKEN")
         if env_token:
             self.bot_token = env_token
 
+    def _load_channel_configuration(self, get_env_var):
+        """Load channel configuration from environment variables."""
         # Home channel ID
         env_home_channel = get_env_var("DISCORD_HOME_CHANNEL_ID")
         if env_home_channel:
             self.home_channel_id = env_home_channel
-            if env_home_channel not in self.monitored_channel_ids:
-                self.monitored_channel_ids.append(env_home_channel)
+            self._add_channel_to_monitored(env_home_channel)
 
         # Legacy support for DISCORD_CHANNEL_ID -> home channel
         env_legacy_channel = get_env_var("DISCORD_CHANNEL_ID")
         if env_legacy_channel and not self.home_channel_id:
             self.home_channel_id = env_legacy_channel
-            if env_legacy_channel not in self.monitored_channel_ids:
-                self.monitored_channel_ids.append(env_legacy_channel)
+            self._add_channel_to_monitored(env_legacy_channel)
 
+        # Multiple channels from comma-separated list
         env_channels = get_env_var("DISCORD_CHANNEL_IDS")
         if env_channels:
-            # Expect comma-separated list
             channel_list = [ch.strip() for ch in env_channels.split(",") if ch.strip()]
-            # Add only channels not already in the list to prevent duplicates
             for channel_id in channel_list:
-                if channel_id not in self.monitored_channel_ids:
-                    self.monitored_channel_ids.append(channel_id)
+                self._add_channel_to_monitored(channel_id)
 
+        # Deferral channel
         env_deferral = get_env_var("DISCORD_DEFERRAL_CHANNEL_ID")
         if env_deferral:
             self.deferral_channel_id = env_deferral
 
-        # User permissions
+    def _load_user_permissions(self, get_env_var):
+        """Load user permissions from environment variables."""
         env_admin = get_env_var("WA_USER_ID")
-        if env_admin:
-            if env_admin not in self.admin_user_ids:
-                self.admin_user_ids.append(env_admin)
+        if env_admin and env_admin not in self.admin_user_ids:
+            self.admin_user_ids.append(env_admin)
+
+    def _add_channel_to_monitored(self, channel_id: str):
+        """Add channel to monitored list if not already present."""
+        if channel_id not in self.monitored_channel_ids:
+            self.monitored_channel_ids.append(channel_id)

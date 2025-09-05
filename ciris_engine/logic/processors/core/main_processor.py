@@ -904,88 +904,107 @@ class AgentProcessor:
         execute_single_step_point method in the pipeline controller.
         """
         try:
-            # Get pipeline state to see what thoughts need processing
             pipeline_state = self._pipeline_controller.get_pipeline_state()
             
             if not pipeline_state.thoughts_by_step:
-                # Try to get new pending thoughts
-                from ciris_engine.logic import persistence
-                from ciris_engine.schemas.runtime.models import ThoughtStatus
-
-                pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=5)
-
-                if not pending_thoughts:
-                    return {
-                        "success": True,
-                        "step_point": "pipeline_empty",
-                        "step_results": [],
-                        "thoughts_processed": 0,
-                        "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-                        "pipeline_empty": True,
-                    }
-
-                # Create mock step results for the thoughts we would process
-                step_results = []
-                for thought in pending_thoughts:
-                    step_results.append({
-                        "thought_id": thought.thought_id,
-                        "round_id": getattr(thought, 'round_id', None),
-                        "task_id": thought.source_task_id,
-                        "step_point": "finalize_tasks_queue",  # First step
-                        "success": True,
-                        "step_data": {
-                            "thought_content": thought.content,
-                            "thought_type": thought.thought_type.value if thought.thought_type else "unknown",
-                            "fallback_mode": True,
-                        },
-                        "processing_time_ms": 10.0,  # Mock processing time
-                    })
-
-                return {
-                    "success": True,
-                    "step_point": "finalize_tasks_queue",
-                    "step_results": step_results,
-                    "thoughts_processed": len(step_results),
-                    "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-                    "pipeline_state": {"fallback_mode": True},
-                }
-
-            # Process existing thoughts in pipeline
-            step_results = []
-            first_step_point = None
-            
-            for step_point, thoughts in pipeline_state.thoughts_by_step.items():
-                if not first_step_point:
-                    first_step_point = step_point
-                    
-                for thought in thoughts[:5]:  # Limit to 5 thoughts per step
-                    step_results.append({
-                        "thought_id": thought.thought_id,
-                        "round_id": getattr(thought, 'round_id', None),
-                        "task_id": getattr(thought, 'source_task_id', None),
-                        "step_point": step_point,
-                        "success": True,
-                        "step_data": thought.step_data or {},
-                        "processing_time_ms": getattr(thought, 'processing_time_ms', 15.0),
-                    })
-                break  # Only process one step point
-
-            return {
-                "success": True,
-                "step_point": first_step_point or "unknown",
-                "step_results": step_results,
-                "thoughts_processed": len(step_results),
-                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-                "pipeline_state": {"fallback_mode": True},
-            }
+                return await self._handle_empty_pipeline_fallback(start_time)
+            else:
+                return self._handle_existing_pipeline_fallback(pipeline_state, start_time)
 
         except Exception as e:
             logger.error(f"Error in fallback single_step: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": f"Fallback single-step error: {str(e)}",
-                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-            }
+            return self._create_fallback_error_response(e, start_time)
+
+    async def _handle_empty_pipeline_fallback(self, start_time) -> dict:
+        """Handle fallback when pipeline is empty - fetch pending thoughts."""
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.runtime.models import ThoughtStatus
+
+        pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=5)
+
+        if not pending_thoughts:
+            return self._create_empty_pipeline_response(start_time)
+
+        step_results = self._create_mock_step_results_from_thoughts(pending_thoughts)
+        return self._create_fallback_success_response("finalize_tasks_queue", step_results, start_time)
+
+    def _handle_existing_pipeline_fallback(self, pipeline_state, start_time) -> dict:
+        """Handle fallback when pipeline has existing thoughts."""
+        step_results = []
+        first_step_point = None
+        
+        for step_point, thoughts in pipeline_state.thoughts_by_step.items():
+            if not first_step_point:
+                first_step_point = step_point
+                
+            step_results.extend(self._create_step_results_from_existing_thoughts(thoughts[:5], step_point))
+            break  # Only process one step point
+
+        return self._create_fallback_success_response(first_step_point or "unknown", step_results, start_time)
+
+    def _create_empty_pipeline_response(self, start_time) -> dict:
+        """Create response when pipeline is completely empty."""
+        return {
+            "success": True,
+            "step_point": "pipeline_empty",
+            "step_results": [],
+            "thoughts_processed": 0,
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+            "pipeline_empty": True,
+        }
+
+    def _create_mock_step_results_from_thoughts(self, thoughts) -> list:
+        """Create mock step results from pending thoughts."""
+        step_results = []
+        for thought in thoughts:
+            step_results.append({
+                "thought_id": thought.thought_id,
+                "round_id": getattr(thought, 'round_id', None),
+                "task_id": thought.source_task_id,
+                "step_point": "finalize_tasks_queue",  # First step
+                "success": True,
+                "step_data": {
+                    "thought_content": thought.content,
+                    "thought_type": thought.thought_type.value if thought.thought_type else "unknown",
+                    "fallback_mode": True,
+                },
+                "processing_time_ms": 10.0,  # Mock processing time
+            })
+        return step_results
+
+    def _create_step_results_from_existing_thoughts(self, thoughts, step_point: str) -> list:
+        """Create step results from existing pipeline thoughts."""
+        step_results = []
+        for thought in thoughts:
+            step_results.append({
+                "thought_id": thought.thought_id,
+                "round_id": getattr(thought, 'round_id', None),
+                "task_id": getattr(thought, 'source_task_id', None),
+                "step_point": step_point,
+                "success": True,
+                "step_data": thought.step_data or {},
+                "processing_time_ms": getattr(thought, 'processing_time_ms', 15.0),
+            })
+        return step_results
+
+    def _create_fallback_success_response(self, step_point: str, step_results: list, start_time) -> dict:
+        """Create successful fallback response."""
+        return {
+            "success": True,
+            "step_point": step_point,
+            "step_results": step_results,
+            "thoughts_processed": len(step_results),
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+            "pipeline_state": {"fallback_mode": True},
+        }
+
+    def _create_fallback_error_response(self, error: Exception, start_time) -> dict:
+        """Create error response for fallback single step."""
+        return {
+            "success": False,
+            "error": f"Fallback single-step error: {str(error)}",
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+        }
 
     async def stop_processing(self) -> None:
         """Stop the processing loop gracefully."""
@@ -1240,9 +1259,7 @@ class AgentProcessor:
             Tuple of (new_round_count, new_consecutive_errors, should_break)
         """
         # Check if we've reached target rounds
-        if num_rounds is not None and round_count >= num_rounds:
-            logger.info(f"Reached target rounds ({num_rounds}), requesting graceful shutdown")
-            request_global_shutdown(f"Processing completed after {num_rounds} rounds")
+        if self._should_stop_after_target_rounds(round_count, num_rounds):
             return round_count, consecutive_errors, True
 
         # COVENANT COMPLIANCE: Check pause state before processing
@@ -1257,8 +1274,29 @@ class AgentProcessor:
         if not await self._handle_shutdown_transitions(current_state):
             return round_count, consecutive_errors, True
 
-        # Process based on current state
-        current_state = self.state_manager.get_state()
+        # Process current state
+        round_count, consecutive_errors, should_break = await self._process_current_state(
+            round_count, consecutive_errors, max_consecutive_errors, current_state
+        )
+        if should_break:
+            return round_count, consecutive_errors, True
+
+        # Handle delay between rounds
+        if not await self._handle_round_delay(current_state):
+            return round_count, consecutive_errors, True
+            
+        return round_count, consecutive_errors, False
+
+    def _should_stop_after_target_rounds(self, round_count: int, num_rounds: Optional[int]) -> bool:
+        """Check if processing should stop after reaching target rounds."""
+        if num_rounds is not None and round_count >= num_rounds:
+            logger.info(f"Reached target rounds ({num_rounds}), requesting graceful shutdown")
+            request_global_shutdown(f"Processing completed after {num_rounds} rounds")
+            return True
+        return False
+
+    async def _process_current_state(self, round_count: int, consecutive_errors: int, max_consecutive_errors: int, current_state: AgentState) -> tuple[int, int, bool]:
+        """Process based on the current agent state."""
         logger.debug(f"Processing round {round_count}, current state: {current_state}")
 
         # Get processor for current state
@@ -1267,41 +1305,50 @@ class AgentProcessor:
             f"Got processor for state {current_state}: {processor.__class__.__name__ if processor else 'None'}"
         )
 
-        # Process based on state type
         if processor and current_state != AgentState.SHUTDOWN:
-            # Regular state processing
-            round_increment, consecutive_errors, should_break = await self._process_regular_state(
-                processor, current_state, consecutive_errors, max_consecutive_errors
+            return await self._handle_regular_state_processing(
+                processor, current_state, consecutive_errors, max_consecutive_errors, round_count
             )
-            round_count += round_increment
-            if should_break:
-                return round_count, consecutive_errors, True
-
         elif current_state == AgentState.DREAM:
-            # Dream state processing
-            if not await self._process_dream_state():
-                return round_count, consecutive_errors, True
-
+            return await self._handle_dream_state_processing(round_count, consecutive_errors)
         elif current_state == AgentState.SHUTDOWN:
-            # Shutdown state processing
-            processor = self.state_processors.get(current_state)
-            round_increment, consecutive_errors, should_break = await self._process_shutdown_state(
-                processor, consecutive_errors
-            )
-            round_count += round_increment
-            if should_break:
-                return round_count, consecutive_errors, True
-
+            return await self._handle_shutdown_state_processing(consecutive_errors, round_count)
         else:
-            logger.warning(f"No processor for state: {current_state}")
-            await asyncio.sleep(1)
+            return await self._handle_unknown_state(round_count, consecutive_errors, current_state)
 
-        # Handle delay between rounds
-        delay = self._calculate_round_delay(current_state)
-        if not await self._handle_delay_with_stop_check(delay):
+    async def _handle_regular_state_processing(self, processor, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int, round_count: int) -> tuple[int, int, bool]:
+        """Handle processing for regular (non-special) states."""
+        round_increment, consecutive_errors, should_break = await self._process_regular_state(
+            processor, current_state, consecutive_errors, max_consecutive_errors
+        )
+        round_count += round_increment
+        return round_count, consecutive_errors, should_break
+
+    async def _handle_dream_state_processing(self, round_count: int, consecutive_errors: int) -> tuple[int, int, bool]:
+        """Handle dream state processing."""
+        if not await self._process_dream_state():
             return round_count, consecutive_errors, True
-            
         return round_count, consecutive_errors, False
+
+    async def _handle_shutdown_state_processing(self, consecutive_errors: int, round_count: int) -> tuple[int, int, bool]:
+        """Handle shutdown state processing."""
+        processor = self.state_processors.get(AgentState.SHUTDOWN)
+        round_increment, consecutive_errors, should_break = await self._process_shutdown_state(
+            processor, consecutive_errors
+        )
+        round_count += round_increment
+        return round_count, consecutive_errors, should_break
+
+    async def _handle_unknown_state(self, round_count: int, consecutive_errors: int, current_state: AgentState) -> tuple[int, int, bool]:
+        """Handle unknown or unsupported states."""
+        logger.warning(f"No processor for state: {current_state}")
+        await asyncio.sleep(1)
+        return round_count, consecutive_errors, False
+
+    async def _handle_round_delay(self, current_state: AgentState) -> bool:
+        """Handle delay between processing rounds."""
+        delay = self._calculate_round_delay(current_state)
+        return await self._handle_delay_with_stop_check(delay)
 
     async def _processing_loop(self, num_rounds: Optional[int] = None) -> None:
         """Main processing loop with state management and comprehensive exception handling."""

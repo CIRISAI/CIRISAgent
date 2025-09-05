@@ -460,9 +460,16 @@ def _extract_pipeline_state_info(request: Request) -> tuple[str, dict, dict]:
 
 def _create_pause_response(success: bool, current_step: str, current_step_schema: dict, pipeline_state: dict) -> RuntimeControlResponse:
     """Create pause action response."""
+    # Create clear message based on success state
+    if success:
+        step_suffix = f" at step: {current_step}" if current_step else ""
+        message = f"Processing paused{step_suffix}"
+    else:
+        message = "Already paused"
+    
     result = RuntimeControlResponse(
         success=success,
-        message=f"Processing paused{f' at step: {current_step}' if current_step else ''}" if success else "Already paused",
+        message=message,
         processor_state="paused" if success else "unknown",
         cognitive_state="UNKNOWN",
     )

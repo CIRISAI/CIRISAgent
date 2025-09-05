@@ -526,3 +526,368 @@ class TestAgentProcessorHelpers:
         main_processor._process_regular_state.assert_called_once()
         main_processor._calculate_round_delay.assert_called_once()
         main_processor._handle_delay_with_stop_check.assert_called_once()
+
+
+class TestProcessSingleRoundHelpers:
+    """Test helper methods for _process_single_round functionality."""
+
+    def test_should_stop_after_target_rounds_reached(self, main_processor):
+        """Test _should_stop_after_target_rounds when target is reached."""
+        with patch('ciris_engine.logic.processors.core.main_processor.request_global_shutdown') as mock_shutdown:
+            result = main_processor._should_stop_after_target_rounds(round_count=5, num_rounds=5)
+            
+            assert result is True
+            mock_shutdown.assert_called_once_with("Processing completed after 5 rounds")
+
+    def test_should_stop_after_target_rounds_not_reached(self, main_processor):
+        """Test _should_stop_after_target_rounds when target not reached."""
+        result = main_processor._should_stop_after_target_rounds(round_count=3, num_rounds=5)
+        assert result is False
+
+    def test_should_stop_after_target_rounds_no_limit(self, main_processor):
+        """Test _should_stop_after_target_rounds with no round limit."""
+        result = main_processor._should_stop_after_target_rounds(round_count=100, num_rounds=None)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_process_current_state_regular_state(self, main_processor, mock_processors):
+        """Test _process_current_state with regular state."""
+        main_processor.state_processors = mock_processors
+        main_processor._handle_regular_state_processing = AsyncMock(return_value=(1, 0, False))
+        
+        result = await main_processor._process_current_state(0, 0, 5, AgentState.WORK)
+        
+        assert result == (1, 0, False)
+        main_processor._handle_regular_state_processing.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_process_current_state_dream_state(self, main_processor):
+        """Test _process_current_state with dream state."""
+        # Ensure DREAM state doesn't have a processor to trigger the elif branch
+        main_processor.state_processors = {state: Mock() for state in ["work", "play", "shutdown"]}
+        
+        # Mock the helper method that actually gets called
+        with patch.object(main_processor, '_handle_dream_state_processing', return_value=(1, 0, False)) as mock_handler:
+            result = await main_processor._process_current_state(0, 0, 5, AgentState.DREAM)
+            
+            assert result == (1, 0, False)
+            mock_handler.assert_called_once_with(0, 0)
+
+    @pytest.mark.asyncio
+    async def test_process_current_state_shutdown_state(self, main_processor):
+        """Test _process_current_state with shutdown state."""
+        main_processor._handle_shutdown_state_processing = AsyncMock(return_value=(1, 0, True))
+        
+        result = await main_processor._process_current_state(0, 0, 5, AgentState.SHUTDOWN)
+        
+        assert result == (1, 0, True)
+        main_processor._handle_shutdown_state_processing.assert_called_once_with(0, 0)
+
+    @pytest.mark.asyncio
+    async def test_process_current_state_unknown_state(self, main_processor):
+        """Test _process_current_state with unknown state."""
+        main_processor._handle_unknown_state = AsyncMock(return_value=(0, 0, False))
+        
+        # Use a state that doesn't have a processor
+        main_processor.state_processors = {}
+        
+        result = await main_processor._process_current_state(0, 0, 5, AgentState.PLAY)
+        
+        assert result == (0, 0, False)
+        main_processor._handle_unknown_state.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_regular_state_processing(self, main_processor, mock_processors):
+        """Test _handle_regular_state_processing helper method."""
+        processor = mock_processors["work"]
+        main_processor._process_regular_state = AsyncMock(return_value=(1, 0, False))
+        
+        result = await main_processor._handle_regular_state_processing(
+            processor, AgentState.WORK, 0, 5, 3
+        )
+        
+        assert result == (4, 0, False)  # round_count incremented
+        main_processor._process_regular_state.assert_called_once_with(
+            processor, AgentState.WORK, 0, 5
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_dream_state_processing_success(self, main_processor):
+        """Test _handle_dream_state_processing when dream processing succeeds."""
+        main_processor._process_dream_state = AsyncMock(return_value=True)
+        
+        result = await main_processor._handle_dream_state_processing(5, 2)
+        
+        assert result == (5, 2, False)  # Continue processing
+        main_processor._process_dream_state.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_dream_state_processing_failure(self, main_processor):
+        """Test _handle_dream_state_processing when dream processing fails."""
+        main_processor._process_dream_state = AsyncMock(return_value=False)
+        
+        result = await main_processor._handle_dream_state_processing(5, 2)
+        
+        assert result == (5, 2, True)  # Should break
+
+    @pytest.mark.asyncio
+    async def test_handle_shutdown_state_processing(self, main_processor, mock_processors):
+        """Test _handle_shutdown_state_processing helper method."""
+        main_processor.state_processors = mock_processors
+        main_processor._process_shutdown_state = AsyncMock(return_value=(1, 1, True))
+        
+        result = await main_processor._handle_shutdown_state_processing(0, 4)
+        
+        assert result == (5, 1, True)  # round_count incremented
+        main_processor._process_shutdown_state.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_state(self, main_processor):
+        """Test _handle_unknown_state helper method."""
+        with patch('asyncio.sleep') as mock_sleep:
+            result = await main_processor._handle_unknown_state(3, 1, AgentState.PLAY)
+            
+            assert result == (3, 1, False)  # No changes, continue processing
+            mock_sleep.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_handle_round_delay(self, main_processor):
+        """Test _handle_round_delay helper method."""
+        main_processor._calculate_round_delay = Mock(return_value=2.0)
+        main_processor._handle_delay_with_stop_check = AsyncMock(return_value=True)
+        
+        result = await main_processor._handle_round_delay(AgentState.WORK)
+        
+        assert result is True
+        main_processor._calculate_round_delay.assert_called_once_with(AgentState.WORK)
+        main_processor._handle_delay_with_stop_check.assert_called_once_with(2.0)
+
+
+class TestFallbackSingleStepHelpers:
+    """Test helper methods for fallback single-step functionality."""
+
+    def test_create_empty_pipeline_response(self, main_processor):
+        """Test _create_empty_pipeline_response helper method."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        
+        result = main_processor._create_empty_pipeline_response(start_time)
+        
+        assert result["success"] is True
+        assert result["step_point"] == "pipeline_empty"
+        assert result["step_results"] == []
+        assert result["thoughts_processed"] == 0
+        assert result["pipeline_empty"] is True
+        assert "processing_time_ms" in result
+
+    def test_create_fallback_error_response(self, main_processor):
+        """Test _create_fallback_error_response helper method."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        error = Exception("Test error message")
+        
+        result = main_processor._create_fallback_error_response(error, start_time)
+        
+        assert result["success"] is False
+        assert "Test error message" in result["error"]
+        assert "Fallback single-step error:" in result["error"]
+        assert "processing_time_ms" in result
+
+    def test_create_fallback_success_response(self, main_processor):
+        """Test _create_fallback_success_response helper method."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        step_results = [{"thought_id": "test_1"}, {"thought_id": "test_2"}]
+        
+        result = main_processor._create_fallback_success_response("test_step", step_results, start_time)
+        
+        assert result["success"] is True
+        assert result["step_point"] == "test_step"
+        assert result["step_results"] == step_results
+        assert result["thoughts_processed"] == 2
+        assert result["pipeline_state"] == {"fallback_mode": True}
+        assert "processing_time_ms" in result
+
+    def test_create_mock_step_results_from_thoughts(self, main_processor):
+        """Test _create_mock_step_results_from_thoughts helper method."""
+        from ciris_engine.schemas.runtime.enums import ThoughtType
+        
+        # Create mock thoughts
+        mock_thoughts = []
+        for i in range(3):
+            thought = Mock()
+            thought.thought_id = f"thought_{i}"
+            thought.round_id = f"round_{i}"
+            thought.source_task_id = f"task_{i}"
+            thought.content = f"Test content {i}"
+            thought.thought_type = ThoughtType.STANDARD
+            mock_thoughts.append(thought)
+        
+        result = main_processor._create_mock_step_results_from_thoughts(mock_thoughts)
+        
+        assert len(result) == 3
+        for i, step_result in enumerate(result):
+            assert step_result["thought_id"] == f"thought_{i}"
+            assert step_result["task_id"] == f"task_{i}"
+            assert step_result["step_point"] == "finalize_tasks_queue"
+            assert step_result["success"] is True
+            assert step_result["step_data"]["thought_content"] == f"Test content {i}"
+            assert step_result["step_data"]["thought_type"] == "standard"
+            assert step_result["step_data"]["fallback_mode"] is True
+            assert step_result["processing_time_ms"] == 10.0
+
+    def test_create_mock_step_results_from_thoughts_no_type(self, main_processor):
+        """Test _create_mock_step_results_from_thoughts with thought having no type."""
+        mock_thought = Mock()
+        mock_thought.thought_id = "thought_1"
+        mock_thought.round_id = None
+        mock_thought.source_task_id = "task_1"
+        mock_thought.content = "Test content"
+        mock_thought.thought_type = None
+        
+        result = main_processor._create_mock_step_results_from_thoughts([mock_thought])
+        
+        assert len(result) == 1
+        assert result[0]["step_data"]["thought_type"] == "unknown"
+
+    def test_create_step_results_from_existing_thoughts(self, main_processor):
+        """Test _create_step_results_from_existing_thoughts helper method."""
+        # Create mock thoughts
+        mock_thoughts = []
+        for i in range(2):
+            thought = Mock()
+            thought.thought_id = f"existing_{i}"
+            thought.round_id = f"round_{i}"
+            thought.source_task_id = f"task_{i}"
+            thought.step_data = {"existing": True, "step": i}
+            thought.processing_time_ms = 20.0 + i
+            mock_thoughts.append(thought)
+        
+        result = main_processor._create_step_results_from_existing_thoughts(mock_thoughts, "test_step_point")
+        
+        assert len(result) == 2
+        for i, step_result in enumerate(result):
+            assert step_result["thought_id"] == f"existing_{i}"
+            assert step_result["task_id"] == f"task_{i}"
+            assert step_result["step_point"] == "test_step_point"
+            assert step_result["success"] is True
+            assert step_result["step_data"] == {"existing": True, "step": i}
+            assert step_result["processing_time_ms"] == 20.0 + i
+
+    def test_create_step_results_from_existing_thoughts_missing_attributes(self, main_processor):
+        """Test _create_step_results_from_existing_thoughts with missing attributes."""
+        mock_thought = Mock()
+        mock_thought.thought_id = "existing_1"
+        mock_thought.round_id = None
+        mock_thought.source_task_id = None  # Missing attribute
+        mock_thought.step_data = None  # Missing step data
+        # Missing processing_time_ms attribute entirely
+        del mock_thought.processing_time_ms
+        
+        result = main_processor._create_step_results_from_existing_thoughts([mock_thought], "test_step")
+        
+        assert len(result) == 1
+        assert result[0]["thought_id"] == "existing_1"
+        assert result[0]["round_id"] is None
+        assert result[0]["task_id"] is None
+        assert result[0]["step_data"] == {}
+        assert result[0]["processing_time_ms"] == 15.0  # Default fallback
+
+    @pytest.mark.asyncio
+    async def test_handle_empty_pipeline_fallback_no_pending_thoughts(self, main_processor):
+        """Test _handle_empty_pipeline_fallback when no pending thoughts exist."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        
+        with patch('ciris_engine.logic.processors.core.main_processor.persistence') as mock_persistence:
+            mock_persistence.get_thoughts_by_status.return_value = []
+            
+            result = await main_processor._handle_empty_pipeline_fallback(start_time)
+            
+            assert result["success"] is True
+            assert result["step_point"] == "pipeline_empty"
+            assert result["thoughts_processed"] == 0
+            assert result["pipeline_empty"] is True
+
+    @pytest.mark.asyncio
+    async def test_handle_empty_pipeline_fallback_with_db_failure(self, main_processor):
+        """Test _handle_empty_pipeline_fallback when database fails (realistic test scenario).
+        
+        In test environments, the database configuration is not available, so persistence
+        calls fail and return empty lists. This tests the actual behavior in that scenario.
+        """
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        
+        # No mocking - test the actual behavior when DB fails
+        result = await main_processor._handle_empty_pipeline_fallback(start_time)
+        
+        # When database fails, get_thoughts_by_status returns [] due to exception handling
+        # So the method should return pipeline_empty response
+        assert result["success"] is True
+        assert result["step_point"] == "pipeline_empty"  # No thoughts due to DB failure
+        assert result["thoughts_processed"] == 0
+        assert len(result["step_results"]) == 0
+        assert "processing_time_ms" in result
+
+    @pytest.mark.asyncio 
+    async def test_handle_empty_pipeline_fallback_with_mocked_thoughts(self, main_processor):
+        """Test _handle_empty_pipeline_fallback with successful database mock."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        
+        mock_thought = Mock()
+        mock_thought.thought_id = "pending_1"
+        mock_thought.source_task_id = "task_1"
+        mock_thought.content = "Pending content"
+        mock_thought.thought_type = Mock(value="standard")
+        
+        # Mock at the right level - the persistence module function that gets called
+        with patch('ciris_engine.logic.persistence.get_thoughts_by_status', return_value=[mock_thought]):
+            result = await main_processor._handle_empty_pipeline_fallback(start_time)
+            
+            assert result["success"] is True
+            assert result["step_point"] == "finalize_tasks_queue"  # With pending thoughts
+            assert result["thoughts_processed"] == 1
+            assert len(result["step_results"]) == 1
+            assert "processing_time_ms" in result
+
+    def test_handle_existing_pipeline_fallback(self, main_processor):
+        """Test _handle_existing_pipeline_fallback helper method."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        
+        # Create mock pipeline state
+        mock_pipeline_state = Mock()
+        mock_thought = Mock()
+        mock_thought.thought_id = "pipeline_1"
+        mock_thought.step_data = {"pipeline": True}
+        
+        mock_pipeline_state.thoughts_by_step = {
+            "step_1": [mock_thought],
+            "step_2": [Mock()]  # Second step that shouldn't be processed
+        }
+        
+        result = main_processor._handle_existing_pipeline_fallback(mock_pipeline_state, start_time)
+        
+        assert result["success"] is True
+        assert result["step_point"] == "step_1"
+        assert result["thoughts_processed"] == 1
+        assert len(result["step_results"]) == 1
+        assert result["step_results"][0]["thought_id"] == "pipeline_1"
+
+    def test_handle_existing_pipeline_fallback_multiple_thoughts_limited(self, main_processor):
+        """Test _handle_existing_pipeline_fallback limits thoughts to 5 per step."""
+        start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        
+        # Create 7 mock thoughts (should limit to 5)
+        mock_thoughts = []
+        for i in range(7):
+            thought = Mock()
+            thought.thought_id = f"thought_{i}"
+            thought.step_data = {"index": i}
+            mock_thoughts.append(thought)
+        
+        mock_pipeline_state = Mock()
+        mock_pipeline_state.thoughts_by_step = {
+            "step_with_many": mock_thoughts
+        }
+        
+        result = main_processor._handle_existing_pipeline_fallback(mock_pipeline_state, start_time)
+        
+        assert result["success"] is True
+        assert result["thoughts_processed"] == 5  # Limited to 5
+        assert len(result["step_results"]) == 5

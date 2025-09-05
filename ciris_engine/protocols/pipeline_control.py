@@ -452,10 +452,20 @@ class PipelineController:
             current_step=step_point,
             step_data={
                 "content": thought.content,
-                "created_at": thought.created_at.isoformat() if hasattr(thought.created_at, 'isoformat') else thought.created_at if thought.created_at else None,
+                "created_at": self._extract_created_at_string(thought),
                 "tags": getattr(thought, 'tags', []),
             },
         )
+
+    def _extract_created_at_string(self, thought) -> Optional[str]:
+        """Extract created_at as a string, handling various formats."""
+        if not thought.created_at:
+            return None
+        
+        if hasattr(thought.created_at, 'isoformat'):
+            return thought.created_at.isoformat()
+        else:
+            return thought.created_at
     
     async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> Dict[str, Any]:
         """

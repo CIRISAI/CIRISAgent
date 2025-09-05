@@ -273,3 +273,180 @@ class TestRegressionPrevention:
         # Verify task creation was attempted
         # Note: The actual task creation happens in _create_passive_observation_result
         # which calls _sign_and_add_task, which calls persistence.add_task
+
+
+class TestDiscordConfigHelperMethods:
+    """Tests for the new helper methods in Discord configuration."""
+
+    def test_load_bot_token(self):
+        """Test _load_bot_token helper method."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        
+        # Test with token present
+        mock_get_env_var.return_value = "test_token_123"
+        config._load_bot_token(mock_get_env_var)
+        
+        assert config.bot_token == "test_token_123"
+        mock_get_env_var.assert_called_once_with("DISCORD_BOT_TOKEN")
+        
+        # Test with no token
+        mock_get_env_var.reset_mock()
+        mock_get_env_var.return_value = None
+        config2 = DiscordAdapterConfig()
+        config2._load_bot_token(mock_get_env_var)
+        
+        assert config2.bot_token is None
+
+    def test_add_channel_to_monitored_new_channel(self):
+        """Test _add_channel_to_monitored with new channel."""
+        config = DiscordAdapterConfig()
+        config.monitored_channel_ids = ["existing_channel"]
+        
+        config._add_channel_to_monitored("new_channel")
+        
+        assert "new_channel" in config.monitored_channel_ids
+        assert "existing_channel" in config.monitored_channel_ids
+        assert len(config.monitored_channel_ids) == 2
+
+    def test_add_channel_to_monitored_duplicate_channel(self):
+        """Test _add_channel_to_monitored with duplicate channel."""
+        config = DiscordAdapterConfig()
+        config.monitored_channel_ids = ["existing_channel"]
+        
+        config._add_channel_to_monitored("existing_channel")
+        
+        assert config.monitored_channel_ids == ["existing_channel"]
+        assert len(config.monitored_channel_ids) == 1
+
+    def test_load_channel_configuration_home_channel(self):
+        """Test _load_channel_configuration with home channel."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        
+        def mock_env_values(key):
+            if key == "DISCORD_HOME_CHANNEL_ID":
+                return "home_123"
+            return None
+            
+        mock_get_env_var.side_effect = mock_env_values
+        config._load_channel_configuration(mock_get_env_var)
+        
+        assert config.home_channel_id == "home_123"
+        assert "home_123" in config.monitored_channel_ids
+
+    def test_load_channel_configuration_legacy_channel(self):
+        """Test _load_channel_configuration with legacy channel."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        
+        def mock_env_values(key):
+            if key == "DISCORD_CHANNEL_ID":
+                return "legacy_123"
+            return None
+            
+        mock_get_env_var.side_effect = mock_env_values
+        config._load_channel_configuration(mock_get_env_var)
+        
+        assert config.home_channel_id == "legacy_123"
+        assert "legacy_123" in config.monitored_channel_ids
+
+    def test_load_channel_configuration_legacy_ignored_if_home_exists(self):
+        """Test legacy channel is ignored if home channel already set."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        config.home_channel_id = "existing_home"  # Pre-set home channel
+        mock_get_env_var = Mock()
+        
+        def mock_env_values(key):
+            if key == "DISCORD_CHANNEL_ID":
+                return "legacy_123"
+            return None
+            
+        mock_get_env_var.side_effect = mock_env_values
+        config._load_channel_configuration(mock_get_env_var)
+        
+        # Should keep existing home channel, ignore legacy
+        assert config.home_channel_id == "existing_home"
+
+    def test_load_channel_configuration_multiple_channels(self):
+        """Test _load_channel_configuration with multiple channels."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        
+        def mock_env_values(key):
+            if key == "DISCORD_CHANNEL_IDS":
+                return "123,456,789"
+            return None
+            
+        mock_get_env_var.side_effect = mock_env_values
+        config._load_channel_configuration(mock_get_env_var)
+        
+        assert "123" in config.monitored_channel_ids
+        assert "456" in config.monitored_channel_ids
+        assert "789" in config.monitored_channel_ids
+
+    def test_load_channel_configuration_deferral_channel(self):
+        """Test _load_channel_configuration with deferral channel."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        
+        def mock_env_values(key):
+            if key == "DISCORD_DEFERRAL_CHANNEL_ID":
+                return "deferral_123"
+            return None
+            
+        mock_get_env_var.side_effect = mock_env_values
+        config._load_channel_configuration(mock_get_env_var)
+        
+        assert config.deferral_channel_id == "deferral_123"
+
+    def test_load_user_permissions_new_admin(self):
+        """Test _load_user_permissions with new admin."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = "admin_123"
+        
+        config._load_user_permissions(mock_get_env_var)
+        
+        assert "admin_123" in config.admin_user_ids
+        mock_get_env_var.assert_called_once_with("WA_USER_ID")
+
+    def test_load_user_permissions_existing_admin(self):
+        """Test _load_user_permissions with existing admin."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        config.admin_user_ids = ["admin_123"]
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = "admin_123"
+        
+        config._load_user_permissions(mock_get_env_var)
+        
+        # Should not duplicate
+        assert config.admin_user_ids == ["admin_123"]
+
+    def test_load_user_permissions_no_admin(self):
+        """Test _load_user_permissions with no admin."""
+        from unittest.mock import Mock
+        
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = None
+        
+        config._load_user_permissions(mock_get_env_var)
+        
+        assert config.admin_user_ids == []

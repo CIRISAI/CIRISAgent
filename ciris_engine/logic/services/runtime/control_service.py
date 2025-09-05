@@ -1033,7 +1033,14 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             if self.runtime and hasattr(self.runtime, 'agent_processor') and self.runtime.agent_processor:
                 processor_paused = getattr(self.runtime.agent_processor, '_is_paused', False)
                 cognitive_state = str(getattr(self.runtime.agent_processor, '_current_state', None))
-                # TODO: Get actual queue depth from message queue
+                
+                # Get actual queue depth using existing processor queue status method
+                try:
+                    processor_queue_status = await self.get_processor_queue_status()
+                    queue_depth = processor_queue_status.queue_size
+                except Exception as e:
+                    logger.warning(f"Failed to get queue depth from processor queue status: {e}")
+                    queue_depth = 0
             
             # Determine processor status
             if processor_paused:

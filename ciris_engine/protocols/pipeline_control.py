@@ -188,26 +188,149 @@ class PipelineController:
     def _create_step_result(self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]) -> StepResult:
         """Create appropriate StepResult based on step point."""
         # Import here to avoid circular dependency
-        from ciris_engine.schemas.services.runtime_control import (  # ... other step result types
+        from ciris_engine.schemas.services.runtime_control import (
             StepResultActionSelection,
             StepResultBuildContext,
+            StepResultBusInbound,
+            StepResultBusOutbound,
             StepResultConscienceExecution,
+            StepResultFinalizeTasksQueue,
+            StepResultHandlerComplete,
+            StepResultHandlerStart,
+            StepResultPackageHandling,
             StepResultPerformASPDMA,
             StepResultPerformDMAs,
+            StepResultPopulateRound,
+            StepResultPopulateThoughtQueue,
+            StepResultRecursiveASPDMA,
+            StepResultRecursiveConscience,
         )
 
-        # Create appropriate result based on step point
-        # This is a simplified example - real implementation would populate all fields
-        if step_point == StepPoint.BUILD_CONTEXT:
+        # Create appropriate result based on step point with proper typed objects
+        current_time = step_data.get("processing_time_ms", 0.0)
+        round_number = step_data.get("round_number", 1)
+        
+        if step_point == StepPoint.FINALIZE_TASKS_QUEUE:
+            return StepResultFinalizeTasksQueue(
+                success=True,
+                round_number=round_number,
+                active_tasks=step_data.get("active_tasks", []),
+                finalized_tasks=step_data.get("finalized_tasks", []),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.POPULATE_THOUGHT_QUEUE:
+            return StepResultPopulateThoughtQueue(
+                success=True,
+                round_number=round_number,
+                tasks_processed=step_data.get("tasks_processed", []),
+                thoughts_generated=step_data.get("thoughts_generated", []),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.POPULATE_ROUND:
+            return StepResultPopulateRound(
+                success=True,
+                round_number=round_number,
+                available_thoughts=step_data.get("available_thoughts", []),
+                selected_thoughts=step_data.get("selected_thoughts", []),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.BUILD_CONTEXT:
             return StepResultBuildContext(
                 success=True,
                 thought_id=thought_id,
                 system_snapshot=step_data.get("system_snapshot", {}),
                 agent_identity=step_data.get("agent_identity", {}),
                 thought_context=step_data.get("context", {}),
-                processing_time_ms=step_data.get("processing_time_ms", 0.0),
+                processing_time_ms=current_time,
             )
-        # ... implement other step points
-
-        # Default fallback
-        return {"step_point": step_point, "thought_id": thought_id, "data": step_data}
+        elif step_point == StepPoint.PERFORM_DMAS:
+            return StepResultPerformDMAs(
+                success=True,
+                thought_id=thought_id,
+                ethical_dma_result=step_data.get("ethical_dma_result"),
+                common_sense_dma_result=step_data.get("common_sense_dma_result"),
+                domain_dma_result=step_data.get("domain_dma_result"),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.PERFORM_ASPDMA:
+            return StepResultPerformASPDMA(
+                success=True,
+                thought_id=thought_id,
+                aspdma_result=step_data.get("aspdma_result"),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.CONSCIENCE_EXECUTION:
+            return StepResultConscienceExecution(
+                success=True,
+                thought_id=thought_id,
+                conscience_results=step_data.get("conscience_results", []),
+                passed=step_data.get("conscience_passed", True),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.RECURSIVE_ASPDMA:
+            return StepResultRecursiveASPDMA(
+                success=True,
+                thought_id=thought_id,
+                retry_reason=step_data.get("retry_reason", ""),
+                recursive_aspdma_result=step_data.get("recursive_aspdma_result"),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.RECURSIVE_CONSCIENCE:
+            return StepResultRecursiveConscience(
+                success=True,
+                thought_id=thought_id,
+                recursive_conscience_results=step_data.get("recursive_conscience_results", []),
+                final_pass=step_data.get("final_conscience_pass", True),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.ACTION_SELECTION:
+            return StepResultActionSelection(
+                success=True,
+                thought_id=thought_id,
+                selected_action=step_data.get("selected_action"),
+                selection_reasoning=step_data.get("selection_reasoning", ""),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.HANDLER_START:
+            return StepResultHandlerStart(
+                success=True,
+                thought_id=thought_id,
+                handler_name=step_data.get("handler_name", ""),
+                action_parameters=step_data.get("action_parameters", {}),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.BUS_OUTBOUND:
+            return StepResultBusOutbound(
+                success=True,
+                thought_id=thought_id,
+                outbound_messages=step_data.get("outbound_messages", []),
+                bus_operations=step_data.get("bus_operations", []),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.PACKAGE_HANDLING:
+            return StepResultPackageHandling(
+                success=True,
+                thought_id=thought_id,
+                adapter_name=step_data.get("adapter_name", ""),
+                package_type=step_data.get("package_type", ""),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.BUS_INBOUND:
+            return StepResultBusInbound(
+                success=True,
+                thought_id=thought_id,
+                inbound_messages=step_data.get("inbound_messages", []),
+                bus_responses=step_data.get("bus_responses", []),
+                processing_time_ms=current_time,
+            )
+        elif step_point == StepPoint.HANDLER_COMPLETE:
+            return StepResultHandlerComplete(
+                success=True,
+                thought_id=thought_id,
+                handler_result=step_data.get("handler_result"),
+                final_output=step_data.get("final_output"),
+                processing_time_ms=current_time,
+            )
+        
+        # Should never reach here with valid step points, but provide fallback
+        raise ValueError(f"Unknown step point: {step_point}")

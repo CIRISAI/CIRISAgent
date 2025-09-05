@@ -36,6 +36,7 @@ class QAModule(Enum):
     # Extended modules
     EXTENDED_API = "extended_api"
     PAUSE_STEP = "pause_step"
+    SINGLE_STEP_COMPREHENSIVE = "single_step_comprehensive"
 
     # Full suites
     API_FULL = "api_full"
@@ -102,6 +103,7 @@ class QAConfig:
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
         from .modules.filter_tests import FilterTestModule
         from .modules.pause_step_tests import PauseStepTestModule
+        from .modules.comprehensive_single_step_tests import ComprehensiveSingleStepTestModule
 
         # API test modules
         if module == QAModule.AUTH:
@@ -147,6 +149,10 @@ class QAConfig:
         # Pause/step testing
         elif module == QAModule.PAUSE_STEP:
             return PauseStepTestModule.get_all_pause_step_tests()
+        
+        # Comprehensive single-step testing
+        elif module == QAModule.SINGLE_STEP_COMPREHENSIVE:
+            return ComprehensiveSingleStepTestModule.get_comprehensive_single_step_tests()
 
         # Aggregate modules
         elif module == QAModule.API_FULL:

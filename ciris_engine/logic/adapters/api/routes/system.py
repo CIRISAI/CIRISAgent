@@ -490,12 +490,15 @@ async def control_runtime(
         elif action == "state":
             # Get current state without changing it
             status = await runtime_control.get_runtime_status()
+            # Get queue depth from the same source as queue endpoint
+            queue_status = await runtime_control.get_processor_queue_status()
+            actual_queue_depth = queue_status.queue_size if queue_status else 0
             result = RuntimeControlResponse(
                 success=True,
                 message="Current runtime state retrieved",
                 processor_state="paused" if status.processor_status == ProcessorStatus.PAUSED else "active",
                 cognitive_state=status.cognitive_state or "UNKNOWN", 
-                queue_depth=status.queue_depth,
+                queue_depth=actual_queue_depth,
             )
             return SuccessResponse(data=result)
 

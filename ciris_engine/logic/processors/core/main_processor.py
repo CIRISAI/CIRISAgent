@@ -746,38 +746,36 @@ class AgentProcessor:
         Returns:
             True if successfully paused (or already paused), False if error occurred
         """
+        logger.info(f"[DEBUG] pause_processing() called, current _is_paused: {self._is_paused}")
+        
         if self._is_paused:
             logger.info("AgentProcessor already paused")
+            logger.info(f"[DEBUG] Returning True from pause_processing, _is_paused: {self._is_paused}")
             return True  # Already paused, still in desired state
 
-        try:
-            logger.info("Pausing AgentProcessor")
-            self._is_paused = True
+        logger.info("Pausing AgentProcessor")
+        self._is_paused = True
+        logger.info(f"[DEBUG] Set _is_paused to True: {self._is_paused}")
 
-            # Create pause event if needed
-            if self._pause_event is None:
-                self._pause_event = asyncio.Event()
+        # Create pause event if needed
+        if self._pause_event is None:
+            self._pause_event = asyncio.Event()
 
-            # Create pipeline controller for single-stepping
-            if self._pipeline_controller is None:
-                from ciris_engine.protocols.pipeline_control import PipelineController
+        # Create pipeline controller for single-stepping
+        if self._pipeline_controller is None:
+            from ciris_engine.protocols.pipeline_control import PipelineController
 
-                self._pipeline_controller = PipelineController(is_paused=True)
+            self._pipeline_controller = PipelineController(is_paused=True)
 
-            # Inject pipeline controller into thought processor
-            if hasattr(self.thought_processor, "set_pipeline_controller"):
-                self.thought_processor.set_pipeline_controller(self._pipeline_controller)
-            else:
-                logger.warning("Thought processor does not support pipeline controller injection")
-                # Still return True as pause was successful even without controller
+        # Inject pipeline controller into thought processor
+        if hasattr(self.thought_processor, "set_pipeline_controller"):
+            self.thought_processor.set_pipeline_controller(self._pipeline_controller)
+        else:
+            logger.warning("Thought processor does not support pipeline controller injection")
+            # Still return True as pause was successful even without controller
 
-            return True  # Successfully paused
-
-        except Exception as e:
-            logger.error(f"Failed to pause processing: {e}")
-            # Rollback pause state on error
-            self._is_paused = False
-            return False  # Failed to pause
+        logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
+        return True  # Successfully paused
 
     async def resume_processing(self) -> bool:
         """
@@ -786,13 +784,17 @@ class AgentProcessor:
         Returns:
             True if successfully resumed
         """
+        logger.info(f"[DEBUG] resume_processing() called, current _is_paused: {self._is_paused}")
+        
         if not self._is_paused:
             logger.info("AgentProcessor not paused")
+            logger.info(f"[DEBUG] Returning False from resume_processing, _is_paused: {self._is_paused}")
             return False
 
         logger.info("Resuming AgentProcessor")
         self._is_paused = False
         self._single_step_mode = False
+        logger.info(f"[DEBUG] Set _is_paused to False: {self._is_paused}")
 
         # Resume all paused thoughts in pipeline
         if self._pipeline_controller:
@@ -802,10 +804,12 @@ class AgentProcessor:
         if self._pause_event:
             self._pause_event.set()
 
+        logger.info(f"[DEBUG] Successfully resumed, final _is_paused: {self._is_paused}")
         return True
 
     def is_paused(self) -> bool:
         """Check if processor is paused."""
+        logger.info(f"[DEBUG] is_paused() called, returning: {self._is_paused}")
         return self._is_paused
 
     def set_thought_processing_callback(self, callback: Any) -> None:
@@ -824,10 +828,14 @@ class AgentProcessor:
         Returns:
             StepResult for the step executed
         """
+        logger.info(f"[DEBUG] single_step() called, current _is_paused: {self._is_paused}")
+        
         if not self._is_paused:
+            logger.info(f"[DEBUG] single_step() failed - processor not paused, _is_paused: {self._is_paused}")
             return {"success": False, "error": "Cannot single-step unless paused"}
 
         if not self._pipeline_controller:
+            logger.info(f"[DEBUG] single_step() failed - no pipeline controller")
             return {"success": False, "error": "Pipeline controller not initialized"}
 
         start_time = self._time_service.now()
@@ -835,6 +843,10 @@ class AgentProcessor:
         # Enable single-step mode
         self._single_step_mode = True
         self._pipeline_controller._single_step_mode = True
+
+        # Signal the pause event to allow exactly one step
+        if self._pause_event:
+            self._pause_event.set()
 
         try:
             # Get next thought to process based on pipeline state
@@ -963,6 +975,18 @@ class AgentProcessor:
                         logger.info(f"Reached target rounds ({num_rounds}), requesting graceful shutdown")
                         request_global_shutdown(f"Processing completed after {num_rounds} rounds")
                         break
+
+                    # COVENANT COMPLIANCE: Check pause state before processing
+                    if self._is_paused:
+                        logger.debug("Processor is paused, waiting for resume or single-step")
+                        if self._pause_event:
+                            await self._pause_event.wait()
+                            # Reset the event for next pause
+                            self._pause_event.clear()
+                        else:
+                            # Safety fallback - wait a bit and check again
+                            await asyncio.sleep(0.1)
+                            continue
 
                     # Update round number
                     # self.thought_processor.advance_round()  # Removed nonexistent method

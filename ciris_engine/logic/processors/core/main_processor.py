@@ -878,6 +878,7 @@ class AgentProcessor:
                 "processing_time_ms": processing_time_ms,
                 "pipeline_state": step_result.get("pipeline_state", {}),
                 "current_round": step_result.get("current_round"),
+                "pipeline_empty": step_result.get("pipeline_empty", False),
             }
 
         except Exception as e:

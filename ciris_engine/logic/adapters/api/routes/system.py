@@ -638,34 +638,64 @@ def _parse_registry_service_key(service_key: str) -> tuple[str, str]:
 
 def _map_service_type_enum(service_type_enum: str, service_name: str, adapter_prefix: str) -> tuple[str, str]:
     """Map ServiceType enum to category and create display name."""
-    display_name = service_name
-    
-    if "COMMUNICATION" in service_type_enum:
-        service_type = "adapter"
-        if adapter_prefix:
-            display_name = f"{adapter_prefix}-COMM"
-    elif "MEMORY" in service_type_enum:
-        service_type = "graph"
-    elif "LLM" in service_type_enum:
-        service_type = "runtime"
-    elif "RUNTIME_CONTROL" in service_type_enum:
-        service_type = "runtime"
-        if adapter_prefix:
-            display_name = f"{adapter_prefix}-RUNTIME"
-    elif "TIME" in service_type_enum:
-        service_type = "infrastructure"
-    elif "TOOL" in service_type_enum:
-        service_type = "tool"
-        if adapter_prefix:
-            display_name = f"{adapter_prefix}-TOOL"
-    elif "WISE_AUTHORITY" in service_type_enum:
-        service_type = "governance"
-        if adapter_prefix:
-            display_name = f"{adapter_prefix}-WISE"
-    else:
-        service_type = "unknown"
+    service_type = _get_service_category(service_type_enum)
+    display_name = _create_display_name(service_type_enum, service_name, adapter_prefix)
     
     return service_type, display_name
+
+def _get_service_category(service_type_enum: str) -> str:
+    """Get the service category based on the service type enum."""
+    # Tool Services (need to check first due to SECRETS_TOOL containing SECRETS)
+    if "TOOL" in service_type_enum:
+        return "tool"
+    
+    # Adapter Services (Communication is adapter-specific)
+    elif "COMMUNICATION" in service_type_enum:
+        return "adapter"
+    
+    # Runtime Services (need to check RUNTIME_CONTROL before SECRETS in infrastructure)
+    elif any(service in service_type_enum for service in [
+        "LLM", "RUNTIME_CONTROL", "TASK_SCHEDULER"
+    ]):
+        return "runtime"
+    
+    # Graph Services (6)
+    elif any(service in service_type_enum for service in [
+        "MEMORY", "CONFIG", "TELEMETRY", "AUDIT", "INCIDENT_MANAGEMENT", "TSDB_CONSOLIDATION"
+    ]):
+        return "graph"
+    
+    # Infrastructure Services (7)
+    elif any(service in service_type_enum for service in [
+        "TIME", "SECRETS", "AUTHENTICATION", "RESOURCE_MONITOR", 
+        "DATABASE_MAINTENANCE", "INITIALIZATION", "SHUTDOWN"
+    ]):
+        return "infrastructure"
+    
+    # Governance Services (4)
+    elif any(service in service_type_enum for service in [
+        "WISE_AUTHORITY", "ADAPTIVE_FILTER", "VISIBILITY", "SELF_OBSERVATION"
+    ]):
+        return "governance"
+    
+    else:
+        return "unknown"
+
+def _create_display_name(service_type_enum: str, service_name: str, adapter_prefix: str) -> str:
+    """Create appropriate display name based on service type and adapter prefix."""
+    if not adapter_prefix:
+        return service_name
+        
+    if "COMMUNICATION" in service_type_enum:
+        return f"{adapter_prefix}-COMM"
+    elif "RUNTIME_CONTROL" in service_type_enum:
+        return f"{adapter_prefix}-RUNTIME"
+    elif "TOOL" in service_type_enum:
+        return f"{adapter_prefix}-TOOL"
+    elif "WISE_AUTHORITY" in service_type_enum:
+        return f"{adapter_prefix}-WISE"
+    else:
+        return service_name
 
 def _parse_service_key(service_key: str) -> tuple[str, str]:
     """Parse any service key and return service_type and display_name."""

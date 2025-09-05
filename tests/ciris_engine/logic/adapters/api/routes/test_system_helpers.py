@@ -19,6 +19,8 @@ from ciris_engine.logic.adapters.api.routes.system import (
     _parse_direct_service_key,
     _parse_registry_service_key,
     _map_service_type_enum,
+    _get_service_category,
+    _create_display_name,
     _parse_service_key,
     _create_service_status,
     _update_service_summary,
@@ -555,3 +557,164 @@ class TestServiceParsingHelpers:
         _update_service_summary(service_summary, "runtime", True)
         
         assert service_summary == {"runtime": {"total": 1, "healthy": 1}}
+
+
+class TestServiceCategoryHelpers:
+    """Test cases for new service category helper functions."""
+
+    def test_get_service_category_communication(self):
+        """Test _get_service_category with COMMUNICATION service type."""
+        result = _get_service_category("ServiceType.COMMUNICATION")
+        assert result == "adapter"
+
+    def test_get_service_category_memory(self):
+        """Test _get_service_category with MEMORY service type."""
+        result = _get_service_category("ServiceType.MEMORY")
+        assert result == "graph"
+
+    def test_get_service_category_llm(self):
+        """Test _get_service_category with LLM service type."""
+        result = _get_service_category("ServiceType.LLM")
+        assert result == "runtime"
+
+    def test_get_service_category_time(self):
+        """Test _get_service_category with TIME service type."""
+        result = _get_service_category("ServiceType.TIME")
+        assert result == "infrastructure"
+
+    def test_get_service_category_wise_authority(self):
+        """Test _get_service_category with WISE_AUTHORITY service type."""
+        result = _get_service_category("ServiceType.WISE_AUTHORITY")
+        assert result == "governance"
+
+    def test_get_service_category_runtime_control(self):
+        """Test _get_service_category with RUNTIME_CONTROL service type."""
+        result = _get_service_category("ServiceType.RUNTIME_CONTROL")
+        assert result == "runtime"
+
+    def test_get_service_category_tool(self):
+        """Test _get_service_category with TOOL service type."""
+        result = _get_service_category("ServiceType.TOOL")
+        assert result == "tool"
+
+    def test_get_service_category_secrets_tool(self):
+        """Test _get_service_category with SECRETS_TOOL service type."""
+        result = _get_service_category("ServiceType.SECRETS_TOOL")
+        assert result == "tool"
+
+    def test_get_service_category_infrastructure_services(self):
+        """Test _get_service_category with all infrastructure services."""
+        services = [
+            "ServiceType.SECRETS",
+            "ServiceType.AUTHENTICATION", 
+            "ServiceType.RESOURCE_MONITOR",
+            "ServiceType.DATABASE_MAINTENANCE",
+            "ServiceType.INITIALIZATION",
+            "ServiceType.SHUTDOWN"
+        ]
+        for service_type in services:
+            result = _get_service_category(service_type)
+            assert result == "infrastructure", f"Expected 'infrastructure' for {service_type}, got '{result}'"
+
+    def test_get_service_category_graph_services(self):
+        """Test _get_service_category with all graph services.""" 
+        services = [
+            "ServiceType.CONFIG",
+            "ServiceType.TELEMETRY",
+            "ServiceType.AUDIT",
+            "ServiceType.INCIDENT_MANAGEMENT",
+            "ServiceType.TSDB_CONSOLIDATION"
+        ]
+        for service_type in services:
+            result = _get_service_category(service_type)
+            assert result == "graph", f"Expected 'graph' for {service_type}, got '{result}'"
+
+    def test_get_service_category_governance_services(self):
+        """Test _get_service_category with all governance services."""
+        services = [
+            "ServiceType.ADAPTIVE_FILTER",
+            "ServiceType.VISIBILITY", 
+            "ServiceType.SELF_OBSERVATION"
+        ]
+        for service_type in services:
+            result = _get_service_category(service_type)
+            assert result == "governance", f"Expected 'governance' for {service_type}, got '{result}'"
+
+    def test_get_service_category_runtime_services(self):
+        """Test _get_service_category with all runtime services."""
+        services = [
+            "ServiceType.TASK_SCHEDULER"
+        ]
+        for service_type in services:
+            result = _get_service_category(service_type)
+            assert result == "runtime", f"Expected 'runtime' for {service_type}, got '{result}'"
+
+    def test_get_service_category_unknown(self):
+        """Test _get_service_category with unknown service type."""
+        result = _get_service_category("ServiceType.UNKNOWN")
+        assert result == "unknown"
+
+    def test_get_service_category_malformed(self):
+        """Test _get_service_category with malformed service type."""
+        result = _get_service_category("NotAServiceType")
+        assert result == "unknown"
+
+    def test_create_display_name_communication_with_adapter(self):
+        """Test _create_display_name with COMMUNICATION and adapter prefix."""
+        result = _create_display_name("ServiceType.COMMUNICATION", "TestService", "API")
+        assert result == "API-COMM"
+
+    def test_create_display_name_communication_with_discord(self):
+        """Test _create_display_name with COMMUNICATION and Discord prefix."""
+        result = _create_display_name("ServiceType.COMMUNICATION", "DiscordService", "DISCORD")
+        assert result == "DISCORD-COMM"
+
+    def test_create_display_name_communication_no_adapter(self):
+        """Test _create_display_name with COMMUNICATION but no adapter prefix."""
+        result = _create_display_name("ServiceType.COMMUNICATION", "CommunicationService", "")
+        assert result == "CommunicationService"
+
+    def test_create_display_name_tool_with_adapter(self):
+        """Test _create_display_name with TOOL and adapter prefix."""
+        result = _create_display_name("ServiceType.TOOL", "ToolService", "CLI")
+        assert result == "CLI-TOOL"
+
+    def test_create_display_name_tool_no_adapter(self):
+        """Test _create_display_name with TOOL but no adapter prefix."""
+        result = _create_display_name("ServiceType.TOOL", "ToolService", "")
+        assert result == "ToolService"
+
+    def test_create_display_name_wise_authority_with_adapter(self):
+        """Test _create_display_name with WISE_AUTHORITY and adapter prefix."""
+        result = _create_display_name("ServiceType.WISE_AUTHORITY", "WiseService", "DISCORD")
+        assert result == "DISCORD-WISE"
+
+    def test_create_display_name_wise_authority_no_adapter(self):
+        """Test _create_display_name with WISE_AUTHORITY but no adapter prefix."""
+        result = _create_display_name("ServiceType.WISE_AUTHORITY", "WiseService", "")
+        assert result == "WiseService"
+
+    def test_create_display_name_runtime_control_with_adapter(self):
+        """Test _create_display_name with RUNTIME_CONTROL and adapter prefix."""
+        result = _create_display_name("ServiceType.RUNTIME_CONTROL", "RuntimeService", "API")
+        assert result == "API-RUNTIME"
+
+    def test_create_display_name_runtime_control_no_adapter(self):
+        """Test _create_display_name with RUNTIME_CONTROL but no adapter prefix."""
+        result = _create_display_name("ServiceType.RUNTIME_CONTROL", "RuntimeService", "")
+        assert result == "RuntimeService"
+
+    def test_create_display_name_other_service_with_adapter(self):
+        """Test _create_display_name with other service types ignores adapter prefix."""
+        result = _create_display_name("ServiceType.MEMORY", "MemoryService", "IGNORED")
+        assert result == "MemoryService"
+
+    def test_create_display_name_other_service_no_adapter(self):
+        """Test _create_display_name with other service types and no adapter prefix."""
+        result = _create_display_name("ServiceType.LLM", "LLMService", "")
+        assert result == "LLMService"
+
+    def test_create_display_name_unknown_service(self):
+        """Test _create_display_name with unknown service type."""
+        result = _create_display_name("ServiceType.UNKNOWN", "UnknownService", "PREFIX")
+        assert result == "UnknownService"

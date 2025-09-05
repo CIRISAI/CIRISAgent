@@ -29,31 +29,31 @@ CIRIS wraps LLM calls with:
 
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
-### Latest: v1.0.7-RC1-patch7 - Agent Self-Configuration
-**This patch enables agents to configure themselves through MEMORIZE (August 28, 2025):**
-- ✅ **Self-Configuration** - Agents can now update configuration via CONFIG nodes
-- ✅ **100% Test Pass Rate** - 36 comprehensive filter tests, all passing
-- ✅ **Bug Fixes** - Fixed SecretReference and SystemSnapshot type issues
-- ✅ **Error Messages** - Detailed, actionable error messages with examples
+### Latest: v1.0.9-RC1-patch9 - Stable Foundation
+**This patch combines single-step debugging and Discord security enhancements (January 11, 2025):**
+- ✅ **Single-Step Debugging** - COVENANT-compliant pipeline transparency with pause/resume
+- ✅ **Discord Security** - Anti-jailbreak hardening and active moderator detection
+- ✅ **Production Fixes** - Fixed duplicated channels bug and service type mapping
+- ✅ **Code Quality** - Reduced cognitive complexity and modernized TypeVar usage
 
 **Key Features:**
 ```bash
-# Configure adaptive filters
-$memorize adaptive_filter/spam_threshold CONFIG LOCAL value=0.8
-$memorize adaptive_filter/caps_threshold CONFIG LOCAL value=0.7
+# Single-step debugging with pause/resume
+curl -X POST http://localhost:8000/v1/system/runtime/pause \
+  -H "Authorization: Bearer $TOKEN"
 
-# Configure secrets filters
-$memorize secrets_filter/jwt_detection_enabled CONFIG LOCAL value=true
-$memorize secrets_filter/custom_patterns CONFIG LOCAL value=['PROJ-[0-9]{4}']
+# Execute single step in pipeline
+curl -X POST http://localhost:8000/v1/system/runtime/single-step \
+  -H "Authorization: Bearer $TOKEN"
 
-# Recall configurations
-$recall adaptive_filter/spam_threshold CONFIG LOCAL
-$recall secrets_filter/jwt_detection_enabled CONFIG LOCAL
+# Check cognitive state and pipeline status  
+curl -X GET http://localhost:8000/v1/system/runtime/state \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**Test Results:** 36/36 tests passed (100% success rate) in 94.12s
+**Quality Metrics:** 81 test files added, SonarCloud quality gates passing, production bugs fixed
 
-See [full release notes](docs/releases/1.0.7-RC1-patch7.md) for comprehensive examples and technical details.
+See [full release notes](docs/releases/1.0.9-RC1-patch9.md) for comprehensive examples and technical details.
 
 ---
 

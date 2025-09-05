@@ -146,18 +146,22 @@ class TestSingleStepHangValidation:
         # Should return immediately, not hang
 
     @pytest.mark.asyncio 
-    async def test_single_step_hangs_when_no_pipeline_controller(self, agent_processor):
-        """Test that single_step fails fast when no pipeline controller."""
-        # ARRANGE: Pause processor but don't set up pipeline controller
+    async def test_single_step_works_with_always_present_pipeline_controller(self, agent_processor):
+        """Test that single_step works now that pipeline controller is always present."""
+        # ARRANGE: Pause processor (pipeline controller is always initialized now)
         agent_processor._is_paused = True
-        agent_processor._pipeline_controller = None
+        # Pipeline controller is always present, no need to check for None
+        assert agent_processor._pipeline_controller is not None
         
-        # ACT: Call single_step
-        result = await agent_processor.single_step()
-        
-        # ASSERT: Fails fast with clear error - NO HANG
-        assert result["success"] is False
-        assert "Pipeline controller not initialized" in result["error"]
+        # Mock the thought processing to avoid full execution
+        with patch.object(agent_processor, '_process_single_thought') as mock_process:
+            mock_process.return_value = {"success": True, "thought_id": "test_thought"}
+            
+            # ACT: Call single_step
+            result = await agent_processor.single_step()
+            
+            # ASSERT: Works correctly with initialized pipeline controller
+            assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_single_step_deadlock_with_paused_processor(self, agent_processor, sample_thought):

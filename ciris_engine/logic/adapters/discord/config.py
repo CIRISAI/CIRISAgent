@@ -148,7 +148,10 @@ class DiscordAdapterConfig(BaseModel):
         if env_channels:
             # Expect comma-separated list
             channel_list = [ch.strip() for ch in env_channels.split(",") if ch.strip()]
-            self.monitored_channel_ids.extend(channel_list)
+            # Add only channels not already in the list to prevent duplicates
+            for channel_id in channel_list:
+                if channel_id not in self.monitored_channel_ids:
+                    self.monitored_channel_ids.append(channel_id)
 
         env_deferral = get_env_var("DISCORD_DEFERRAL_CHANNEL_ID")
         if env_deferral:

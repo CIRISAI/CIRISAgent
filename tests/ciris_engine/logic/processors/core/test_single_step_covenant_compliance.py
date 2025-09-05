@@ -580,12 +580,17 @@ class TestSingleStepCOVENANTCompliance:
         assert result["success"] is False, "MUST fail fast when not paused"
         assert "Cannot single-step unless paused" in result["error"], "MUST provide clear error message"
         
-        # Test 2: No pipeline controller
+        # Test 2: Pipeline controller is always present now, so test paused behavior instead
         agent_processor._is_paused = True
-        agent_processor._pipeline_controller = None
+        # Pipeline controller is always initialized now
+        assert agent_processor._pipeline_controller is not None, "Pipeline controller should always be present"
         
-        result = await agent_processor.single_step()
-        assert result["success"] is False, "MUST fail fast when no pipeline controller"
-        assert "Pipeline controller not initialized" in result["error"], "MUST provide clear error message"
+        # Mock to test error handling during pipeline controller execution (raise exception)
+        with patch.object(agent_processor._pipeline_controller, 'execute_single_step_point') as mock_execute:
+            mock_execute.side_effect = Exception("Test processing error")
+            
+            result = await agent_processor.single_step()
+            assert result["success"] is False, "MUST fail fast on processing error"
+            assert "Test processing error" in result["error"], "MUST provide clear error message"
         
         # NO SILENT FAILURES - FAIL FAST AND LOUD!

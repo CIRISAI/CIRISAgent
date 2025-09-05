@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, Set, TypeVar, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, cast
 
 from pydantic import BaseModel
 
@@ -16,8 +16,7 @@ from ciris_engine.schemas.services.filters_core import FilterPriority, FilterRes
 
 logger = logging.getLogger(__name__)
 
-# Using TypeVar for backward compatibility - will migrate to PEP 695 syntax when Python 3.12+ is required
-MessageT = TypeVar("MessageT", bound=BaseModel)
+# Modern PEP 695 generic syntax (Python 3.12+)
 
 PASSIVE_CONTEXT_LIMIT = 20
 
@@ -48,7 +47,7 @@ def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] 
     return re.sub(mention_pattern, replace_mention, content)
 
 
-class BaseObserver(Generic[MessageT], ABC):
+class BaseObserver[MessageT: BaseModel](ABC):
     """Common functionality for message observers."""
 
     def __init__(

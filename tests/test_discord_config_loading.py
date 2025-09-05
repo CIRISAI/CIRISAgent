@@ -211,11 +211,9 @@ class TestDiscordAdapterInitialization:
 
             # Call again - should not duplicate
             config.load_env_vars()
-            # This will actually duplicate because extend is used - this is a bug!
-            assert len(config.monitored_channel_ids) == 2  # Bug: Should be 1 but is 2
-
-            # This test documents the current (buggy) behavior
-            # A proper fix would check for duplicates before extending
+            # Fixed: No longer duplicates due to duplicate checking before append
+            assert len(config.monitored_channel_ids) == 1  # Fixed: Should be 1 and now is 1
+            assert config.monitored_channel_ids == ["1382010877171073108"]
 
 
 class TestRegressionPrevention:

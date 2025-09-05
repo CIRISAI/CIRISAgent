@@ -113,10 +113,13 @@ class TestAgentProcessorPause:
 
     @pytest.mark.asyncio
     async def test_pipeline_controller_created_on_pause(self, agent_processor):
-        """Test that pipeline controller is created when pausing."""
-        assert agent_processor._pipeline_controller is None
+        """Test that pipeline controller is always present and gets paused on pause."""
+        # Pipeline controller is now always initialized
+        assert agent_processor._pipeline_controller is not None
+        assert isinstance(agent_processor._pipeline_controller, PipelineController)
+        assert not agent_processor._pipeline_controller.is_paused  # Initially not paused
 
-        # Pause creates pipeline controller
+        # Pause updates the existing pipeline controller
         await agent_processor.pause_processing()
 
         assert agent_processor._pipeline_controller is not None

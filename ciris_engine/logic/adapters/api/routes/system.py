@@ -582,6 +582,120 @@ async def control_runtime(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _parse_direct_service_key(service_key: str) -> tuple[str, str]:
+    """Parse direct service key and return service_type and display_name."""
+    parts = service_key.split(".")
+    if len(parts) >= 3:
+        service_type = parts[1]  # 'graph', 'infrastructure', etc.
+        service_name = parts[2]  # 'memory_service', 'time_service', etc.
+        
+        # Convert snake_case to PascalCase for display
+        display_name = "".join(word.capitalize() for word in service_name.split("_"))
+        return service_type, display_name
+    return "unknown", service_key
+
+def _parse_registry_service_key(service_key: str) -> tuple[str, str]:
+    """Parse registry service key and return service_type and display_name."""
+    parts = service_key.split(".")
+    logger.debug(f"Parsing registry key: {service_key}, parts: {parts}")
+    
+    # Handle both 3-part and 4-part keys
+    if len(parts) >= 4 and parts[1] == "ServiceType":
+        # Format: registry.ServiceType.ENUM.ServiceName_id
+        service_type_enum = f"{parts[1]}.{parts[2]}"  # 'ServiceType.TOOL'
+        service_name = parts[3]  # 'APIToolService_127803015745648'
+        logger.debug(f"4-part key: {service_key}, service_name: {service_name}")
+    else:
+        # Fallback: registry.ENUM.ServiceName
+        service_type_enum = parts[1]  # 'ServiceType.COMMUNICATION', etc.
+        service_name = parts[2] if len(parts) > 2 else parts[1]  # Service name or enum value
+        logger.debug(f"3-part key: {service_key}, service_name: {service_name}")
+
+    # Clean up service name (remove instance ID)
+    if "_" in service_name:
+        service_name = service_name.split("_")[0]
+
+    # Extract adapter type from service name
+    adapter_prefix = ""
+    if "Discord" in service_name:
+        adapter_prefix = "DISCORD"
+    elif "API" in service_name:
+        adapter_prefix = "API"
+    elif "CLI" in service_name:
+        adapter_prefix = "CLI"
+
+    # Map ServiceType enum to category and set display name
+    service_type, display_name = _map_service_type_enum(service_type_enum, service_name, adapter_prefix)
+    
+    return service_type, display_name
+
+def _map_service_type_enum(service_type_enum: str, service_name: str, adapter_prefix: str) -> tuple[str, str]:
+    """Map ServiceType enum to category and create display name."""
+    display_name = service_name
+    
+    if "COMMUNICATION" in service_type_enum:
+        service_type = "adapter"
+        if adapter_prefix:
+            display_name = f"{adapter_prefix}-COMM"
+    elif "MEMORY" in service_type_enum:
+        service_type = "graph"
+    elif "LLM" in service_type_enum:
+        service_type = "runtime"
+    elif "RUNTIME_CONTROL" in service_type_enum:
+        service_type = "runtime"
+        if adapter_prefix:
+            display_name = f"{adapter_prefix}-RUNTIME"
+    elif "TIME" in service_type_enum:
+        service_type = "infrastructure"
+    elif "TOOL" in service_type_enum:
+        service_type = "tool"
+        if adapter_prefix:
+            display_name = f"{adapter_prefix}-TOOL"
+    elif "WISE_AUTHORITY" in service_type_enum:
+        service_type = "governance"
+        if adapter_prefix:
+            display_name = f"{adapter_prefix}-WISE"
+    else:
+        service_type = "unknown"
+    
+    return service_type, display_name
+
+def _parse_service_key(service_key: str) -> tuple[str, str]:
+    """Parse any service key and return service_type and display_name."""
+    parts = service_key.split(".")
+    
+    # Handle direct services (format: direct.service_type.service_name)
+    if service_key.startswith("direct.") and len(parts) >= 3:
+        return _parse_direct_service_key(service_key)
+    
+    # Handle registry services (format: registry.ServiceType.ENUM.ServiceName_id)
+    elif service_key.startswith("registry.") and len(parts) >= 3:
+        return _parse_registry_service_key(service_key)
+    
+    else:
+        return "unknown", service_key
+
+def _create_service_status(service_key: str, details: dict) -> ServiceStatus:
+    """Create ServiceStatus from service key and details."""
+    service_type, display_name = _parse_service_key(service_key)
+    
+    return ServiceStatus(
+        name=display_name,
+        type=service_type,
+        healthy=details.get("healthy", False),
+        available=details.get("healthy", False),  # Use healthy as available
+        uptime_seconds=None,  # Not available in simplified view
+        metrics=ServiceMetrics(),
+    )
+
+def _update_service_summary(service_summary: dict, service_type: str, is_healthy: bool) -> None:
+    """Update service summary with service type and health status."""
+    if service_type not in service_summary:
+        service_summary[service_type] = {"total": 0, "healthy": 0}
+    service_summary[service_type]["total"] += 1
+    if is_healthy:
+        service_summary[service_type]["healthy"] += 1
+
 @router.get("/services", response_model=SuccessResponse[ServicesStatusResponse])
 async def get_services_status(
     request: Request, auth: AuthContext = Depends(require_observer)
@@ -593,11 +707,10 @@ async def get_services_status(
     availability, and basic metrics.
     """
     # Use the runtime control service to get all services
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-
-    if not runtime_control:
+    try:
+        runtime_control = _get_runtime_control_service(request)
+    except HTTPException:
+        # Handle case where no runtime control service is available
         return SuccessResponse(
             data=ServicesStatusResponse(
                 services=[], total_services=0, healthy_services=0, timestamp=datetime.now(timezone.utc)
@@ -608,104 +721,15 @@ async def get_services_status(
     try:
         health_status = await runtime_control.get_service_health_status()
 
-        # Convert service details to ServiceStatus list
+        # Convert service details to ServiceStatus list using helper functions
         services = []
         service_summary = {}
 
         # Include ALL services (both direct and registry)
         for service_key, details in health_status.service_details.items():
-            # Parse service key to get type and name
-            parts = service_key.split(".")
-
-            # Handle direct services (format: direct.service_type.service_name)
-            if service_key.startswith("direct.") and len(parts) >= 3:
-                source = parts[0]  # 'direct'
-                service_type = parts[1]  # 'graph', 'infrastructure', etc.
-                service_name = parts[2]  # 'memory_service', 'time_service', etc.
-
-                # Convert snake_case to PascalCase for display
-                service_name = "".join(word.capitalize() for word in service_name.split("_"))
-
-            # Handle registry services (format: registry.ServiceType.ENUM.ServiceName_id)
-            elif service_key.startswith("registry.") and len(parts) >= 3:
-                # source = parts[0]  # 'registry' - not used currently
-
-                # Handle both 3-part and 4-part keys
-                if len(parts) >= 4 and parts[1] == "ServiceType":
-                    # Format: registry.ServiceType.ENUM.ServiceName_id
-                    service_type_enum = f"{parts[1]}.{parts[2]}"  # 'ServiceType.TOOL'
-                    service_name = parts[3]  # 'APIToolService_127803015745648'
-                    logger.debug(f"4-part key: {service_key}, service_name: {service_name}")
-                else:
-                    # Fallback: registry.ENUM.ServiceName
-                    service_type_enum = parts[1]  # 'ServiceType.COMMUNICATION', etc.
-                    service_name = parts[2]  # Service name or enum value
-                    logger.debug(f"3-part key: {service_key}, service_name: {service_name}")
-
-                # Clean up service name (remove instance ID)
-                if "_" in service_name:
-                    service_name = service_name.split("_")[0]
-
-                # Extract adapter type from service name and create display name
-                adapter_prefix = ""
-                display_name = service_name
-
-                if "Discord" in service_name:
-                    adapter_prefix = "DISCORD"
-                elif "API" in service_name:
-                    adapter_prefix = "API"
-                elif "CLI" in service_name:
-                    adapter_prefix = "CLI"
-
-                # Map ServiceType enum to category and set display name
-                service_type = "unknown"
-                if "COMMUNICATION" in service_type_enum:
-                    service_type = "adapter"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-COMM"
-                elif "MEMORY" in service_type_enum:
-                    service_type = "graph"
-                elif "LLM" in service_type_enum:
-                    service_type = "runtime"
-                elif "TIME" in service_type_enum:
-                    service_type = "infrastructure"
-                elif "TOOL" in service_type_enum:
-                    service_type = "tool"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-TOOL"
-                elif "WISE_AUTHORITY" in service_type_enum:
-                    service_type = "governance"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-WISE"
-                elif "RUNTIME_CONTROL" in service_type_enum:
-                    service_type = "runtime"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-RUNTIME"
-
-                # Use display name for adapter services
-                if adapter_prefix and display_name != service_name:
-                    service_name = display_name
-            else:
-                service_type = "unknown"
-                service_name = service_key
-
-            # Create ServiceStatus
-            status = ServiceStatus(
-                name=service_name,
-                type=service_type,
-                healthy=details.get("healthy", False),
-                available=details.get("healthy", False),  # Use healthy as available
-                uptime_seconds=None,  # Not available in simplified view
-                metrics=ServiceMetrics(),
-            )
+            status = _create_service_status(service_key, details)
             services.append(status)
-
-            # Update service summary
-            if service_type not in service_summary:
-                service_summary[service_type] = {"total": 0, "healthy": 0}
-            service_summary[service_type]["total"] += 1
-            if details.get("healthy", False):
-                service_summary[service_type]["healthy"] += 1
+            _update_service_summary(service_summary, status.type, status.healthy)
 
         return SuccessResponse(
             data=ServicesStatusResponse(

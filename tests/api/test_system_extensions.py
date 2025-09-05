@@ -34,7 +34,7 @@ from ciris_engine.schemas.services.core.runtime import (
     ServiceHealthStatus,
     ServiceSelectionExplanation,
 )
-from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint
 from ciris_engine.schemas.processors.states import AgentState
 
 
@@ -275,7 +275,15 @@ class TestSingleStepEndpoint:
         mock_runtime.agent_processor = mock_agent_processor
         
         # Mock pipeline state and step result
-        mock_pipeline_state = {"current_round": 1, "thoughts_by_step": {}}
+        mock_pipeline_state = PipelineState(
+            is_paused=False,
+            current_round=1,
+            thoughts_by_step={},
+            task_queue=[],
+            thought_queue=[],
+            total_thoughts_processed=0,
+            total_thoughts_in_flight=0
+        )
         mock_step_result = {
             "step_point": "PERFORM_DMAS",
             "thought_id": "test_thought_1",

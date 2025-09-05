@@ -1023,6 +1023,286 @@ class AgentProcessor:
         finally:
             self._processing_task = None
 
+    async def _check_pause_state(self) -> bool:
+        """
+        Check pause state and handle waiting for resume.
+        
+        Returns:
+            True if processing should continue, False if should skip this round
+        """
+        if not self._is_paused:
+            return True
+            
+        logger.debug("Processor is paused, waiting for resume or single-step")
+        if self._pause_event:
+            await self._pause_event.wait()
+            # Reset the event for next pause
+            self._pause_event.clear()
+        else:
+            # Safety fallback - wait a bit and check again
+            await asyncio.sleep(0.1)
+            return False
+        return True
+    
+    async def _handle_shutdown_transitions(self, current_state: AgentState) -> bool:
+        """
+        Handle shutdown-related state transitions.
+        
+        Args:
+            current_state: Current agent state
+            
+        Returns:
+            True to continue processing, False to break from loop
+        """
+        if current_state == AgentState.SHUTDOWN:
+            logger.debug("In SHUTDOWN state, skipping transition checks")
+            return True
+            
+        # Check if shutdown has been requested
+        if is_global_shutdown_requested():
+            shutdown_reason = get_global_shutdown_reason() or "Unknown reason"
+            logger.info(f"Global shutdown requested: {shutdown_reason}")
+            # Transition to shutdown state if not already there
+            if self.state_manager.can_transition_to(AgentState.SHUTDOWN):
+                await self._handle_state_transition(AgentState.SHUTDOWN)
+            else:
+                logger.error(f"Cannot transition from {current_state} to SHUTDOWN")
+                return False
+        else:
+            # Check for automatic state transitions only if not shutting down
+            next_state = self.state_manager.should_auto_transition()
+            if next_state:
+                await self._handle_state_transition(next_state)
+        return True
+    
+    async def _process_regular_state(self, processor, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int) -> tuple[int, int, bool]:
+        """
+        Process regular (non-shutdown) states.
+        
+        Args:
+            processor: State processor
+            current_state: Current agent state
+            consecutive_errors: Current consecutive error count
+            max_consecutive_errors: Maximum allowed consecutive errors
+            
+        Returns:
+            Tuple of (round_count_increment, new_consecutive_errors, should_break)
+        """
+        try:
+            logger.debug(f"Calling {processor.__class__.__name__}.process(round={self.current_round_number})")
+            result = await processor.process(self.current_round_number)
+            logger.debug(f"Processor returned: {result.__class__.__name__ if hasattr(result, '__class__') else type(result)}")
+            
+            # Check for state transition recommendations
+            if current_state == AgentState.WORK:
+                # Check for scheduled dream tasks
+                if await self._check_scheduled_dream():
+                    logger.info("Scheduled dream time has arrived")
+                    await self._handle_state_transition(AgentState.DREAM)
+            elif current_state == AgentState.SOLITUDE and processor == self.solitude_processor:
+                # Check if the result indicates we should exit solitude
+                if hasattr(result, "should_exit_solitude") and result.should_exit_solitude:
+                    exit_reason = getattr(result, "exit_reason", "Unknown reason")
+                    logger.info(f"Exiting solitude: {exit_reason}")
+                    await self._handle_state_transition(AgentState.WORK)
+            
+            return 1, 0, False  # increment round, reset errors, don't break
+            
+        except Exception as e:
+            consecutive_errors += 1
+            logger.error(f"Error in {processor} for state {current_state}: {e}", exc_info=True)
+            
+            if consecutive_errors >= max_consecutive_errors:
+                logger.error(f"Too many consecutive processing errors ({consecutive_errors}), requesting shutdown")
+                request_global_shutdown(f"Processing errors: {consecutive_errors} consecutive failures")
+                return 0, consecutive_errors, True  # don't increment round, keep errors, break
+            
+            # Add backoff delay after errors
+            await asyncio.sleep(min(consecutive_errors * 2, 30))
+            return 0, consecutive_errors, False  # don't increment round, keep errors, don't break
+    
+    async def _process_dream_state(self) -> bool:
+        """
+        Process dream state.
+        
+        Returns:
+            True to continue processing, False should not happen
+        """
+        # Dream processing is handled by enhanced dream processor
+        if not self.dream_processor._dream_task or self.dream_processor._dream_task.done():
+            # Dream ended, transition back to WORK
+            logger.info("Dream processing complete, returning to WORK state")
+            await self._handle_state_transition(AgentState.WORK)
+        else:
+            await asyncio.sleep(5)  # Check periodically
+        return True
+    
+    async def _process_shutdown_state(self, processor, consecutive_errors: int) -> tuple[int, int, bool]:
+        """
+        Process shutdown state with negotiation.
+        
+        Args:
+            processor: Shutdown processor
+            consecutive_errors: Current consecutive error count
+            
+        Returns:
+            Tuple of (round_count_increment, new_consecutive_errors, should_break)
+        """
+        logger.info("In SHUTDOWN state, processing shutdown negotiation")
+        logger.debug(f"Shutdown processor from state_processors: {processor}")
+        
+        if not processor:
+            logger.error("No shutdown processor available")
+            return 0, consecutive_errors, True
+            
+        try:
+            result = await processor.process(self.current_round_number)
+            logger.info(f"Shutdown check - result type: {type(result)}, result: {result}")
+            
+            # Handle ShutdownResult object (not dict)
+            logger.debug(f"Result is object, checking for shutdown_ready: hasattr={hasattr(result, 'shutdown_ready')}")
+            if hasattr(result, "shutdown_ready"):
+                logger.debug(f"result.shutdown_ready = {result.shutdown_ready}")
+                if result.shutdown_ready:
+                    logger.info("Shutdown negotiation complete (from result object), exiting processing loop")
+                    return 1, 0, True  # increment round, reset errors, break
+            
+            # Check processor's shutdown_complete attribute directly
+            if hasattr(processor, "shutdown_complete"):
+                logger.debug(f"processor.shutdown_complete = {processor.shutdown_complete}")
+                if processor.shutdown_complete:
+                    logger.info("Shutdown negotiation complete (processor.shutdown_complete is True), exiting processing loop")
+                    return 1, 0, True  # increment round, reset errors, break
+            
+            return 1, 0, False  # increment round, reset errors, don't break
+            
+        except Exception as e:
+            consecutive_errors += 1
+            logger.error(f"Error in shutdown processor: {e}", exc_info=True)
+            return 0, consecutive_errors, True  # don't increment round, keep errors, break
+    
+    def _calculate_round_delay(self, current_state: AgentState) -> float:
+        """
+        Calculate delay between processing rounds based on config and state.
+        
+        Args:
+            current_state: Current agent state
+            
+        Returns:
+            Delay in seconds
+        """
+        # Get delay from config, using mock LLM delay if enabled
+        delay = 1.0
+        if hasattr(self.app_config, "workflow"):
+            mock_llm = getattr(self.app_config, "mock_llm", False)
+            if hasattr(self.app_config.workflow, "get_round_delay"):
+                delay = self.app_config.workflow.get_round_delay(mock_llm)
+            elif hasattr(self.app_config.workflow, "round_delay_seconds"):
+                delay = self.app_config.workflow.round_delay_seconds
+        
+        # State-specific delays override config only if not using mock LLM
+        if not getattr(self.app_config, "mock_llm", False):
+            if current_state == AgentState.WORK:
+                delay = 3.0  # 3 second delay in work mode as requested
+            elif current_state == AgentState.SOLITUDE:
+                delay = 10.0  # Slower pace in solitude
+            elif current_state == AgentState.DREAM:
+                delay = 5.0  # Check dream state periodically
+        
+        return delay
+    
+    async def _handle_delay_with_stop_check(self, delay: float) -> bool:
+        """
+        Handle delay with stop event checking.
+        
+        Args:
+            delay: Delay time in seconds
+            
+        Returns:
+            True to continue processing, False to break from loop
+        """
+        if delay > 0 and not (self._stop_event is not None and self._stop_event.is_set()):
+            try:
+                if self._stop_event is not None:
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
+                    return False  # Stop event was set
+                else:
+                    await asyncio.sleep(delay)
+            except asyncio.TimeoutError:
+                pass  # Continue processing
+        return True
+
+    async def _process_single_round(self, round_count: int, consecutive_errors: int, max_consecutive_errors: int, num_rounds: Optional[int]) -> tuple[int, int, bool]:
+        """
+        Process a single round of the main loop.
+        
+        Returns:
+            Tuple of (new_round_count, new_consecutive_errors, should_break)
+        """
+        # Check if we've reached target rounds
+        if num_rounds is not None and round_count >= num_rounds:
+            logger.info(f"Reached target rounds ({num_rounds}), requesting graceful shutdown")
+            request_global_shutdown(f"Processing completed after {num_rounds} rounds")
+            return round_count, consecutive_errors, True
+
+        # COVENANT COMPLIANCE: Check pause state before processing
+        if not await self._check_pause_state():
+            return round_count, consecutive_errors, False
+
+        # Update round number
+        self.current_round_number += 1
+
+        # Handle shutdown transitions
+        current_state = self.state_manager.get_state()
+        if not await self._handle_shutdown_transitions(current_state):
+            return round_count, consecutive_errors, True
+
+        # Process based on current state
+        current_state = self.state_manager.get_state()
+        logger.debug(f"Processing round {round_count}, current state: {current_state}")
+
+        # Get processor for current state
+        processor = self.state_processors.get(current_state)
+        logger.debug(
+            f"Got processor for state {current_state}: {processor.__class__.__name__ if processor else 'None'}"
+        )
+
+        # Process based on state type
+        if processor and current_state != AgentState.SHUTDOWN:
+            # Regular state processing
+            round_increment, consecutive_errors, should_break = await self._process_regular_state(
+                processor, current_state, consecutive_errors, max_consecutive_errors
+            )
+            round_count += round_increment
+            if should_break:
+                return round_count, consecutive_errors, True
+
+        elif current_state == AgentState.DREAM:
+            # Dream state processing
+            if not await self._process_dream_state():
+                return round_count, consecutive_errors, True
+
+        elif current_state == AgentState.SHUTDOWN:
+            # Shutdown state processing
+            processor = self.state_processors.get(current_state)
+            round_increment, consecutive_errors, should_break = await self._process_shutdown_state(
+                processor, consecutive_errors
+            )
+            round_count += round_increment
+            if should_break:
+                return round_count, consecutive_errors, True
+
+        else:
+            logger.warning(f"No processor for state: {current_state}")
+            await asyncio.sleep(1)
+
+        # Handle delay between rounds
+        delay = self._calculate_round_delay(current_state)
+        if not await self._handle_delay_with_stop_check(delay):
+            return round_count, consecutive_errors, True
+            
+        return round_count, consecutive_errors, False
+
     async def _processing_loop(self, num_rounds: Optional[int] = None) -> None:
         """Main processing loop with state management and comprehensive exception handling."""
         logger.info(f"Processing loop started (num_rounds: {num_rounds})")
@@ -1034,185 +1314,11 @@ class AgentProcessor:
             logger.info("Entering main processing while loop...")
             while not (self._stop_event is not None and self._stop_event.is_set()):
                 try:
-                    if num_rounds is not None and round_count >= num_rounds:
-                        logger.info(f"Reached target rounds ({num_rounds}), requesting graceful shutdown")
-                        request_global_shutdown(f"Processing completed after {num_rounds} rounds")
-                        break
-
-                    # COVENANT COMPLIANCE: Check pause state before processing
-                    if self._is_paused:
-                        logger.debug("Processor is paused, waiting for resume or single-step")
-                        if self._pause_event:
-                            await self._pause_event.wait()
-                            # Reset the event for next pause
-                            self._pause_event.clear()
-                        else:
-                            # Safety fallback - wait a bit and check again
-                            await asyncio.sleep(0.1)
-                            continue
-
-                    # Update round number
-                    # self.thought_processor.advance_round()  # Removed nonexistent method
-                    self.current_round_number += 1
-
-                    # Get current state
-                    current_state = self.state_manager.get_state()
-
-                    # Never transition away from SHUTDOWN state
-                    if current_state == AgentState.SHUTDOWN:
-                        logger.debug("In SHUTDOWN state, skipping transition checks")
-                    else:
-                        # Check if shutdown has been requested
-                        if is_global_shutdown_requested():
-                            shutdown_reason = get_global_shutdown_reason() or "Unknown reason"
-                            logger.info(f"Global shutdown requested: {shutdown_reason}")
-                            # Transition to shutdown state if not already there
-                            if self.state_manager.can_transition_to(AgentState.SHUTDOWN):
-                                await self._handle_state_transition(AgentState.SHUTDOWN)
-                            else:
-                                logger.error(f"Cannot transition from {current_state} to SHUTDOWN")
-                                break
-                        else:
-                            # Check for automatic state transitions only if not shutting down
-                            next_state = self.state_manager.should_auto_transition()
-                            if next_state:
-                                await self._handle_state_transition(next_state)
-
-                    # Process based on current state
-                    current_state = self.state_manager.get_state()
-                    logger.debug(f"Processing round {round_count}, current state: {current_state}")
-
-                    # Get processor for current state
-                    processor = self.state_processors.get(current_state)
-                    logger.debug(
-                        f"Got processor for state {current_state}: {processor.__class__.__name__ if processor else 'None'}"
+                    round_count, consecutive_errors, should_break = await self._process_single_round(
+                        round_count, consecutive_errors, max_consecutive_errors, num_rounds
                     )
-
-                    if processor and current_state != AgentState.SHUTDOWN:
-                        # Use the appropriate processor (except for SHUTDOWN which has special handling)
-                        try:
-                            logger.debug(
-                                f"Calling {processor.__class__.__name__}.process(round={self.current_round_number})"
-                            )
-                            result = await processor.process(self.current_round_number)
-                            logger.debug(
-                                f"Processor returned: {result.__class__.__name__ if hasattr(result, '__class__') else type(result)}"
-                            )
-                            round_count += 1
-                            consecutive_errors = 0  # Reset error counter on success
-
-                            # Check for state transition recommendations
-                            if current_state == AgentState.WORK:
-                                # Check for scheduled dream tasks
-                                if await self._check_scheduled_dream():
-                                    logger.info("Scheduled dream time has arrived")
-                                    await self._handle_state_transition(AgentState.DREAM)
-
-                            elif current_state == AgentState.SOLITUDE and processor == self.solitude_processor:
-                                # Check if the result indicates we should exit solitude
-                                # Result is now typed as SolitudeResult
-                                if hasattr(result, "should_exit_solitude") and result.should_exit_solitude:
-                                    exit_reason = getattr(result, "exit_reason", "Unknown reason")
-                                    logger.info(f"Exiting solitude: {exit_reason}")
-                                    await self._handle_state_transition(AgentState.WORK)
-
-                        except Exception as e:
-                            consecutive_errors += 1
-                            logger.error(f"Error in {processor} for state {current_state}: {e}", exc_info=True)
-
-                            if consecutive_errors >= max_consecutive_errors:
-                                logger.error(
-                                    f"Too many consecutive processing errors ({consecutive_errors}), requesting shutdown"
-                                )
-                                request_global_shutdown(f"Processing errors: {consecutive_errors} consecutive failures")
-                                break
-
-                            # Add backoff delay after errors
-                            await asyncio.sleep(min(consecutive_errors * 2, 30))
-
-                    elif current_state == AgentState.DREAM:
-                        # Dream processing is handled by enhanced dream processor
-                        if not self.dream_processor._dream_task or self.dream_processor._dream_task.done():
-                            # Dream ended, transition back to WORK
-                            logger.info("Dream processing complete, returning to WORK state")
-                            await self._handle_state_transition(AgentState.WORK)
-                        else:
-                            await asyncio.sleep(5)  # Check periodically
-
-                    elif current_state == AgentState.SHUTDOWN:
-                        # Process shutdown state with negotiation
-                        logger.info("In SHUTDOWN state, processing shutdown negotiation")
-                        processor = self.state_processors.get(current_state)
-                        logger.debug(f"Shutdown processor from state_processors: {processor}")
-                        if processor:
-                            try:
-                                result = await processor.process(self.current_round_number)
-                                round_count += 1
-                                consecutive_errors = 0
-
-                                # Check if shutdown is complete
-                                logger.info(f"Shutdown check - result type: {type(result)}, result: {result}")
-
-                                # Handle ShutdownResult object (not dict)
-                                logger.debug(
-                                    f"Result is object, checking for shutdown_ready: hasattr={hasattr(result, 'shutdown_ready')}"
-                                )
-                                if hasattr(result, "shutdown_ready"):
-                                    logger.debug(f"result.shutdown_ready = {result.shutdown_ready}")
-                                    if result.shutdown_ready:
-                                        logger.info(
-                                            "Shutdown negotiation complete (from result object), exiting processing loop"
-                                        )
-                                        break
-
-                                # Check processor's shutdown_complete attribute directly
-                                if hasattr(processor, "shutdown_complete"):
-                                    logger.debug(f"processor.shutdown_complete = {processor.shutdown_complete}")
-                                    if processor.shutdown_complete:
-                                        logger.info(
-                                            "Shutdown negotiation complete (processor.shutdown_complete is True), exiting processing loop"
-                                        )
-                                        break
-                            except Exception as e:
-                                consecutive_errors += 1
-                                logger.error(f"Error in shutdown processor: {e}", exc_info=True)
-                                break
-                        else:
-                            logger.error("No shutdown processor available")
-                            break
-
-                    else:
-                        logger.warning(f"No processor for state: {current_state}")
-                        await asyncio.sleep(1)
-
-                    # Brief delay between rounds
-                    # Get delay from config, using mock LLM delay if enabled
-                    delay = 1.0
-                    if hasattr(self.app_config, "workflow"):
-                        mock_llm = getattr(self.app_config, "mock_llm", False)
-                        if hasattr(self.app_config.workflow, "get_round_delay"):
-                            delay = self.app_config.workflow.get_round_delay(mock_llm)
-                        elif hasattr(self.app_config.workflow, "round_delay_seconds"):
-                            delay = self.app_config.workflow.round_delay_seconds
-
-                    # State-specific delays override config only if not using mock LLM
-                    if not getattr(self.app_config, "mock_llm", False):
-                        if current_state == AgentState.WORK:
-                            delay = 3.0  # 3 second delay in work mode as requested
-                        elif current_state == AgentState.SOLITUDE:
-                            delay = 10.0  # Slower pace in solitude
-                        elif current_state == AgentState.DREAM:
-                            delay = 5.0  # Check dream state periodically
-
-                    if delay > 0 and not (self._stop_event is not None and self._stop_event.is_set()):
-                        try:
-                            if self._stop_event is not None:
-                                await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
-                                break  # Stop event was set
-                            else:
-                                await asyncio.sleep(delay)
-                        except asyncio.TimeoutError:
-                            pass  # Continue processing
+                    if should_break:
+                        break
 
                 except Exception as e:
                     consecutive_errors += 1

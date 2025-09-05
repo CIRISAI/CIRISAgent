@@ -211,6 +211,11 @@ class TestPauseInteractionContract:
              patch.object(ApiPlatform, 'start') as mock_start:
             mock_rcb.return_value.get_service.return_value = mock_main_runtime_control_service
             
+            # Create real APIAuthService in dev mode
+            from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+            real_auth_service = APIAuthService()
+            real_auth_service._dev_mode = True
+            
             # Create mock runtime
             mock_runtime = MagicMock()
             # Add pipeline_controller to mock_runtime

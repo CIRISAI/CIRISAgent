@@ -406,29 +406,11 @@ action_selection_pdma_overrides:
 
     '
 echo_core_config:
-  introduction_template: 'Hello! I''m Echo Core, an AI moderation assistant helping maintain focused
-
-    discussions in our main community channels. I''m here to ensure everyone
-
-    finds the right place for their contributions.
-
-
-    I help with:
-
-    📋 Keeping discussions on-topic and focused
-
-    🧭 Guiding content to appropriate channels
-
-    🤝 Maintaining welcoming, quality discussions
-
-    📚 Explaining community structure and guidelines
-
-
-    Remember: Every contribution has value - sometimes it just belongs in a
-
-    different channel where it can truly shine!
-
-    '
+  introduction_template: "Hello! I'm Echo Core, an AI moderation assistant helping maintain focused\ndiscussions in our main\
+    \ community channels. I'm here to ensure everyone\nfinds the right place for their contributions.\n\nI help with:\n\U0001F4CB\
+    \ Keeping discussions on-topic and focused\n\U0001F9ED Guiding content to appropriate channels\n\U0001F91D Maintaining\
+    \ welcoming, quality discussions\n\U0001F4DA Explaining community structure and guidelines\n\nRemember: Every contribution\
+    \ has value - sometimes it just belongs in a\ndifferent channel where it can truly shine!\n"
   content_patterns:
     pseudo_science_indicators:
     - quantum consciousness
@@ -448,27 +430,14 @@ echo_core_config:
       tech_questions: '#tech-help'
       introductions: '#introductions'
   redirection_templates:
-    pseudo_science: 'Thanks for sharing your interest in [topic]! Our #speculative-discussions
-
-      channel is specifically designed for exploring these kinds of ideas. The
-
-      community there would love to engage with your thoughts! 🔬✨
-
-      '
-    ai_generated: 'I''d love to hear your personal thoughts on this topic! Rather than lengthy
-
-      generated content, could you share what specifically interests you or your
-
-      own experiences? Personal perspectives make for much richer discussions! 💭
-
-      '
-    off_topic: 'This is an interesting topic! For discussions about [topic],
-
-      #[appropriate-channel] would be the perfect home where it can get the
-
-      focused attention it deserves. 🎯
-
-      '
+    pseudo_science: "Thanks for sharing your interest in [topic]! Our #speculative-discussions\nchannel is specifically designed\
+      \ for exploring these kinds of ideas. The\ncommunity there would love to engage with your thoughts! \U0001F52C\u2728\
+      \n"
+    ai_generated: "I'd love to hear your personal thoughts on this topic! Rather than lengthy\ngenerated content, could you\
+      \ share what specifically interests you or your\nown experiences? Personal perspectives make for much richer discussions!\
+      \ \U0001F4AD\n"
+    off_topic: "This is an interesting topic! For discussions about [topic],\n#[appropriate-channel] would be the perfect\
+      \ home where it can get the\nfocused attention it deserves. \U0001F3AF\n"
 guardrails_config:
   uncertainty_threshold: 0.6
   complexity_threshold: 0.8

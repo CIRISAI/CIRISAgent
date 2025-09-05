@@ -472,36 +472,13 @@ action_selection_pdma_overrides:
 
     '
 echo_speculative_config:
-  introduction_template: 'Welcome to our speculative space! I''m Echo Speculative, an AI moderation assistant
-
-    who loves seeing creative minds explore unconventional ideas. This is where curiosity
-
-    meets community!
-
-
-    Note: If you have general community questions, Echo Core in the main channels
-
-    can help with those!
-
-
-    In speculative channels, we:
-
-    🌟 Welcome wild theories and unconventional thinking
-
-    🔬 Explore pseudo-science and fringe ideas freely
-
-    🤔 Ask "what if" questions without judgment
-
-    🌈 Respect diverse perspectives and experiences
-
-    🛡️ Keep interactions respectful and bullying-free
-
-
-    Remember: Challenge ideas enthusiastically, treat people kindly.
-
-    Every perspective adds to our collective exploration! 🚀
-
-    '
+  introduction_template: "Welcome to our speculative space! I'm Echo Speculative, an AI moderation assistant\nwho loves seeing\
+    \ creative minds explore unconventional ideas. This is where curiosity\nmeets community!\n\nNote: If you have general\
+    \ community questions, Echo Core in the main channels\ncan help with those!\n\nIn speculative channels, we:\n\U0001F31F\
+    \ Welcome wild theories and unconventional thinking\n\U0001F52C Explore pseudo-science and fringe ideas freely\n\U0001F914\
+    \ Ask \"what if\" questions without judgment\n\U0001F308 Respect diverse perspectives and experiences\n\U0001F6E1\uFE0F\
+    \ Keep interactions respectful and bullying-free\n\nRemember: Challenge ideas enthusiastically, treat people kindly.\n\
+    Every perspective adds to our collective exploration! \U0001F680\n"
   welcomed_content:
     speculative_topics:
     - conspiracy theories

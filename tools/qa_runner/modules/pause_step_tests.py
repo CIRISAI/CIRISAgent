@@ -38,7 +38,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Basic single-step execution (legacy)",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step",
+                endpoint="/v1/system/runtime/step",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -54,7 +54,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Enhanced single-step with details",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -95,7 +95,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Step point data structure validation",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -116,7 +116,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="DMA step point validation", 
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -127,7 +127,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Pipeline state structure validation",
                 module=QAModule.SYSTEM,  
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -155,7 +155,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Multi-step processing validation",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true", 
+                endpoint="/v1/system/runtime/step?include_details=true", 
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -173,7 +173,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Invalid query parameter handling",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=invalid",
+                endpoint="/v1/system/runtime/step?include_details=invalid",
                 method="POST",
                 payload={},
                 expected_status=422,  # FastAPI validation error
@@ -183,7 +183,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Enhanced response memory efficiency",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST", 
                 payload={},
                 expected_status=200,
@@ -194,7 +194,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Concurrent single-step requests",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -211,7 +211,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Single-step performance baseline",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -223,7 +223,7 @@ class PauseStepTestModule:
             QATestCase(
                 name="Step point data extraction performance",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/runtime/single-step?include_details=true",
+                endpoint="/v1/system/runtime/step?include_details=true",
                 method="POST",
                 payload={},
                 expected_status=200,
@@ -512,7 +512,7 @@ class PauseStepTestModule:
             def make_request():
                 try:
                     response = requests.post(
-                        f"{config.base_url}/v1/system/runtime/single-step?include_details=true",
+                        f"{config.base_url}/v1/system/runtime/step?include_details=true",
                         headers={"Authorization": f"Bearer {getattr(config, '_auth_token', '')}"},
                         json={},
                         timeout=10
@@ -603,7 +603,7 @@ class PauseStepTestModule:
             # Compare with basic single-step request
             start_time = time.time()
             basic_response = requests.post(
-                f"{config.base_url}/v1/system/runtime/single-step",
+                f"{config.base_url}/v1/system/runtime/step",
                 headers={"Authorization": f"Bearer {getattr(config, '_auth_token', '')}"},
                 json={},
                 timeout=10

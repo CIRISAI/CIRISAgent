@@ -217,4 +217,4 @@ stewardship:
       formula: ceil((CIS * RM) / 7)
       result: 2
     public_key_fingerprint: sha256:c418e4f3a9cbc3b30172b76edb489e0fe50effcdf67091757c5acee9179430a8
-    signature: ed25519:X0zLSleRO+qZMwm+mvS48RCCeRsGDkSojYSZdtgY8iwry9u9Wd4ojbeu/CF+KxTjvOpefOU8imhrIGVCks4kAg==
+    signature: ed25519:RHqKn0gV7Trqlw4QfNk3BgzBMp7HjV6iojKkBt7qAruAfN1Hm8eZTE2wB9gGDTEBQBc9I8jxb8+dnwH7iCDTBQ==

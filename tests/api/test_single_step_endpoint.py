@@ -1,7 +1,7 @@
 """
-Comprehensive unit tests for enhanced single-step API endpoint.
+Comprehensive unit tests for single-step API endpoint.
 
-Tests the enhanced single-step endpoint with detailed step point data,
+Tests the single-step endpoint with detailed step point data,
 pipeline state, and backward compatibility.
 """
 
@@ -40,8 +40,8 @@ from ciris_engine.schemas.services.runtime_control import (
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 
-class TestEnhancedSingleStepEndpoint:
-    """Test enhanced single-step endpoint with step point data."""
+class TestSingleStepEndpoint:
+    """Test single-step endpoint with step point data."""
 
     @pytest.fixture
     def app(self):

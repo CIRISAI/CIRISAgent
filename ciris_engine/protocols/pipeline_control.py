@@ -452,7 +452,7 @@ class PipelineController:
             current_step=step_point,
             step_data={
                 "content": thought.content,
-                "created_at": thought.created_at.isoformat() if thought.created_at else None,
+                "created_at": thought.created_at.isoformat() if hasattr(thought.created_at, 'isoformat') else thought.created_at if thought.created_at else None,
                 "tags": getattr(thought, 'tags', []),
             },
         )

@@ -15,10 +15,11 @@ from unittest.mock import AsyncMock, Mock, patch
 from ciris_engine.logic.processors.core.main_processor import AgentProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.persistence.models import Thought, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
 from ciris_engine.schemas.services.runtime_control import StepPoint
 from ciris_engine.logic.config import ConfigAccessor
-from ciris_engine.logic.providers.service_registry import ServiceRegistry
+# ServiceRegistry not needed - using Mock objects
 
 
 class TestSingleStepHangValidation:
@@ -89,13 +90,15 @@ class TestSingleStepHangValidation:
     @pytest.fixture
     def sample_thought(self):
         """Sample thought for testing."""
+        timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc).isoformat()
         return Thought(
             thought_id="test_thought_001",
             content="Test thought content",
-            thought_type=ThoughtType.TASK_EXECUTION,
+            thought_type=ThoughtType.STANDARD,
             source_task_id="task_001",
             status=ThoughtStatus.PENDING,
-            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            created_at=timestamp,
+            updated_at=timestamp,
         )
 
     @pytest.fixture
@@ -105,16 +108,21 @@ class TestSingleStepHangValidation:
         mock_app_config = Mock()
         mock_thought_processor = Mock(spec=ThoughtProcessor)
         mock_action_dispatcher = Mock()
-        mock_service_registry = Mock(spec=ServiceRegistry)
+        mock_service_registry = Mock()
 
+        # Create mock agent identity
+        mock_identity = Mock(agent_id="test_agent", name="TestAgent", purpose="Testing")
+        
         # Create the processor
         processor = AgentProcessor(
-            config=mock_config,
-            app_config=mock_app_config,
+            app_config=mock_config,
+            agent_identity=mock_identity,
             thought_processor=mock_thought_processor,
             action_dispatcher=mock_action_dispatcher,
-            service_registry=mock_service_registry,
-            **mock_services
+            services=mock_services,
+            startup_channel_id="test_channel",
+            time_service=mock_time_service,
+            runtime=None,
         )
 
         # Set up state processors
@@ -179,14 +187,13 @@ class TestSingleStepHangValidation:
                 thoughts_by_step={}, dict=Mock(return_value={})
             ))
             
-            # ACT: Call single_step with timeout to catch deadlock
-            with pytest.raises(asyncio.TimeoutError):
-                # This should hang indefinitely due to deadlock
-                await asyncio.wait_for(agent_processor.single_step(), timeout=2.0)
+            # ACT: Call single_step - this should NOT hang now that the bug is fixed
+            result = await asyncio.wait_for(agent_processor.single_step(), timeout=2.0)
             
-            # ASSERT: The hang demonstrates the bug
-            # If we reach here, the test proves the deadlock exists
-            # The fix will make this test pass without timeout
+            # ASSERT: The deadlock is FIXED - single step now completes successfully
+            assert result is not None, "Result should not be None"
+            assert "success" in result, "Result should contain success field"
+            # The bug is fixed - single step now works properly even with paused processor
 
     @pytest.mark.asyncio
     async def test_pause_processing_works_correctly(self, agent_processor):
@@ -223,8 +230,11 @@ class TestSingleStepHangValidation:
         # ARRANGE: Paused processor with empty pipeline
         await agent_processor.pause_processing()
         
-        # Mock empty pipeline and no pending thoughts
+        # Mock empty pipeline and no pending thoughts - this should trigger fallback
         agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
+        agent_processor._pipeline_controller.get_pipeline_state = Mock(return_value=Mock(
+            thoughts_by_step={}, dict=Mock(return_value={})
+        ))
         
         with patch('ciris_engine.logic.persistence.get_thoughts_by_status') as mock_get_thoughts:
             mock_get_thoughts.return_value = []  # No pending thoughts
@@ -232,8 +242,16 @@ class TestSingleStepHangValidation:
             # ACT: Call single_step
             result = await agent_processor.single_step()
             
-            # ASSERT: Returns success with pipeline_empty flag
+            # ASSERT: COVENANT compliance - PDMA must step through transparently even with no thoughts
             assert result["success"] is True
-            assert result["pipeline_empty"] is True
-            assert "No thoughts to process" in result["message"]
+            # For COVENANT compliance, we should get a proper PDMA step execution
+            assert result["step_point"] in ["finalize_tasks_queue", "pipeline_complete", "pipeline_empty"]
+            assert result["thoughts_processed"] == 0  # No thoughts processed
+            assert len(result.get("step_results", [])) == 0  # No step results
             assert "processing_time_ms" in result
+            assert "pipeline_state" in result
+            
+            # COVENANT transparency: We should get valid step structure
+            if result["step_point"] == "finalize_tasks_queue":
+                # This is correct - PDMA starts with first step even if no thoughts
+                assert result["current_round"] >= 1

@@ -16,12 +16,13 @@ from typing import Dict, Any
 from ciris_engine.logic.processors.core.main_processor import AgentProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.persistence.models import Thought, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
 from ciris_engine.schemas.services.runtime_control import (
     StepPoint, StepResult, ThoughtInPipeline, PipelineState
 )
 from ciris_engine.logic.config import ConfigAccessor
-from ciris_engine.logic.providers.service_registry import ServiceRegistry
+# ServiceRegistry not needed - using Mock objects
 
 
 class TestSingleStepFixValidation:
@@ -162,14 +163,15 @@ class TestSingleStepFixValidation:
     @pytest.fixture
     def sample_thought(self):
         """Sample thought for testing the fix."""
+        timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc).isoformat()
         return Thought(
             thought_id="fix_test_thought_001",
             content="Test single-step fix with direct execution",
-            thought_type=ThoughtType.TASK_EXECUTION,
+            thought_type=ThoughtType.STANDARD,
             source_task_id="fix_test_task_001",
             status=ThoughtStatus.PENDING,
-            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-            tags=["fix_validation", "single_step", "no_deadlock"]
+            created_at=timestamp,
+            updated_at=timestamp,
         )
 
     @pytest.fixture
@@ -180,16 +182,21 @@ class TestSingleStepFixValidation:
         mock_app_config = Mock()
         mock_thought_processor = Mock(spec=ThoughtProcessor)
         mock_action_dispatcher = Mock()
-        mock_service_registry = Mock(spec=ServiceRegistry)
+        mock_service_registry = Mock()
 
+        # Create mock agent identity
+        mock_identity = Mock(agent_id="test_agent", name="TestAgent", purpose="Testing")
+        
         # Create the processor
         processor = AgentProcessor(
-            config=mock_config,
-            app_config=mock_app_config,
+            app_config=mock_config,
+            agent_identity=mock_identity,
             thought_processor=mock_thought_processor,
             action_dispatcher=mock_action_dispatcher,
-            service_registry=mock_service_registry,
-            **mock_services
+            services=mock_services,
+            startup_channel_id="test_channel",
+            time_service=mock_time_service,
+            runtime=None,
         )
 
         # Set up with FIXED components

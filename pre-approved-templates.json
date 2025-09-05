@@ -1,32 +1,32 @@
 {
   "version": "1.0",
-  "created_at": "2025-08-17T04:01:00.155137Z",
+  "created_at": "2025-09-05T01:29:22.599578Z",
+  "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk=",
   "templates": {
     "default": {
-      "checksum": "sha256:cb7adf02f99e357c66e49f3d39a901fd9828b2d9e8803d291578fc04de4e4ecc",
+      "checksum": "sha256:85e44be2d9a35276dea2e9550e07a3e982846afd6a951afb7af96454617f8935",
       "description": "Datum - baseline agent template"
     },
     "sage": {
-      "checksum": "sha256:32e79a69471b28dbb1e952e8212bd12b758b5b3c7c8cb069e8abc3293ea3daf1",
+      "checksum": "sha256:625a4840ed38e3c6f0f1bafc7b02af1651f81841f60d99d6a9fcaf5216ba236d",
       "description": "Sage - wise questioning agent"
     },
     "scout": {
-      "checksum": "sha256:90940992ff2d64d53efadadbd8486539ecfeb8757193db437f349d5e21c8a54d",
+      "checksum": "sha256:366b27c3398b669e87e2ee22d20835868f8800f59c84ae5fc6091d5df3b2d8ff",
       "description": "Scout - direct action demonstrator"
     },
+    "echo": {
+      "checksum": "sha256:2e604e94d3eef3c98eb1fa7ad3ed701e5ca1ed9495e883db1c0510f9a279d314",
+      "description": "Echo - base moderation template"
+    },
     "echo-core": {
-      "checksum": "sha256:8084992d909af97906103c186f180f43f4db3e01472db6422f34a8d65596d3a7",
+      "checksum": "sha256:dcec9eb7293cd1eeb2b4f7ad6c6a7bc0a9f8ed2022f712b8154ec1f63104d2a4",
       "description": "Echo-Core - general community moderation"
     },
     "echo-speculative": {
-      "checksum": "sha256:a75f4c8c0b67a48737f03d2b6a340e7ad40d8de8e5217dedb1f8d358f54ac531",
+      "checksum": "sha256:ebf6ebdc9a42af1194a1ef1dadb038992cf479bbb194e8bc8ba1cad2aee745c4",
       "description": "Echo-Speculative - speculative discussion moderation"
-    },
-    "echo": {
-      "checksum": "sha256:009a45fadb7b5fb44cab3e04824284fbf48e15863d6408327b8ec98ed2138cf1",
-      "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "SVZ/jJFkXCOhchsqgSJehVSRNGeb16+KHFl4kBro7xBj2nQDrWaSL3pcxj8hfS94L26n25wCi50R0KB/M1kNAw==",
-  "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
+  "root_signature": "U2NunQz0BlJEHZLbAAiDu9G638yXGpSu0cL9FM2dMkOummQQRL89bysznVPG2qsewzV+9dl5rt1ivpZBBbQGDg=="
 }

@@ -443,11 +443,14 @@ class BaseObserver(Generic[MessageT], ABC):
                 task_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {formatted_msg_content}"]  # type: ignore[attr-defined]
 
             task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
+            task_lines.append("CIRIS_OBSERVATION_START")
             
             # Build user lookup and format history lines
             user_lookup = self._build_user_lookup_from_history(msg, history_context)
             history_lines = self._format_history_lines(history_context, user_lookup)
             task_lines.extend(history_lines)
+            
+            task_lines.append("CIRIS_OBSERVATION_END")
 
             task_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="

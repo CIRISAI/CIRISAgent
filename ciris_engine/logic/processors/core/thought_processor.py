@@ -51,6 +51,9 @@ class ThoughtProcessor:
         self.telemetry_service = telemetry_service
         self._time_service = time_service
         self.auth_service = auth_service
+        
+        # Pipeline controller for single-stepping (injected when paused)
+        self._pipeline_controller: Optional[Any] = None
 
     async def process_thought(
         self, thought_item: ProcessingQueueItem, context: Optional[dict] = None
@@ -205,6 +208,15 @@ class ThoughtProcessor:
                 return None
 
         # 2. Build context (always build proper ThoughtContext for DMA orchestrator)
+        # STEP POINT: BUILD_CONTEXT
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        await self._check_step_point(StepPoint.BUILD_CONTEXT, thought_item.thought_id, {
+            "timestamp": self._time_service.now().isoformat(),
+            "thought_id": thought_item.thought_id,
+            "task_id": thought_item.source_task_id,
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+        })
+        
         batch_context_data = context.get("batch_context") if context else None
         if batch_context_data:
             logger.debug(f"Using batch context for thought {thought_item.thought_id}")
@@ -230,6 +242,14 @@ class ThoughtProcessor:
             thought_item.initial_context = thought_context
 
         # 3. Run DMAs
+        # STEP POINT: PERFORM_DMAS
+        await self._check_step_point(StepPoint.PERFORM_DMAS, thought_item.thought_id, {
+            "timestamp": self._time_service.now().isoformat(),
+            "thought_id": thought_item.thought_id,
+            "context": thought_context.model_dump() if hasattr(thought_context, "model_dump") else str(thought_context),
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+        })
+        
         # template_name is not an accepted argument by run_initial_dmas.
         # If template specific DMA behavior is needed, it might be part of thought_item's context
         # or run_initial_dmas and its sub-runners would need to be updated.
@@ -307,6 +327,14 @@ class ThoughtProcessor:
             return self._create_deferral_result(dma_results, thought)
 
         # 5. Run action selection
+        # STEP POINT: PERFORM_ASPDMA
+        await self._check_step_point(StepPoint.PERFORM_ASPDMA, thought_item.thought_id, {
+            "timestamp": self._time_service.now().isoformat(),
+            "thought_id": thought_item.thought_id,
+            "dma_results": str(dma_results) if dma_results else None,
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+        })
+        
         profile_name = self._get_profile_name(thought)
         try:
             action_result = await self.dma_orchestrator.run_action_selection(
@@ -385,6 +413,15 @@ class ThoughtProcessor:
             return self._create_deferral_result(dma_results, thought)
 
         # 6. Apply consciences
+        # STEP POINT: CONSCIENCE_EXECUTION
+        await self._check_step_point(StepPoint.CONSCIENCE_EXECUTION, thought_item.thought_id, {
+            "timestamp": self._time_service.now().isoformat(),
+            "thought_id": thought_item.thought_id,
+            "selected_action": str(getattr(action_result, 'selected_action', 'UNKNOWN')),
+            "action_result": str(action_result) if action_result else None,
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+        })
+        
         logger.info(
             f"ThoughtProcessor: Applying consciences for {thought.thought_id} with action {getattr(action_result, 'selected_action', 'UNKNOWN')}"
         )
@@ -431,6 +468,15 @@ class ThoughtProcessor:
             )
 
             # Re-run action selection with guidance
+            # STEP POINT: RECURSIVE_ASPDMA
+            await self._check_step_point(StepPoint.RECURSIVE_ASPDMA, thought_item.thought_id, {
+                "timestamp": self._time_service.now().isoformat(),
+                "thought_id": thought_item.thought_id,
+                "retry_reason": override_reason,
+                "original_action": str(getattr(action_result, 'selected_action', 'UNKNOWN')),
+                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+            })
+            
             try:
                 retry_result = await self.dma_orchestrator.run_action_selection(
                     thought_item=thought_item,
@@ -442,6 +488,15 @@ class ThoughtProcessor:
 
                 if retry_result:
                     # Always re-apply consciences, even if same action type (parameters may differ)
+                    # STEP POINT: RECURSIVE_CONSCIENCE
+                    await self._check_step_point(StepPoint.RECURSIVE_CONSCIENCE, thought_item.thought_id, {
+                        "timestamp": self._time_service.now().isoformat(),
+                        "thought_id": thought_item.thought_id,
+                        "retry_action": str(retry_result.selected_action),
+                        "retry_result": str(retry_result) if retry_result else None,
+                        "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+                    })
+                    
                     logger.info(
                         f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}"
                     )
@@ -516,6 +571,16 @@ class ThoughtProcessor:
                     resource_usage=None,
                 )
 
+        # STEP POINT: ACTION_SELECTION (final action determined)
+        await self._check_step_point(StepPoint.ACTION_SELECTION, thought_item.thought_id, {
+            "timestamp": self._time_service.now().isoformat(),
+            "thought_id": thought_item.thought_id,
+            "selected_action": str(getattr(final_result, 'selected_action', 'UNKNOWN')),
+            "selection_reasoning": getattr(final_result, 'rationale', ''),
+            "conscience_passed": not getattr(conscience_result, 'overridden', True) if conscience_result else True,
+            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
+        })
+        
         # Store conscience result on the action result for later access
         # This allows handlers to access epistemic data through dispatch context
         if final_result and conscience_result:
@@ -701,6 +766,23 @@ class ThoughtProcessor:
         from ciris_engine.logic import persistence
 
         return await persistence.async_get_thought_by_id(thought_id)
+
+    def set_pipeline_controller(self, pipeline_controller: Any) -> None:
+        """Inject pipeline controller for single-stepping support."""
+        self._pipeline_controller = pipeline_controller
+        
+    async def _check_step_point(self, step_point: "StepPoint", thought_id: str, step_data: Dict[str, Any]) -> None:
+        """Check if we should pause at this step point and handle pause if needed."""
+        if not self._pipeline_controller:
+            return
+            
+        # Import here to avoid circular dependency
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        
+        if await self._pipeline_controller.should_pause_at(step_point, thought_id):
+            logger.info(f"Pausing at step point {step_point.value} for thought {thought_id}")
+            step_result = await self._pipeline_controller.pause_at_step_point(step_point, thought_id, step_data)
+            logger.info(f"Resumed from step point {step_point.value} with result: {type(step_result).__name__}")
 
     async def _verify_task_authorization(self, thought: Thought) -> bool:
         """Verify that the thought's parent task is signed by at least an observer."""

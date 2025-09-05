@@ -73,8 +73,8 @@ class RuntimeControlResponse(BaseModel):
     queue_depth: int = Field(0, description="Number of items in processing queue")
 
 
-class EnhancedSingleStepResponse(RuntimeControlResponse):
-    """Enhanced response for single-step operations with detailed step point data.
+class SingleStepResponse(RuntimeControlResponse):
+    """Response for single-step operations with detailed step point data.
     
     Extends the basic RuntimeControlResponse with comprehensive step point information,
     pipeline state, and demo-ready data for transparent AI operation visibility.
@@ -245,13 +245,13 @@ def _safe_demo_data(demo_data) -> Optional[Dict[str, Any]]:
     return None
 
 
-@router.post("/runtime/single-step", response_model=SuccessResponse[Union[RuntimeControlResponse, EnhancedSingleStepResponse]])
+@router.post("/runtime/step", response_model=SuccessResponse[Union[RuntimeControlResponse, SingleStepResponse]])
 async def single_step_processor(
     request: Request, 
     auth: AuthContext = Depends(require_admin), 
     body: dict = Body(default={}),
     include_details: bool = Query(False, description="Include detailed step point data and pipeline state")
-) -> SuccessResponse[Union[RuntimeControlResponse, EnhancedSingleStepResponse]]:
+) -> SuccessResponse[Union[RuntimeControlResponse, SingleStepResponse]]:
     """
     Execute a single processing step.
 
@@ -302,7 +302,7 @@ async def single_step_processor(
         safe_tokens_used = _safe_tokens_used(tokens_used)
         safe_demo_data = _safe_demo_data(demo_data)
 
-        enhanced_response = EnhancedSingleStepResponse(
+        single_step_response = SingleStepResponse(
             **basic_response_data,
             step_point=safe_step_point,
             step_result=safe_step_result,
@@ -312,7 +312,7 @@ async def single_step_processor(
             demo_data=safe_demo_data,
         )
         
-        return SuccessResponse(data=enhanced_response)
+        return SuccessResponse(data=single_step_response)
         
     except Exception as e:
         logger.error(f"Error in single step: {e}")
@@ -577,44 +577,52 @@ async def get_processor_states(
     try:
         # Get current state from agent processor
         current_state = None
+        current_state_name = None
         if hasattr(runtime.agent_processor, "state_manager") and runtime.agent_processor.state_manager:
             current_state = runtime.agent_processor.state_manager.get_state()
+            if current_state:
+                # Handle both enum objects and string representations like "AgentState.WORK"
+                current_state_str = str(current_state)
+                if "." in current_state_str:
+                    current_state_name = current_state_str.split(".")[-1]  # Extract "WORK" from "AgentState.WORK"
+                else:
+                    current_state_name = current_state_str
 
         # Define all processor states with descriptions
         processor_states = [
             ProcessorStateInfo(
                 name="WAKEUP",
-                is_active=str(current_state) == "WAKEUP" if current_state else False,
+                is_active=current_state_name == "WAKEUP" if current_state_name else False,
                 description="Initial state for identity confirmation and system initialization",
                 capabilities=["identity_confirmation", "system_checks", "initial_setup"],
             ),
             ProcessorStateInfo(
                 name="WORK",
-                is_active=str(current_state) == "WORK" if current_state else False,
+                is_active=current_state_name == "WORK" if current_state_name else False,
                 description="Normal task processing and interaction state",
                 capabilities=["task_processing", "user_interaction", "tool_usage", "memory_operations"],
             ),
             ProcessorStateInfo(
                 name="DREAM",
-                is_active=str(current_state) == "DREAM" if current_state else False,
+                is_active=current_state_name == "DREAM" if current_state_name else False,
                 description="Deep introspection and memory consolidation state",
                 capabilities=["memory_consolidation", "pattern_analysis", "self_reflection"],
             ),
             ProcessorStateInfo(
                 name="PLAY",
-                is_active=str(current_state) == "PLAY" if current_state else False,
+                is_active=current_state_name == "PLAY" if current_state_name else False,
                 description="Creative exploration and experimentation state",
                 capabilities=["creative_tasks", "exploration", "learning", "experimentation"],
             ),
             ProcessorStateInfo(
                 name="SOLITUDE",
-                is_active=str(current_state) == "SOLITUDE" if current_state else False,
+                is_active=current_state_name == "SOLITUDE" if current_state_name else False,
                 description="Quiet reflection and planning state",
                 capabilities=["planning", "reflection", "goal_setting", "strategy_development"],
             ),
             ProcessorStateInfo(
                 name="SHUTDOWN",
-                is_active=str(current_state) == "SHUTDOWN" if current_state else False,
+                is_active=current_state_name == "SHUTDOWN" if current_state_name else False,
                 description="Graceful shutdown and cleanup state",
                 capabilities=["cleanup", "final_messages", "state_persistence", "resource_release"],
             ),

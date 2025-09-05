@@ -33,9 +33,9 @@ class TestRouterOrdering:
         return TestClient(test_app)
 
     def test_single_step_endpoint_accessible(self, client):
-        """Test that the single-step endpoint is accessible and not shadowed."""
-        # This should hit the specific single-step endpoint, not the generic {action} route
-        response = client.post("/v1/system/runtime/single-step", json={})
+        """Test that the step endpoint is accessible and not shadowed."""
+        # This should hit the specific step endpoint, not the generic {action} route
+        response = client.post("/v1/system/runtime/step", json={})
         
         # We expect either:
         # - 401 (unauthorized) if auth is required
@@ -91,7 +91,7 @@ class TestRouterOrdering:
         # - 404 (not found) - because 'invalid_action' doesn't match any specific route
         # - 400 (bad request) with "Invalid action" if it hits the {action} route
         
-        # The key is that 'single-step' should NOT be treated as an invalid action
+        # The key is that 'step' should NOT be treated as an invalid action
         assert response.status_code in [401, 404, 400]
 
     def test_router_registration_order_in_app(self):
@@ -108,13 +108,13 @@ class TestRouterOrdering:
                 routes.append(route.path)
         
         # Look for our specific routes
-        single_step_routes = [r for r in routes if 'single-step' in r]
+        step_routes = [r for r in routes if '/runtime/step' in r and '{action}' not in r]
         action_routes = [r for r in routes if '/runtime/{action}' in r]
         
         # We should have both routes registered
-        assert len(single_step_routes) > 0, "single-step route not found"
+        assert len(step_routes) > 0, "step route not found"
         assert len(action_routes) > 0, "{action} route not found"
         
         # Note: FastAPI route matching works on order of registration
-        # The specific route (single-step) should be matched before the parametrized route ({action})
+        # The specific route (step) should be matched before the parametrized route ({action})
         # This is ensured by registering system_extensions router before system router

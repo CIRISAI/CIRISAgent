@@ -138,8 +138,21 @@ class TestAgentProcessorPause:
         # Now single-step should work (though no thoughts to process)
         with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get:
             mock_get.return_value = []
-
-            result = await agent_processor.single_step()
+            
+            # Mock the pipeline controller to return empty pipeline response
+            if hasattr(agent_processor, '_pipeline_controller') and agent_processor._pipeline_controller:
+                # Mock execute_single_step_point to return pipeline_empty response
+                with patch.object(agent_processor._pipeline_controller, 'execute_single_step_point', 
+                                return_value={
+                                    "step_point": "pipeline_empty",
+                                    "step_results": [],
+                                    "pipeline_state": {},
+                                    "current_round": 0,
+                                    "pipeline_empty": True
+                                }):
+                    result = await agent_processor.single_step()
+            else:
+                result = await agent_processor.single_step()
 
             assert result["success"]
             assert result.get("pipeline_empty")

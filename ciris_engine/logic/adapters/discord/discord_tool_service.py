@@ -43,6 +43,7 @@ class DiscordToolService(ToolService):
             "discord_remove_role": self._remove_role,
             "discord_get_user_info": self._get_user_info,
             "discord_get_channel_info": self._get_channel_info,
+            "discord_get_guild_moderators": self._get_guild_moderators,
         }
 
     def set_client(self, client: discord.Client) -> None:
@@ -460,6 +461,47 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def _get_guild_moderators(self, params: dict) -> dict:
+        """Get list of guild members with moderator permissions, excluding ECHO users."""
+        guild_id = params.get("guild_id")
+
+        if not guild_id:
+            return {"success": False, "error": "guild_id is required"}
+
+        try:
+            if not self._client:
+                return {"success": False, "error": "Discord client not initialized"}
+            
+            guild = self._client.get_guild(int(guild_id))
+            if not guild:
+                guild = await self._client.fetch_guild(int(guild_id))
+            
+            if not guild:
+                return {"success": False, "error": f"Guild with ID {guild_id} not found"}
+
+            moderators = []
+            
+            # Iterate through guild members to find those with moderator permissions
+            async for member in guild.fetch_members(limit=None):
+                # Check if user has moderator permissions (can manage messages, kick, ban, etc.)
+                if (member.guild_permissions.manage_messages or 
+                    member.guild_permissions.kick_members or 
+                    member.guild_permissions.ban_members or
+                    member.guild_permissions.manage_roles):
+                    
+                    # Filter out ECHO users
+                    if "ECHO" not in str(member.display_name).upper() and "ECHO" not in str(member.name).upper():
+                        moderators.append({
+                            "user_id": str(member.id),
+                            "username": member.name,
+                            "display_name": member.display_name,
+                            "nickname": member.nick
+                        })
+
+            return {"success": True, "data": {"moderators": moderators}}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     async def get_available_tools(self) -> List[str]:
         """Get list of available Discord tools."""
         return list(self._tools.keys())
@@ -482,6 +524,7 @@ class DiscordToolService(ToolService):
             "discord_remove_role": ["guild_id", "user_id", "role_name"],
             "discord_get_user_info": ["user_id"],
             "discord_get_channel_info": ["channel_id"],
+            "discord_get_guild_moderators": ["guild_id"],
         }
 
         if tool_name not in required_params:
@@ -597,6 +640,11 @@ class DiscordToolService(ToolService):
                 properties={"channel_id": {"type": "string", "description": "Channel ID to get info for"}},
                 required=["channel_id"],
             ),
+            "discord_get_guild_moderators": ToolParameterSchema(
+                type="object",
+                properties={"guild_id": {"type": "string", "description": "Guild ID to get moderators for"}},
+                required=["guild_id"],
+            ),
         }
 
         tool_descriptions = {
@@ -610,6 +658,7 @@ class DiscordToolService(ToolService):
             "discord_remove_role": "Remove a role from a user in a Discord guild",
             "discord_get_user_info": "Get information about a Discord user",
             "discord_get_channel_info": "Get information about a Discord channel",
+            "discord_get_guild_moderators": "Get list of guild members with moderator permissions, excluding ECHO users",
         }
 
         if tool_name not in tool_schemas:

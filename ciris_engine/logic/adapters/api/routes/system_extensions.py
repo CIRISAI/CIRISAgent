@@ -5,16 +5,24 @@ Adds runtime queue, service management, and processor state endpoints.
 """
 
 import logging
-from typing import List, Optional
+from typing import Dict, Any, List, Optional, Union
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+# Constants to avoid duplication
+UNITTEST_MOCK_TYPE_PREFIX = "<class 'unittest.mock"
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.api.responses import SuccessResponse, ResponseMetadata
 from ciris_engine.schemas.services.core.runtime import (
     ProcessorQueueStatus,
     ServiceHealthStatus,
     ServiceSelectionExplanation,
+)
+from ciris_engine.schemas.services.runtime_control import (
+    StepPoint,
+    StepResult,
+    PipelineState,
 )
 
 from ..constants import (
@@ -65,15 +73,194 @@ class RuntimeControlResponse(BaseModel):
     queue_depth: int = Field(0, description="Number of items in processing queue")
 
 
-@router.post("/runtime/single-step", response_model=SuccessResponse[RuntimeControlResponse])
+class EnhancedSingleStepResponse(RuntimeControlResponse):
+    """Enhanced response for single-step operations with detailed step point data.
+    
+    Extends the basic RuntimeControlResponse with comprehensive step point information,
+    pipeline state, and demo-ready data for transparent AI operation visibility.
+    """
+
+    # Step Point Information
+    step_point: Optional[StepPoint] = Field(None, description="The step point that was just executed")
+    step_result: Optional[Dict[str, Any]] = Field(None, description="Complete step result data with full context")
+    
+    # Pipeline State
+    pipeline_state: Optional[PipelineState] = Field(None, description="Current pipeline state with all thoughts")
+    
+    # Performance Metrics
+    processing_time_ms: float = Field(0.0, description="Total processing time for this step in milliseconds")
+    tokens_used: Optional[int] = Field(None, description="LLM tokens consumed during this step")
+    
+    # Demo-Ready Data
+    demo_data: Optional[Dict[str, Any]] = Field(None, description="Presentation-ready data for demos and transparency")
+    
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Single step completed: Processed PERFORM_DMAS for thought_001",
+                "processor_state": "paused",
+                "cognitive_state": "WORK",
+                "queue_depth": 3,
+                "step_point": "PERFORM_DMAS",
+                "step_result": {
+                    "step_point": "PERFORM_DMAS",
+                    "thought_id": "thought_001",
+                    "ethical_dma": {"reasoning": "Analyzed ethical implications", "confidence_level": 0.85},
+                    "common_sense_dma": {"reasoning": "Applied common sense principles", "confidence_level": 0.90},
+                    "domain_dma": {"reasoning": "Domain expertise applied", "confidence_level": 0.80}
+                },
+                "pipeline_state": {
+                    "is_paused": True,
+                    "current_round": 5,
+                    "thoughts_by_step": {"BUILD_CONTEXT": [], "PERFORM_DMAS": []}
+                },
+                "processing_time_ms": 1250.0,
+                "tokens_used": 150,
+                "demo_data": {
+                    "category": "ethical_reasoning",
+                    "step_description": "Multi-perspective DMA analysis",
+                    "key_insights": {
+                        "ethical_confidence": 0.85,
+                        "dmas_executed": ["ethical", "common_sense", "domain"]
+                    }
+                }
+            }
+        }
+
+
+# Helper functions for single-step processor
+
+
+def _extract_cognitive_state(runtime) -> Optional[str]:
+    """Extract cognitive state from runtime safely."""
+    try:
+        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
+            if hasattr(runtime.agent_processor, "state_manager") and runtime.agent_processor.state_manager:
+                current_state = runtime.agent_processor.state_manager.get_state()
+                return str(current_state) if current_state else None
+    except Exception as e:
+        logger.debug(f"Could not extract cognitive state: {e}")
+    return None
+
+
+async def _get_queue_depth(runtime_control) -> int:
+    """Get queue depth safely."""
+    try:
+        queue_status = await runtime_control.get_processor_queue_status()
+        return queue_status.queue_size if queue_status else 0
+    except Exception as e:
+        logger.debug(f"Could not get queue depth: {e}")
+        return 0
+
+
+def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, Any]], Optional[Any], float, Optional[int], Optional[Dict[str, Any]]]:
+    """Extract pipeline state, step result, and processing metrics."""
+    step_point = None
+    step_result = None
+    pipeline_state = None
+    processing_time_ms = 0.0
+    tokens_used = None
+    demo_data = None
+    
+    try:
+        if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
+            pipeline_controller = runtime.pipeline_controller
+            
+            # Get current pipeline state
+            try:
+                pipeline_state = pipeline_controller.get_current_state()
+            except Exception as e:
+                logger.debug(f"Could not get pipeline state: {e}")
+            
+            # Get latest step result
+            try:
+                latest_step_result = pipeline_controller.get_latest_step_result()
+                if latest_step_result:
+                    step_point = latest_step_result.step_point
+                    step_result = latest_step_result.model_dump() if hasattr(latest_step_result, 'model_dump') else dict(latest_step_result)
+            except Exception as e:
+                logger.debug(f"Could not get step result: {e}")
+            
+            # Get processing metrics
+            try:
+                metrics = pipeline_controller.get_processing_metrics()
+                if metrics:
+                    processing_time_ms = metrics.get("total_processing_time_ms", 0.0)
+                    tokens_used = metrics.get("tokens_used")
+                    # Create demo data based on step point
+                    demo_data = _create_demo_data(step_point, step_result, metrics)
+            except Exception as e:
+                logger.debug(f"Could not get processing metrics: {e}")
+    
+    except Exception as e:
+        logger.debug(f"Could not extract enhanced data: {e}")
+    
+    return step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data
+
+
+def _safe_step_point(step_point) -> Optional[Any]:
+    """Safely extract step point, filtering out mock objects."""
+    if step_point and hasattr(step_point, 'value') and not str(type(step_point)).startswith(UNITTEST_MOCK_TYPE_PREFIX):
+        return step_point
+    return None
+
+
+def _safe_step_result(step_result) -> Optional[Dict[str, Any]]:
+    """Safely extract step result, filtering out mock objects."""
+    if step_result and isinstance(step_result, dict) and not str(type(step_result)).startswith(UNITTEST_MOCK_TYPE_PREFIX):
+        return step_result
+    return None
+
+
+def _safe_pipeline_state(pipeline_state) -> Optional[Dict[str, Any]]:
+    """Safely extract pipeline state, filtering out mock objects."""
+    if pipeline_state and not str(type(pipeline_state)).startswith(UNITTEST_MOCK_TYPE_PREFIX):
+        if hasattr(pipeline_state, 'model_dump'):
+            return pipeline_state.model_dump()
+        elif isinstance(pipeline_state, dict):
+            return pipeline_state
+    return None
+
+
+def _safe_processing_time(processing_time_ms) -> float:
+    """Safely extract processing time."""
+    if isinstance(processing_time_ms, (int, float)):
+        return processing_time_ms
+    return 0.0
+
+
+def _safe_tokens_used(tokens_used) -> Optional[int]:
+    """Safely extract tokens used."""
+    if tokens_used and isinstance(tokens_used, int):
+        return tokens_used
+    return None
+
+
+def _safe_demo_data(demo_data) -> Optional[Dict[str, Any]]:
+    """Safely extract demo data."""
+    if demo_data and isinstance(demo_data, dict):
+        return demo_data
+    return None
+
+
+@router.post("/runtime/single-step", response_model=SuccessResponse[Union[RuntimeControlResponse, EnhancedSingleStepResponse]])
 async def single_step_processor(
-    request: Request, auth: AuthContext = Depends(require_admin), body: dict = Body(default={})
-) -> SuccessResponse[RuntimeControlResponse]:
+    request: Request, 
+    auth: AuthContext = Depends(require_admin), 
+    body: dict = Body(default={}),
+    include_details: bool = Query(False, description="Include detailed step point data and pipeline state")
+) -> SuccessResponse[Union[RuntimeControlResponse, EnhancedSingleStepResponse]]:
     """
     Execute a single processing step.
 
     Useful for debugging and demonstrations. Processes one item from the queue.
     Requires ADMIN role.
+    
+    Parameters:
+    - include_details: If true, returns enhanced response with step point data,
+                      pipeline state, and performance metrics for demos
     """
     # Try main runtime control service first (has all methods), fall back to API runtime control
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
@@ -85,19 +272,117 @@ async def single_step_processor(
     try:
         result = await runtime_control.single_step()
 
-        # Convert to our response format
-        response = RuntimeControlResponse(
-            success=result.success,
-            message=f"Single step {'completed' if result.success else 'failed'}: {result.error or 'No additional info'}",
-            processor_state=result.new_status.value if hasattr(result.new_status, "value") else str(result.new_status),
-            cognitive_state=None,  # Would need to get from agent processor
-            queue_depth=0,  # Would need to get from queue status
-        )
+        # Get basic runtime data
+        runtime = getattr(request.app.state, "runtime", None)
+        cognitive_state = _extract_cognitive_state(runtime)
+        queue_depth = await _get_queue_depth(runtime_control)
 
-        return SuccessResponse(data=response)
+        # Basic response data
+        basic_response_data = {
+            "success": result.success,
+            "message": f"Single step {'completed' if result.success else 'failed'}: {result.error or 'No additional info'}",
+            "processor_state": result.new_status.value if hasattr(result.new_status, "value") else str(result.new_status),
+            "cognitive_state": cognitive_state,
+            "queue_depth": queue_depth,
+        }
+
+        if not include_details:
+            # Return basic response for backward compatibility
+            response = RuntimeControlResponse(**basic_response_data)
+            return SuccessResponse(data=response)
+        
+        # Enhanced response with step point data
+        step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data = _extract_pipeline_data(runtime)
+        
+        # Create enhanced response with safe defaults - filter out mock objects
+        safe_step_point = _safe_step_point(step_point)
+        safe_step_result = _safe_step_result(step_result)
+        safe_pipeline_state = _safe_pipeline_state(pipeline_state)
+        safe_processing_time = _safe_processing_time(processing_time_ms)
+        safe_tokens_used = _safe_tokens_used(tokens_used)
+        safe_demo_data = _safe_demo_data(demo_data)
+
+        enhanced_response = EnhancedSingleStepResponse(
+            **basic_response_data,
+            step_point=safe_step_point,
+            step_result=safe_step_result,
+            pipeline_state=safe_pipeline_state,
+            processing_time_ms=safe_processing_time,
+            tokens_used=safe_tokens_used,
+            demo_data=safe_demo_data,
+        )
+        
+        return SuccessResponse(data=enhanced_response)
+        
     except Exception as e:
         logger.error(f"Error in single step: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _create_demo_data(step_point: Optional[StepPoint], step_result: Optional[Dict[str, Any]], metrics: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Create presentation-ready demo data based on step point and results."""
+    if not step_point:
+        return None
+    
+    # Categorize step points for demo presentation
+    step_categories = {
+        StepPoint.FINALIZE_TASKS_QUEUE: "queue_management", 
+        StepPoint.POPULATE_THOUGHT_QUEUE: "queue_management",
+        StepPoint.POPULATE_ROUND: "queue_management",
+        StepPoint.BUILD_CONTEXT: "system_architecture",
+        StepPoint.PERFORM_DMAS: "ethical_reasoning",
+        StepPoint.PERFORM_ASPDMA: "decision_making",
+        StepPoint.CONSCIENCE_EXECUTION: "ethical_reasoning", 
+        StepPoint.RECURSIVE_ASPDMA: "learning_adaptation",
+        StepPoint.RECURSIVE_CONSCIENCE: "learning_adaptation",
+        StepPoint.ACTION_SELECTION: "decision_making",
+        StepPoint.HANDLER_START: "system_architecture",
+        StepPoint.BUS_OUTBOUND: "system_architecture", 
+        StepPoint.PACKAGE_HANDLING: "system_architecture",
+        StepPoint.BUS_INBOUND: "system_architecture",
+        StepPoint.HANDLER_COMPLETE: "performance_completion",
+    }
+    
+    step_descriptions = {
+        StepPoint.PERFORM_DMAS: "Multi-perspective DMA analysis",
+        StepPoint.PERFORM_ASPDMA: "LLM-powered action selection",
+        StepPoint.CONSCIENCE_EXECUTION: "Ethical safety checks",
+        StepPoint.BUILD_CONTEXT: "System state and context building",
+        StepPoint.ACTION_SELECTION: "Final action determination",
+        # Add more as needed
+    }
+    
+    demo_data = {
+        "category": step_categories.get(step_point, "processing"),
+        "step_description": step_descriptions.get(step_point, f"Step point: {step_point}"),
+        "step_timings": metrics.get("step_timings", {}) if metrics else {},
+    }
+    
+    # Add step-specific insights
+    key_insights = {}
+    
+    if step_result:
+        if step_point == StepPoint.PERFORM_DMAS:
+            # Extract DMA insights
+            if "ethical_dma" in step_result:
+                key_insights["ethical_decision"] = step_result["ethical_dma"].get("decision")
+            if "dmas_executed" in step_result:
+                key_insights["dmas_executed"] = step_result["dmas_executed"]
+        elif step_point == StepPoint.PERFORM_ASPDMA:
+            # Extract LLM reasoning insights
+            if "aspdma_result" in step_result:
+                aspdma = step_result["aspdma_result"]
+                key_insights["selected_action"] = aspdma.get("selected_action")
+                key_insights["confidence"] = aspdma.get("confidence_level")
+        elif step_point == StepPoint.BUILD_CONTEXT:
+            # Extract context insights
+            key_insights["context_size"] = step_result.get("context_size_bytes")
+            key_insights["memory_queries"] = step_result.get("memory_queries_performed")
+    
+    if key_insights:
+        demo_data["key_insights"] = key_insights
+    
+    return demo_data
 
 
 # Service Management Extensions

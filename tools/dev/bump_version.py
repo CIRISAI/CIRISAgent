@@ -23,7 +23,7 @@ from pathlib import Path
 
 def bump_version(bump_type: str):
     """Bump the version in constants.py."""
-    constants_file = Path(__file__).parent.parent / "ciris_engine" / "constants.py"
+    constants_file = Path(__file__).parent.parent.parent / "ciris_engine" / "constants.py"
 
     with open(constants_file, "r") as f:
         content = f.read()

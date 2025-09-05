@@ -49,6 +49,7 @@ Available modules:
   handlers        - Message handlers
   simple_handlers - Simple handler tests
   sdk             - SDK tests
+  pause_step      - Enhanced single-step/pause debugging
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything

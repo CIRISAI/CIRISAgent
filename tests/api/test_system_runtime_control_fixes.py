@@ -15,6 +15,17 @@ import pytest
 from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext, UserRole
 from ciris_engine.logic.adapters.api.routes.system import control_runtime, RuntimeControlResponse
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.services.core.runtime import RuntimeStatusResponse, ProcessorControlResponse, ProcessorStatus
+
+# Import runtime control fixtures
+from tests.fixtures.runtime_control import (
+    runtime_status_running,
+    runtime_status_paused,
+    runtime_status_dream,
+    runtime_status_no_cognitive_state,
+    mock_main_runtime_control_service,
+    mock_api_runtime_control_service,
+)
 
 
 @pytest.fixture
@@ -55,58 +66,38 @@ def mock_body():
     return body
 
 
-@pytest.fixture
-def mock_main_runtime_control():
-    """Create a mock main runtime control service (full featured)."""
-    mock = AsyncMock()
-    
-    # Mock pause_processing method that returns control response
-    mock_control_response = MagicMock()
-    mock_control_response.success = True
-    mock.pause_processing = AsyncMock(return_value=mock_control_response)
-    
-    # Mock resume_processing method that returns control response  
-    mock.resume_processing = AsyncMock(return_value=mock_control_response)
-    
-    # Mock get_runtime_status method that returns status object
-    mock_status = MagicMock()
-    mock_status.paused = False
-    mock_status.cognitive_state = "WORK"
-    mock_status.queue_depth = 3
-    mock.get_runtime_status = AsyncMock(return_value=mock_status)
-    
-    return mock
+# Fixtures are now imported from tests.fixtures.runtime_control
+# Use mock_main_runtime_control_service and mock_api_runtime_control_service
 
 
-@pytest.fixture 
-def mock_api_runtime_control():
-    """Create a mock API runtime control service (parameter-based)."""
-    mock = AsyncMock()
+def create_runtime_mock_with_agent_processor(cognitive_state="WORK", pipeline_state=None):
+    """Helper to create a properly configured runtime mock."""
+    mock_runtime = MagicMock()
     
-    # Mock pause_processing method that takes reason parameter and returns boolean
-    mock.pause_processing = AsyncMock(return_value=True)
+    # Setup agent_processor to return proper cognitive state
+    mock_agent_processor = MagicMock()
+    mock_agent_processor.get_current_state.return_value = cognitive_state
+    mock_runtime.agent_processor = mock_agent_processor
     
-    # Mock resume_processing method that returns boolean
-    mock.resume_processing = AsyncMock(return_value=True)
+    # Setup pipeline_controller if pipeline_state is provided
+    if pipeline_state:
+        mock_pipeline_controller = MagicMock()
+        mock_pipeline_controller.get_current_state.return_value = pipeline_state
+        mock_runtime.pipeline_controller = mock_pipeline_controller
+    else:
+        mock_runtime.pipeline_controller = None
     
-    # Mock get_runtime_status method
-    mock_status = MagicMock() 
-    mock_status.paused = True
-    mock_status.cognitive_state = "PAUSED"
-    mock_status.queue_depth = 0
-    mock.get_runtime_status = AsyncMock(return_value=mock_status)
-    
-    return mock
+    return mock_runtime
 
 
 class TestRuntimeControlServiceFallback:
     """Test the service fallback mechanism for runtime control."""
 
     @pytest.mark.asyncio
-    async def test_pause_with_main_service(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_pause_with_main_service(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test pause operation with main runtime control service."""
         # Setup - main service available
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
         mock_request.app.state.runtime_control_service = None
         
         # Setup runtime for pipeline state extraction
@@ -114,6 +105,12 @@ class TestRuntimeControlServiceFallback:
         mock_pipeline_controller = MagicMock()
         mock_pipeline_controller.get_current_state.return_value = {"current_step": "BUILD_CONTEXT"}
         mock_runtime.pipeline_controller = mock_pipeline_controller
+        
+        # Setup agent_processor to return proper cognitive state
+        mock_agent_processor = MagicMock()
+        mock_agent_processor.get_current_state.return_value = "WORK"
+        mock_runtime.agent_processor = mock_agent_processor
+        
         mock_request.app.state.runtime = mock_runtime
 
         # Execute
@@ -127,14 +124,14 @@ class TestRuntimeControlServiceFallback:
         assert result.data.processor_state == "paused"
         
         # Verify main service was called (no parameters because it's the main service)
-        mock_main_runtime_control.pause_processing.assert_called_once_with()
+        mock_main_runtime_control_service.pause_processing.assert_called_once_with()
 
     @pytest.mark.asyncio
-    async def test_pause_with_api_service_fallback(self, mock_request, mock_admin_auth_context, mock_body, mock_api_runtime_control):
+    async def test_pause_with_api_service_fallback(self, mock_request, mock_admin_auth_context, mock_body, mock_api_runtime_control_service):
         """Test pause operation falling back to API runtime control service."""
         # Setup - only API service available
         mock_request.app.state.main_runtime_control_service = None
-        mock_request.app.state.runtime_control_service = mock_api_runtime_control
+        mock_request.app.state.runtime_control_service = mock_api_runtime_control_service
 
         # Execute
         result = await control_runtime("pause", mock_request, mock_body, mock_admin_auth_context)
@@ -145,7 +142,7 @@ class TestRuntimeControlServiceFallback:
         assert "paused" in result.data.message.lower()
         
         # Verify API service was called with reason parameter
-        mock_api_runtime_control.pause_processing.assert_called_once_with("Test reason")
+        mock_api_runtime_control_service.pause_processing.assert_called_once_with("Test reason")
 
     @pytest.mark.asyncio
     async def test_pause_parameter_detection(self, mock_request, mock_admin_auth_context, mock_body):
@@ -188,10 +185,10 @@ class TestRuntimeControlServiceFallback:
         assert result.data.success is True
 
     @pytest.mark.asyncio
-    async def test_resume_with_control_response(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_resume_with_control_response(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test resume operation that returns control response object."""
         # Setup
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("resume", mock_request, mock_body, mock_admin_auth_context)
@@ -203,14 +200,14 @@ class TestRuntimeControlServiceFallback:
         assert result.data.processor_state == "active"
         
         # Verify service method was called
-        mock_main_runtime_control.resume_processing.assert_called_once()
+        mock_main_runtime_control_service.resume_processing.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_resume_with_boolean_response(self, mock_request, mock_admin_auth_context, mock_body, mock_api_runtime_control):
+    async def test_resume_with_boolean_response(self, mock_request, mock_admin_auth_context, mock_body, mock_api_runtime_control_service):
         """Test resume operation that returns boolean."""
         # Setup
         mock_request.app.state.main_runtime_control_service = None
-        mock_request.app.state.runtime_control_service = mock_api_runtime_control
+        mock_request.app.state.runtime_control_service = mock_api_runtime_control_service
 
         # Execute  
         result = await control_runtime("resume", mock_request, mock_body, mock_admin_auth_context)
@@ -221,23 +218,19 @@ class TestRuntimeControlServiceFallback:
         assert "resumed" in result.data.message.lower()
         
         # Verify service method was called
-        mock_api_runtime_control.resume_processing.assert_called_once()
+        mock_api_runtime_control_service.resume_processing.assert_called_once()
 
 
 class TestRuntimeStateEndpoint:
     """Test the runtime state retrieval with proper attribute access."""
 
     @pytest.mark.asyncio
-    async def test_state_with_getattr_access(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_state_with_getattr_access(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service, runtime_status_dream):
         """Test state retrieval using getattr for object attribute access."""
-        # Setup status object with attributes (not dict)
-        mock_status = MagicMock()
-        mock_status.paused = True
-        mock_status.cognitive_state = "DREAM"
-        mock_status.queue_depth = 5
-        mock_main_runtime_control.get_runtime_status.return_value = mock_status
+        # Use the dream status fixture
+        mock_main_runtime_control_service.get_runtime_status.return_value = runtime_status_dream
         
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("state", mock_request, mock_body, mock_admin_auth_context)
@@ -250,20 +243,18 @@ class TestRuntimeStateEndpoint:
         assert result.data.queue_depth == 5
         
         # Verify await was added to the call
-        mock_main_runtime_control.get_runtime_status.assert_called_once()
+        mock_main_runtime_control_service.get_runtime_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_state_with_missing_attributes(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_state_with_missing_attributes(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service, runtime_status_no_cognitive_state):
         """Test state retrieval with missing attributes (default values)."""
-        # Setup status object with missing attributes
-        mock_status = MagicMock()
-        # Don't set any attributes to test default values
-        del mock_status.paused
-        del mock_status.cognitive_state  
-        del mock_status.queue_depth
-        mock_main_runtime_control.get_runtime_status.return_value = mock_status
+        # Use the no cognitive state fixture to test default behavior
+        mock_main_runtime_control_service.get_runtime_status.return_value = runtime_status_no_cognitive_state
         
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        # Override queue status to return None to test default behavior
+        mock_main_runtime_control_service.get_processor_queue_status.return_value = None
+        
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("state", mock_request, mock_body, mock_admin_auth_context)
@@ -276,47 +267,36 @@ class TestRuntimeStateEndpoint:
         assert result.data.queue_depth == 0  # getattr(status, "queue_depth", 0)
 
     @pytest.mark.asyncio
-    async def test_state_async_call_added(self, mock_request, mock_admin_auth_context, mock_body):
+    async def test_state_async_call_added(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service, runtime_status_running):
         """Test that await was properly added to get_runtime_status call."""
-        # Setup mock to verify async call
-        mock_runtime_control = AsyncMock()
-        mock_status = MagicMock()
-        mock_status.paused = False
-        mock_status.cognitive_state = "WORK"
-        mock_status.queue_depth = 2
-        
-        # This should be called with await
-        mock_runtime_control.get_runtime_status = AsyncMock(return_value=mock_status)
-        mock_request.app.state.main_runtime_control_service = mock_runtime_control
+        # Use the running status fixture and verify async call
+        mock_main_runtime_control_service.get_runtime_status = AsyncMock(return_value=runtime_status_running)
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("state", mock_request, mock_body, mock_admin_auth_context)
 
         # Verify the async method was awaited correctly
         assert result.data.success is True
-        mock_runtime_control.get_runtime_status.assert_called_once()
+        mock_main_runtime_control_service.get_runtime_status.assert_called_once()
         # Ensure it was actually awaited (AsyncMock tracks this)
-        assert mock_runtime_control.get_runtime_status.called
+        assert mock_main_runtime_control_service.get_runtime_status.called
 
 
 class TestPipelineStateEnhancement:
     """Test enhanced pause response with pipeline state information."""
 
     @pytest.mark.asyncio
-    async def test_pause_with_pipeline_state(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_pause_with_pipeline_state(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test pause operation captures pipeline state for UI display."""
-        # Setup runtime with pipeline controller
-        mock_runtime = MagicMock()
-        mock_pipeline_controller = MagicMock()
-        
         # Mock pipeline state
         mock_pipeline_state = MagicMock()
         mock_pipeline_state.current_step = "PERFORM_DMAS"
-        mock_pipeline_controller.get_current_state.return_value = mock_pipeline_state
         
-        mock_runtime.pipeline_controller = mock_pipeline_controller
+        # Setup runtime with proper mocks
+        mock_runtime = create_runtime_mock_with_agent_processor("WORK", mock_pipeline_state)
         mock_request.app.state.runtime = mock_runtime
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("pause", mock_request, mock_body, mock_admin_auth_context)
@@ -333,13 +313,12 @@ class TestPipelineStateEnhancement:
         assert result.data.current_step_schema["can_single_step"] is True
 
     @pytest.mark.asyncio
-    async def test_pause_without_pipeline_controller(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_pause_without_pipeline_controller(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test pause operation when no pipeline controller is available."""
-        # Setup runtime without pipeline controller
-        mock_runtime = MagicMock()
-        mock_runtime.pipeline_controller = None
+        # Setup runtime without pipeline controller but with agent_processor
+        mock_runtime = create_runtime_mock_with_agent_processor("WORK", None)
         mock_request.app.state.runtime = mock_runtime
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("pause", mock_request, mock_body, mock_admin_auth_context)
@@ -352,15 +331,15 @@ class TestPipelineStateEnhancement:
         assert not hasattr(result.data, 'current_step') or result.data.current_step is None
 
     @pytest.mark.asyncio
-    async def test_pause_pipeline_exception_handling(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_pause_pipeline_exception_handling(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test pause operation handles pipeline exceptions gracefully."""
-        # Setup runtime with pipeline controller that throws exception
-        mock_runtime = MagicMock()
+        # Setup runtime with proper agent_processor and pipeline controller that throws exception
+        mock_runtime = create_runtime_mock_with_agent_processor("WORK", None)
         mock_pipeline_controller = MagicMock()
         mock_pipeline_controller.get_current_state.side_effect = Exception("Pipeline error")
         mock_runtime.pipeline_controller = mock_pipeline_controller
         mock_request.app.state.runtime = mock_runtime
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute - should not raise exception
         result = await control_runtime("pause", mock_request, mock_body, mock_admin_auth_context)
@@ -375,17 +354,14 @@ class TestRuntimeControlResponseSchema:
     """Test the enhanced RuntimeControlResponse schema."""
 
     @pytest.mark.asyncio
-    async def test_enhanced_response_fields(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_enhanced_response_fields(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test that enhanced response includes the new optional fields."""
         # Setup runtime with pipeline state
-        mock_runtime = MagicMock()
-        mock_pipeline_controller = MagicMock()
         mock_pipeline_state = MagicMock()
         mock_pipeline_state.current_step = "BUILD_CONTEXT"
-        mock_pipeline_controller.get_current_state.return_value = mock_pipeline_state
-        mock_runtime.pipeline_controller = mock_pipeline_controller
+        mock_runtime = create_runtime_mock_with_agent_processor("WORK", mock_pipeline_state)
         mock_request.app.state.runtime = mock_runtime
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("pause", mock_request, mock_body, mock_admin_auth_context)
@@ -405,11 +381,11 @@ class TestRuntimeControlResponseSchema:
         assert "next_actions" in response_data.current_step_schema
 
     @pytest.mark.asyncio
-    async def test_response_without_enhanced_fields(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control):
+    async def test_response_without_enhanced_fields(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test response when enhanced fields are not available."""
         # Setup without pipeline controller
         mock_request.app.state.runtime = None
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
         # Execute
         result = await control_runtime("resume", mock_request, mock_body, mock_admin_auth_context)
@@ -440,16 +416,16 @@ class TestServiceNotAvailableHandling:
         assert "Runtime control service not available" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_main_service_preferred_over_api_service(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control, mock_api_runtime_control):
+    async def test_main_service_preferred_over_api_service(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service, mock_api_runtime_control_service):
         """Test that main service is preferred when both are available."""
         # Setup - both services available
-        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control
-        mock_request.app.state.runtime_control_service = mock_api_runtime_control
+        mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
+        mock_request.app.state.runtime_control_service = mock_api_runtime_control_service
 
         # Execute
         result = await control_runtime("pause", mock_request, mock_body, mock_admin_auth_context)
 
         # Verify main service was used (no parameter call)
         assert result.data.success is True
-        mock_main_runtime_control.pause_processing.assert_called_once_with()
-        mock_api_runtime_control.pause_processing.assert_not_called()
+        mock_main_runtime_control_service.pause_processing.assert_called_once_with()
+        mock_api_runtime_control_service.pause_processing.assert_not_called()

@@ -56,8 +56,8 @@ class TestPauseInteractionContract:
         When paused, the ethical reasoning pipeline must be inspectable step-by-step.
         """
         # Setup API with mocked services
-        with patch('ciris_engine.logic.adapters.api.adapter.RuntimeControlBus') as mock_rcb, \
-             patch('ciris_engine.logic.adapters.api.adapter.CommunicationBus') as mock_cb:
+        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb, \
+             patch('ciris_engine.logic.buses.CommunicationBus') as mock_cb:
             
             # Configure runtime control bus
             mock_rcb.return_value.get_service.return_value = mock_runtime_control
@@ -66,8 +66,11 @@ class TestPauseInteractionContract:
             mock_cb.return_value.get_service.return_value = mock_communication_service
             
             # Create API platform
-            api_platform = ApiPlatform()
-            await api_platform.initialize()
+            # Create mock runtime
+            mock_runtime = MagicMock()
+            
+            api_platform = ApiPlatform(mock_runtime)
+            await api_platform.start()
             
             app = api_platform.app
             client = TestClient(app)
@@ -130,7 +133,7 @@ class TestPauseInteractionContract:
         
         This ensures the RuntimeStatusResponse includes pause state information.
         """
-        with patch('ciris_engine.logic.adapters.api.adapter.RuntimeControlBus') as mock_rcb:
+        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb:
             mock_rcb.return_value.get_service.return_value = mock_runtime_control
             
             # Mock a paused runtime status
@@ -139,8 +142,11 @@ class TestPauseInteractionContract:
             mock_runtime_control.get_runtime_status.return_value.cognitive_state = "PAUSED"
             mock_runtime_control.get_runtime_status.return_value.queue_depth = 1
             
-            api_platform = ApiPlatform()
-            await api_platform.initialize()
+            # Create mock runtime
+            mock_runtime = MagicMock()
+            
+            api_platform = ApiPlatform(mock_runtime)
+            await api_platform.start()
             
             app = api_platform.app
             client = TestClient(app)
@@ -169,11 +175,14 @@ class TestPauseInteractionContract:
         
         This validates the queuing mechanism for step-by-step debugging.
         """
-        with patch('ciris_engine.logic.adapters.api.adapter.RuntimeControlBus') as mock_rcb:
+        with patch('ciris_engine.logic.buses.RuntimeControlBus') as mock_rcb:
             mock_rcb.return_value.get_service.return_value = mock_runtime_control
             
-            api_platform = ApiPlatform()
-            await api_platform.initialize()
+            # Create mock runtime
+            mock_runtime = MagicMock()
+            
+            api_platform = ApiPlatform(mock_runtime)
+            await api_platform.start()
             
             app = api_platform.app
             client = TestClient(app)

@@ -519,9 +519,17 @@ async def control_runtime(
             success=result.success,
             message=result.message,
             processor_state=result.processor_state,
-            cognitive_state=cognitive_state,
+            cognitive_state=cognitive_state or result.cognitive_state or "UNKNOWN",
             queue_depth=result.queue_depth,
         )
+        
+        # Copy enhanced fields if they exist
+        if hasattr(result, 'current_step'):
+            response.current_step = result.current_step
+        if hasattr(result, 'current_step_schema'):
+            response.current_step_schema = result.current_step_schema
+        if hasattr(result, 'pipeline_state'):
+            response.pipeline_state = result.pipeline_state
 
         return SuccessResponse(data=response)
 

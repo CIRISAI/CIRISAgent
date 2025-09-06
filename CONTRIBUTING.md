@@ -1,5 +1,13 @@
 # Contributing to CIRIS Agent
 
+> **🏠 Looking to build multi-modal AI capabilities?** 
+> 
+> **Consider contributing to [CIRISHome](https://github.com/CIRISAI/CIRISHome)** - our active development platform for vision, audio, and sensor fusion capabilities that enable medical AI for underserved communities. CIRISHome welcomes multi-modal AI development using Home Assistant as a foundation, with the ultimate goal of life-saving healthcare access for those who need it most.
+>
+> **CIRISAgent** (this repository) focuses on core AI agent functionality with a complete H3ERE architecture, while **CIRISHome** is where multi-modal capabilities are developed and tested.
+
+---
+
 Thank you for your interest in contributing to CIRIS Agent! This document outlines how to contribute effectively to the project.
 
 ## 🏗️ **Engine Status: H3ERE Architecture Complete**

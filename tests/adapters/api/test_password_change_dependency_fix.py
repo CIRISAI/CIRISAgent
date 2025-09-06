@@ -7,15 +7,16 @@ but the dependency function requires both auth AND auth_service parameters.
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock
-from fastapi import HTTPException, Request
+from unittest.mock import AsyncMock, Mock, patch
+from fastapi import HTTPException, Request, Depends
 from datetime import datetime, timezone
 
 from ciris_engine.logic.adapters.api.routes.users import change_password, list_user_api_keys
 from ciris_engine.logic.adapters.api.routes.users import ChangePasswordRequest
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
-from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext
+from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext, check_permissions
 from ciris_engine.schemas.runtime.api import APIRole
+from ciris_engine.schemas.api.auth import Permission, UserRole
 
 
 class TestPasswordChangeDependencyFix:
@@ -26,8 +27,8 @@ class TestPasswordChangeDependencyFix:
         """Auth context for admin user."""
         return AuthContext(
             user_id="admin",
-            role="SYSTEM_ADMIN",
-            permissions={"users.write", "users.read", "users.delete"},
+            role=UserRole.SYSTEM_ADMIN,
+            permissions={Permission.FULL_ACCESS},
             authenticated_at=datetime.now(timezone.utc)
         )
 
@@ -36,8 +37,8 @@ class TestPasswordChangeDependencyFix:
         """Auth context for regular user."""
         return AuthContext(
             user_id="user123",
-            role="OBSERVER",
-            permissions={"users.read"},
+            role=UserRole.OBSERVER,
+            permissions={Permission.VIEW_MESSAGES, Permission.VIEW_AUDIT},
             authenticated_at=datetime.now(timezone.utc)
         )
 
@@ -145,19 +146,18 @@ class TestPasswordChangeDependencyFix:
             )
 
         assert exc_info.value.status_code == 403
-        assert "insufficient permissions" in exc_info.value.detail.lower()
+        assert "missing required permissions" in exc_info.value.detail.lower()
 
     def test_regression_prevention_attributes(self):
         """Test that ensures the specific AttributeError can't happen."""
         # This test documents the specific bug that was fixed
         # The bug was: auth_service was a Depends object instead of the actual service
         
-        # Mock a Depends object (simplified)
-        depends_mock = Mock()
-        depends_mock.__class__.__name__ = "Depends"
+        # Create an actual Depends object
+        depends_obj = Depends(lambda: None)
         
         # This should fail as expected - a Depends object doesn't have get_user
-        assert not hasattr(depends_mock, "get_user")
+        assert not hasattr(depends_obj, "get_user")
         
         # But our actual service should have get_user
         service = Mock(spec=APIAuthService)

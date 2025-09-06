@@ -2038,6 +2038,53 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 if latencies:
                     service_latency_ms[service] = sum(latencies) / len(latencies)
 
+            # Calculate average thought depth from database
+            avg_thought_depth = 0.0
+            try:
+                from ciris_engine.logic.persistence import get_db_connection
+                # Get the memory service to access its db_path
+                memory_service = await self._memory_bus.get_service(handler_name="telemetry_service")
+                if memory_service:
+                    db_path = getattr(memory_service, "db_path", None)
+                    with get_db_connection(db_path=db_path) as conn:
+                        cursor = conn.cursor()
+                        # Query thoughts from the last 24 hours and calculate average thought_depth
+                        cursor.execute("""
+                            SELECT AVG(thought_depth) as avg_depth 
+                            FROM thoughts 
+                            WHERE created_at >= datetime('now', '-24 hours')
+                        """)
+                        result = cursor.fetchone()
+                        if result and result[0] is not None:
+                            avg_thought_depth = float(result[0])
+                        logger.debug(f"Calculated average thought depth: {avg_thought_depth}")
+            except Exception as e:
+                logger.warning(f"Failed to calculate average thought depth: {e}")
+                avg_thought_depth = 1.5  # Fallback value
+
+            # Calculate queue saturation from runtime control service
+            queue_saturation = 0.0
+            try:
+                # Access runtime control service via bus manager if available
+                runtime_control_bus = getattr(self, "_runtime_control_bus", None)
+                if runtime_control_bus:
+                    runtime_control = await runtime_control_bus.get_service(handler_name="telemetry_service")
+                    if runtime_control:
+                        processor_queue_status = await runtime_control.get_processor_queue_status()
+                        if processor_queue_status and processor_queue_status.max_size > 0:
+                            queue_saturation = processor_queue_status.queue_size / processor_queue_status.max_size
+                            queue_saturation = min(1.0, max(0.0, queue_saturation))  # Clamp to 0-1 range
+                            logger.debug(f"Calculated queue saturation: {queue_saturation:.3f} ({processor_queue_status.queue_size}/{processor_queue_status.max_size})")
+                        else:
+                            logger.debug("Processor queue status not available or max_size is 0")
+                    else:
+                        logger.debug("Runtime control service not available")
+                else:
+                    logger.debug("Runtime control bus not available")
+            except Exception as e:
+                logger.warning(f"Failed to calculate queue saturation: {e}")
+                queue_saturation = 0.0  # Fallback value
+
             # Get system uptime
             uptime_seconds = 0.0
             if hasattr(self, "_start_time") and self._start_time:
@@ -2070,8 +2117,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 carbon_24h_grams=carbon_24h_grams,
                 energy_24h_kwh=energy_24h_kwh,
                 error_rate_percent=error_rate_percent,
-                avg_thought_depth=1.5,  # TODO: Calculate from thought data
-                queue_saturation=0.0,  # TODO: Calculate from queue metrics
+                avg_thought_depth=avg_thought_depth,
+                queue_saturation=queue_saturation,
             )
 
             # Cache the result

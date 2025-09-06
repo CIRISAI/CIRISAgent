@@ -47,6 +47,7 @@ class SpeakHandler(BaseActionHandler):
         dispatch_context: DispatchContext,
     ) -> Optional[str]:
         thought_id = thought.thought_id
+        start_time = self.time_service.now()
 
         # Create trace correlation for handler execution
         self._create_trace_correlation(dispatch_context, HandlerActionType.SPEAK)
@@ -162,7 +163,7 @@ class SpeakHandler(BaseActionHandler):
         response_data = ServiceResponseData(
             success=success,
             result_summary=f"Message {'sent' if success else 'failed'} to channel {channel_id}",
-            execution_time_ms=100.0,  # TODO: Track actual execution time
+            execution_time_ms=(now - start_time).total_seconds() * 1000.0,
             response_timestamp=now,
         )
 

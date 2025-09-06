@@ -540,7 +540,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Update to set active=False
         await self.update_wa(wa_id, active=False)
-        # TODO: Add audit log entry for revocation using reason
+        
+        # Add audit log entry for revocation
+        if hasattr(self, '_audit_service') and self._audit_service:
+            await self._audit_service.log_event(
+                event_type="wa_revocation",
+                source_service="authentication",
+                details={
+                    "wa_id": wa_id,
+                    "reason": reason,
+                    "timestamp": self._time_service.now().isoformat() if self._time_service else None
+                }
+            )
         logger.info(f"Revoked WA {wa_id}: {reason}")
         return True
 

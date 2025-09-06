@@ -891,17 +891,55 @@ class APIAuthService:
         # Store updated user
         self._users[user_id] = user
 
-        # Also update in database if we have auth service
+        # Also update/create in database if we have auth service
         if self._auth_service:
             try:
-                # Update WA role and parent in database
-                # Update WA role in database
-                await self._auth_service.update_wa(
-                    user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
-                )
+                # Check if WA certificate exists first
+                existing_wa = await self._auth_service.get_wa(user_id)
+                
+                if existing_wa:
+                    # WA exists - update it
+                    await self._auth_service.update_wa(
+                        user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
+                    )
+                    print(f"Updated existing WA {user_id} to role {wa_role}")
+                else:
+                    # WA doesn't exist - create it
+                    # This happens when user was created via OAuth but never had a WA certificate
+                    # Get base permissions for the role and add WA-specific permissions
+                    base_permissions = self.get_permissions_for_role(user.api_role)
+                    wa_permissions = base_permissions + [
+                        "wa.resolve_deferral",  # Critical for deferral resolution
+                        "wa.mint"  # Allow WA to mint others
+                    ]
+                    
+                    wa_cert = await self._auth_service.create_wa(
+                        name=user.name,
+                        email=user.name + "@ciris.local" if not "@" in user.name else user.name,
+                        scopes=wa_permissions,
+                        role=wa_role
+                    )
+                    print(f"Created new WA certificate {wa_cert.wa_id} for user {user_id} with role {wa_role}")
+                    
+                    # For OAuth users, link the WA to their OAuth identity
+                    if ":" in user_id:  # OAuth users have format "provider:external_id"
+                        provider, external_id = user_id.split(":", 1)
+                        await self._auth_service.update_wa(
+                            wa_cert.wa_id,
+                            oauth_provider=provider,
+                            oauth_external_id=external_id
+                        )
+                        print(f"Linked WA {wa_cert.wa_id} to OAuth identity {provider}:{external_id}")
+                    
+                    # Update user record with the new WA ID
+                    user.wa_id = wa_cert.wa_id
+                    self._users[wa_cert.wa_id] = user  # Store under new WA ID
+                    if user_id != wa_cert.wa_id:
+                        self._users.pop(user_id, None)  # Remove old OAuth-based entry
+                        
                 # Note: parent_wa_id and auto_minted are not supported by the protocol's update_wa method
                 # They would need to be set during creation or via a different mechanism
             except Exception as e:
-                print(f"Error updating WA role in database: {e}")
+                print(f"Error updating/creating WA in database: {e}")
 
         return user

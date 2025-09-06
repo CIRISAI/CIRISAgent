@@ -213,68 +213,7 @@ class ThoughtProcessor:
         thought_context = await self._gather_context_step(thought_item, context)
 
         # 3. Run DMAs
-        # STEP POINT: PERFORM_DMAS
-        await self._stream_step_point(StepPoint.PERFORM_DMAS, thought_item.thought_id, {
-            "timestamp": self._time_service.now().isoformat(),
-            "thought_id": thought_item.thought_id,
-            "context": thought_context.model_dump() if hasattr(thought_context, "model_dump") else str(thought_context),
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-        })
-        
-        # template_name is not an accepted argument by run_initial_dmas.
-        # If template specific DMA behavior is needed, it might be part of thought_item's context
-        # or run_initial_dmas and its sub-runners would need to be updated.
-        # For now, removing profile_name to fix TypeError.
-        # The dsdma_context argument is optional and defaults to None if not provided.
-        try:
-            logger.debug(f"About to call dma_orchestrator.run_initial_dmas for thought {thought_item.thought_id}")
-            dma_results = await self.dma_orchestrator.run_initial_dmas(
-                thought_item=thought_item,
-                processing_context=thought_context,
-            )
-        except DMAFailure as dma_err:
-            logger.error(
-                f"DMA failure during initial processing for {thought_item.thought_id}: {dma_err}",
-                exc_info=True,
-            )
-            if self.telemetry_service:
-                await self.telemetry_service.record_metric(
-                    "dma_failure",
-                    value=1.0,
-                    tags={
-                        "thought_id": thought_item.thought_id,
-                        "error": str(dma_err)[:100],
-                        "path_type": "critical",  # Critical failure
-                        "source_module": "thought_processor",
-                    },
-                )
-            defer_params = DeferParams(reason="DMA timeout", context={"error": str(dma_err)}, defer_until=None)
-            # Update correlation with DMA failure
-            end_time = self._time_service.now()
-            from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
-
-            update_req = CorrelationUpdateRequest(
-                correlation_id=correlation.correlation_id,
-                response_data={
-                    "success": "false",
-                    "error_message": f"DMA failure: {str(dma_err)}",
-                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
-                    "response_timestamp": end_time.isoformat(),
-                },
-                status=ServiceCorrelationStatus.FAILED,
-                metric_value=None,
-                tags=None,
-            )
-            persistence.update_correlation(update_req, self._time_service)
-            return ActionSelectionDMAResult(
-                selected_action=HandlerActionType.DEFER,
-                action_parameters=defer_params,
-                rationale="DMA timeout",
-                raw_llm_response=None,
-                reasoning=None,
-                evaluation_time_ms=None,
-                resource_usage=None,
-            )
+        dma_results = await self._perform_dmas_step(thought_item, thought_context)
 
         # 4. Check for failures/escalations
         if self._has_critical_failure(dma_results):
@@ -298,55 +237,8 @@ class ThoughtProcessor:
             return self._create_deferral_result(dma_results, thought)
 
         # 5. Run action selection
-        # STEP POINT: PERFORM_ASPDMA
-        await self._stream_step_point(StepPoint.PERFORM_ASPDMA, thought_item.thought_id, {
-            "timestamp": self._time_service.now().isoformat(),
-            "thought_id": thought_item.thought_id,
-            "dma_results": str(dma_results) if dma_results else None,
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-        })
-        
-        profile_name = self._get_profile_name(thought)
-        try:
-            action_result = await self.dma_orchestrator.run_action_selection(
-                thought_item=thought_item,
-                actual_thought=thought,
-                processing_context=thought_context,  # This is the ThoughtContext
-                dma_results=dma_results,
-                profile_name=profile_name,
-            )
-        except DMAFailure as dma_err:
-            logger.error(
-                f"DMA failure during action selection for {thought_item.thought_id}: {dma_err}",
-                exc_info=True,
-            )
-            defer_params = DeferParams(reason="DMA timeout", context={"error": str(dma_err)}, defer_until=None)
-            # Update correlation with DMA failure (action selection)
-            end_time = self._time_service.now()
-            from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
-
-            update_req = CorrelationUpdateRequest(
-                correlation_id=correlation.correlation_id,
-                response_data={
-                    "success": "false",
-                    "error_message": f"DMA failure during action selection: {str(dma_err)}",
-                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
-                    "response_timestamp": end_time.isoformat(),
-                },
-                status=ServiceCorrelationStatus.FAILED,
-                metric_value=None,
-                tags=None,
-            )
-            persistence.update_correlation(update_req, self._time_service)
-            return ActionSelectionDMAResult(
-                selected_action=HandlerActionType.DEFER,
-                action_parameters=defer_params,
-                rationale="DMA timeout",
-                raw_llm_response=None,
-                reasoning=None,
-                evaluation_time_ms=None,
-                resource_usage=None,
-            )
+        # 4. Run Action Selection (ASPDMA)
+        action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
 
         # CRITICAL DEBUG: Check action_result details immediately
         if action_result:
@@ -779,16 +671,41 @@ class ThoughtProcessor:
     @step_point(StepPoint.PERFORM_DMAS)
     async def _perform_dmas_step(self, thought_item: ProcessingQueueItem, thought_context):
         """Step 2: Execute multi-perspective DMAs."""
-        thought = await self._fetch_thought(thought_item.thought_id)
-        
         try:
-            dma_results = await self.dma_orchestrator.run_dmas(
-                thought, thought_context, self.app_config.get_dsdma_context()
+            logger.debug(f"About to call dma_orchestrator.run_initial_dmas for thought {thought_item.thought_id}")
+            dma_results = await self.dma_orchestrator.run_initial_dmas(
+                thought_item=thought_item,
+                processing_context=thought_context,
             )
             return dma_results
-        except DMAFailure as e:
-            logger.warning(f"DMA failure for thought {thought_item.thought_id}: {e}")
-            return None
+        except DMAFailure as dma_err:
+            logger.error(
+                f"DMA failure during initial processing for {thought_item.thought_id}: {dma_err}",
+                exc_info=True,
+            )
+            # Record telemetry for critical DMA failure
+            if self.telemetry_service:
+                await self.telemetry_service.record_metric(
+                    "dma_failure",
+                    value=1.0,
+                    tags={
+                        "thought_id": thought_item.thought_id,
+                        "error": str(dma_err)[:100],
+                        "path_type": "critical",  # Critical failure
+                        "source_module": "thought_processor",
+                    },
+                )
+            # Return deferral result for DMA failures
+            defer_params = DeferParams(reason="DMA timeout", context={"error": str(dma_err)}, defer_until=None)
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.DEFER,
+                action_parameters=defer_params,
+                rationale=f"DMA failure: {dma_err}",
+                raw_llm_response=None,
+                reasoning=None,
+                evaluation_time_ms=None,
+                resource_usage=None,
+            )
 
     @streaming_step(StepPoint.PERFORM_ASPDMA)
     @step_point(StepPoint.PERFORM_ASPDMA)
@@ -800,14 +717,31 @@ class ThoughtProcessor:
         if dma_results and hasattr(dma_results, 'should_defer_to_wise_authority') and dma_results.should_defer_to_wise_authority:
             return self._create_deferral_result(dma_results, thought)
 
+        profile_name = self._get_profile_name(thought)
         try:
-            action_result = await self._perform_aspdma_with_retry(
-                thought, thought_context, dma_results, max_retries=3
+            action_result = await self.dma_orchestrator.run_action_selection(
+                thought_item=thought_item,
+                actual_thought=thought,
+                processing_context=thought_context,  # This is the ThoughtContext
+                dma_results=dma_results,
+                profile_name=profile_name,
             )
             return action_result
-        except Exception as e:
-            logger.error(f"ASPDMA failed for thought {thought_item.thought_id}: {e}")
-            return self._create_deferral_result(dma_results, thought)
+        except DMAFailure as dma_err:
+            logger.error(
+                f"DMA failure during action selection for {thought_item.thought_id}: {dma_err}",
+                exc_info=True,
+            )
+            defer_params = DeferParams(reason="DMA timeout", context={"error": str(dma_err)}, defer_until=None)
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.DEFER,
+                action_parameters=defer_params,
+                rationale="DMA timeout",
+                raw_llm_response=None,
+                reasoning=None,
+                evaluation_time_ms=None,
+                resource_usage=None,
+            )
 
     @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
     @step_point(StepPoint.CONSCIENCE_EXECUTION)

@@ -27,6 +27,8 @@ CIRIS wraps LLM calls with:
 
 **Philosophy**: "No Dicts, No Strings, No Kings" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
 
+**Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
+
 ## Quick Start
 
 ```bash

@@ -178,12 +178,21 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             self._commands_processed += 1
             await self._record_event("processor_control", "single_step", success=True, result=result)
 
+            # Return the full step result data instead of discarding it
             return ProcessorControlResponse(
                 success=result.get("success", False),
                 processor_name="agent",
                 operation="single_step",
                 new_status=self._processor_status,
                 error=result.get("error"),
+                # Pass through all the H3ERE step data
+                step_point=result.get("step_point"),
+                step_results=result.get("step_results", []),
+                thoughts_processed=result.get("thoughts_processed", 0),
+                processing_time_ms=result.get("processing_time_ms", 0.0),
+                pipeline_state=result.get("pipeline_state", {}),
+                current_round=result.get("current_round"),
+                pipeline_empty=result.get("pipeline_empty", False),
             )
 
         except Exception as e:

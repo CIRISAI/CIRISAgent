@@ -1,6 +1,6 @@
 # Release Notes - CIRIS v1.4.3
 
-**Release Date**: January 2025
+**Release Date**: September 2025
 **Branch**: 1.4.3-beta
 **Focus**: Real Metrics Implementation - 362 Operational Metrics with Zero Placeholders + CIRISLens Support
 

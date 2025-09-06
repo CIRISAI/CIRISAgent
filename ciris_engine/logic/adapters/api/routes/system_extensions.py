@@ -245,22 +245,18 @@ def _safe_demo_data(demo_data) -> Optional[Dict[str, Any]]:
     return None
 
 
-@router.post("/runtime/step", response_model=SuccessResponse[Union[RuntimeControlResponse, SingleStepResponse]])
+@router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
 async def single_step_processor(
     request: Request, 
     auth: AuthContext = Depends(require_admin), 
-    body: dict = Body(default={}),
-    include_details: bool = Query(False, description="Include detailed step point data and pipeline state")
-) -> SuccessResponse[Union[RuntimeControlResponse, SingleStepResponse]]:
+    body: dict = Body(default={})
+) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
 
     Useful for debugging and demonstrations. Processes one item from the queue.
+    Always returns detailed H3ERE step data for transparency.
     Requires ADMIN role.
-    
-    Parameters:
-    - include_details: If true, returns enhanced response with step point data,
-                      pipeline state, and performance metrics for demos
     """
     # Try main runtime control service first (has all methods), fall back to API runtime control
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
@@ -286,21 +282,32 @@ async def single_step_processor(
             "queue_depth": queue_depth,
         }
 
-        if not include_details:
-            # Return basic response for backward compatibility
-            response = RuntimeControlResponse(**basic_response_data)
-            return SuccessResponse(data=response)
+        # Always provide comprehensive H3ERE step data directly from ProcessorControlResponse
+        # The runtime control service now passes through all H3ERE step data
         
-        # Enhanced response with step point data
-        step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data = _extract_pipeline_data(runtime)
+        # Convert step_point string to enum if needed
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        safe_step_point = None
+        if result.step_point:
+            try:
+                safe_step_point = StepPoint(result.step_point.lower()) if isinstance(result.step_point, str) else result.step_point
+            except (ValueError, AttributeError):
+                safe_step_point = None
         
-        # Create enhanced response with safe defaults - filter out mock objects
-        safe_step_point = _safe_step_point(step_point)
-        safe_step_result = _safe_step_result(step_result)
-        safe_pipeline_state = _safe_pipeline_state(pipeline_state)
-        safe_processing_time = _safe_processing_time(processing_time_ms)
-        safe_tokens_used = _safe_tokens_used(tokens_used)
-        safe_demo_data = _safe_demo_data(demo_data)
+        # Convert step_results list to consolidated step_result dict for API response
+        safe_step_result = None
+        if result.step_results and isinstance(result.step_results, list):
+            # Consolidate list of step results into a single dict for API response
+            safe_step_result = {
+                "steps_processed": len(result.step_results),
+                "results_by_round": {str(item.get("round_number", 0)): item for item in result.step_results if isinstance(item, dict)},
+                "summary": result.step_results[0] if result.step_results else None
+            }
+        
+        safe_pipeline_state = result.pipeline_state
+        safe_processing_time = result.processing_time_ms or 0.0
+        safe_tokens_used = None  # Not yet implemented in ProcessorControlResponse
+        safe_demo_data = None  # Create from step data if needed
 
         single_step_response = SingleStepResponse(
             **basic_response_data,
@@ -626,3 +633,78 @@ async def get_processor_states(
     except Exception as e:
         logger.error(f"Error getting processor states: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runtime/reasoning-stream")
+async def reasoning_stream(
+    request: Request, 
+    auth: AuthContext = Depends(require_admin)
+):
+    """
+    Stream live H3ERE reasoning steps as they occur.
+    
+    Provides real-time streaming of step-by-step reasoning for live UI generation.
+    Returns Server-Sent Events (SSE) with step data as processing happens.
+    Requires ADMIN role.
+    """
+    from fastapi.responses import StreamingResponse
+    import json
+    import asyncio
+    
+    # Get runtime control service
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    if not runtime_control:
+        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+
+    async def stream_reasoning_steps():
+        """Generate Server-Sent Events for live reasoning steps."""
+        try:
+            # Subscribe to the global step result stream
+            from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+            
+            # Create a queue for this client
+            stream_queue = asyncio.Queue(maxsize=100)
+            step_result_stream.subscribe(stream_queue)
+            
+            try:
+                # Send initial connection event
+                yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
+                
+                # Stream live step results as they occur
+                while True:
+                    try:
+                        # Wait for step results with timeout to send keepalive
+                        step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
+                        
+                        # Stream the step update
+                        yield f"event: step_update\ndata: {json.dumps(step_update, default=str)}\n\n"
+                        
+                    except asyncio.TimeoutError:
+                        # Send keepalive every 30 seconds
+                        yield f"event: keepalive\ndata: {json.dumps({'timestamp': datetime.now().isoformat()})}\n\n"
+                        
+                    except Exception as step_error:
+                        logger.error(f"Error processing step result in stream: {step_error}")
+                        yield f"event: error\ndata: {json.dumps({'error': str(step_error)})}\n\n"
+                        break
+                        
+            finally:
+                # Clean up subscription
+                step_result_stream.unsubscribe(stream_queue)
+                
+        except Exception as e:
+            logger.error(f"Error in reasoning stream: {e}")
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        stream_reasoning_steps(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )

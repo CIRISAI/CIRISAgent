@@ -165,6 +165,15 @@ class ProcessorControlResponse(BaseModel):
     operation: str = Field(..., description="Operation performed")
     new_status: ProcessorStatus = Field(..., description="New processor status")
     error: Optional[str] = Field(None, description="Error message if failed")
+    
+    # H3ERE step data for single-step operations
+    step_point: Optional[str] = Field(None, description="H3ERE step point executed")
+    step_results: Optional[List[Dict[str, Any]]] = Field(None, description="Step results organized by round and task")
+    thoughts_processed: Optional[int] = Field(None, description="Number of thoughts processed")
+    processing_time_ms: Optional[float] = Field(None, description="Processing time in milliseconds")
+    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Current pipeline state")
+    current_round: Optional[int] = Field(None, description="Current processing round")
+    pipeline_empty: Optional[bool] = Field(None, description="Whether pipeline is empty")
 
 
 class AdapterOperationResponse(BaseModel):

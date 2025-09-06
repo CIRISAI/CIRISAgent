@@ -499,5 +499,5 @@ By replacing traditional configuration approaches with this graph-based, version
 
 **Service Version**: 1.0.0  
 **Documentation Version**: 1.0.0  
-**Last Updated**: January 2025  
+**Last Updated**: September 2025  
 **Maintainer**: CIRIS Development Team

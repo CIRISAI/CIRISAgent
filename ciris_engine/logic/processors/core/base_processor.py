@@ -140,9 +140,39 @@ class BaseProcessor(ABC):
 
             dispatch_ctx = DispatchContext(**context)
 
+            # STEP POINT: PERFORM_ACTION (before action dispatch)
+            if hasattr(self, '_stream_step_point'):
+                from ciris_engine.schemas.services.runtime_control import StepPoint
+                await self._stream_step_point(StepPoint.PERFORM_ACTION, thought.thought_id, {
+                    "timestamp": getattr(self, '_time_service', None).now().isoformat() if hasattr(self, '_time_service') and self._time_service else None,
+                    "thought_id": thought.thought_id,
+                    "selected_action": str(getattr(result, 'selected_action', 'UNKNOWN')),
+                    "action_parameters": str(getattr(result, 'action_parameters', None)),
+                    "dispatch_context": str(dispatch_ctx),
+                })
+
+            dispatch_start = getattr(self, '_time_service', None).now() if hasattr(self, '_time_service') and self._time_service else None
+            
             await self.action_dispatcher.dispatch(
                 action_selection_result=result, thought=thought, dispatch_context=dispatch_ctx
             )
+            
+            dispatch_end = getattr(self, '_time_service', None).now() if hasattr(self, '_time_service') and self._time_service else None
+            dispatch_time_ms = (dispatch_end - dispatch_start).total_seconds() * 1000 if dispatch_start and dispatch_end else 0.0
+            
+            # STEP POINT: ACTION_COMPLETE (after action dispatch)
+            if hasattr(self, '_stream_step_point'):
+                from ciris_engine.schemas.services.runtime_control import StepPoint
+                await self._stream_step_point(StepPoint.ACTION_COMPLETE, thought.thought_id, {
+                    "timestamp": dispatch_end.isoformat() if dispatch_end else None,
+                    "thought_id": thought.thought_id,
+                    "action_executed": str(getattr(result, 'selected_action', 'UNKNOWN')),
+                    "dispatch_success": True,
+                    "execution_time_ms": dispatch_time_ms,
+                    "handler_completed": True,
+                    "follow_up_processing_pending": True,
+                })
+            
             return True
         except Exception as e:
             logger.error(f"Error dispatching action: {e}", exc_info=True)

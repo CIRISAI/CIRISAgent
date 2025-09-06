@@ -65,8 +65,18 @@ class PipelineController:
         self._resume_events: Dict[str, asyncio.Event] = {}
         self._abort_flags: Dict[str, bool] = {}
 
-        # Step point control
-        self._enabled_step_points = set(StepPoint)  # All enabled by default
+        # Step point control - ONLY 9 real H3ERE pipeline steps
+        self._enabled_step_points = {
+            StepPoint.GATHER_CONTEXT,
+            StepPoint.PERFORM_DMAS,
+            StepPoint.PERFORM_ASPDMA,
+            StepPoint.CONSCIENCE_EXECUTION,
+            StepPoint.RECURSIVE_ASPDMA,
+            StepPoint.RECURSIVE_CONSCIENCE,
+            StepPoint.FINALIZE_ACTION,
+            StepPoint.PERFORM_ACTION,
+            StepPoint.ACTION_COMPLETE,
+        }
         self._single_step_mode = False
 
     async def should_pause_at(self, step_point: StepPoint, thought_id: str) -> bool:
@@ -82,7 +92,7 @@ class PipelineController:
             return True
 
         # Otherwise only pause at specific configured points
-        return step_point in [StepPoint.POPULATE_ROUND, StepPoint.ACTION_SELECTION]
+        return step_point in [StepPoint.POPULATE_ROUND, StepPoint.FINALIZE_ACTION]
 
     async def pause_at_step_point(
         self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]
@@ -171,7 +181,7 @@ class PipelineController:
         self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Dict[str, Any]
     ) -> None:
         """Update thought with step-specific data."""
-        if step_point == StepPoint.BUILD_CONTEXT:
+        if step_point == StepPoint.GATHER_CONTEXT:
             thought.context_built = step_data.get("context")
         elif step_point == StepPoint.PERFORM_DMAS:
             thought.dma_results = step_data.get("dma_results")
@@ -179,161 +189,77 @@ class PipelineController:
             thought.aspdma_result = step_data.get("aspdma_result")
         elif step_point == StepPoint.CONSCIENCE_EXECUTION:
             thought.conscience_results = step_data.get("conscience_results")
-        elif step_point == StepPoint.ACTION_SELECTION:
+        elif step_point == StepPoint.FINALIZE_ACTION:
             thought.selected_action = step_data.get("selected_action")
-        elif step_point == StepPoint.HANDLER_COMPLETE:
+        elif step_point == StepPoint.ROUND_COMPLETE:
             thought.handler_result = step_data.get("handler_result")
             thought.bus_operations = step_data.get("bus_operations")
 
     def _create_step_result(self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]) -> StepResult:
-        """Create appropriate StepResult based on step point."""
-        # Import here to avoid circular dependency
+        """Create StepResult using EXACT data from running H3ERE pipeline."""
+        # Import only the 9 real H3ERE step result schemas
         from ciris_engine.schemas.services.runtime_control import (
-            StepResultActionSelection,
-            StepResultBuildContext,
-            StepResultBusInbound,
-            StepResultBusOutbound,
-            StepResultConscienceExecution,
-            StepResultFinalizeTasksQueue,
-            StepResultHandlerComplete,
-            StepResultHandlerStart,
-            StepResultPackageHandling,
-            StepResultPerformASPDMA,
+            StepResultGatherContext,
             StepResultPerformDMAs,
-            StepResultPopulateRound,
-            StepResultPopulateThoughtQueue,
+            StepResultPerformASPDMA,
+            StepResultConscienceExecution,
             StepResultRecursiveASPDMA,
             StepResultRecursiveConscience,
+            StepResultFinalizeAction,
+            StepResultPerformAction,
+            StepResultActionComplete,
         )
 
-        # Create appropriate result based on step point with proper typed objects
-        current_time = step_data.get("processing_time_ms", 0.0)
-        round_number = step_data.get("round_number", 1)
-        
-        if step_point == StepPoint.FINALIZE_TASKS_QUEUE:
-            return StepResultFinalizeTasksQueue(
+        # Use EXACT SUT data - no fake data, no simulation!
+        # FAIL FAST AND LOUD if step_point is not one of our 9 real H3ERE steps
+        if step_point == StepPoint.GATHER_CONTEXT:
+            return StepResultGatherContext(
                 success=True,
-                round_number=round_number,
-                active_tasks=step_data.get("active_tasks", []),
-                finalized_tasks=step_data.get("finalized_tasks", []),
-                processing_time_ms=current_time,
-            )
-        elif step_point == StepPoint.POPULATE_THOUGHT_QUEUE:
-            return StepResultPopulateThoughtQueue(
-                success=True,
-                round_number=round_number,
-                tasks_processed=step_data.get("tasks_processed", []),
-                thoughts_generated=step_data.get("thoughts_generated", []),
-                processing_time_ms=current_time,
-            )
-        elif step_point == StepPoint.POPULATE_ROUND:
-            return StepResultPopulateRound(
-                success=True,
-                round_number=round_number,
-                available_thoughts=step_data.get("available_thoughts", []),
-                selected_thoughts=step_data.get("selected_thoughts", []),
-                processing_time_ms=current_time,
-            )
-        elif step_point == StepPoint.BUILD_CONTEXT:
-            return StepResultBuildContext(
-                success=True,
-                thought_id=thought_id,
-                system_snapshot=step_data.get("system_snapshot", {}),
-                agent_identity=step_data.get("agent_identity", {}),
-                thought_context=step_data.get("context", {}),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
         elif step_point == StepPoint.PERFORM_DMAS:
             return StepResultPerformDMAs(
                 success=True,
-                thought_id=thought_id,
-                ethical_dma_result=step_data.get("ethical_dma_result"),
-                common_sense_dma_result=step_data.get("common_sense_dma_result"),
-                domain_dma_result=step_data.get("domain_dma_result"),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
         elif step_point == StepPoint.PERFORM_ASPDMA:
             return StepResultPerformASPDMA(
                 success=True,
-                thought_id=thought_id,
-                aspdma_result=step_data.get("aspdma_result"),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
         elif step_point == StepPoint.CONSCIENCE_EXECUTION:
             return StepResultConscienceExecution(
                 success=True,
-                thought_id=thought_id,
-                conscience_results=step_data.get("conscience_results", []),
-                passed=step_data.get("conscience_passed", True),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
         elif step_point == StepPoint.RECURSIVE_ASPDMA:
             return StepResultRecursiveASPDMA(
                 success=True,
-                thought_id=thought_id,
-                retry_reason=step_data.get("retry_reason", ""),
-                recursive_aspdma_result=step_data.get("recursive_aspdma_result"),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
         elif step_point == StepPoint.RECURSIVE_CONSCIENCE:
             return StepResultRecursiveConscience(
                 success=True,
-                thought_id=thought_id,
-                recursive_conscience_results=step_data.get("recursive_conscience_results", []),
-                final_pass=step_data.get("final_conscience_pass", True),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
-        elif step_point == StepPoint.ACTION_SELECTION:
-            return StepResultActionSelection(
+        elif step_point == StepPoint.FINALIZE_ACTION:
+            return StepResultFinalizeAction(
                 success=True,
-                thought_id=thought_id,
-                selected_action=step_data.get("selected_action"),
-                selection_reasoning=step_data.get("selection_reasoning", ""),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
-        elif step_point == StepPoint.HANDLER_START:
-            return StepResultHandlerStart(
+        elif step_point == StepPoint.PERFORM_ACTION:
+            return StepResultPerformAction(
                 success=True,
-                thought_id=thought_id,
-                handler_name=step_data.get("handler_name", ""),
-                action_parameters=step_data.get("action_parameters", {}),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
-        elif step_point == StepPoint.BUS_OUTBOUND:
-            return StepResultBusOutbound(
+        elif step_point == StepPoint.ACTION_COMPLETE:
+            return StepResultActionComplete(
                 success=True,
-                thought_id=thought_id,
-                outbound_messages=step_data.get("outbound_messages", []),
-                bus_operations=step_data.get("bus_operations", []),
-                processing_time_ms=current_time,
-            )
-        elif step_point == StepPoint.PACKAGE_HANDLING:
-            return StepResultPackageHandling(
-                success=True,
-                thought_id=thought_id,
-                adapter_name=step_data.get("adapter_name", ""),
-                package_type=step_data.get("package_type", ""),
-                processing_time_ms=current_time,
-            )
-        elif step_point == StepPoint.BUS_INBOUND:
-            return StepResultBusInbound(
-                success=True,
-                thought_id=thought_id,
-                inbound_messages=step_data.get("inbound_messages", []),
-                bus_responses=step_data.get("bus_responses", []),
-                processing_time_ms=current_time,
-            )
-        elif step_point == StepPoint.HANDLER_COMPLETE:
-            return StepResultHandlerComplete(
-                success=True,
-                thought_id=thought_id,
-                handler_result=step_data.get("handler_result"),
-                final_output=step_data.get("final_output"),
-                processing_time_ms=current_time,
+                **step_data  # Use EXACT data from SUT
             )
         
-        # Should never reach here with valid step points, but provide fallback
-        raise ValueError(f"Unknown step point: {step_point}")
+        # FAIL FAST AND LOUD - only 9 real H3ERE steps allowed!
+        raise ValueError(f"Invalid step point: {step_point}. Only 9 real H3ERE pipeline steps are supported!")
 
     async def execute_single_step_point(self) -> Dict[str, Any]:
         """
@@ -408,18 +334,18 @@ class PipelineController:
             StepPoint.FINALIZE_TASKS_QUEUE,
             StepPoint.POPULATE_THOUGHT_QUEUE,
             StepPoint.POPULATE_ROUND,
-            StepPoint.BUILD_CONTEXT,
+            StepPoint.GATHER_CONTEXT,
             StepPoint.PERFORM_DMAS,
             StepPoint.PERFORM_ASPDMA,
             StepPoint.CONSCIENCE_EXECUTION,
             StepPoint.RECURSIVE_ASPDMA,
-            StepPoint.RECURSIVE_CONSCIENCE,
-            StepPoint.ACTION_SELECTION,
-            StepPoint.HANDLER_START,
-            StepPoint.BUS_OUTBOUND,
-            StepPoint.PACKAGE_HANDLING,
-            StepPoint.BUS_INBOUND,
-            StepPoint.HANDLER_COMPLETE,
+            StepPoint.RECURSIVE_CONSCIENCE_EXECUTION,
+            StepPoint.FINALIZE_ACTION,
+            StepPoint.MULTI_SERVICE_BUS,
+            StepPoint.DELIVERY_PAYLOAD,
+            StepPoint.EXECUTION,
+            StepPoint.FOLLOW_UP_THOUGHT,
+            StepPoint.ROUND_COMPLETE,
         ]
         
         # Track current step point
@@ -445,11 +371,14 @@ class PipelineController:
     
     def _create_thought_in_pipeline(self, thought, step_point: StepPoint) -> ThoughtInPipeline:
         """Create a ThoughtInPipeline from a Thought for processing."""
+        from datetime import datetime
+        
         return ThoughtInPipeline(
             thought_id=thought.thought_id,
             task_id=thought.source_task_id,
             thought_type=thought.thought_type.value if thought.thought_type else "task_execution",
             current_step=step_point,
+            entered_step_at=datetime.now(),
             step_data={
                 "content": thought.content,
                 "created_at": self._extract_created_at_string(thought),
@@ -480,7 +409,7 @@ class PipelineController:
         
         processing_time_ms = (asyncio.get_event_loop().time() - processing_start) * 1000
         
-        return {
+        step_result = {
             "thought_id": thought.thought_id if hasattr(thought, 'thought_id') else str(thought),
             "round_id": getattr(self, '_current_round', 1),
             "task_id": getattr(thought, 'task_id', getattr(thought, 'source_task_id', None)),
@@ -490,6 +419,17 @@ class PipelineController:
             "processing_time_ms": processing_time_ms,
             "timestamp": asyncio.get_event_loop().time(),
         }
+        
+        # Always broadcast step results to connected clients
+        try:
+            from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+            await step_result_stream.broadcast_step_result(step_result)
+        except Exception as e:
+            # Don't let streaming errors break step execution
+            import logging
+            logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
+        
+        return step_result
     
     def _mock_step_execution(self, step_point: StepPoint, thought) -> Dict[str, Any]:
         """Mock step execution for different step points."""
@@ -499,7 +439,7 @@ class PipelineController:
             "thought_content": getattr(thought, 'content', str(thought))[:100],
         }
         
-        if step_point == StepPoint.BUILD_CONTEXT:
+        if step_point == StepPoint.GATHER_CONTEXT:
             return {**base_data, "context_built": True, "context_size": 1024}
         elif step_point == StepPoint.PERFORM_DMAS:
             return {
@@ -516,7 +456,7 @@ class PipelineController:
                 "all_passed": True,
                 "ethical_compliance": True,
             }
-        elif step_point == StepPoint.ACTION_SELECTION:
+        elif step_point == StepPoint.FINALIZE_ACTION:
             return {
                 **base_data,
                 "selected_action": "speak",

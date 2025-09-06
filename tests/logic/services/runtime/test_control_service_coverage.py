@@ -51,7 +51,16 @@ class TestRuntimeControlServiceCoverage:
         mock.agent_processor.is_paused = Mock(return_value=False)
         mock.agent_processor.pause_processing = AsyncMock(return_value=True)
         mock.agent_processor.resume_processing = AsyncMock(return_value=True)
-        mock.agent_processor.single_step = AsyncMock(return_value={"success": True, "processing_time_ms": 50.0})
+        mock.agent_processor.single_step = AsyncMock(return_value={
+            "success": True, 
+            "processing_time_ms": 50.0,
+            "step_point": "BUILD_CONTEXT",
+            "step_results": [{"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}],
+            "thoughts_processed": 1,
+            "pipeline_state": {"current_round": 1, "thoughts_in_pipeline": 2},
+            "current_round": 1,
+            "pipeline_empty": False
+        })
         mock.agent_processor.get_queue_status = Mock(return_value=Mock(pending_thoughts=5, pending_tasks=2))
 
         # Mock service registry
@@ -124,6 +133,15 @@ class TestRuntimeControlServiceCoverage:
         assert response.operation == "single_step"
         assert control_service._single_steps == 1
         mock_runtime.agent_processor.single_step.assert_called_once()
+        
+        # Verify H3ERE step data is passed through
+        assert response.step_point == "BUILD_CONTEXT"
+        assert response.step_results == [{"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}]
+        assert response.thoughts_processed == 1
+        assert response.processing_time_ms == 50.0
+        assert response.pipeline_state == {"current_round": 1, "thoughts_in_pipeline": 2}
+        assert response.current_round == 1
+        assert response.pipeline_empty is False
 
     @pytest.mark.asyncio
     async def test_single_step_not_paused(self, control_service, mock_runtime):

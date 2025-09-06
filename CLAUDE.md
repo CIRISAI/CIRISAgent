@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with the CIRIS codebase.
 
-## 🎯 CURRENT FOCUS: Release Candidate Quality & Stability (January 2025)
+## 🎯 CURRENT FOCUS: Release Candidate Quality & Stability (September 2025)
 
 **Status**: Release Candidate 1 (RC1) - Production Ready
 **Branch**: `1.0-RC1-patch*` branches for fixes
@@ -145,7 +145,7 @@ https://agents.ciris.ai/v1/auth/oauth/datum/google/callback
 - /v1/ is at the ROOT level
 - This is the DEFAULT route (not /api/{agent}/v1/)
 
-## Current Status (January 2025)
+## Current Status (September 2025)
 
 ### Major Achievements
 
@@ -314,7 +314,7 @@ grep -r "class.*YourThingHere" --include="*.py"
 - `ThoughtSchema` - Thoughts
 - `GuidanceRequest/Response` - WA guidance
 
-## Current Status (January 2025) - Release Candidate 1
+## Current Status (September 2025) - Release Candidate 1
 
 ### Completed ✅
 - 82 API endpoints fully operational

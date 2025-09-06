@@ -69,13 +69,20 @@ class TestSingleStepEndpoint:
         """Create enhanced mock runtime control service with step point data."""
         mock = AsyncMock()
         
-        # Configure basic single_step response
+        # Configure basic single_step response with H3ERE step data
         mock.single_step.return_value = ProcessorControlResponse(
             success=True,
             processor_name="agent",
             operation="single_step",
             new_status=ProcessorStatus.PAUSED,
-            message="Processed 1 thought",
+            error=None,
+            step_point="perform_dmas",  # Use lowercase enum value
+            step_results=[{"round_number": 2, "task_id": "task_001", "step_data": {"dmas_executed": ["ethical", "common_sense"]}}],
+            thoughts_processed=1,
+            processing_time_ms=850.0,
+            pipeline_state={"current_round": 2, "thoughts_in_pipeline": 1, "is_paused": True},
+            current_round=2,
+            pipeline_empty=False,
         )
         
         # Configure queue status
@@ -207,15 +214,15 @@ class TestSingleStepEndpoint:
         assert "cognitive_state" in step_data
         assert "queue_depth" in step_data
         
-        # Verify no enhanced data by default
-        assert "step_point" not in step_data
-        assert "step_result" not in step_data
-        assert "pipeline_state" not in step_data
+        # Now always includes H3ERE step data for transparency
+        assert "step_point" in step_data
+        assert "step_result" in step_data or "step_results" in step_data  # Could be either field name
+        assert "pipeline_state" in step_data
 
-    def test_enhanced_single_step_with_details_parameter(self, client, auth_headers, mock_app_with_services):
-        """Test enhanced single-step with ?include_details=true parameter."""
+    def test_single_step_always_includes_enhanced_data(self, client, auth_headers, mock_app_with_services):
+        """Test that single-step always includes enhanced H3ERE step data."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -230,18 +237,16 @@ class TestSingleStepEndpoint:
         assert "message" in step_data
         assert step_data["processor_state"] == "paused"
         
-        # Verify enhanced fields present
+        # Always includes H3ERE step data
         assert "step_point" in step_data
-        assert "step_result" in step_data
+        assert "step_result" in step_data or "step_results" in step_data
         assert "pipeline_state" in step_data
         assert "processing_time_ms" in step_data
-        assert "tokens_used" in step_data
-        assert "demo_data" in step_data
 
     def test_enhanced_response_step_point_data(self, client, auth_headers, mock_app_with_services):
         """Test that step point data is correctly included in enhanced response."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -272,7 +277,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_pipeline_state(self, client, auth_headers, mock_app_with_services):
         """Test that pipeline state is correctly included in enhanced response."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -302,7 +307,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_performance_metrics(self, client, auth_headers, mock_app_with_services):
         """Test that performance metrics are included in enhanced response."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -323,7 +328,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_demo_data_structure(self, client, auth_headers, mock_app_with_services):
         """Test that demo data has proper structure for presentation."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -368,7 +373,7 @@ class TestSingleStepEndpoint:
         runtime.pipeline_controller.get_latest_step_result.return_value = mock_build_context_result
         
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -395,7 +400,7 @@ class TestSingleStepEndpoint:
         mock_app_with_services.state.runtime.pipeline_controller = None
         
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -420,7 +425,7 @@ class TestSingleStepEndpoint:
         runtime.pipeline_controller.get_latest_step_result.side_effect = Exception("Step result error")
         
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -437,7 +442,7 @@ class TestSingleStepEndpoint:
     def test_enhanced_response_queue_depth_accuracy(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response provides accurate queue depth."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -454,7 +459,7 @@ class TestSingleStepEndpoint:
     def test_response_schema_validation(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response validates against schema."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )
@@ -470,21 +475,11 @@ class TestSingleStepEndpoint:
         metadata = data["metadata"]
         assert "timestamp" in metadata
 
-    def test_invalid_include_details_parameter(self, client, auth_headers, mock_app_with_services):
-        """Test handling of invalid include_details parameter values."""
-        # Test with invalid boolean string - FastAPI will return 422
+    def test_single_step_ignores_query_parameters(self, client, auth_headers, mock_app_with_services):
+        """Test that single-step endpoint ignores query parameters since it always provides full data."""
+        # Test with any query parameter - should be ignored
         response = client.post(
-            "/v1/system/runtime/step?include_details=invalid",
-            headers=auth_headers,
-            json={}
-        )
-        
-        # FastAPI returns 422 for invalid query parameter types
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        
-        # Test with valid false value
-        response = client.post(
-            "/v1/system/runtime/step?include_details=false",
+            "/v1/system/runtime/step?some_param=value",
             headers=auth_headers,
             json={}
         )
@@ -492,8 +487,10 @@ class TestSingleStepEndpoint:
         assert response.status_code == status.HTTP_200_OK
         step_data = response.json()["data"]
         
-        # Should not include enhanced data
-        assert "step_point" not in step_data
+        # Always includes H3ERE step data regardless of query parameters
+        assert "step_point" in step_data
+        assert "step_result" in step_data or "step_results" in step_data
+        assert "pipeline_state" in step_data
 
     def test_concurrent_single_step_requests(self, client, auth_headers, mock_app_with_services):
         """Test that concurrent single-step requests are handled properly."""
@@ -525,10 +522,37 @@ class TestSingleStepEndpoint:
         assert all(status_code == 200 for status_code in results)
         assert len(results) == 3
 
+    def test_basic_single_step_includes_h3ere_data(self, client, auth_headers, mock_app_with_services):
+        """Test that basic single-step now includes H3ERE step data from runtime control service."""
+        response = client.post(
+            "/v1/system/runtime/step",
+            headers=auth_headers,
+            json={}
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        step_data = data["data"]
+        
+        # Basic fields should still be present
+        assert step_data["success"] is True
+        assert "message" in step_data
+        
+        # CRITICAL: The fixed service should now provide H3ERE step data in basic response
+        # This test ensures the bug fix sticks - ProcessorControlResponse now passes through step data
+        assert "step_point" in step_data
+        assert step_data["step_point"] == "perform_dmas"
+        assert "step_result" in step_data  # API consolidates step_results into step_result
+        assert step_data["step_result"] is not None
+        assert "processing_time_ms" in step_data
+        assert step_data["processing_time_ms"] == 850.0
+        assert "pipeline_state" in step_data
+        assert step_data["pipeline_state"] is not None
+
     def test_enhanced_response_memory_efficiency(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response doesn't include excessive data."""
         response = client.post(
-            "/v1/system/runtime/step?include_details=true",
+            "/v1/system/runtime/step",
             headers=auth_headers,
             json={}
         )

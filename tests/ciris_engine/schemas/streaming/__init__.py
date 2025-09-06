@@ -1,0 +1,1 @@
+# Streaming schema tests

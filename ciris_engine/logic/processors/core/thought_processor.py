@@ -26,6 +26,8 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelationStatus,
     TraceContext,
 )
+from ciris_engine.logic.processors.core.step_decorators import streaming_step, step_point
+from ciris_engine.schemas.services.runtime_control import StepPoint
 
 logger = logging.getLogger(__name__)
 
@@ -208,42 +210,11 @@ class ThoughtProcessor:
                 return None
 
         # 2. Build context (always build proper ThoughtContext for DMA orchestrator)
-        # STEP POINT: BUILD_CONTEXT
-        from ciris_engine.schemas.services.runtime_control import StepPoint
-        await self._check_step_point(StepPoint.BUILD_CONTEXT, thought_item.thought_id, {
-            "timestamp": self._time_service.now().isoformat(),
-            "thought_id": thought_item.thought_id,
-            "task_id": thought_item.source_task_id,
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-        })
-        
-        batch_context_data = context.get("batch_context") if context else None
-        if batch_context_data:
-            logger.debug(f"Using batch context for thought {thought_item.thought_id}")
-            # Use optimized batch context building
-            from ciris_engine.logic.context.batch_context import build_system_snapshot_with_batch
-
-            system_snapshot = await build_system_snapshot_with_batch(
-                task=None,  # Would need to get task if available
-                thought=thought,
-                batch_data=batch_context_data,
-                memory_service=self.context_builder.memory_service if self.context_builder else None,
-                graphql_provider=None,
-            )
-            # Build full thought context with the optimized snapshot
-            thought_context = await self.context_builder.build_thought_context(thought, system_snapshot=system_snapshot)
-        else:
-            logger.debug(f"Building full context for thought {thought_item.thought_id} (no batch context)")
-            thought_context = await self.context_builder.build_thought_context(thought)
-        # Store the fresh context on the queue item so DMA executor can use it
-        if hasattr(thought_context, "model_dump"):
-            thought_item.initial_context = thought_context.model_dump()
-        else:
-            thought_item.initial_context = thought_context
+        thought_context = await self._gather_context_step(thought_item, context)
 
         # 3. Run DMAs
         # STEP POINT: PERFORM_DMAS
-        await self._check_step_point(StepPoint.PERFORM_DMAS, thought_item.thought_id, {
+        await self._stream_step_point(StepPoint.PERFORM_DMAS, thought_item.thought_id, {
             "timestamp": self._time_service.now().isoformat(),
             "thought_id": thought_item.thought_id,
             "context": thought_context.model_dump() if hasattr(thought_context, "model_dump") else str(thought_context),
@@ -328,7 +299,7 @@ class ThoughtProcessor:
 
         # 5. Run action selection
         # STEP POINT: PERFORM_ASPDMA
-        await self._check_step_point(StepPoint.PERFORM_ASPDMA, thought_item.thought_id, {
+        await self._stream_step_point(StepPoint.PERFORM_ASPDMA, thought_item.thought_id, {
             "timestamp": self._time_service.now().isoformat(),
             "thought_id": thought_item.thought_id,
             "dma_results": str(dma_results) if dma_results else None,
@@ -414,7 +385,7 @@ class ThoughtProcessor:
 
         # 6. Apply consciences
         # STEP POINT: CONSCIENCE_EXECUTION
-        await self._check_step_point(StepPoint.CONSCIENCE_EXECUTION, thought_item.thought_id, {
+        await self._stream_step_point(StepPoint.CONSCIENCE_EXECUTION, thought_item.thought_id, {
             "timestamp": self._time_service.now().isoformat(),
             "thought_id": thought_item.thought_id,
             "selected_action": str(getattr(action_result, 'selected_action', 'UNKNOWN')),
@@ -469,7 +440,7 @@ class ThoughtProcessor:
 
             # Re-run action selection with guidance
             # STEP POINT: RECURSIVE_ASPDMA
-            await self._check_step_point(StepPoint.RECURSIVE_ASPDMA, thought_item.thought_id, {
+            await self._stream_step_point(StepPoint.RECURSIVE_ASPDMA, thought_item.thought_id, {
                 "timestamp": self._time_service.now().isoformat(),
                 "thought_id": thought_item.thought_id,
                 "retry_reason": override_reason,
@@ -489,7 +460,7 @@ class ThoughtProcessor:
                 if retry_result:
                     # Always re-apply consciences, even if same action type (parameters may differ)
                     # STEP POINT: RECURSIVE_CONSCIENCE
-                    await self._check_step_point(StepPoint.RECURSIVE_CONSCIENCE, thought_item.thought_id, {
+                    await self._stream_step_point(StepPoint.RECURSIVE_CONSCIENCE, thought_item.thought_id, {
                         "timestamp": self._time_service.now().isoformat(),
                         "thought_id": thought_item.thought_id,
                         "retry_action": str(retry_result.selected_action),
@@ -571,8 +542,8 @@ class ThoughtProcessor:
                     resource_usage=None,
                 )
 
-        # STEP POINT: ACTION_SELECTION (final action determined)
-        await self._check_step_point(StepPoint.ACTION_SELECTION, thought_item.thought_id, {
+        # STEP POINT: FINALIZE_ACTION (final action determined)
+        await self._stream_step_point(StepPoint.FINALIZE_ACTION, thought_item.thought_id, {
             "timestamp": self._time_service.now().isoformat(),
             "thought_id": thought_item.thought_id,
             "selected_action": str(getattr(final_result, 'selected_action', 'UNKNOWN')),
@@ -770,9 +741,175 @@ class ThoughtProcessor:
     def set_pipeline_controller(self, pipeline_controller: Any) -> None:
         """Inject pipeline controller for single-stepping support."""
         self._pipeline_controller = pipeline_controller
+
+    # === H3ERE Pipeline Step Methods with Decorators ===
+    
+    @streaming_step(StepPoint.GATHER_CONTEXT)
+    @step_point(StepPoint.GATHER_CONTEXT)
+    async def _gather_context_step(self, thought_item: ProcessingQueueItem, context: Optional[dict] = None):
+        """Step 1: Build context for DMA processing."""
+        thought = await self._fetch_thought(thought_item.thought_id)
         
-    async def _check_step_point(self, step_point: "StepPoint", thought_id: str, step_data: Dict[str, Any]) -> None:
-        """Check if we should pause at this step point and handle pause if needed."""
+        batch_context_data = context.get("batch_context") if context else None
+        if batch_context_data:
+            logger.debug(f"Using batch context for thought {thought_item.thought_id}")
+            from ciris_engine.logic.context.batch_context import build_system_snapshot_with_batch
+
+            system_snapshot = await build_system_snapshot_with_batch(
+                task=None,
+                thought=thought,
+                batch_data=batch_context_data,
+                memory_service=self.context_builder.memory_service if self.context_builder else None,
+                graphql_provider=None,
+            )
+            thought_context = await self.context_builder.build_thought_context(thought, system_snapshot=system_snapshot)
+        else:
+            logger.debug(f"Building full context for thought {thought_item.thought_id} (no batch context)")
+            thought_context = await self.context_builder.build_thought_context(thought)
+        
+        # Store context on queue item
+        if hasattr(thought_context, "model_dump"):
+            thought_item.initial_context = thought_context.model_dump()
+        else:
+            thought_item.initial_context = thought_context
+            
+        return thought_context
+
+    @streaming_step(StepPoint.PERFORM_DMAS)
+    @step_point(StepPoint.PERFORM_DMAS)
+    async def _perform_dmas_step(self, thought_item: ProcessingQueueItem, thought_context):
+        """Step 2: Execute multi-perspective DMAs."""
+        thought = await self._fetch_thought(thought_item.thought_id)
+        
+        try:
+            dma_results = await self.dma_orchestrator.run_dmas(
+                thought, thought_context, self.app_config.get_dsdma_context()
+            )
+            return dma_results
+        except DMAFailure as e:
+            logger.warning(f"DMA failure for thought {thought_item.thought_id}: {e}")
+            return None
+
+    @streaming_step(StepPoint.PERFORM_ASPDMA)
+    @step_point(StepPoint.PERFORM_ASPDMA)
+    async def _perform_aspdma_step(self, thought_item: ProcessingQueueItem, thought_context, dma_results):
+        """Step 3: LLM-powered action selection."""
+        thought = await self._fetch_thought(thought_item.thought_id)
+        
+        # Check for WA deferral first
+        if dma_results and hasattr(dma_results, 'should_defer_to_wise_authority') and dma_results.should_defer_to_wise_authority:
+            return self._create_deferral_result(dma_results, thought)
+
+        try:
+            action_result = await self._perform_aspdma_with_retry(
+                thought, thought_context, dma_results, max_retries=3
+            )
+            return action_result
+        except Exception as e:
+            logger.error(f"ASPDMA failed for thought {thought_item.thought_id}: {e}")
+            return self._create_deferral_result(dma_results, thought)
+
+    @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
+    @step_point(StepPoint.CONSCIENCE_EXECUTION)
+    async def _conscience_execution_step(self, thought_item: ProcessingQueueItem, action_result):
+        """Step 4: Ethical safety validation."""
+        if not action_result:
+            return action_result
+            
+        try:
+            conscience_results = await self.conscience_registry.apply_all_consciences(
+                action_result, thought_item
+            )
+            
+            # Check if conscience passed
+            conscience_passed = all(result.passed for result in conscience_results)
+            action_result.conscience_passed = conscience_passed
+            
+            return action_result, conscience_results
+        except Exception as e:
+            logger.error(f"Conscience execution failed for thought {thought_item.thought_id}: {e}")
+            return action_result, []
+
+    @streaming_step(StepPoint.RECURSIVE_ASPDMA)
+    @step_point(StepPoint.RECURSIVE_ASPDMA, conditional=True)
+    async def _recursive_aspdma_step(self, thought_item: ProcessingQueueItem, thought_context, dma_results, override_reason: str):
+        """Step 3B: Optional retry action selection after conscience failure."""
+        thought = await self._fetch_thought(thought_item.thought_id)
+        
+        try:
+            # Re-run action selection with guidance about why previous action failed
+            retry_result = await self._perform_aspdma_with_guidance(
+                thought, thought_context, dma_results, override_reason, max_retries=3
+            )
+            return retry_result
+        except Exception as e:
+            logger.error(f"Recursive ASPDMA failed for thought {thought_item.thought_id}: {e}")
+            return None
+
+    @streaming_step(StepPoint.RECURSIVE_CONSCIENCE)
+    @step_point(StepPoint.RECURSIVE_CONSCIENCE, conditional=True)
+    async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result):
+        """Step 4B: Optional re-validation if recursive action failed."""
+        if not retry_result:
+            return retry_result, []
+            
+        try:
+            recursive_conscience_results = await self.conscience_registry.apply_all_consciences(
+                retry_result, thought_item
+            )
+            
+            # Check if recursive conscience passed
+            final_conscience_passed = all(result.passed for result in recursive_conscience_results)
+            retry_result.conscience_passed = final_conscience_passed
+            
+            return retry_result, recursive_conscience_results
+        except Exception as e:
+            logger.error(f"Recursive conscience execution failed for thought {thought_item.thought_id}: {e}")
+            return retry_result, []
+
+    @streaming_step(StepPoint.FINALIZE_ACTION)
+    @step_point(StepPoint.FINALIZE_ACTION)
+    async def _finalize_action_step(self, thought_item: ProcessingQueueItem, final_result):
+        """Step 5: Final action determination."""
+        if not final_result:
+            # If no final result, create ponder action
+            return ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    reason="No valid action could be determined",
+                    duration_minutes=1,
+                    should_generate_follow_up=True,
+                ),
+                rationale="Failed to determine valid action - pondering instead",
+                confidence_score=0.1,
+                resource_usage=None,
+            )
+        
+        return final_result
+
+    @streaming_step(StepPoint.PERFORM_ACTION)
+    @step_point(StepPoint.PERFORM_ACTION)
+    async def _perform_action_step(self, thought_item: ProcessingQueueItem, result, context: dict):
+        """Step 6: Dispatch action to handler."""
+        # This step is handled by base_processor dispatch_action method
+        # Just pass through the result - actual dispatch happens after this
+        return result
+
+    @streaming_step(StepPoint.ACTION_COMPLETE)
+    @step_point(StepPoint.ACTION_COMPLETE)
+    async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result):
+        """Step 7: Action execution completed."""
+        # This step is handled by base_processor after dispatch
+        # Mark the completion status
+        return {
+            "thought_id": thought_item.thought_id,
+            "action_completed": True,
+            "dispatch_success": dispatch_result.get("success", True) if isinstance(dispatch_result, dict) else True,
+            "execution_time_ms": dispatch_result.get("execution_time_ms", 0.0) if isinstance(dispatch_result, dict) else 0.0,
+        }
+        
+    async def _stream_step_point(self, step_point: "StepPoint", thought_id: str, step_data: Dict[str, Any]) -> None:
+        """Stream step result data from this step point."""
         if not self._pipeline_controller:
             return
             

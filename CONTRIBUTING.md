@@ -1,156 +1,258 @@
-# Contributing to CIRIS Engine
+# Contributing to CIRIS Agent
 
-First off, thank you for considering contributing to CIRISEngine! Your help is appreciated.
+Thank you for your interest in contributing to CIRIS Agent! This document outlines how to contribute effectively to the project.
 
-This document provides guidelines for contributing to the project. Please read it before you start.
+## 🏗️ **Engine Status: H3ERE Architecture Complete**
 
-## Code of Conduct
+The CIRIS Agent's core **H3ERE (Hyper3 Ethical Recursive Engine)** is architecturally complete and production-ready:
 
-This project and everyone participating in it is governed by a [Code of Conduct](CODE_OF_CONDUCT.md) (to be created). By participating, you are expected to uphold this code. Please report unacceptable behavior.
+- **4 DMAs**: 3 core decision-making algorithms (PDMA, CSDMA, DSDMA) + 1 recursive (ASPDMA)
+- **10 Handlers**: Exactly 10 action handlers in 3×3×3+1 structure
+- **6 Message Buses**: Complete communication infrastructure
+- **22 Core Services**: All essential services implemented and documented
+- **Complete Type Safety**: Zero `Dict[str, Any]` in production code
 
-## How Can I Contribute?
+## 🎯 **How to Contribute**
 
-There are many ways to contribute, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests or writing code which can be incorporated into CIRISEngine itself.
+Since the core engine is complete, contributions should focus on:
 
-### Reporting Bugs
+### **1. New Adapters** ⭐ *Most Valuable*
+Create new interfaces for CIRIS to interact with different platforms:
+- **Social Media**: Twitter, LinkedIn, Mastodon adapters  
+- **Messaging**: Slack, Teams, Telegram adapters
+- **Development**: GitHub, GitLab integration adapters
+- **Documentation**: Confluence, Notion adapters
 
--   **Ensure the bug was not already reported** by searching on GitHub under [Issues](https://github.com/CIRISAI/CIRISAgent/issues).
--   If you're unable to find an open issue addressing the problem, [open a new one](https://github.com/CIRISAI/CIRISAgent/issues/new). Be sure to include a **title and clear description**, as much relevant information as possible, and a **code sample or an executable test case** demonstrating the expected behavior that is not occurring.
--   For bonus points, provide a **failing test** as a pull request.
+### **2. Bug Fixes & Improvements** 🔧
+- Fix issues in existing functionality
+- Performance optimizations
+- Memory leak resolution
+- Test coverage improvements
 
-### Suggesting Enhancements
+### **3. New Modular Services** 🧩
+Extend CIRIS capabilities with new modular services:
+- Advanced analytics services
+- External API integrations
+- Specialized tool services
 
--   Open a new issue to discuss your enhancement. Explain why this enhancement would be useful and provide as much detail as possible.
--   If you have a clear vision, you can also submit a pull request with the enhancement.
+## 📋 **Adapter Development Guide**
 
-### Pull Requests
+### **Creating a New Adapter**
 
--   Fork the repository and create your branch from `main`.
--   If you've added code that should be tested, add tests.
--   If you've changed APIs, update the documentation.
--   Ensure the test suite passes (`pytest`).
--   Make sure your code lints (e.g., using Pylance, Flake8, or Black).
--   Issue that pull request!
+1. **Follow the established pattern** from existing adapters (`ciris_engine/logic/adapters/`):
+   ```
+   adapters/your_adapter/
+   ├── README.md                    # Comprehensive documentation
+   ├── __init__.py                  # Public exports
+   ├── adapter.py                   # Main adapter class
+   ├── services/                    # Adapter-specific services
+   │   ├── communication_service.py # Required: Communication
+   │   ├── tool_service.py         # Optional: Tools  
+   │   └── runtime_control.py      # Optional: Control
+   └── schemas/                     # Adapter-specific schemas
+   ```
 
-## Development Setup
+2. **Implement required interfaces**:
+   ```python
+   from ciris_engine.protocols.adapters import BaseAdapter
+   
+   class YourAdapter(BaseAdapter):
+       async def initialize(self) -> None:
+           """Initialize your adapter"""
+           pass
+           
+       async def cleanup(self) -> None:
+           """Clean shutdown"""
+           pass
+   ```
 
-(This section can be expanded with more specific setup instructions if needed, e.g., virtual environment setup, specific Python versions, pre-commit hooks.)
+3. **Create adapter-specific services** that integrate with CIRIS buses
+4. **Write comprehensive tests** following existing test patterns
+5. **Document everything** with detailed README files
 
-1.  Fork the repository.
-2.  Clone your fork: `git clone https://github.com/your-username/CIRISAgent.git`
-3.  Create a virtual environment and activate it.
-4.  Install dependencies: `pip install -r requirements.txt`
-5.  Set up any necessary environment variables (see `README.md`).
+## 🧩 **Modular Service Development**
 
-## Development Guidelines
+For new modular services, follow the **Mock LLM pattern** in `ciris_modular_services/mock_llm/`:
 
-### Task and Thought Creation
+### **Required Files:**
+```
+your_service/
+├── manifest.json          # Service declaration
+├── README.md             # Documentation
+├── __init__.py           # Module exports
+├── service.py            # Main service class
+├── protocol.py           # Service protocol
+└── schemas.py            # Service-specific schemas
+```
 
-When integrating new input sources or agents, please adhere to the following conventions for creating Tasks and Thoughts:
-
--   **Always store raw external input in `Task.context` under a descriptive key, often including an `"initial_input_content"` field for the primary text.**
-    For example, when a new Discord message is received, the `Task` object created should have its `context` dictionary populated like this:
-    ```python
-    task_context = {
-        "origin_service": "discord", # Identifies the source service
-        "initial_input_content": message.content, # The raw Discord message content
-        "discord_message_id": str(message.id),
-        "discord_channel_id": str(message.channel.id),
-        "discord_user_id": str(message.author.id),
-        "discord_user_name": message.author.name,
-        # ... other relevant metadata from the source ...
+### **Manifest Structure:**
+```json
+{
+  "module": {
+    "name": "your_service",
+    "version": "1.0.0", 
+    "description": "Your service description",
+    "author": "Your Name"
+  },
+  "services": [{
+    "type": "YOUR_SERVICE_TYPE",
+    "priority": "NORMAL",
+    "class": "your_service.service.YourServiceClass",
+    "capabilities": ["your_capability"]
+  }],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.RequiredProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.required.schemas"  
+    ]
+  },
+  "exports": {
+    "service_class": "your_service.service.YourServiceClass",
+    "protocol": "your_service.protocol.YourServiceProtocol"
+  },
+  "configuration": {
+    "config_option": {
+      "type": "string",
+      "default": "default_value",
+      "description": "Configuration description"
     }
-    new_task = Task(..., context=task_context)
-    ```
-    The `AgentProcessor` uses `Task.description` (which is often derived from `initial_input_content` or a summary) to populate the content of the initial "seed thought".
+  }
+}
+```
 
--   **The engine auto-generates a "seed thought"; do not add initial `Thought`s manually for new tasks.**
-    When a new `Task` is added (e.g., via a service handler calling `ActionDispatcher.add_task_to_db()`), the `AgentProcessor._generate_seed_thoughts()` method will automatically detect active tasks needing seeds and generate an initial "seed" thought for it. Your service/input handler code should primarily be responsible for creating and persisting the `Task`.
+## 🏛️ **H3ERE Architecture Overview**
 
-Adhering to these guidelines ensures consistency in how new work enters the CIRIS Engine processing pipeline.
+Understanding the architecture helps create better contributions:
 
-### Agent Identity and Profile Templates
+### **Decision-Making Flow:**
+1. **Input** → Adapter receives external input
+2. **Task Creation** → Adapter creates Task with context
+3. **DMA Evaluation** → PDMA, CSDMA, DSDMA evaluate
+4. **ASPDMA Selection** → Recursive action selection  
+5. **Handler Execution** → One of 10 handlers executes
+6. **Output** → Response via Communication Bus
 
-**⚠️ IMPORTANT: The profile system has been replaced by the graph-based identity system. Profile YAML files are now ONLY used as templates during initial agent creation.**
+### **The 10 H3ERE Handlers:**
+- **Action (3)**: SPEAK, TOOL, OBSERVE
+- **Memory (3)**: MEMORIZE, RECALL, FORGET  
+- **Deferral (3)**: REJECT, PONDER, DEFER
+- **Terminal (1)**: TASK_COMPLETE
 
-The CIRIS Engine uses a graph-based identity system where each agent's identity is stored in the graph database at `agent/identity`. Profile YAML files in `ciris_profiles/` serve only as templates for creating new agents.
+### **The 6 Message Buses:**
+- **CommunicationBus** → Multi-adapter external communication
+- **MemoryBus** → Graph storage and retrieval
+- **LLMBus** → Multiple LLM provider access
+- **ToolBus** → External tool execution
+- **RuntimeControlBus** → System control and monitoring
+- **WiseBus** → Ethical guidance and wisdom
 
-**Creating a New Agent Template:**
+## 📝 **Development Guidelines**
 
-1.  **Define your DSDMA Class (Optional):**
-    *   If your profile requires custom domain-specific logic, create a new Python class that inherits from `ciris_engine.dma.dsdma_base.BaseDSDMA`.
-    *   Implement the `evaluate_thought` method and define a `DOMAIN_NAME` and a `DEFAULT_TEMPLATE` for its system prompt.
-    *   Ensure your DSDMA class's `__init__` method calls `super().__init__(...)` and accepts `aclient` (the instructor-patched OpenAI client) and `model_name`, plus any `domain_specific_knowledge` or `prompt_template` overrides it might need from `dsdma_kwargs`.
-    *   Place this class in a suitable location, e.g., `ciris_engine/dma/dsdma_yournewprofile.py`.
-    *   Ensure your new DSDMA class is imported in `ciris_engine/dma/__init__.py` if you want it to be easily accessible.
+### **Type Safety First**
+- **No Dicts**: Use Pydantic models for all data
+- **No Strings**: Use enums and typed constants  
+- **No Kings**: No special cases or bypass patterns
 
-2.  **Create a Profile Template YAML File:**
-    *   Create a new YAML file in the `ciris_profiles/` directory (e.g., `ciris_profiles/yournewtemplate.yaml`).
-    *   This file will be used ONLY during initial agent creation:
-        ```yaml
-        name: YourProfileName # e.g., "Researcher", "HelperBot"
-        dsdma_identifier: YourDSDMAClassName # e.g., "StudentDSDMA", "BasicTeacherDSDMA", or null
-        dsdma_kwargs: # Optional: Arguments to pass to your DSDMA's __init__
-          prompt_template: | # Example: Override the DSDMA's DEFAULT_TEMPLATE
-            You are the YourProfileName DSDMA. Your specific instructions go here.
-            Context: {context_str}
-            Rules: {rules_summary_str}
-            Respond in JSON...
-          # domain_specific_knowledge:
-          #   some_custom_key: "some_value"
-        permitted_actions: # List of allowed actions for this profile
-          - "speak"
-          - "ponder"
-          # - "tool"
-          # - "reject"
-          # - "defer"
-        csdma_overrides: # Optional: Overrides for CSDMAEvaluator
-          csdma_system_prompt: | # Example: Override CSDMA's system prompt
-            You are a CSDMA for the YourProfileName agent. Evaluate common sense with a focus on X.
-            Context: {context_summary}
-            ... (rest of CSDMA prompt structure)
-        action_selection_pdma_overrides: # Optional: Overrides for ActionSelectionPDMA prompts
-          system_header: |
-            You are acting for the YourProfileName agent. Prioritize X and Y.
-          # Example: student_mode_csdma_ambiguity_guidance (if your profile is 'student')
-          # yourprofilename_mode_csdma_ambiguity_guidance: |
-          #   Guidance for ActionSelectionPDMA on how to react to CSDMA flags for this profile.
-          # ... other specific overrides for ActionSelectionPDMA ...
-        ```
+### **Task and Thought Creation**
+When creating new input sources:
 
-**Using a Profile Template:**
+```python
+# Store raw input in Task.context
+task_context = {
+    "origin_service": "your_adapter",
+    "initial_input_content": raw_input,
+    "adapter_specific_id": message_id,
+    # ... other metadata
+}
+new_task = Task(..., context=task_context)
+```
 
-1.  **During Agent Creation:**
-    *   Use the `--profile` flag when creating a new agent: `python main.py --profile yourtemplate --wa-bootstrap`
-    *   Or via API with WA authorization: `POST /v1/agents/create` with `profile_template: "yourtemplate"`
+- **Don't create Thoughts manually** - The engine auto-generates seed thoughts
+- **Store all external context** in `Task.context` for processing
 
-2.  **After Creation:**
-    *   The agent's identity is stored in the graph database at `agent/identity`
-    *   Profile YAML files are no longer referenced
-    *   All identity changes must go through the MEMORIZE action with WA approval
-    *   Changes exceeding 20% variance will trigger reconsideration
+### **Testing Requirements**
+- **Unit tests** for all new functionality
+- **Integration tests** for adapter interactions
+- **Mock services** for external dependencies
+- **Type safety validation** with mypy
 
-3.  **Identity Evolution:**
-    *   Identity changes happen through the graph database with proper authorization
-    *   All changes are cryptographically logged in the audit trail
-    *   The agent maintains its identity across restarts via the persistence layer
+### **Documentation Standards**
+- **README.md** for every new component
+- **Inline documentation** for complex logic
+- **API documentation** for new protocols
+- **Architecture alignment** with H3ERE principles
 
-For more information, see [IDENTITY_MIGRATION_SUMMARY.md](docs/IDENTITY_MIGRATION_SUMMARY.md).
+## 🔍 **Development Setup**
 
-## Coding Conventions
+1. **Fork and Clone**:
+   ```bash
+   git clone https://github.com/your-username/CIRISAgent.git
+   cd CIRISAgent
+   ```
 
--   Follow [PEP 8](https://www.python.org/dev/peps/pep-0008/) for Python code.
--   Use type hints for all function signatures and complex variable assignments.
--   Write clear and concise commit messages.
--   Ensure code is well-commented, especially for complex logic.
--   Write unit tests for new features and bug fixes.
+2. **Set up Environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   pip install -r requirements.txt
+   ```
 
-## Issue and Pull Request Labels
+3. **Run Tests**:
+   ```bash
+   python -m pytest tests/
+   ```
 
-(This section can be expanded if you use specific labels for issues and PRs.)
+4. **Check Type Safety**:
+   ```bash
+   mypy ciris_engine/
+   ```
 
-Thank you for your contributions!
+## 🚀 **Pull Request Process**
+
+1. **Create branch** from latest `main`
+2. **Follow naming**: `feature/your-feature` or `fix/issue-description`
+3. **Write tests** for all new functionality
+4. **Update documentation** as needed
+5. **Ensure all tests pass**: `pytest`
+6. **Verify type safety**: `mypy`
+7. **Write clear commit messages** following conventional commits
+8. **Submit PR** with detailed description
+
+### **PR Requirements:**
+- [ ] All tests pass
+- [ ] Type safety maintained (no new `Dict[str, Any]`)
+- [ ] Documentation updated
+- [ ] Follows H3ERE architectural principles
+- [ ] No breaking changes to core engine
+
+## 🏷️ **Issue Labels**
+
+- **adapter**: New adapter development
+- **service**: New modular service
+- **bug**: Bug fixes and corrections  
+- **improvement**: Performance or code quality improvements
+- **documentation**: Documentation updates
+- **testing**: Test coverage improvements
+
+## 📚 **Resources**
+
+- **Architecture**: See `ciris_engine/logic/README.md`
+- **H3ERE Documentation**: All bus and service README files
+- **Example Adapters**: `ciris_engine/logic/adapters/`
+- **Example Services**: `ciris_modular_services/mock_llm/`
+
+## ⚖️ **Code of Conduct**
+
+All contributors must follow our commitment to ethical AI development:
+- **Beneficence**: Contributions must benefit users and society
+- **Non-maleficence**: No harmful or malicious code
+- **Transparency**: Clear, well-documented contributions
+- **Respect**: Professional and inclusive collaboration
 
 ---
+
+**The H3ERE engine is complete. Your contributions extend its reach and capabilities!** 🚀
 
 *Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*

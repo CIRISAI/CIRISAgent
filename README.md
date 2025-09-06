@@ -1,5 +1,5 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![RC1](https://img.shields.io/badge/Status-RC1-yellow.svg)](NOTICE)
+[![Stable](https://img.shields.io/badge/Status-STABLE-green.svg)](docs/releases/1.1.0.md)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
@@ -14,7 +14,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**RELEASE CANDIDATE 1.0.9-RC1-patch9** | [Release Notes](docs/releases/1.0.9-RC1-patch9.md) | [Patch 8](docs/releases/1.0.8-RC1-patch8.md) | [Patch 7](docs/releases/1.0.7-RC1-patch7.md) | [Patch 6](docs/releases/1.0.6-RC1-patch6.md) | [Patch 5](docs/releases/1.0.5-RC1-patch5.md) | [Patch 4](docs/releases/1.0.4-RC1-patch4.md) | [Patch 3](docs/releases/1.0.3-RC1-patch3.md) | [Patch 2](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH2.md) | [Patch 1](RELEASE_NOTES/RELEASE_NOTES_RC1_PATCH1.md) | [RC1 Notes](RELEASE_NOTES/RELEASE_NOTES_1.0.0-RC1.md)
+**STABLE RELEASE 1.1.0** | [Release Notes](docs/releases/1.1.0.md) | [RC1-patch9](docs/releases/1.0.9-RC1-patch9.md) | [Previous Releases](docs/releases/)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -29,12 +29,12 @@ CIRIS wraps LLM calls with:
 
 Run it in 2 minutes: **[Installation Guide](docs/INSTALLATION.md)**
 
-### Latest: v1.0.9-RC1-patch9 - Stable Foundation
-**This patch combines single-step debugging and Discord security enhancements (January 11, 2025):**
-- ✅ **Single-Step Debugging** - COVENANT-compliant pipeline transparency with pause/resume
-- ✅ **Discord Security** - Anti-jailbreak hardening and active moderator detection
-- ✅ **Production Fixes** - Fixed duplicated channels bug and service type mapping
-- ✅ **Code Quality** - Reduced cognitive complexity and modernized TypeVar usage
+### Latest: v1.1.0 - First Stable Release ✅
+**Production-ready ethical AI framework (January 12, 2025):**
+- 🎯 **Stable Release** - Transition from RC1 to production-ready software
+- 📚 **Documentation Excellence** - Accurate API docs and streamlined developer guides  
+- 🔧 **Code Quality** - Reduced cognitive complexity and eliminated test flakiness
+- ✅ **Production Ready** - Complete single-step debugging and ethical reasoning pipeline
 
 **Key Features:**
 ```bash
@@ -43,7 +43,7 @@ curl -X POST http://localhost:8000/v1/system/runtime/pause \
   -H "Authorization: Bearer $TOKEN"
 
 # Execute single step in pipeline
-curl -X POST http://localhost:8000/v1/system/runtime/single-step \
+curl -X POST http://localhost:8000/v1/system/runtime/step \
   -H "Authorization: Bearer $TOKEN"
 
 # Check cognitive state and pipeline status  

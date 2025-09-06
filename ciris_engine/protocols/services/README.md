@@ -34,7 +34,7 @@ System governance and control:
 - **[wise_authority.py](./governance/wise_authority.py)** - Human oversight and deferrals
 - **[filter.py](./governance/filter.py)** - Message filtering and prioritization
 - **[visibility.py](./governance/visibility.py)** - API introspection and transparency
-- **[self_observation.py](./adaptation/self_observation.py)** - Identity variance and pattern analysis
+- **[self_observation.py](./governance/self_observation.py)** - Identity variance and pattern analysis
 
 ### Tool Services (1)
 External tool integration:

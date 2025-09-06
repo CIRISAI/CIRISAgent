@@ -28,7 +28,7 @@ You'll find related files at:
 
 - **adapters/** - Platform integrations (API, CLI, Discord, etc.)
 - **audit/** - Audit and verification logic
-- **buses/** - Message bus implementations
+- **[buses/](buses/README.md)** - Message bus implementations for multi-provider service coordination
 - **config/** - Configuration management
 - **context/** - Context building and management
 - **dma/** - Decision Making Algorithms
@@ -42,6 +42,6 @@ You'll find related files at:
 - **registries/** - Service and handler registries
 - **runtime/** - Runtime management
 - **secrets/** - Secret management
-- **services/** - Core services
+- **[services/](services/README.md)** - Core services (22 total)
 - **telemetry/** - Metrics and monitoring
 - **utils/** - Utility functions

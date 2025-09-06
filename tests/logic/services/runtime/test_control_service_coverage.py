@@ -441,7 +441,7 @@ class TestRuntimeControlServiceCoverage:
         # Mock get_processor_queue_status to raise exception
         control_service.get_processor_queue_status = AsyncMock(side_effect=RuntimeError("Queue status error"))
         
-        with patch('ciris_engine.logic.services.runtime.control_service.logger') as mock_logger:
+        with patch('ciris_engine.logic.services.runtime.control_service.service.logger') as mock_logger:
             status = await control_service.get_runtime_status()
             
             # Should log warning and fallback to 0

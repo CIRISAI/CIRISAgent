@@ -213,7 +213,7 @@ class TestInitializationBugs:
         mock_runtime = Mock()
 
         # This could fail if parent __init__ hasn't completed
-        with patch("ciris_engine.logic.services.runtime.control_service.BaseService.__init__") as mock_init:
+        with patch("ciris_engine.logic.services.runtime.control_service.service.BaseService.__init__") as mock_init:
             mock_init.side_effect = Exception("Parent init failed")
 
             with pytest.raises(Exception) as exc_info:

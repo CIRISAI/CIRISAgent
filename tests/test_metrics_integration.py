@@ -226,6 +226,17 @@ class TestMetricsIntegration(BaseMetricsTest):
                 "secrets_tool.success_rate": 1.0,
                 "secrets_tool.error_rate": 0.0,
             },
+            # Database Maintenance Service
+            "database_maintenance": {
+                "uptime_seconds": 7200.0,
+                "request_count": 8.0,
+                "error_count": 0.0,
+                "error_rate": 0.0,
+                "healthy": 1.0,
+                "maintenance_operations": 5.0,
+                "database_size_mb": 128.0,
+                "cleanup_operations": 3.0,
+            },
             # Graph Services
             "memory": {
                 "uptime_seconds": 7200.0,

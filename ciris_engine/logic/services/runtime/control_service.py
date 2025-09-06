@@ -1025,6 +1025,31 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             # Agent identity is now stored in graph, not profiles
             _current_profile = "identity-based"
 
+            # Get agent processor state and queue info
+            processor_paused = False
+            cognitive_state = None
+            queue_depth = 0
+            
+            if self.runtime and hasattr(self.runtime, 'agent_processor') and self.runtime.agent_processor:
+                processor_paused = getattr(self.runtime.agent_processor, '_is_paused', False)
+                cognitive_state = str(getattr(self.runtime.agent_processor, '_current_state', None))
+                
+                # Get actual queue depth using existing processor queue status method
+                try:
+                    processor_queue_status = await self.get_processor_queue_status()
+                    queue_depth = processor_queue_status.queue_size
+                except Exception as e:
+                    logger.warning(f"Failed to get queue depth from processor queue status: {e}")
+                    queue_depth = 0
+            
+            # Determine processor status
+            if processor_paused:
+                processor_status = ProcessorStatus.PAUSED
+            elif self._processor_status == ProcessorStatus.RUNNING:
+                processor_status = ProcessorStatus.RUNNING
+            else:
+                processor_status = self._processor_status
+
             return RuntimeStatusResponse(
                 is_running=self._processor_status == ProcessorStatus.RUNNING,
                 uptime_seconds=uptime,
@@ -1032,6 +1057,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 adapter_count=len(adapters),
                 total_messages_processed=self._messages_processed,
                 current_load=self._calculate_current_load(),
+                processor_status=processor_status,
+                cognitive_state=cognitive_state,
+                queue_depth=queue_depth,
             )
 
         except Exception as e:
@@ -1043,6 +1071,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 adapter_count=0,
                 total_messages_processed=0,
                 current_load=0.0,
+                processor_status=ProcessorStatus.ERROR,
+                cognitive_state=None,
+                queue_depth=0,
             )
 
     async def get_runtime_snapshot(self) -> RuntimeStateSnapshot:

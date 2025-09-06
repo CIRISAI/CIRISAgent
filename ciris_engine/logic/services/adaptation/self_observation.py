@@ -423,9 +423,9 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
             current_variance=current_variance,
             patterns_in_buffer=0,  # No more proposal buffer
             pending_proposals=0,  # No more proposals
-            average_cycle_duration_seconds=0.0,  # TODO: Calculate from history
+            average_cycle_duration_seconds=self._calculate_average_cycle_duration(),
             total_changes_applied=sum(c.changes_applied for c in self._adaptation_history),
-            rollback_rate=0.0,  # TODO: Track rollbacks
+            rollback_rate=self._calculate_rollback_rate(),
             identity_stable=self._consecutive_failures < 3,
             time_since_last_change=(
                 (self._time_service.now() - self._last_adaptation).total_seconds()
@@ -495,6 +495,43 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
 
         if self._memory_bus:
             await self._memory_bus.memorize(stop_node, handler_name="self_observation")
+
+    def _calculate_average_cycle_duration(self) -> float:
+        """Calculate average duration of completed observation cycles."""
+        if not self._adaptation_history:
+            return 0.0
+        
+        completed_cycles = [
+            cycle for cycle in self._adaptation_history 
+            if cycle.completed_at is not None
+        ]
+        
+        if not completed_cycles:
+            return 0.0
+        
+        total_duration = 0.0
+        for cycle in completed_cycles:
+            if cycle.completed_at and cycle.started_at:
+                duration = (cycle.completed_at - cycle.started_at).total_seconds()
+                total_duration += duration
+        
+        return total_duration / len(completed_cycles)
+
+    def _calculate_rollback_rate(self) -> float:
+        """Calculate rollback rate from adaptation history."""
+        if not self._adaptation_history:
+            return 0.0
+        
+        total_changes = sum(cycle.changes_applied for cycle in self._adaptation_history)
+        total_rollbacks = sum(
+            getattr(cycle, 'rollbacks_performed', 0) 
+            for cycle in self._adaptation_history
+        )
+        
+        if total_changes == 0:
+            return 0.0
+        
+        return total_rollbacks / total_changes
 
     async def _on_start(self) -> None:
         """Start the self-configuration service."""

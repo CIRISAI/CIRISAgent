@@ -113,10 +113,13 @@ class TestAgentProcessorPause:
 
     @pytest.mark.asyncio
     async def test_pipeline_controller_created_on_pause(self, agent_processor):
-        """Test that pipeline controller is created when pausing."""
-        assert agent_processor._pipeline_controller is None
+        """Test that pipeline controller is always present and gets paused on pause."""
+        # Pipeline controller is now always initialized
+        assert agent_processor._pipeline_controller is not None
+        assert isinstance(agent_processor._pipeline_controller, PipelineController)
+        assert not agent_processor._pipeline_controller.is_paused  # Initially not paused
 
-        # Pause creates pipeline controller
+        # Pause updates the existing pipeline controller
         await agent_processor.pause_processing()
 
         assert agent_processor._pipeline_controller is not None
@@ -138,8 +141,21 @@ class TestAgentProcessorPause:
         # Now single-step should work (though no thoughts to process)
         with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get:
             mock_get.return_value = []
-
-            result = await agent_processor.single_step()
+            
+            # Mock the pipeline controller to return empty pipeline response
+            if hasattr(agent_processor, '_pipeline_controller') and agent_processor._pipeline_controller:
+                # Mock execute_single_step_point to return pipeline_empty response
+                with patch.object(agent_processor._pipeline_controller, 'execute_single_step_point', 
+                                return_value={
+                                    "step_point": "pipeline_empty",
+                                    "step_results": [],
+                                    "pipeline_state": {},
+                                    "current_round": 0,
+                                    "pipeline_empty": True
+                                }):
+                    result = await agent_processor.single_step()
+            else:
+                result = await agent_processor.single_step()
 
             assert result["success"]
             assert result.get("pipeline_empty")

@@ -107,6 +107,8 @@ class TestRuntimeControlServiceCoverage:
             config_manager=None,
             time_service=mock_time_service,
         )
+        # Set start time to avoid datetime calculation errors
+        service._start_time = datetime.now(timezone.utc) - timedelta(hours=1)
         return service
 
     @pytest.mark.asyncio
@@ -417,3 +419,44 @@ class TestRuntimeControlServiceCoverage:
         metrics = await control_service.get_metrics()
         assert isinstance(metrics, dict)
         # Don't check specific values as they depend on implementation details
+
+
+    @pytest.mark.asyncio
+    async def test_queue_depth_integration(self, control_service, mock_runtime):
+        """Test queue depth integration using get_processor_queue_status method."""
+        # Mock the get_processor_queue_status method to return specific queue size
+        mock_queue_status = Mock()
+        mock_queue_status.queue_size = 15
+        control_service.get_processor_queue_status = AsyncMock(return_value=mock_queue_status)
+        
+        status = await control_service.get_runtime_status()
+        
+        # Verify queue_depth is correctly set from processor queue status
+        assert status.queue_depth == 15, f"Expected queue_depth=15 from processor queue status, got {status.queue_depth}"
+        control_service.get_processor_queue_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_queue_depth_exception_handling(self, control_service, mock_runtime):
+        """Test exception handling when get_processor_queue_status fails."""
+        # Mock get_processor_queue_status to raise exception
+        control_service.get_processor_queue_status = AsyncMock(side_effect=RuntimeError("Queue status error"))
+        
+        with patch('ciris_engine.logic.services.runtime.control_service.logger') as mock_logger:
+            status = await control_service.get_runtime_status()
+            
+            # Should log warning and fallback to 0
+            mock_logger.warning.assert_called_once()
+            warning_call = mock_logger.warning.call_args[0][0]
+            assert "Failed to get queue depth from processor queue status" in warning_call
+            assert status.queue_depth == 0, f"Expected queue_depth=0 on exception, got {status.queue_depth}"
+
+    @pytest.mark.asyncio
+    async def test_queue_depth_no_agent_processor(self, control_service):
+        """Test queue depth when agent processor is not available."""
+        # Remove agent processor to test fallback
+        control_service.runtime.agent_processor = None
+        
+        status = await control_service.get_runtime_status()
+        
+        # Should fallback to 0 when no agent processor
+        assert status.queue_depth == 0, f"Expected queue_depth=0 when no agent processor, got {status.queue_depth}"

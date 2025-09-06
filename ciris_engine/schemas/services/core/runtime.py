@@ -187,6 +187,9 @@ class RuntimeStatusResponse(BaseModel):
     adapter_count: int = Field(..., description="Number of adapters")
     total_messages_processed: int = Field(..., description="Total messages processed")
     current_load: float = Field(..., description="Current system load")
+    processor_status: ProcessorStatus = Field(ProcessorStatus.RUNNING, description="Current processor operational status")
+    cognitive_state: Optional[str] = Field(None, description="Current cognitive state (AgentState)")
+    queue_depth: int = Field(0, description="Number of items in processing queue")
 
 
 class RuntimeStateSnapshot(BaseModel):

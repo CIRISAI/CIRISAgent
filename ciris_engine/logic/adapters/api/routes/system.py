@@ -27,6 +27,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
 )
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.utils.serialization import serialize_timestamp
 
@@ -100,6 +101,11 @@ class RuntimeControlResponse(BaseModel):
     processor_state: str = Field(..., description="Current processor state")
     cognitive_state: Optional[str] = Field(None, description=DESC_CURRENT_COGNITIVE_STATE)
     queue_depth: int = Field(0, description="Number of items in processing queue")
+    
+    # Enhanced pause response fields for UI display
+    current_step: Optional[str] = Field(None, description="Current pipeline step when paused")
+    current_step_schema: Optional[Dict[str, Any]] = Field(None, description="Full schema object for current step")
+    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Complete pipeline state when paused")
 
 
 class ServiceStatus(BaseModel):
@@ -382,6 +388,166 @@ async def get_resource_usage(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_runtime_control_service(request: Request):
+    """Get runtime control service from request, trying main service first."""
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    if not runtime_control:
+        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+    return runtime_control
+
+def _validate_runtime_action(action: str) -> None:
+    """Validate the runtime control action."""
+    valid_actions = ["pause", "resume", "state"]
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}")
+
+async def _execute_pause_action(runtime_control, body: RuntimeAction) -> bool:
+    """Execute pause action and return success status."""
+    # Check if the service expects a reason parameter (API runtime control) or not (main runtime control)
+    import inspect
+    sig = inspect.signature(runtime_control.pause_processing)
+    if len(sig.parameters) > 0:  # API runtime control service
+        success = await runtime_control.pause_processing(body.reason or "API request")
+    else:  # Main runtime control service
+        control_response = await runtime_control.pause_processing()
+        success = control_response.success
+    return success
+
+def _extract_pipeline_state_info(request: Request) -> tuple[str, dict, dict]:
+    """
+    Extract pipeline state information for UI display.
+    
+    Returns:
+        Tuple of (current_step, current_step_schema, pipeline_state)
+    """
+    current_step = None
+    current_step_schema = None  
+    pipeline_state = None
+    
+    try:
+        # Try to get current pipeline state from the runtime
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
+            pipeline_controller = runtime.pipeline_controller
+            
+            # Get current pipeline state
+            try:
+                pipeline_state = pipeline_controller.get_current_state()
+                if pipeline_state and hasattr(pipeline_state, 'current_step'):
+                    current_step = pipeline_state.current_step
+            except Exception as e:
+                logger.debug(f"Could not get current step from pipeline: {e}")
+            
+            # Get the full step schema/metadata
+            if current_step:
+                try:
+                    # Get step schema - this would include all step metadata
+                    current_step_schema = {
+                        "step_point": current_step,
+                        "description": f"System paused at step: {current_step}",
+                        "timestamp": datetime.now().isoformat(),
+                        "can_single_step": True,
+                        "next_actions": ["single_step", "resume"]
+                    }
+                except Exception as e:
+                    logger.debug(f"Could not get step schema: {e}")
+    except Exception as e:
+        logger.debug(f"Could not get pipeline information: {e}")
+    
+    return current_step, current_step_schema, pipeline_state
+
+def _create_pause_response(success: bool, current_step: str, current_step_schema: dict, pipeline_state: dict) -> RuntimeControlResponse:
+    """Create pause action response."""
+    # Create clear message based on success state
+    if success:
+        step_suffix = f" at step: {current_step}" if current_step else ""
+        message = f"Processing paused{step_suffix}"
+    else:
+        message = "Already paused"
+    
+    result = RuntimeControlResponse(
+        success=success,
+        message=message,
+        processor_state="paused" if success else "unknown",
+        cognitive_state="UNKNOWN",
+    )
+    
+    # Add current step information to response for UI
+    if current_step:
+        result.current_step = current_step
+        result.current_step_schema = current_step_schema
+        result.pipeline_state = pipeline_state
+        
+    return result
+
+async def _execute_resume_action(runtime_control) -> RuntimeControlResponse:
+    """Execute resume action."""
+    # Check if the service returns a control response or just boolean
+    resume_result = await runtime_control.resume_processing()
+    if hasattr(resume_result, 'success'):  # Main runtime control service
+        success = resume_result.success
+    else:  # API runtime control service
+        success = resume_result
+    
+    return RuntimeControlResponse(
+        success=success,
+        message="Processing resumed" if success else "Not paused",
+        processor_state="active" if success else "unknown",
+        cognitive_state="UNKNOWN",
+        queue_depth=0,
+    )
+
+async def _execute_state_action(runtime_control) -> RuntimeControlResponse:
+    """Execute state query action."""
+    # Get current state without changing it
+    status = await runtime_control.get_runtime_status()
+    # Get queue depth from the same source as queue endpoint
+    queue_status = await runtime_control.get_processor_queue_status()
+    actual_queue_depth = queue_status.queue_size if queue_status else 0
+    
+    return RuntimeControlResponse(
+        success=True,
+        message="Current runtime state retrieved",
+        processor_state="paused" if status.processor_status == ProcessorStatus.PAUSED else "active",
+        cognitive_state=status.cognitive_state or "UNKNOWN", 
+        queue_depth=actual_queue_depth,
+    )
+
+def _get_cognitive_state(request: Request) -> str:
+    """Get cognitive state from agent processor if available."""
+    cognitive_state = None
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None:
+        try:
+            cognitive_state = runtime.agent_processor.get_current_state()
+        except Exception as e:
+            logger.warning(
+                f"Failed to retrieve cognitive state: {type(e).__name__}: {str(e)} - Agent processor may not be initialized"
+            )
+    return cognitive_state
+
+def _create_final_response(base_result: RuntimeControlResponse, cognitive_state: str) -> RuntimeControlResponse:
+    """Create final response with cognitive state and any enhanced fields."""
+    response = RuntimeControlResponse(
+        success=base_result.success,
+        message=base_result.message,
+        processor_state=base_result.processor_state,
+        cognitive_state=cognitive_state or base_result.cognitive_state or "UNKNOWN",
+        queue_depth=base_result.queue_depth,
+    )
+    
+    # Copy enhanced fields if they exist
+    if hasattr(base_result, 'current_step'):
+        response.current_step = base_result.current_step
+    if hasattr(base_result, 'current_step_schema'):
+        response.current_step_schema = base_result.current_step_schema
+    if hasattr(base_result, 'pipeline_state'):
+        response.pipeline_state = base_result.pipeline_state
+
+    return response
+
 @router.post("/runtime/{action}", response_model=SuccessResponse[RuntimeControlResponse])
 async def control_runtime(
     action: str, request: Request, body: RuntimeAction = Body(...), auth: AuthContext = Depends(require_admin)
@@ -396,82 +562,24 @@ async def control_runtime(
 
     Requires ADMIN role.
     """
-    # Try main runtime control service first (has all methods), fall back to API runtime control
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-    if not runtime_control:
-        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
-
     try:
-        # Validate action
-        valid_actions = ["pause", "resume", "state"]
-        if action not in valid_actions:
-            raise HTTPException(status_code=400, detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}")
+        runtime_control = _get_runtime_control_service(request)
+        _validate_runtime_action(action)
 
         # Execute action
         if action == "pause":
-            # Check if the service expects a reason parameter (API runtime control) or not (main runtime control)
-            import inspect
-            sig = inspect.signature(runtime_control.pause_processing)
-            if len(sig.parameters) > 0:  # API runtime control service
-                success = await runtime_control.pause_processing(body.reason or "API request")
-            else:  # Main runtime control service
-                control_response = await runtime_control.pause_processing()
-                success = control_response.success
-            result = RuntimeControlResponse(
-                success=success,
-                message="Processing paused" if success else "Already paused",
-                processor_state="paused" if success else "unknown",
-                cognitive_state="UNKNOWN",
-                queue_depth=0,
-            )
+            success = await _execute_pause_action(runtime_control, body)
+            current_step, current_step_schema, pipeline_state = _extract_pipeline_state_info(request)
+            result = _create_pause_response(success, current_step, current_step_schema, pipeline_state)
         elif action == "resume":
-            # Check if the service returns a control response or just boolean
-            resume_result = await runtime_control.resume_processing()
-            if hasattr(resume_result, 'success'):  # Main runtime control service
-                success = resume_result.success
-            else:  # API runtime control service
-                success = resume_result
-            result = RuntimeControlResponse(
-                success=success,
-                message="Processing resumed" if success else "Not paused",
-                processor_state="active" if success else "unknown",
-                cognitive_state="UNKNOWN",
-                queue_depth=0,
-            )
+            result = await _execute_resume_action(runtime_control)
         elif action == "state":
-            # Get current state without changing it
-            status = runtime_control.get_runtime_status()
-            result = RuntimeControlResponse(
-                success=True,
-                message="Current runtime state retrieved",
-                processor_state="paused" if status.get("paused", False) else "active",
-                cognitive_state=status.get("cognitive_state", "UNKNOWN"),
-                queue_depth=0,  # Not tracked in simplified version
-            )
+            result = await _execute_state_action(runtime_control)
             return SuccessResponse(data=result)
 
-        # Get cognitive state if available
-        cognitive_state = None
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None:
-            try:
-                cognitive_state = runtime.agent_processor.get_current_state()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to retrieve cognitive state: {type(e).__name__}: {str(e)} - Agent processor may not be initialized"
-                )
-                pass
-
-        # Convert result to our response format
-        response = RuntimeControlResponse(
-            success=result.success,
-            message=result.message,
-            processor_state=result.processor_state,
-            cognitive_state=cognitive_state,
-            queue_depth=result.queue_depth,
-        )
+        # Get cognitive state and create final response
+        cognitive_state = _get_cognitive_state(request)
+        response = _create_final_response(result, cognitive_state)
 
         return SuccessResponse(data=response)
 
@@ -480,6 +588,150 @@ async def control_runtime(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+def _parse_direct_service_key(service_key: str) -> tuple[str, str]:
+    """Parse direct service key and return service_type and display_name."""
+    parts = service_key.split(".")
+    if len(parts) >= 3:
+        service_type = parts[1]  # 'graph', 'infrastructure', etc.
+        service_name = parts[2]  # 'memory_service', 'time_service', etc.
+        
+        # Convert snake_case to PascalCase for display
+        display_name = "".join(word.capitalize() for word in service_name.split("_"))
+        return service_type, display_name
+    return "unknown", service_key
+
+def _parse_registry_service_key(service_key: str) -> tuple[str, str]:
+    """Parse registry service key and return service_type and display_name."""
+    parts = service_key.split(".")
+    logger.debug(f"Parsing registry key: {service_key}, parts: {parts}")
+    
+    # Handle both 3-part and 4-part keys
+    if len(parts) >= 4 and parts[1] == "ServiceType":
+        # Format: registry.ServiceType.ENUM.ServiceName_id
+        service_type_enum = f"{parts[1]}.{parts[2]}"  # 'ServiceType.TOOL'
+        service_name = parts[3]  # 'APIToolService_127803015745648'
+        logger.debug(f"4-part key: {service_key}, service_name: {service_name}")
+    else:
+        # Fallback: registry.ENUM.ServiceName
+        service_type_enum = parts[1]  # 'ServiceType.COMMUNICATION', etc.
+        service_name = parts[2] if len(parts) > 2 else parts[1]  # Service name or enum value
+        logger.debug(f"3-part key: {service_key}, service_name: {service_name}")
+
+    # Clean up service name (remove instance ID)
+    if "_" in service_name:
+        service_name = service_name.split("_")[0]
+
+    # Extract adapter type from service name
+    adapter_prefix = ""
+    if "Discord" in service_name:
+        adapter_prefix = "DISCORD"
+    elif "API" in service_name:
+        adapter_prefix = "API"
+    elif "CLI" in service_name:
+        adapter_prefix = "CLI"
+
+    # Map ServiceType enum to category and set display name
+    service_type, display_name = _map_service_type_enum(service_type_enum, service_name, adapter_prefix)
+    
+    return service_type, display_name
+
+def _map_service_type_enum(service_type_enum: str, service_name: str, adapter_prefix: str) -> tuple[str, str]:
+    """Map ServiceType enum to category and create display name."""
+    service_type = _get_service_category(service_type_enum)
+    display_name = _create_display_name(service_type_enum, service_name, adapter_prefix)
+    
+    return service_type, display_name
+
+def _get_service_category(service_type_enum: str) -> str:
+    """Get the service category based on the service type enum."""
+    # Tool Services (need to check first due to SECRETS_TOOL containing SECRETS)
+    if "TOOL" in service_type_enum:
+        return "tool"
+    
+    # Adapter Services (Communication is adapter-specific)
+    elif "COMMUNICATION" in service_type_enum:
+        return "adapter"
+    
+    # Runtime Services (need to check RUNTIME_CONTROL before SECRETS in infrastructure)
+    elif any(service in service_type_enum for service in [
+        "LLM", "RUNTIME_CONTROL", "TASK_SCHEDULER"
+    ]):
+        return "runtime"
+    
+    # Graph Services (6)
+    elif any(service in service_type_enum for service in [
+        "MEMORY", "CONFIG", "TELEMETRY", "AUDIT", "INCIDENT_MANAGEMENT", "TSDB_CONSOLIDATION"
+    ]):
+        return "graph"
+    
+    # Infrastructure Services (7)
+    elif any(service in service_type_enum for service in [
+        "TIME", "SECRETS", "AUTHENTICATION", "RESOURCE_MONITOR", 
+        "DATABASE_MAINTENANCE", "INITIALIZATION", "SHUTDOWN"
+    ]):
+        return "infrastructure"
+    
+    # Governance Services (4)
+    elif any(service in service_type_enum for service in [
+        "WISE_AUTHORITY", "ADAPTIVE_FILTER", "VISIBILITY", "SELF_OBSERVATION"
+    ]):
+        return "governance"
+    
+    else:
+        return "unknown"
+
+def _create_display_name(service_type_enum: str, service_name: str, adapter_prefix: str) -> str:
+    """Create appropriate display name based on service type and adapter prefix."""
+    if not adapter_prefix:
+        return service_name
+        
+    if "COMMUNICATION" in service_type_enum:
+        return f"{adapter_prefix}-COMM"
+    elif "RUNTIME_CONTROL" in service_type_enum:
+        return f"{adapter_prefix}-RUNTIME"
+    elif "TOOL" in service_type_enum:
+        return f"{adapter_prefix}-TOOL"
+    elif "WISE_AUTHORITY" in service_type_enum:
+        return f"{adapter_prefix}-WISE"
+    else:
+        return service_name
+
+def _parse_service_key(service_key: str) -> tuple[str, str]:
+    """Parse any service key and return service_type and display_name."""
+    parts = service_key.split(".")
+    
+    # Handle direct services (format: direct.service_type.service_name)
+    if service_key.startswith("direct.") and len(parts) >= 3:
+        return _parse_direct_service_key(service_key)
+    
+    # Handle registry services (format: registry.ServiceType.ENUM.ServiceName_id)
+    elif service_key.startswith("registry.") and len(parts) >= 3:
+        return _parse_registry_service_key(service_key)
+    
+    else:
+        return "unknown", service_key
+
+def _create_service_status(service_key: str, details: dict) -> ServiceStatus:
+    """Create ServiceStatus from service key and details."""
+    service_type, display_name = _parse_service_key(service_key)
+    
+    return ServiceStatus(
+        name=display_name,
+        type=service_type,
+        healthy=details.get("healthy", False),
+        available=details.get("healthy", False),  # Use healthy as available
+        uptime_seconds=None,  # Not available in simplified view
+        metrics=ServiceMetrics(),
+    )
+
+def _update_service_summary(service_summary: dict, service_type: str, is_healthy: bool) -> None:
+    """Update service summary with service type and health status."""
+    if service_type not in service_summary:
+        service_summary[service_type] = {"total": 0, "healthy": 0}
+    service_summary[service_type]["total"] += 1
+    if is_healthy:
+        service_summary[service_type]["healthy"] += 1
 
 @router.get("/services", response_model=SuccessResponse[ServicesStatusResponse])
 async def get_services_status(
@@ -492,11 +744,10 @@ async def get_services_status(
     availability, and basic metrics.
     """
     # Use the runtime control service to get all services
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-
-    if not runtime_control:
+    try:
+        runtime_control = _get_runtime_control_service(request)
+    except HTTPException:
+        # Handle case where no runtime control service is available
         return SuccessResponse(
             data=ServicesStatusResponse(
                 services=[], total_services=0, healthy_services=0, timestamp=datetime.now(timezone.utc)
@@ -507,104 +758,15 @@ async def get_services_status(
     try:
         health_status = await runtime_control.get_service_health_status()
 
-        # Convert service details to ServiceStatus list
+        # Convert service details to ServiceStatus list using helper functions
         services = []
         service_summary = {}
 
         # Include ALL services (both direct and registry)
         for service_key, details in health_status.service_details.items():
-            # Parse service key to get type and name
-            parts = service_key.split(".")
-
-            # Handle direct services (format: direct.service_type.service_name)
-            if service_key.startswith("direct.") and len(parts) >= 3:
-                source = parts[0]  # 'direct'
-                service_type = parts[1]  # 'graph', 'infrastructure', etc.
-                service_name = parts[2]  # 'memory_service', 'time_service', etc.
-
-                # Convert snake_case to PascalCase for display
-                service_name = "".join(word.capitalize() for word in service_name.split("_"))
-
-            # Handle registry services (format: registry.ServiceType.ENUM.ServiceName_id)
-            elif service_key.startswith("registry.") and len(parts) >= 3:
-                # source = parts[0]  # 'registry' - not used currently
-
-                # Handle both 3-part and 4-part keys
-                if len(parts) >= 4 and parts[1] == "ServiceType":
-                    # Format: registry.ServiceType.ENUM.ServiceName_id
-                    service_type_enum = f"{parts[1]}.{parts[2]}"  # 'ServiceType.TOOL'
-                    service_name = parts[3]  # 'APIToolService_127803015745648'
-                    logger.debug(f"4-part key: {service_key}, service_name: {service_name}")
-                else:
-                    # Fallback: registry.ENUM.ServiceName
-                    service_type_enum = parts[1]  # 'ServiceType.COMMUNICATION', etc.
-                    service_name = parts[2]  # Service name or enum value
-                    logger.debug(f"3-part key: {service_key}, service_name: {service_name}")
-
-                # Clean up service name (remove instance ID)
-                if "_" in service_name:
-                    service_name = service_name.split("_")[0]
-
-                # Extract adapter type from service name and create display name
-                adapter_prefix = ""
-                display_name = service_name
-
-                if "Discord" in service_name:
-                    adapter_prefix = "DISCORD"
-                elif "API" in service_name:
-                    adapter_prefix = "API"
-                elif "CLI" in service_name:
-                    adapter_prefix = "CLI"
-
-                # Map ServiceType enum to category and set display name
-                service_type = "unknown"
-                if "COMMUNICATION" in service_type_enum:
-                    service_type = "adapter"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-COMM"
-                elif "MEMORY" in service_type_enum:
-                    service_type = "graph"
-                elif "LLM" in service_type_enum:
-                    service_type = "runtime"
-                elif "TIME" in service_type_enum:
-                    service_type = "infrastructure"
-                elif "TOOL" in service_type_enum:
-                    service_type = "tool"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-TOOL"
-                elif "WISE_AUTHORITY" in service_type_enum:
-                    service_type = "governance"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-WISE"
-                elif "RUNTIME_CONTROL" in service_type_enum:
-                    service_type = "runtime"
-                    if adapter_prefix:
-                        display_name = f"{adapter_prefix}-RUNTIME"
-
-                # Use display name for adapter services
-                if adapter_prefix and display_name != service_name:
-                    service_name = display_name
-            else:
-                service_type = "unknown"
-                service_name = service_key
-
-            # Create ServiceStatus
-            status = ServiceStatus(
-                name=service_name,
-                type=service_type,
-                healthy=details.get("healthy", False),
-                available=details.get("healthy", False),  # Use healthy as available
-                uptime_seconds=None,  # Not available in simplified view
-                metrics=ServiceMetrics(),
-            )
+            status = _create_service_status(service_key, details)
             services.append(status)
-
-            # Update service summary
-            if service_type not in service_summary:
-                service_summary[service_type] = {"total": 0, "healthy": 0}
-            service_summary[service_type]["total"] += 1
-            if details.get("healthy", False):
-                service_summary[service_type]["healthy"] += 1
+            _update_service_summary(service_summary, status.type, status.healthy)
 
         return SuccessResponse(
             data=ServicesStatusResponse(

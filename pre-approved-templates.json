@@ -1,32 +1,32 @@
 {
   "version": "1.0",
-  "created_at": "2025-08-17T04:01:00.155137Z",
+  "created_at": "2025-09-05T14:23:15.055644Z",
   "templates": {
     "default": {
-      "checksum": "sha256:cb7adf02f99e357c66e49f3d39a901fd9828b2d9e8803d291578fc04de4e4ecc",
+      "checksum": "sha256:85e44be2d9a35276dea2e9550e07a3e982846afd6a951afb7af96454617f8935",
       "description": "Datum - baseline agent template"
     },
     "sage": {
-      "checksum": "sha256:32e79a69471b28dbb1e952e8212bd12b758b5b3c7c8cb069e8abc3293ea3daf1",
+      "checksum": "sha256:625a4840ed38e3c6f0f1bafc7b02af1651f81841f60d99d6a9fcaf5216ba236d",
       "description": "Sage - wise questioning agent"
     },
     "scout": {
-      "checksum": "sha256:90940992ff2d64d53efadadbd8486539ecfeb8757193db437f349d5e21c8a54d",
+      "checksum": "sha256:366b27c3398b669e87e2ee22d20835868f8800f59c84ae5fc6091d5df3b2d8ff",
       "description": "Scout - direct action demonstrator"
     },
     "echo-core": {
-      "checksum": "sha256:8084992d909af97906103c186f180f43f4db3e01472db6422f34a8d65596d3a7",
+      "checksum": "sha256:07589002704c3976be9253ecde6b9a3821672f50f7200aa70818ccc63e7094f1",
       "description": "Echo-Core - general community moderation"
     },
     "echo-speculative": {
-      "checksum": "sha256:a75f4c8c0b67a48737f03d2b6a340e7ad40d8de8e5217dedb1f8d358f54ac531",
+      "checksum": "sha256:2418f145e8409604b2dfa9f27235769a060041ed23862a97727e2297b1aac5b1",
       "description": "Echo-Speculative - speculative discussion moderation"
     },
     "echo": {
-      "checksum": "sha256:009a45fadb7b5fb44cab3e04824284fbf48e15863d6408327b8ec98ed2138cf1",
+      "checksum": "sha256:f78cf7924dd62d7ffbfc9fe70260098ccf320d709d0cf3c00a3b646f04e03fb6",
       "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "SVZ/jJFkXCOhchsqgSJehVSRNGeb16+KHFl4kBro7xBj2nQDrWaSL3pcxj8hfS94L26n25wCi50R0KB/M1kNAw==",
+  "root_signature": "xcXSm3WAwba4a4M9xoqfkUEX9H4PT6h1YU3sE1Ra8suQbaFQIsfkgmXgIu/etPea/O+57OLRdvAZf02dTbUYAg==",
   "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
 }

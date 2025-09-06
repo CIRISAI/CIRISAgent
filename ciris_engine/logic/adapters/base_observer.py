@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, Set, TypeVar, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, cast
 
 from pydantic import BaseModel
 
@@ -16,8 +16,7 @@ from ciris_engine.schemas.services.filters_core import FilterPriority, FilterRes
 
 logger = logging.getLogger(__name__)
 
-# Using TypeVar for backward compatibility - will migrate to PEP 695 syntax when Python 3.12+ is required
-MessageT = TypeVar("MessageT", bound=BaseModel)
+# Modern PEP 695 generic syntax (Python 3.12+)
 
 PASSIVE_CONTEXT_LIMIT = 20
 
@@ -48,7 +47,7 @@ def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] 
     return re.sub(mention_pattern, replace_mention, content)
 
 
-class BaseObserver(Generic[MessageT], ABC):
+class BaseObserver[MessageT: BaseModel](ABC):
     """Common functionality for message observers."""
 
     def __init__(
@@ -326,6 +325,20 @@ class BaseObserver(Generic[MessageT], ABC):
         
         return lines
     
+    async def _add_custom_context_sections(self, task_lines: List[str], msg: MessageT, history_context: List[Dict]) -> None:
+        """Extension point for subclasses to add custom context sections.
+        
+        This method is called before the conversation history is added,
+        allowing subclasses to inject their own context information.
+        
+        Args:
+            task_lines: The task lines list to append to
+            msg: The message being processed  
+            history_context: The conversation history context
+        """
+        # Base implementation does nothing - subclasses can override
+        pass
+    
     async def _append_consent_aware_content(self, task_lines: List[str], msg: MessageT, user_lookup: Dict[str, str]) -> None:
         """Append current message content with consent awareness."""
         from ciris_engine.schemas.consent.core import ConsentStream
@@ -442,12 +455,18 @@ class BaseObserver(Generic[MessageT], ABC):
             else:
                 task_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {formatted_msg_content}"]  # type: ignore[attr-defined]
 
+            # Allow subclasses to add custom context sections before conversation history
+            await self._add_custom_context_sections(task_lines, msg, history_context)
+            
             task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
+            task_lines.append("CIRIS_OBSERVATION_START")
             
             # Build user lookup and format history lines
             user_lookup = self._build_user_lookup_from_history(msg, history_context)
             history_lines = self._format_history_lines(history_context, user_lookup)
             task_lines.extend(history_lines)
+            
+            task_lines.append("CIRIS_OBSERVATION_END")
 
             task_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="

@@ -428,7 +428,7 @@ async def change_password(
     # Check permissions
     if user_id != auth.user_id:
         # Only SYSTEM_ADMIN can change other users' passwords
-        await check_permissions([PERMISSION_USERS_WRITE])(auth)
+        await check_permissions([PERMISSION_USERS_WRITE])(auth, auth_service)
         # SYSTEM_ADMIN doesn't need to provide current password
         success = await auth_service.change_password(
             user_id=user_id, new_password=request.new_password, skip_current_check=True
@@ -640,7 +640,7 @@ async def list_user_api_keys(
     """
     # Check permissions
     if user_id != auth.user_id:
-        await check_permissions([PERMISSION_USERS_READ])(auth)
+        await check_permissions([PERMISSION_USERS_READ])(auth, auth_service)
 
     keys = auth_service.list_user_api_keys(user_id)
 

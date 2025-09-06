@@ -102,6 +102,31 @@ class RuntimeControlResponse(BaseModel):
     queue_depth: int = Field(0, description="Number of items in processing queue")
 
 
+class SingleStepResponse(BaseModel):
+    """Response for single-step operations with detailed step point data."""
+    
+    # Basic runtime control data
+    success: bool = Field(..., description="Whether action succeeded")
+    message: str = Field(..., description="Human-readable status message")
+    processor_state: str = Field(..., description="Current processor state")
+    cognitive_state: Optional[str] = Field(None, description="Current cognitive state")
+    queue_depth: int = Field(0, description="Number of items in processing queue")
+    
+    # Step Point Information
+    step_point: Optional[str] = Field(None, description="The step point that was just executed")
+    step_result: Optional[Dict[str, Any]] = Field(None, description="Complete step result data with full context")
+    
+    # Pipeline State
+    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Current pipeline state with all thoughts")
+    
+    # Performance Metrics
+    processing_time_ms: Optional[float] = Field(None, description="Time taken to execute this step in milliseconds")
+    tokens_used: Optional[int] = Field(None, description="Tokens consumed during this step")
+    
+    # Demo Data
+    demo_data: Optional[Dict[str, Any]] = Field(None, description="Demo-ready data for UI display")
+
+
 class ServiceMetrics(BaseModel):
     """Service-specific metrics."""
 
@@ -254,6 +279,22 @@ class SystemResource:
     async def resume(self, reason: Optional[str] = None) -> RuntimeControlResponse:
         """Resume agent processing. Requires: ADMIN role"""
         return await self.runtime_control("resume", reason)
+
+    async def single_step(self, include_details: bool = True) -> SingleStepResponse:
+        """
+        Execute a single step of the processing pipeline with detailed data.
+        
+        Args:
+            include_details: Whether to include detailed step point data (default: True)
+            
+        Returns:
+            SingleStepResponse with step point data, pipeline state, and performance metrics
+            
+        Requires: ADMIN role
+        """
+        params = {"include_details": str(include_details).lower()}
+        result = await self._transport.request("POST", "/v1/system/runtime/step", params=params)
+        return SingleStepResponse(**result["data"])
 
     async def get_state(self) -> RuntimeControlResponse:
         """Get current runtime state. Requires: OBSERVER role"""

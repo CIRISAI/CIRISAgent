@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
@@ -127,8 +127,38 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         return is_from_monitored or is_from_deferral
 
+    def _detect_and_replace_spoofed_markers(self, content: str) -> str:
+        """Detect and replace attempts to spoof CIRIS observation markers."""
+        import re
+        
+        # Patterns for detecting spoofed markers (case insensitive, with variations)
+        patterns = [
+            r'CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START',
+            r'CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END',
+            r'CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START',  # Common misspelling
+            r'CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END',
+            r'CIRIS[_\s]*OBS(?:ERV)?[_\s]*START',  # Shortened version
+            r'CIRIS[_\s]*OBS(?:ERV)?[_\s]*END',
+        ]
+        
+        modified_content = content
+        for pattern in patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                modified_content = re.sub(
+                    pattern, 
+                    "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!", 
+                    modified_content, 
+                    flags=re.IGNORECASE
+                )
+                logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern}")
+        
+        return modified_content
+
     async def _enhance_message(self, msg: DiscordMessage) -> DiscordMessage:
-        """Enhance Discord messages with vision processing if available."""
+        """Enhance Discord messages with vision processing and anti-spoofing protection."""
+        # First, detect and replace any spoofed markers
+        clean_content = self._detect_and_replace_spoofed_markers(msg.content)
+        
         # Process any images in the message if vision is available
         if self._vision_helper.is_available() and hasattr(msg, "raw_message") and msg.raw_message:
             try:
@@ -150,10 +180,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                             additional_content += "\n\n"
                         additional_content += embed_descriptions
 
-                    # Create a new message with the augmented content
+                    # Create a new message with the augmented content and anti-spoofing protection
                     return DiscordMessage(
                         message_id=msg.message_id,
-                        content=msg.content + additional_content,
+                        content=clean_content + additional_content,
                         author_id=msg.author_id,
                         author_name=msg.author_name,
                         channel_id=msg.channel_id,
@@ -165,6 +195,19 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             except Exception as e:
                 logger.error(f"Failed to process images in message {msg.message_id}: {e}")
 
+        # Return message with anti-spoofing protection even if no image processing
+        if clean_content != msg.content:
+            return DiscordMessage(
+                message_id=msg.message_id,
+                content=clean_content,
+                author_id=msg.author_id,
+                author_name=msg.author_name,
+                channel_id=msg.channel_id,
+                is_bot=msg.is_bot,
+                is_dm=msg.is_dm,
+                raw_message=msg.raw_message,
+            )
+        
         return msg
 
     async def _handle_priority_observation(self, msg: DiscordMessage, filter_result: Any) -> None:
@@ -436,3 +479,52 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         except Exception as e:
             logger.error(f"Error processing guidance message {msg.message_id}: {e}", exc_info=True)
+
+    async def _get_guild_moderators(self, guild_id: str) -> List[Dict[str, str]]:
+        """Get list of guild moderators using the Discord tool service."""
+        try:
+            if not self.communication_service:
+                logger.warning("No communication service available to get guild moderators")
+                return []
+
+            # Try to get the Discord tool service from communication service
+            if hasattr(self.communication_service, '_discord_tool_service'):
+                tool_service = self.communication_service._discord_tool_service
+                result = await tool_service._get_guild_moderators({"guild_id": guild_id})
+                
+                if result.get("success") and "data" in result:
+                    moderators = result["data"].get("moderators", [])
+                    logger.info(f"Retrieved {len(moderators)} moderators from guild {guild_id}")
+                    return moderators
+                else:
+                    logger.warning(f"Failed to get moderators: {result.get('error', 'Unknown error')}")
+                    
+        except Exception as e:
+            logger.error(f"Error getting guild moderators: {e}")
+            
+        return []
+
+    def _extract_guild_id_from_channel(self, channel_id: str) -> Optional[str]:
+        """Extract guild ID from channel ID format (discord_guildid_channelid)."""
+        if channel_id and channel_id.startswith("discord_"):
+            parts = channel_id.split("_")
+            if len(parts) == 3:  # Format: discord_guildid_channelid
+                return parts[1]
+        return None
+
+    async def _add_custom_context_sections(self, task_lines: List[str], msg: DiscordMessage, history_context: List[Dict]) -> None:
+        """Add Discord-specific ACTIVE MODS section to context."""
+        # Add ACTIVE MODS section for Discord
+        guild_id = self._extract_guild_id_from_channel(msg.channel_id)
+        if guild_id:
+            moderators = await self._get_guild_moderators(guild_id)
+            if moderators:
+                task_lines.append("\n=== ACTIVE MODS ===")
+                for mod in moderators:
+                    nickname = mod.get('nickname') or mod.get('display_name') or mod.get('username')
+                    task_lines.append(f"ID: {mod['user_id']} | Nick: {nickname}")
+                task_lines.append("=== END ACTIVE MODS ===")
+            else:
+                task_lines.append("\n=== ACTIVE MODS ===")
+                task_lines.append("No moderators available or unable to retrieve moderator list")
+                task_lines.append("=== END ACTIVE MODS ===")

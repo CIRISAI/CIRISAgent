@@ -26,7 +26,7 @@ class TestDiscordToolServiceInitialization:
         service = DiscordToolService()
         assert service._client is None
         assert service._tools is not None
-        assert len(service._tools) == 10  # All tools registered
+        assert len(service._tools) == 11  # All tools registered
 
     def test_init_with_client(self):
         """Test service initialization with Discord client."""
@@ -161,7 +161,7 @@ class TestToolRegistry:
         tools = await service.get_available_tools()
 
         assert isinstance(tools, list)
-        assert len(tools) == 10
+        assert len(tools) == 11
         assert "discord_send_message" in tools
         assert "discord_delete_message" in tools
         assert "discord_timeout_user" in tools
@@ -197,7 +197,7 @@ class TestToolRegistry:
         tools = await service.list_tools()
 
         assert isinstance(tools, list)
-        assert len(tools) == 10
+        assert len(tools) == 11
         assert "discord_send_message" in tools
 
 

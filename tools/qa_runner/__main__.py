@@ -50,6 +50,7 @@ Available modules:
   simple_handlers - Simple handler tests
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
+  single_step_comprehensive - Complete 17-phase COVENANT single-step validation
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything

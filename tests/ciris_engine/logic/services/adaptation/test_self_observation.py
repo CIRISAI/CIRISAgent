@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from ciris_engine.logic.services.adaptation.self_observation import (
+from ciris_engine.logic.services.governance.self_observation import (
     ObservationCycle,
     ObservationState,
     SelfObservationService,
@@ -78,8 +78,8 @@ class TestSelfObservationService:
     @pytest.fixture
     def service(self, mock_time_service, mock_memory_bus, mock_telemetry, mock_service_registry):
         """Create SelfObservationService instance."""
-        with patch("ciris_engine.logic.services.adaptation.self_observation.MemoryBus") as mock_bus_class:
-            with patch("ciris_engine.logic.services.adaptation.self_observation.GraphTelemetryService") as mock_tel_class:
+        with patch("ciris_engine.logic.services.governance.self_observation.service.MemoryBus") as mock_bus_class:
+            with patch("ciris_engine.logic.services.governance.self_observation.service.GraphTelemetryService") as mock_tel_class:
                 # Configure mocks
                 mock_bus_class.return_value = mock_memory_bus
                 mock_tel_class.return_value = mock_telemetry

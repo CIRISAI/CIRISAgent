@@ -142,7 +142,7 @@ async def test_time_service_mocking():
     # Mock the datetime.now to return a fixed time
     fixed_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
-    with patch("ciris_engine.logic.services.lifecycle.time.datetime") as mock_datetime:
+    with patch("ciris_engine.logic.services.lifecycle.time.service.datetime") as mock_datetime:
         mock_datetime.now.return_value = fixed_time
         mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
 

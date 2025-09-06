@@ -295,7 +295,7 @@ class TestConsentServiceCleanup:
         }
         current_time = mock_time_service.now()
         
-        with patch('ciris_engine.logic.services.governance.consent.logger') as mock_logger:
+        with patch('ciris_engine.logic.services.governance.consent.service.logger') as mock_logger:
             result = consent_service._extract_expired_user_from_node(node, current_time)
             
             assert result is None
@@ -379,7 +379,7 @@ class TestConsentServiceCleanup:
             "other_user": Mock()
         }
         
-        with patch('ciris_engine.logic.services.governance.consent.logger') as mock_logger:
+        with patch('ciris_engine.logic.services.governance.consent.service.logger') as mock_logger:
             result = consent_service._perform_cleanup(["expired_user"])
             
             assert result == 1

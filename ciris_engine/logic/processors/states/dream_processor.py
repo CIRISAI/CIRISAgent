@@ -18,7 +18,7 @@ from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.services.adaptation.self_observation import SelfObservationService
+from ciris_engine.logic.services.governance.self_observation import SelfObservationService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.base import MetricsUpdate

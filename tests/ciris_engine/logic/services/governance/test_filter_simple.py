@@ -7,7 +7,7 @@ import asyncio
 
 import pytest
 
-from ciris_engine.logic.services.governance.filter import AdaptiveFilterService
+from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.schemas.services.filters_core import FilterPriority
 

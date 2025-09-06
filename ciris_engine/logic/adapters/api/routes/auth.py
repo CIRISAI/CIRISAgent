@@ -633,6 +633,7 @@ async def oauth_callback(
             role=user_role,
         )
 
+
         # Store OAuth profile data if we have it
         if picture:
             # Validate the picture URL for security

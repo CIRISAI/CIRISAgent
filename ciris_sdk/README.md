@@ -90,7 +90,7 @@ The SDK now provides **easy access to ALL 436+ metrics** through the unified tel
 
 ### Get All Metrics with One Call
 ```python
-# Get ALL metrics from 21 services
+# Get ALL metrics from 22 services
 all_metrics = await client.telemetry.get_all_metrics()
 print(f"System healthy: {all_metrics['system_healthy']}")
 print(f"LLM requests: {all_metrics['buses']['llm_bus']['request_count']}")

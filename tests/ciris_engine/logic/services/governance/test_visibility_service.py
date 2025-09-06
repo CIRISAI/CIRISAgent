@@ -146,8 +146,8 @@ async def test_visibility_empty_state(visibility_service):
     await visibility_service.start()
 
     # With no data in persistence, should return empty state
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[]):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_status", return_value=[]):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status", return_value=[]):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_status", return_value=[]):
             snapshot = await visibility_service.get_current_state()
 
     assert isinstance(snapshot, VisibilitySnapshot)
@@ -166,8 +166,8 @@ async def test_visibility_with_active_task(visibility_service):
     task = create_test_task("task-123", TaskStatus.ACTIVE)
 
     # Mock persistence to return the task
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[task]):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_status", return_value=[]):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status", return_value=[task]):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_status", return_value=[]):
             snapshot = await visibility_service.get_current_state()
 
     assert isinstance(snapshot, VisibilitySnapshot)
@@ -185,8 +185,8 @@ async def test_visibility_with_active_thoughts(visibility_service):
     thoughts = [create_test_thought(f"thought-{i}", "task-123", ThoughtStatus.PENDING) for i in range(3)]
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[]):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_status", return_value=thoughts):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status", return_value=[]):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_status", return_value=thoughts):
             snapshot = await visibility_service.get_current_state()
 
     assert isinstance(snapshot, VisibilitySnapshot)
@@ -203,8 +203,8 @@ async def test_visibility_with_recent_decisions(visibility_service):
     decisions = [create_test_thought(f"thought-{i}", "task-123", ThoughtStatus.COMPLETED, "SPEAK") for i in range(5)]
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[]):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_status") as mock_get_thoughts:
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status", return_value=[]):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_status") as mock_get_thoughts:
             # Return empty for PENDING, decisions for COMPLETED
             def side_effect(status, db_path):
                 if status == ThoughtStatus.PENDING:
@@ -236,8 +236,8 @@ async def test_visibility_reasoning_depth(visibility_service):
     ]
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[]):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_status", return_value=thoughts):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status", return_value=[]):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_status", return_value=thoughts):
             snapshot = await visibility_service.get_current_state()
 
     assert isinstance(snapshot, VisibilitySnapshot)
@@ -250,7 +250,7 @@ async def test_get_reasoning_trace_no_task(visibility_service):
     await visibility_service.start()
 
     # Mock persistence to return None
-    with patch("ciris_engine.logic.services.governance.visibility.get_task_by_id", return_value=None):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_task_by_id", return_value=None):
         trace = await visibility_service.get_reasoning_trace("nonexistent-task")
 
     assert isinstance(trace, ReasoningTrace)
@@ -274,8 +274,8 @@ async def test_get_reasoning_trace_with_thoughts(visibility_service):
     ]
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_task_by_id", return_value=task):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_task_id", return_value=thoughts):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_task_by_id", return_value=task):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_task_id", return_value=thoughts):
             trace = await visibility_service.get_reasoning_trace("task-123")
 
     assert isinstance(trace, ReasoningTrace)
@@ -297,8 +297,8 @@ async def test_get_decision_history_no_task(visibility_service):
     await visibility_service.start()
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_task_by_id", return_value=None):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_task_id", return_value=[]):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_task_by_id", return_value=None):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_task_id", return_value=[]):
             history = await visibility_service.get_decision_history("nonexistent-task")
 
     assert isinstance(history, TaskDecisionHistory)
@@ -326,8 +326,8 @@ async def test_get_decision_history_with_decisions(visibility_service):
     ]
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_task_by_id", return_value=task):
-        with patch("ciris_engine.logic.services.governance.visibility.get_thoughts_by_task_id", return_value=thoughts):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_task_by_id", return_value=task):
+        with patch("ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_task_id", return_value=thoughts):
             history = await visibility_service.get_decision_history("task-123")
 
     assert isinstance(history, TaskDecisionHistory)
@@ -358,7 +358,7 @@ async def test_explain_action(visibility_service):
     thought = create_test_thought("thought-123", "task-123", ThoughtStatus.COMPLETED, "SPEAK")
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_thought_by_id", return_value=thought):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_thought_by_id", return_value=thought):
         explanation = await visibility_service.explain_action("thought-123")
 
     assert "Action: SPEAK" in explanation
@@ -371,7 +371,7 @@ async def test_explain_action_no_thought(visibility_service):
     await visibility_service.start()
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_thought_by_id", return_value=None):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_thought_by_id", return_value=None):
         explanation = await visibility_service.explain_action("nonexistent")
 
     assert "No thought found with ID nonexistent" in explanation
@@ -386,7 +386,7 @@ async def test_explain_action_no_final_action(visibility_service):
     thought = create_test_thought("thought-123", "task-123", ThoughtStatus.PENDING)
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_thought_by_id", return_value=thought):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_thought_by_id", return_value=thought):
         explanation = await visibility_service.explain_action("thought-123")
 
     assert "did not result in an action" in explanation
@@ -419,7 +419,7 @@ async def test_get_task_history(visibility_service):
         task.updated_at = (now - timedelta(hours=(i + 3))).isoformat()
 
     # Mock persistence
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status") as mock_get_tasks:
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status") as mock_get_tasks:
 
         def side_effect(status, db_path):
             if status == TaskStatus.COMPLETED:
@@ -441,7 +441,7 @@ async def test_get_task_history(visibility_service):
     assert history[0].task_id == "task-1"  # Most recent completed task
 
     # Test with smaller limit
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status") as mock_get_tasks:
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status") as mock_get_tasks:
         mock_get_tasks.side_effect = side_effect
         history_limited = await visibility_service.get_task_history(limit=2)
 
@@ -454,7 +454,7 @@ async def test_get_task_history_empty(visibility_service):
     await visibility_service.start()
 
     # Mock persistence to return empty lists
-    with patch("ciris_engine.logic.services.governance.visibility.get_tasks_by_status", return_value=[]):
+    with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status", return_value=[]):
         history = await visibility_service.get_task_history()
 
     assert isinstance(history, list)

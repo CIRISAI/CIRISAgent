@@ -166,7 +166,7 @@ async def runtime_control_service(mock_runtime, mock_adapter_manager, mock_time_
 @pytest_asyncio.fixture
 async def task_scheduler_service(mock_time_service):
     """Create task scheduler service with mocked dependencies."""
-    with patch("ciris_engine.logic.services.lifecycle.scheduler.get_db_connection"):
+    with patch("ciris_engine.logic.services.lifecycle.scheduler.service.get_db_connection"):
         service = TaskSchedulerService(db_path=":memory:", time_service=mock_time_service, check_interval_seconds=60)
 
         # Simulate some activity

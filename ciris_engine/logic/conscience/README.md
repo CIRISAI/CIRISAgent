@@ -106,7 +106,17 @@ class EpistemicHumilityConscience:
     # Suggests when to defer or ponder
 ```
 
-## Data Flow
+## H3ERE Recursive Processing Flow
+
+### Conscience and ASPDMA Integration
+
+The conscience system works with the **recursive ASPDMA** in the H3ERE architecture:
+
+1. **Initial ASPDMA**: Action Selection PDMA chooses action from 3 core DMA outputs
+2. **Conscience Check**: All epistemic faculties evaluate the selected action  
+3. **First Bounce**: If conscience fails, triggers **RECURSIVE_ASPDMA** (not PONDER)
+4. **Recursive ASPDMA**: Re-runs action selection with conscience feedback incorporated
+5. **Max Rounds**: Only DEFER when `conscience_retry_limit: 2` is exceeded
 
 ### ConscienceResult Structure
 ```python
@@ -119,34 +129,39 @@ class ConscienceResult(BaseModel):
     epistemic_data: Dict[str, Any]  # Faculty insights
 ```
 
-### Integration with Thought Processing
+### Critical Recursive Behavior
 
-1. **Action Selection**: DMA selects an action based on context
-2. **Conscience Evaluation**: All faculties analyze the action
-3. **Result Accumulation**: ConscienceResult with insights created
-4. **Context Enhancement**: Results added to thought context
-5. **Flow Forward**: Insights available to follow-up thoughts
-6. **Retry Guidance**: If reconsideration suggested, specific guidance provided
-
+**First Bounce → RECURSIVE_ASPDMA (NOT PONDER):**
 ```python
-# Conscience results flow through the decision chain
 async def process_thought_with_conscience(thought_item):
-    # 1. DMA selects action
-    action_result = await dma_orchestrator.select_action(thought_item)
+    # 1. Initial ASPDMA selects action
+    action_result = await aspdma.select_action(thought_item)
 
     # 2. Conscience evaluates (always runs)
     conscience_result = await apply_conscience(action_result, context)
 
-    # 3. Store insights for future decisions
-    thought_context.conscience_insights = conscience_result.epistemic_data
-
-    # 4. If reconsideration suggested, retry with guidance
-    if conscience_result.overridden:
-        retry_result = await retry_with_conscience_guidance(
-            original_action=action_result,
-            guidance=conscience_result.override_reason,
-            insights=conscience_result.epistemic_data
+    # 3. First failure triggers RECURSIVE_ASPDMA
+    if conscience_result.overridden and retry_count < conscience_retry_limit:
+        # This triggers RECURSIVE_ASPDMA, not PONDER
+        recursive_result = await aspdma.select_action_with_conscience_feedback(
+            thought_item=thought_item,
+            conscience_feedback=conscience_result.override_reason,
+            retry_attempt=retry_count + 1
         )
+        
+    # 4. Only DEFER when max rounds exceeded
+    elif conscience_result.overridden and retry_count >= conscience_retry_limit:
+        # Now we DEFER to human authority
+        return ActionSelectionDMAResult(
+            selected_action=HandlerActionType.DEFER.value,
+            rationale="Conscience retry limit exceeded - deferring to authority"
+        )
+```
+
+### Configuration
+```yaml
+# From essential.yaml
+conscience_retry_limit: 2  # Maximum recursive ASPDMA attempts
 ```
 
 ## Additional Protection Layers
@@ -169,10 +184,21 @@ Beyond the epistemic faculties, the conscience system integrates:
 - Automatic redaction in logs
 - Compliance with data protection standards
 
-### Thought Depth Guardrail
-- Prevents infinite pondering loops
-- Ensures processing completion
-- Maintains system responsiveness
+### Thought Depth Guardrail (`thought_depth_guardrail.py`)
+- **Max Depth Enforcement**: Forces DEFER when `thought_depth >= max_depth` (default: 20)
+- **Terminal Action Detection**: DEFER, REJECT, TASK_COMPLETE don't count toward depth
+- **Automatic Deferral**: Creates DEFER action with human guidance context
+- **Infinite Loop Prevention**: Ensures processing completion and system responsiveness
+
+```python
+# Key behavior: Only DEFER on max rounds
+if current_depth >= self.max_depth:
+    # Force DEFER - no more recursive attempts
+    return ActionSelectionDMAResult(
+        selected_action=HandlerActionType.DEFER.value,
+        rationale=f"Maximum thought depth of {self.max_depth} reached"
+    )
+```
 
 ## Configuration
 

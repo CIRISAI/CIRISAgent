@@ -137,7 +137,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         # Tool Services (1)
         app.state.secrets_tool_service = None
 
-        # === INFRASTRUCTURE COMPONENTS (not part of the 21 services) ===
+        # === INFRASTRUCTURE COMPONENTS (not part of the 22 services) ===
         app.state.service_registry = None
         app.state.agent_processor = None
         app.state.message_handler = None

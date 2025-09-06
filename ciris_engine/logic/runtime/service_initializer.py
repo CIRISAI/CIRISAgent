@@ -15,13 +15,13 @@ import aiofiles
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor
 from ciris_engine.logic.persistence import get_sqlite_db_full_path
-from ciris_engine.logic.persistence.maintenance import DatabaseMaintenanceService
+from ciris_engine.logic.services.infrastructure.database_maintenance import DatabaseMaintenanceService
 from ciris_engine.logic.registries.base import Priority, ServiceRegistry
 
 # CoreToolService removed - SELF_HELP moved to memory per user request
 # BasicTelemetryCollector removed - using GraphTelemetryService instead
 from ciris_engine.logic.secrets.service import SecretsService
-from ciris_engine.logic.services.governance.filter import AdaptiveFilterService
+from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
 
 # Removed AuditSinkManager - audit is consolidated, no sink needed
 from ciris_engine.logic.services.governance.wise_authority import WiseAuthorityService
@@ -622,7 +622,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("Database maintenance service initialized and started")
 
         # Initialize self observation service
-        from ciris_engine.logic.services.adaptation.self_observation import SelfObservationService
+        from ciris_engine.logic.services.governance.self_observation import SelfObservationService
 
         assert self.time_service is not None
         assert self.bus_manager is not None

@@ -178,7 +178,7 @@ MDD incorporates sustainable development practices to maintain long-term mission
 
 ## Case Study: CIRIS Implementation
 
-The CIRIS (Covenant-Integrated Responsible Intelligence System) demonstrates successful MDD implementation:
+The CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) demonstrates successful MDD implementation:
 
 **Mission**: Meta-Goal M-1 - Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing
 

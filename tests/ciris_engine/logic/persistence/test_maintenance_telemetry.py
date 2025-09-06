@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 
-from ciris_engine.logic.persistence.maintenance import DatabaseMaintenanceService
+from ciris_engine.logic.services.infrastructure.database_maintenance import DatabaseMaintenanceService
 from ciris_engine.schemas.config import EssentialConfig
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 

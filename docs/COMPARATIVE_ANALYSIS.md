@@ -10,7 +10,7 @@ This document provides a comprehensive, fact-checked comparison of leading AI ag
 
 ### 1. **CIRIS** - Ethical AI Governance Platform
 - **Focus**: Safety-first AI with cryptographic human oversight
-- **Architecture**: 21 microservices + 6 message buses
+- **Architecture**: 22 microservices + 6 message buses
 - **License**: Apache 2.0
 - **Production Status**: Live at agents.ciris.ai
 - **Distinguishing Features**: Conscience system, Wise Authority, graph-based identity
@@ -61,7 +61,7 @@ This document provides a comprehensive, fact-checked comparison of leading AI ag
 | **Offline Capable** | ✅ Mock LLM | ⚠️ Local LLM | ✅ Yes | ⚠️ Requires LLM | ❌ No | ❌ No |
 | **Audit Trail** | ✅ Crypto-signed | ⚠️ Logging | ❌ Basic | ❌ Basic | ⚠️ Enterprise | ❌ Minimal |
 | **Emergency Stop** | ✅ Ed25519 | ❌ Manual | ❌ None | ❌ None | ❌ None | ❌ None |
-| **Learning Curve** | ❌ Steep (21 services) | ⚠️ Moderate | ⚠️ Moderate | ❌ Steep | ✅ Easy | ✅ Easy |
+| **Learning Curve** | ❌ Steep (22 services) | ⚠️ Moderate | ⚠️ Moderate | ❌ Steep | ✅ Easy | ✅ Easy |
 | **Community Size** | ❌ Small | ✅ 20k+ builders | ✅ Large | ✅ Large | ✅ 100k+ devs | ✅ 175k stars |
 
 ## Safety & Ethics Analysis

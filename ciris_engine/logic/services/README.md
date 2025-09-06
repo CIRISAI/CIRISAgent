@@ -1,618 +1,237 @@
-# Services Module
-
-The services module provides essential standalone service implementations that support core CIRIS agent functionality. These services integrate with the multi-service architecture through the service registry and sink patterns, providing specialized capabilities for adaptive filtering, configuration management, and transaction orchestration.
+# CIRIS Services
 
-## Architecture Overview
-
-### Service Integration Pattern
-
-All services in this module inherit from the base `Service` class and integrate with the CIRIS multi-service architecture:
-
-```python
-from ciris_engine.adapters.base import Service
-from ciris_engine.registries.base import ServiceRegistry, Priority
-
-class ExampleService(Service):
-    async def start(self):
-        await super().start()
-        # Service initialization
-
-    async def stop(self):
-        await super().stop()
-        # Cleanup logic
-```
-
-### Core Service Components
-
-The services module contains three primary service implementations:
-
-1. **Adaptive Filter Service** - Intelligent message filtering with ML-based priority detection
-2. **Agent Configuration Service** - Configuration management through graph memory (agent-initiated)
-3. **Multi-Service Transaction Orchestrator** - Coordinated multi-service operations
-
-## Service Implementations
-
-### Adaptive Filter Service (`adaptive_filter_service.py`)
-
-Provides sophisticated message filtering capabilities with machine learning-based priority detection and user trust tracking.
-
-#### Core Features
-
-- **Intelligent Priority Detection**: Automatically classifies messages by urgency and importance
-- **User Trust Tracking**: Maintains trust profiles for users based on interaction history
-- **Graph Memory Integration**: Persists filter configuration and learning data
-- **Pattern-Based Updates**: Agent can update filtering rules based on discovered patterns
-- **Multi-Adapter Support**: Works with CLI, Discord, and API adapters
-
-#### Configuration Structure
-
-```python
-from ciris_engine.schemas.filter_schemas_v1 import AdaptiveFilterConfig
-
-config = AdaptiveFilterConfig(
-    enabled=True,
-    learning_rate=0.1,
-    trust_decay_hours=24,
-    max_trust_score=100,
-    priority_keywords={
-        FilterPriority.CRITICAL: ["urgent", "emergency", "help"],
-        FilterPriority.HIGH: ["important", "asap", "priority"],
-        FilterPriority.MEDIUM: ["question", "request", "please"]
-    },
-    spam_patterns=[
-        r"\b(click here|act now|limited time)\b",
-        r"\b(free money|easy cash|guaranteed)\b"
-    ]
-)
-```
-
-#### Usage Examples
-
-```python
-# Initialize service
-filter_service = AdaptiveFilterService(
-    memory_service=memory_service,
-    llm_service=llm_service  # Optional for enhanced detection
-)
-
-# Start service (loads configuration from graph memory)
-await filter_service.start()
-
-# Filter incoming message
-filter_result = await filter_service.filter_message(
-    message=incoming_message,
-    adapter_type="discord"
-)
-
-if filter_result.should_process:
-    # Process high-priority message immediately
-    if filter_result.priority == FilterPriority.CRITICAL:
-        await priority_handler.handle(message)
-    else:
-        await normal_handler.handle(message)
-else:
-    # Message filtered out (spam, malicious, etc.)
-    logger.info(f"Filtered message: {filter_result.reasoning}")
-```
-
-#### Filter Result Processing
-
-```python
-from ciris_engine.schemas.filter_schemas_v1 import FilterResult, FilterPriority
-
-# Example filter result
-result = FilterResult(
-    message_id="msg_123",
-    priority=FilterPriority.HIGH,
-    triggered_filters=["urgency_detector", "trust_booster"],
-    should_process=True,
-    reasoning="High-priority message from trusted user",
-    confidence=0.87,
-    context_hints={
-        "user_trust_score": 85,
-        "urgency_indicators": ["urgent", "help"],
-        "threat_level": "none"
-    }
-)
-```
-
-#### Trust Profile Management
-
-```python
-# Update user trust based on interaction outcomes
-await filter_service.update_user_trust(
-    user_id="user_123",
-    interaction_outcome="positive",  # positive, negative, neutral
-    context={"message_type": "question", "resolution": "helpful"}
-)
-
-# Get current trust profile
-trust_profile = await filter_service.get_user_trust("user_123")
-print(f"Trust score: {trust_profile.trust_score}/100")
-print(f"Interaction count: {trust_profile.interaction_count}")
-```
-
-### Agent Configuration Service (`agent_config_service.py`)
-
-Manages agent self-configuration through graph memory with support for LOCAL vs IDENTITY scope handling and Wise Authority approval workflows.
-
-#### Scope-Based Configuration
-
-The service handles two primary configuration scopes:
-
-- **LOCAL Scope**: Runtime settings that can be changed immediately
-- **IDENTITY Scope**: Core identity settings requiring WA approval
-
-```python
-from ciris_engine.schemas.graph_schemas_v1 import ConfigNodeType, GraphScope
-
-# Get local configuration (immediate access)
-local_config = await config_service.get_config(
-    config_type=ConfigNodeType.FILTER_CONFIG,
-    scope=GraphScope.LOCAL
-)
-
-# Request identity configuration change (requires WA approval)
-identity_update = await config_service.request_identity_update(
-    config_type=ConfigNodeType.AGENT_PROFILE,
-    changes={"personality_traits": ["helpful", "analytical", "cautious"]},
-    justification="Adjusting personality for better user interactions"
-)
-```
-
-#### Configuration Management Workflow
-
-```python
-class AgentConfigService(Service):
-    async def update_config(
-        self,
-        config_type: ConfigNodeType,
-        config_data: Dict[str, Any],
-        scope: GraphScope = GraphScope.LOCAL
-    ) -> bool:
-        """Update configuration based on scope (identity changes require WA approval)"""
-
-        if scope == GraphScope.IDENTITY:
-            # Identity changes require WA approval
-            return await self._request_wa_approval(config_type, config_data)
-        else:
-            # Local changes can be applied immediately
-            return await self._apply_local_config(config_type, config_data)
-
-    async def _request_wa_approval(self, config_type: ConfigNodeType, changes: Dict[str, Any]) -> bool:
-        """Request Wise Authority approval for identity changes"""
-        approval_request = {
-            "request_id": f"identity_update_{datetime.now().isoformat()}",
-            "config_type": config_type.value,
-            "proposed_changes": changes,
-            "current_config": await self._get_current_identity_config(config_type),
-            "impact_assessment": await self._assess_change_impact(config_type, changes)
-        }
-
-        if self.wa_service:
-            return await self.wa_service.request_approval(approval_request)
-        else:
-            logger.warning("No WA service available for identity update approval")
-            return False
-```
-
-#### Configuration Examples
-
-```python
-# Agent decides to update filter based on discovered insights
-# (Not automatic - agent reads insights from DREAM state pattern detection)
-filter_config = await config_service.get_config(ConfigNodeType.FILTER_CONFIG)
-filter_config["spam_threshold"] = 0.85  # Agent chooses to increase sensitivity
-
-await config_service.update_config(
-    ConfigNodeType.FILTER_CONFIG,
-    filter_config,
-    scope=GraphScope.LOCAL
-)
-
-# Request personality adjustment (requires WA approval)
-identity_changes = {
-    "personality_traits": ["helpful", "analytical", "security-conscious"],
-    "response_style": "formal",
-    "expertise_areas": ["cybersecurity", "data analysis"]
-}
-
-approval_pending = await config_service.update_config(
-    ConfigNodeType.AGENT_PROFILE,
-    identity_changes,
-    scope=GraphScope.IDENTITY
-)
-```
-
-### Multi-Service Transaction Orchestrator (`multi_service_transaction_orchestrator.py`)
-
-Coordinates complex multi-service operations through the MultiServiceActionSink, ensuring atomic transactions and proper rollback handling.
-
-#### Transaction Coordination
-
-The orchestrator manages sequences of actions across multiple services as atomic units:
-
-```python
-from ciris_engine.schemas.service_actions_v1 import ActionMessage, ActionType
-
-# Define a complex transaction
-transaction_actions = [
-    ActionMessage(
-        action_type=ActionType.MEMORIZE,
-        content="User requested data analysis",
-        metadata={"priority": "high", "category": "analysis"}
-    ),
-    ActionMessage(
-        action_type=ActionType.SEND_TOOL,
-        tool_name="data_analyzer",
-        parameters={"dataset": "user_data.csv", "analysis_type": "statistical"}
-    ),
-    ActionMessage(
-        action_type=ActionType.SEND_MESSAGE,
-        channel_id="user_channel",
-        content="Analysis complete. Preparing results..."
-    )
-]
-
-# Execute as atomic transaction
-tx_id = "analysis_workflow_001"
-await orchestrator.orchestrate(tx_id, transaction_actions)
-```
-
-#### Rollback and Error Handling
-
-```python
-class MultiServiceTransactionOrchestrator(Service):
-    async def orchestrate(self, tx_id: str, actions: List[ActionMessage]) -> None:
-        """Execute actions as atomic transaction with rollback on failure"""
-        completed_actions = []
-
-        try:
-            for action in actions:
-                # Execute action through sink
-                result = await self.sink.enqueue_action(action)
-                completed_actions.append((action, result))
-
-                # Update transaction status
-                self.transactions[tx_id] = {
-                    "status": "in_progress",
-                    "completed": len(completed_actions),
-                    "total": len(actions)
-                }
-
-            # Mark transaction as successful
-            self.transactions[tx_id]["status"] = "completed"
-
-        except Exception as e:
-            logger.error(f"Transaction {tx_id} failed: {e}")
-
-            # Rollback completed actions
-            await self.rollback(tx_id, completed_actions)
-
-            self.transactions[tx_id] = {
-                "status": "failed",
-                "error": str(e),
-                "rollback_completed": True
-            }
-            raise
-
-    async def rollback(self, tx_id: str, completed_actions: List[Tuple[ActionMessage, Any]]) -> None:
-        """Rollback completed actions in reverse order"""
-        for action, result in reversed(completed_actions):
-            try:
-                rollback_action = self._create_rollback_action(action, result)
-                if rollback_action:
-                    await self.sink.enqueue_action(rollback_action)
-            except Exception as e:
-                logger.error(f"Rollback failed for action {action.action_type}: {e}")
-```
-
-#### Transaction Monitoring
-
-```python
-# Monitor transaction status
-tx_status = orchestrator.get_transaction_status("analysis_workflow_001")
-
-if tx_status["status"] == "completed":
-    print("Transaction completed successfully")
-elif tx_status["status"] == "failed":
-    print(f"Transaction failed: {tx_status['error']}")
-    if tx_status.get("rollback_completed"):
-        print("Rollback completed successfully")
-elif tx_status["status"] == "in_progress":
-    progress = tx_status["completed"] / tx_status["total"] * 100
-    print(f"Transaction progress: {progress:.1f}%")
-```
-
-## Service Registry Integration
-
-### Registration Patterns
-
-Services integrate with the CIRIS service registry for discovery and dependency injection:
-
-```python
-from ciris_engine.registries.base import ServiceRegistry, Priority
-
-# Register services in runtime initialization
-service_registry = ServiceRegistry()
-
-# Register adaptive filter service
-filter_service = AdaptiveFilterService(memory_service, llm_service)
-await filter_service.start()
-
-service_registry.register_service(
-    service_type="filter",
-    provider=filter_service,
-    priority=Priority.HIGH,
-    capabilities=["filter_message", "update_user_trust", "get_filter_stats"]
-)
-
-# Register configuration service
-config_service = AgentConfigService(memory_service, wa_service, filter_service)
-await config_service.start()
-
-service_registry.register_service(
-    service_type="config",
-    provider=config_service,
-    priority=Priority.HIGH,
-    capabilities=["get_config", "update_config", "request_identity_update"]
-)
-
-# Register transaction orchestrator
-orchestrator = MultiServiceTransactionOrchestrator(service_registry, multi_service_sink)
-await orchestrator.start()
-
-service_registry.register_service(
-    service_type="transaction_orchestrator",
-    provider=orchestrator,
-    priority=Priority.MEDIUM,
-    capabilities=["orchestrate", "rollback", "get_transaction_status"]
-)
-```
-
-### Service Discovery and Usage
-
-```python
-# Components can discover and use services through registry
-class ExampleHandler:
-    def __init__(self, service_registry: ServiceRegistry):
-        self.registry = service_registry
-
-    async def process_message(self, message: IncomingMessage):
-        # Get filter service
-        filter_service = await self.registry.get_service(
-            handler="ExampleHandler",
-            service_type="filter",
-            required_capabilities=["filter_message"]
-        )
-
-        if filter_service:
-            # Apply filtering
-            filter_result = await filter_service.filter_message(message)
-
-            if filter_result.should_process:
-                # Get config service for processing parameters
-                config_service = await self.registry.get_service(
-                    handler="ExampleHandler",
-                    service_type="config",
-                    required_capabilities=["get_config"]
-                )
-
-                if config_service:
-                    processing_config = await config_service.get_config(
-                        ConfigNodeType.PROCESSING_CONFIG
-                    )
-
-                    # Process message with configuration
-                    await self._process_with_config(message, processing_config)
-```
-
-## Integration with Multi-Service Sink
-
-### Sink-Based Service Coordination
-
-Services integrate with the multi-service sink for unified action routing:
-
-```python
-from ciris_engine.sinks.multi_service_sink import MultiServiceActionSink
-
-class ServiceIntegratedHandler:
-    def __init__(self, service_registry: ServiceRegistry, multi_service_sink: MultiServiceActionSink):
-        self.registry = service_registry
-        self.sink = multi_service_sink
-
-    async def handle_complex_workflow(self, user_request: str):
-        # Step 1: Filter and prioritize request
-        filter_service = await self.registry.get_service("Handler", "filter")
-        filter_result = await filter_service.filter_message(user_request)
-
-        if filter_result.priority == FilterPriority.HIGH:
-            # Step 2: Create transaction for high-priority workflow
-            orchestrator = await self.registry.get_service("Handler", "transaction_orchestrator")
-
-            workflow_actions = [
-                # Memory operation
-                ActionMessage(
-                    action_type=ActionType.MEMORIZE,
-                    content=f"High priority request: {user_request}",
-                    metadata={"priority": "high", "user_trust": filter_result.context_hints.get("user_trust_score")}
-                ),
-                # Tool execution
-                ActionMessage(
-                    action_type=ActionType.SEND_TOOL,
-                    tool_name="priority_processor",
-                    parameters={"request": user_request, "urgency": "high"}
-                ),
-                # Response generation
-                ActionMessage(
-                    action_type=ActionType.GENERATE_RESPONSE,
-                    prompt=f"Respond to high-priority request: {user_request}",
-                    context={"user_priority": "high", "processing_mode": "immediate"}
-                )
-            ]
-
-            # Execute as coordinated transaction
-            await orchestrator.orchestrate(f"priority_workflow_{datetime.now().timestamp()}", workflow_actions)
-```
-
-## Performance and Monitoring
-
-### Service Health Monitoring
-
-```python
-# Health check integration
-class ServiceHealthMonitor:
-    def __init__(self, service_registry: ServiceRegistry):
-        self.registry = service_registry
-
-    async def check_service_health(self) -> Dict[str, Any]:
-        health_report = {}
-
-        # Check filter service health
-        filter_service = await self.registry.get_service("Monitor", "filter")
-        if filter_service and hasattr(filter_service, 'get_health_status'):
-            health_report["filter"] = await filter_service.get_health_status()
-
-        # Check config service health
-        config_service = await self.registry.get_service("Monitor", "config")
-        if config_service and hasattr(config_service, 'is_healthy'):
-            health_report["config"] = await config_service.is_healthy()
-
-        # Check orchestrator health
-        orchestrator = await self.registry.get_service("Monitor", "transaction_orchestrator")
-        if orchestrator:
-            health_report["orchestrator"] = {
-                "active_transactions": len(orchestrator.transactions),
-                "failed_transactions": sum(
-                    1 for tx in orchestrator.transactions.values()
-                    if tx.get("status") == "failed"
-                )
-            }
-
-        return health_report
-```
-
-### Performance Optimization
-
-```python
-# Service performance optimization patterns
-class OptimizedServiceUsage:
-    def __init__(self, service_registry: ServiceRegistry):
-        self.registry = service_registry
-        self._service_cache = {}
-        self._cache_ttl = 300  # 5 minutes
-
-    async def get_cached_service(self, service_type: str, handler: str = "Default"):
-        """Get service with caching to reduce registry lookups"""
-        cache_key = f"{handler}:{service_type}"
-
-        if cache_key in self._service_cache:
-            cached_entry = self._service_cache[cache_key]
-            if (datetime.now() - cached_entry["timestamp"]).seconds < self._cache_ttl:
-                return cached_entry["service"]
-
-        # Cache miss - fetch from registry
-        service = await self.registry.get_service(handler, service_type)
-        self._service_cache[cache_key] = {
-            "service": service,
-            "timestamp": datetime.now()
-        }
-
-        return service
-```
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-#### Service Initialization Failures
-
-```python
-# Robust service initialization with fallbacks
-async def initialize_services_with_fallbacks(memory_service, llm_service=None):
-    services = {}
-
-    try:
-        # Initialize filter service
-        filter_service = AdaptiveFilterService(memory_service, llm_service)
-        await filter_service.start()
-        services["filter"] = filter_service
-        logger.info("Filter service initialized successfully")
-    except Exception as e:
-        logger.error(f"Filter service initialization failed: {e}")
-        # Create fallback filter service with basic functionality
-        services["filter"] = BasicFilterService()
-
-    try:
-        # Initialize config service
-        config_service = AgentConfigService(memory_service)
-        await config_service.start()
-        services["config"] = config_service
-        logger.info("Config service initialized successfully")
-    except Exception as e:
-        logger.error(f"Config service initialization failed: {e}")
-        # Use static configuration as fallback
-        services["config"] = StaticConfigService()
-
-    return services
-```
-
-#### Memory Service Integration Issues
-
-```python
-# Handle memory service connection issues
-class ResilientMemoryIntegration:
-    def __init__(self, memory_service):
-        self.memory = memory_service
-        self._connection_retries = 3
-        self._retry_delay = 1.0
-
-    async def safe_memory_operation(self, operation_func, *args, **kwargs):
-        """Execute memory operation with retry logic"""
-        for attempt in range(self._connection_retries):
-            try:
-                return await operation_func(*args, **kwargs)
-            except ConnectionError as e:
-                if attempt < self._connection_retries - 1:
-                    logger.warning(f"Memory operation failed (attempt {attempt + 1}), retrying: {e}")
-                    await asyncio.sleep(self._retry_delay * (2 ** attempt))
-                else:
-                    logger.error(f"Memory operation failed after {self._connection_retries} attempts: {e}")
-                    raise
-            except Exception as e:
-                logger.error(f"Unexpected error in memory operation: {e}")
-                raise
-```
-
-#### Configuration Validation
-
-```python
-# Validate service configurations
-def validate_service_config(config: Dict[str, Any], service_type: str) -> bool:
-    """Validate service configuration before initialization"""
-
-    required_fields = {
-        "filter": ["enabled", "learning_rate", "priority_keywords"],
-        "config": ["cache_ttl_minutes", "scope_map"],
-        "orchestrator": ["max_concurrent_transactions", "rollback_timeout"]
-    }
-
-    if service_type not in required_fields:
-        logger.warning(f"Unknown service type for validation: {service_type}")
-        return True
-
-    missing_fields = []
-    for field in required_fields[service_type]:
-        if field not in config:
-            missing_fields.append(field)
-
-    if missing_fields:
-        logger.error(f"Missing required configuration fields for {service_type}: {missing_fields}")
-        return False
-
-    return True
-```
+The 22 core services that implement CIRIS's mission-driven architecture. Each service serves a specific purpose aligned with Meta-Goal M-1: promoting sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing.
+
+## Service Architecture Overview
+
+CIRIS follows a strict service architecture with exactly **22 core services** organized into 6 categories:
+
+### [Graph Services (6)](#graph-services) - Memory and Data Management
+Services that manage different aspects of the graph memory system and data persistence.
+
+### [Infrastructure Services (4)](#infrastructure-services) - Foundation Systems  
+Core infrastructure services that enable reliable system operation.
+
+### [Lifecycle Services (4)](#lifecycle-services) - System Lifecycle Management
+Services that manage system initialization, operation, and shutdown.
+
+### [Governance Services (5)](#governance-services) - Ethical and Operational Governance
+Services that ensure ethical behavior and operational transparency.
+
+### [Runtime Services (2)](#runtime-services) - Essential Runtime Operations
+Critical services for system operation and external integrations.
+
+### [Tool Services (1)](#tool-services) - Agent Self-Help Capabilities
+Services that provide tools for agent self-sufficiency.
+
+## Service Categories
+
+### Graph Services (6)
+
+All graph services extend `BaseGraphService` and integrate with the graph memory system:
+
+1. **[Memory Service](graph/memory_service.py)** - Core graph operations and memory storage
+   - Central to "Graph Memory as Identity" architecture
+   - Handles MEMORIZE, RECALL, and FORGET operations
+   - Manages graph node creation and relationship mapping
+   - *See: [memory_service/README.md](memory_service/README.md)*
+
+2. **[Audit Service](graph/audit_service.py)** - Immutable audit trail with cryptographic signatures
+   - Complete traceability of all system operations
+   - Ed25519 signatures for data integrity
+   - Compliance and debugging support
+
+3. **[Config Service](graph/config_service.py)** - Dynamic configuration stored in graph
+   - Configuration as memory - versioned and evolutionary
+   - Graph-based configuration management
+   - Runtime configuration updates
+
+4. **[Telemetry Service](graph/telemetry_service.py)** - Performance metrics and system health
+   - Real-time system monitoring and metrics collection
+   - Performance tracking and optimization insights
+   - Offline-capable observability
+
+5. **[Incident Management Service](graph/incident_service.py)** - Problem tracking and resolution
+   - Incident detection, tracking, and resolution workflows
+   - Learning from failures for institutional memory
+   - Problem pattern recognition
+
+6. **[TSDB Consolidation Service](graph/tsdb_consolidation/)** - Time-series data consolidation
+   - Consolidates telemetry into 6-hour summaries
+   - Long-term memory storage (1000+ years)
+   - Historical trend analysis
+
+### Infrastructure Services (4)
+
+Foundation services extending `BaseInfrastructureService`:
+
+1. **[Authentication Service](infrastructure/authentication.py)** - Identity verification and access control
+   - Multi-tenant support with role-based access
+   - JWT token management and OAuth2 integration
+   - WA certificate validation
+
+2. **[Resource Monitor Service](infrastructure/resource_monitor.py)** - System resource tracking
+   - CPU, memory, and disk usage monitoring  
+   - Resource constraint prevention (4GB RAM target)
+   - Performance optimization insights
+
+3. **Database Maintenance Service** - SQLite optimization and long-term health
+   - Database vacuum operations and optimization
+   - Storage efficiency for 1000-year operation
+   - Data integrity verification
+
+4. **Secrets Service** - Cryptographic secret management
+   - AES-256-GCM encryption for all secrets
+   - Centralized security boundary
+   - Secure credential storage and retrieval
+
+### Lifecycle Services (4)
+
+Services managing system lifecycle extending `BaseService`:
+
+1. **[Initialization Service](lifecycle/initialization.py)** - Startup orchestration
+   - Complex initialization order management
+   - Service dependency resolution
+   - System health verification
+
+2. **[Shutdown Service](lifecycle/shutdown.py)** - Graceful shutdown coordination
+   - Clean shutdown in resource-constrained environments
+   - Data integrity preservation during shutdown
+   - Service dependency cleanup
+
+3. **[Time Service](lifecycle/time.py)** - Consistent time operations
+   - Testability and consistency across system
+   - No direct `datetime.now()` calls
+   - Timezone and temporal coordination
+
+4. **[Task Scheduler Service](lifecycle/scheduler.py)** - Cron-like scheduling and autonomous behavior
+   - Autonomous agent activities and maintenance
+   - Scheduled task execution and management
+   - Proactive system behavior
+
+### Governance Services (5)
+
+Ethical and operational governance services:
+
+1. **[Wise Authority Service](governance/wise_authority.py)** - Ethical decision making
+   - Ubuntu philosophy implementation
+   - Community-impact decision making
+   - Human oversight and guidance
+
+2. **[Adaptive Filter Service](governance/filter.py)** - Intelligent message prioritization
+   - ML-based priority detection and spam filtering
+   - User trust level tracking and management
+   - Attention economy management
+
+3. **[Visibility Service](governance/visibility.py)** - Reasoning transparency
+   - Decision chain explanation ("the why")
+   - Trust through transparency
+   - Audit trail of reasoning processes
+
+4. **[Consent Service](governance/consent.py)** - User consent and data handling
+   - GDPR compliance and ethical data handling
+   - TEMPORARY/PARTNERED/ANONYMOUS stream management
+   - 90-day decay protocol implementation
+
+5. **Self Observation Service** - Behavioral analysis and pattern detection
+   - Identity variance monitoring (20% threshold)
+   - Behavioral pattern analysis and insight generation
+   - Continuous learning and adaptation
+
+### Runtime Services (2)
+
+Essential runtime services:
+
+1. **[LLM Service](runtime/llm_service.py)** - Language model interface
+   - Multi-provider LLM abstraction (OpenAI, Anthropic, Mock)
+   - Automatic fallback and provider selection
+   - Offline mode with mock LLM support
+
+2. **[Runtime Control Service](runtime/control_service.py)** - Dynamic system control
+   - Remote system management and debugging
+   - Pause/resume processor functionality
+   - Production operations interface
+
+### Tool Services (1)
+
+Agent self-help capabilities:
+
+1. **[Secrets Tool Service](tools/secrets_tool_service.py)** - Agent secret management
+   - Secret recall and filter update capabilities
+   - Agent self-sufficiency tools
+   - Always available, even offline
+
+## Service Architecture Patterns
+
+### Base Service Classes
+
+- **`BaseService`** - Common service interface and lifecycle management
+- **`BaseGraphService`** - Graph-integrated services with memory capabilities  
+- **`BaseInfrastructureService`** - Infrastructure services with system integration
+- **`BaseScheduledService`** - Services with time-based scheduling capabilities
+
+### Service Dependencies
+
+Services follow strict dependency order during initialization:
+
+1. **Infrastructure** (time, shutdown, init, resources)
+2. **Database** (SQLite with migrations)  
+3. **Memory Foundation** (secrets, memory service)
+4. **Identity** (load/create agent identity)
+5. **Graph Services** (config, audit, telemetry, etc.)
+6. **Security** (wise authority)
+7. **Remaining Services**
+8. **Tool Services**
+9. **Component Assembly**
+10. **Final Verification**
+
+### Message Bus vs Direct Injection
+
+**Services Using Message Buses:**
+- Memory Service (MemoryBus) - Multiple graph backends
+- LLM Service (LLMBus) - Multiple LLM providers  
+- Wise Authority Service (WiseBus) - Distributed wisdom
+- Secrets Tool Service (ToolBus) - Tool ecosystem
+- Runtime Control Service (RuntimeControlBus) - Management interfaces
+
+**Services Using Direct Injection:**
+- All Graph Services (except memory)
+- All Infrastructure Services  
+- All Lifecycle Services
+- All remaining Governance Services
+
+### Service Principles
+
+1. **Mission Alignment** - Every service justifies existence against Meta-Goal M-1
+2. **Single Responsibility** - Each service has one clear purpose
+3. **Protocol-First** - All services implement defined protocols
+4. **Type Safety** - Zero `Dict[str, Any]` in service implementations
+5. **Async-First** - All services support async operations
+6. **Offline Capable** - Services work without external dependencies
+7. **Audit Everything** - All service operations are traceable
+
+## Development Guidelines
+
+### Adding a New Service
+
+**⚠️ IMPORTANT**: The 22-service architecture is complete. New services should only be added with explicit architectural justification.
+
+1. Define protocol in `ciris_engine/protocols/services/`
+2. Implement service extending appropriate base class
+3. Create schemas in `ciris_engine/schemas/services/`
+4. Add to ServiceInitializer dependency order
+5. Update service count documentation (if approved)
+6. Add comprehensive tests
+7. Document service purpose and mission alignment
+
+### Service Testing
+
+- Integration over unit tests
+- Real schemas, no dict mocks
+- Test through protocols, not implementations
+- Async test patterns throughout
+- Offline scenario coverage
 
 ---
 
-The services module provides essential infrastructure services that enhance the CIRIS agent's capabilities through intelligent filtering, flexible configuration management, and reliable transaction coordination. These services integrate seamlessly with the multi-service architecture while maintaining clear separation of concerns and robust error handling.
+*These 22 services implement the technical foundation for CIRIS's mission of enabling diverse sentient beings to pursue flourishing through sustainable adaptive coherence.*

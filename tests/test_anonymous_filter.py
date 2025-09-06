@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from ciris_engine.logic.services.governance.consent import ConsentService
-from ciris_engine.logic.services.governance.filter import AdaptiveFilterService
+from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import ConsentCategory, ConsentRequest, ConsentStream
 from ciris_engine.schemas.runtime.enums import ServiceType

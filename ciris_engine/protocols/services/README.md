@@ -1,6 +1,6 @@
 # Service Protocols
 
-This directory contains the protocol definitions for all 21 CIRIS services. Each protocol defines the exact interface that its corresponding service implementation must follow.
+This directory contains the protocol definitions for all 22 CIRIS services. Each protocol defines the exact interface that its corresponding service implementation must follow.
 
 ## Service Categories
 
@@ -34,7 +34,7 @@ System governance and control:
 - **[wise_authority.py](./governance/wise_authority.py)** - Human oversight and deferrals
 - **[filter.py](./governance/filter.py)** - Message filtering and prioritization
 - **[visibility.py](./governance/visibility.py)** - API introspection and transparency
-- **[self_observation.py](./adaptation/self_observation.py)** - Identity variance and pattern analysis
+- **[self_observation.py](./governance/self_observation.py)** - Identity variance and pattern analysis
 
 ### Tool Services (1)
 External tool integration:

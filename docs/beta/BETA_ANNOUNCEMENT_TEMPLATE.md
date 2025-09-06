@@ -16,7 +16,7 @@ We're excited to announce the beta release of CIRIS Agent, an open-source AI age
 
 ### Key Features
 
-- 21 core services with clean architecture
+- 22 core services with clean architecture
 - 78 REST API endpoints with TypeScript SDK
 - Mock LLM for offline development
 - Docker deployment ready
@@ -76,7 +76,7 @@ Key achievements:
 • Human oversight through Wise Authority system
 • Designed for resource-constrained environments (4GB RAM)
 
-The architecture includes 21 core services, 78 API endpoints, and support for multiple adapters (Discord, REST API, CLI). Every decision is auditable and explainable.
+The architecture includes 22 core services, 78 API endpoints, and support for multiple adapters (Discord, REST API, CLI). Every decision is auditable and explainable.
 
 Looking for beta testers, especially in:
 • Community moderation
@@ -136,7 +136,7 @@ FOR IMMEDIATE RELEASE
 
 [CITY, Date] - CIRIS L3C today announced the beta release of CIRIS Agent, an open-source AI agent framework that achieves complete type safety while providing built-in ethical reasoning and human oversight capabilities.
 
-The 1.0.0-beta.1 release represents a significant milestone in AI safety and reliability, with the codebase containing zero instances of untyped data structures (Dict[str, Any]) across its 21 core services and 78 API endpoints.
+The 1.0.0-beta.1 release represents a significant milestone in AI safety and reliability, with the codebase containing zero instances of untyped data structures (Dict[str, Any]) across its 22 core services and 78 API endpoints.
 
 "CIRIS Agent proves that we can build sophisticated AI systems without sacrificing type safety or transparency," said [Spokesperson Name]. "Every decision the agent makes is typed, validated, and auditable."
 
@@ -175,7 +175,7 @@ Excited to announce the beta release of CIRIS Agent, an AI agent framework with 
 - Full mypy strict compliance
 
 **Architecture**
-- 21 core services (all required)
+- 22 core services (all required)
 - 6 message buses for scalability
 - Graph-based memory (Neo4j compatible)
 - Protocol-first design

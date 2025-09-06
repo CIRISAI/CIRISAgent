@@ -27,7 +27,7 @@
 
 ## Executive Summary
 
-CIRIS (Covenant-Integrated Responsible Intelligence System) is an ethical AI platform designed for progressive deployment, starting with Discord community moderation and scaling to critical applications like healthcare triage.
+CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) is an ethical AI platform designed for progressive deployment, starting with Discord community moderation and scaling to critical applications like healthcare triage.
 
 **Key Features:**
 - 22 core services with strict type safety
@@ -794,7 +794,7 @@ docker restart ciris-agent-datum
 
 ### Key Principles
 
-1. **Service Count is Complete**: 21 core services
+1. **Service Count is Complete**: 22 core services
 2. **No Service Creates Services**: Only ServiceInitializer
 3. **Type Safety First**: All data uses Pydantic schemas
 4. **Protocol-Driven**: Clear interfaces
@@ -834,7 +834,7 @@ docker restart ciris-agent-datum
 CIRISAgent/
 ├── ciris_engine/         # Core engine code
 │   ├── logic/           # All business logic
-│   │   ├── services/    # 21 core services
+│   │   ├── services/    # 22 core services
 │   │   ├── adapters/    # API, CLI, Discord adapters
 │   │   ├── handlers/    # Message handlers
 │   │   └── persistence/ # Database layer

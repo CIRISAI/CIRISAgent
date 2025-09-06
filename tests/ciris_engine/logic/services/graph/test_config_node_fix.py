@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from ciris_engine.logic.secrets.service import SecretsService
-from ciris_engine.logic.services.governance.filter import AdaptiveFilterService
+from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
 from ciris_engine.logic.services.graph.config_service import GraphConfigService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.logic.services.lifecycle.time import TimeService

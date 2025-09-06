@@ -1,6 +1,6 @@
 # Service Protocols
 
-This directory contains the protocol definitions for all 21 CIRIS services. Each protocol defines the exact interface that its corresponding service implementation must follow.
+This directory contains the protocol definitions for all 22 CIRIS services. Each protocol defines the exact interface that its corresponding service implementation must follow.
 
 ## Service Categories
 

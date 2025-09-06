@@ -46,7 +46,7 @@ We are thrilled to announce the **beta release** of CIRIS Agent - a sophisticate
 - "No Dicts, No Strings, No Kings" philosophy fully realized
 
 ### Robust Architecture
-- **21 Core Services** + dynamic adapter services
+- **22 Core Services** + dynamic adapter services
 - **78 API endpoints** across 12 modules
 - **1,161 tests passing** with CI/CD verification
 - **Sonar A-grades** across all metrics with zero security issues

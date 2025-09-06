@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Project Overview
 
-CIRIS (Covenant-Integrated Responsible Intelligence System) is an ethical AI platform:
+CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) is an ethical AI platform:
 - **Production**: Discord moderation + API at agents.ciris.ai
 - **Architecture**: 22 core services, 6 message buses, strict type safety
 - **Philosophy**: No Dicts, No Strings, No Kings
@@ -52,7 +52,7 @@ CIRIS (Covenant-Integrated Responsible Intelligence System) is an ethical AI pla
 
 ## Core Philosophy: Type Safety First
 
-✅ **ACHIEVED: Zero `Dict[str, Any]` in production code**
+🚧 **PROGRESS: Minimizing `Dict[str, Any]` usage in production code**
 
 ### The Three Rules
 
@@ -150,15 +150,16 @@ https://agents.ciris.ai/v1/auth/oauth/datum/google/callback
 ### Major Achievements
 
 1. **Complete Type Safety**
-   - Zero `Dict[str, Any]` in production code
+   - Minimized `Dict[str, Any]` usage with ongoing cleanup
    - All data structures use Pydantic schemas
    - Full type validation throughout the system
 
 2. **Service Architecture**: 22 Core Services + Adapter Services ✅
    - Graph Services (6): memory, config, telemetry, audit, incident_management, tsdb_consolidation
-   - Infrastructure Services (7): time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
+   - Infrastructure Services (4): authentication, resource_monitor, database_maintenance, secrets
+   - Lifecycle Services (4): initialization, shutdown, time, task_scheduler
    - Governance Services (5): wise_authority, adaptive_filter, visibility, self_observation, consent
-   - Runtime Services (3): llm, runtime_control, task_scheduler
+   - Runtime Services (2): llm, runtime_control
    - Tool Services (1): secrets_tool
    - **Note**: pattern_analysis_loop and identity_variance_monitor are sub-services within self_observation
    - **Adapter Services** (added at runtime):
@@ -318,7 +319,7 @@ grep -r "class.*YourThingHere" --include="*.py"
 ### Completed ✅
 - 82 API endpoints fully operational
 - Complete type safety (zero Dict[str, Any])
-- 21 core services + adapter services
+- 22 core services + adapter services
 - Production deployment at agents.ciris.ai
 - 1,180+ tests with Docker CI/CD
 - DSAR compliance and transparency feeds
@@ -336,19 +337,22 @@ grep -r "class.*YourThingHere" --include="*.py"
 
 ## Service Architecture
 
-### 21 Core Services
+### 22 Core Services
 
 **Graph Services (6):**
 memory, config, telemetry, audit, incident_management, tsdb_consolidation
 
-**Infrastructure Services (7):**
-time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
+**Infrastructure Services (4):**
+authentication, resource_monitor, database_maintenance, secrets
 
-**Governance Services (4):**
-wise_authority, adaptive_filter, visibility, self_observation
+**Lifecycle Services (4):**
+initialization, shutdown, time, task_scheduler
 
-**Runtime Services (3):**
-llm, runtime_control, task_scheduler
+**Governance Services (5):**
+wise_authority, adaptive_filter, visibility, consent, self_observation
+
+**Runtime Services (2):**
+llm, runtime_control
 
 **Tool Services (1):**
 secrets_tool
@@ -520,7 +524,7 @@ python -m pytest tests/                 # timeout: 300000ms
 
 1. **OAuth Format**: `/v1/auth/oauth/{agent_id}/{provider}/callback`
 2. **Default Auth**: admin/ciris_admin_password (dev only)
-3. **Service Count**: 21 core services (complete, don't add more)
+3. **Service Count**: 22 core services (complete, don't add more)
 4. **No Service Creates Services**: Only ServiceInitializer
 5. **Version After Changes**: Always bump version
 6. **Medical Prohibition**: Zero medical code in main repo
@@ -529,7 +533,7 @@ python -m pytest tests/                 # timeout: 300000ms
 
 ## Quality Standards
 
-- **Type Safety**: Zero Dict[str, Any]
+- **Type Safety**: Minimal Dict[str, Any] usage
 - **Test Coverage**: Target 80%
 - **Response Time**: <1s API responses
 - **Memory**: 4GB RAM maximum

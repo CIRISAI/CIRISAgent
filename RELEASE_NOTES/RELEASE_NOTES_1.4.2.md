@@ -45,7 +45,7 @@ Massive telemetry infrastructure upgrade providing unified access to all system 
 
 **Unified Telemetry Endpoint** (`/telemetry/unified`):
 - Single endpoint replacing 78+ individual telemetry routes
-- Parallel collection from all 21 services (10x performance improvement)
+- Parallel collection from all 22 services (10x performance improvement)
 - Smart 30-second TTL caching (95% load reduction)
 - Multiple views: summary, health, operational, performance, reliability, detailed
 - Export formats: JSON, Prometheus, Graphite
@@ -85,7 +85,7 @@ Intelligent routing system for specialized language models based on domain exper
 
 ### Telemetry Implementation
 - **83.5% metric coverage** (436/522 metrics implemented)
-- **21 services** with telemetry support
+- **22 services** with telemetry support
 - **6 message buses** fully instrumented
 - **30-second cache** reducing load by 95%
 

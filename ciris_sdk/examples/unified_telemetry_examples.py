@@ -2,7 +2,7 @@
 Examples of using the CIRISClient SDK to access unified telemetry.
 
 The unified telemetry endpoint provides easy access to ALL 436+ metrics
-from 21 services through a single, optimized endpoint.
+from 22 services through a single, optimized endpoint.
 """
 
 import asyncio

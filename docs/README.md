@@ -1,6 +1,6 @@
 # CIRIS Documentation
 
-Welcome to the CIRIS (Continuous Intelligent Response and Interaction System) documentation.
+Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) documentation.
 
 ## Getting Started
 - [Quick Start Guide](QUICKSTART.md) - Get running in 5 minutes

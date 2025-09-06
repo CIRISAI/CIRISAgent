@@ -1,6 +1,6 @@
 """Communication Service Protocol.
 
-IMPORTANT: This is NOT one of the 21 core services!
+IMPORTANT: This is NOT one of the 22 core services!
 
 This protocol defines the interface for adapter-provided communication services.
 It is used by the CommunicationBus to enable multiple communication providers:

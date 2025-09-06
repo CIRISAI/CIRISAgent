@@ -1568,7 +1568,7 @@ async def get_unified_telemetry(
     Unified enterprise telemetry endpoint.
 
     This single endpoint replaces 78+ individual telemetry routes by intelligently
-    aggregating metrics from all 21 required services using parallel collection.
+    aggregating metrics from all 22 required services using parallel collection.
 
     Features:
     - Parallel collection from all services (10x faster than sequential)

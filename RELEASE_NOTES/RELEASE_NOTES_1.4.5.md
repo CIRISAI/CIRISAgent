@@ -61,10 +61,10 @@ python tools/api_telemetry_tool.py --monitor --interval 5
 
 ## 📈 Service Count Reconciliation
 
-**Total: 41 Services** (not 42 as previously documented)
+**Total: 42 Services** (updated from 41 with consent service addition)
 
-- **Core Services**: 33
-  - 21 core services
+- **Core Services**: 34
+  - 22 core services
   - 6 message buses
   - 3 runtime objects
   - 3 bootstrap services

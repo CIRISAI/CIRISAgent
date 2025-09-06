@@ -8,6 +8,8 @@
 
 **Copyright © 2025 Eric Moore and CIRIS L3C** | **Apache 2.0 License**
 
+**Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**
+
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
 **STABLE RELEASE 1.1.0** | [Release Notes](docs/releases/1.1.0.md) | [Documentation Hub](docs/README.md)
@@ -74,7 +76,7 @@ python main.py --adapter api --port 8000
 
 ---
 
-**CIRIS: Covenant-Integrated Responsible Intelligence System**  
+**CIRIS: Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**  
 *Ethical AI with human oversight, complete transparency, and production reliability.*
 
 **Ready to build trustworthy AI?** → **[Get started →](docs/README.md)**

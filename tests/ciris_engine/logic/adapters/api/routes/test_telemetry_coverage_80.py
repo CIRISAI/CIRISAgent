@@ -38,7 +38,7 @@ def app_with_detailed_services():
     # Include router
     app.include_router(router)
 
-    # Initialize ALL 21 core services with detailed mocks
+    # Initialize ALL 22 core services with detailed mocks
 
     # Telemetry service with query_metrics that returns real data
     telemetry_service = MagicMock()

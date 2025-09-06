@@ -187,28 +187,28 @@ class TestDiscordGetGuildModeratorsSuccess:
         # Mix of members with different permission combinations
         all_members = [
             # Should be included - has manage_messages
-            self._create_mock_member("111", "MessageMod", permissions=dict(
-                manage_messages=True, kick_members=False, ban_members=False, manage_roles=False)),
+            self._create_mock_member("111", "MessageMod", 
+                manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
             
             # Should be included - has kick_members  
-            self._create_mock_member("222", "KickMod", permissions=dict(
-                manage_messages=False, kick_members=True, ban_members=False, manage_roles=False)),
+            self._create_mock_member("222", "KickMod", 
+                manage_messages=False, kick_members=True, ban_members=False, manage_roles=False),
             
             # Should be included - has ban_members
-            self._create_mock_member("333", "BanMod", permissions=dict(
-                manage_messages=False, kick_members=False, ban_members=True, manage_roles=False)),
+            self._create_mock_member("333", "BanMod", 
+                manage_messages=False, kick_members=False, ban_members=True, manage_roles=False),
             
             # Should be included - has manage_roles
-            self._create_mock_member("444", "RoleMod", permissions=dict(
-                manage_messages=False, kick_members=False, ban_members=False, manage_roles=True)),
+            self._create_mock_member("444", "RoleMod", 
+                manage_messages=False, kick_members=False, ban_members=False, manage_roles=True),
             
             # Should NOT be included - no moderator permissions  
-            self._create_mock_member("555", "RegularUser", permissions=dict(
-                manage_messages=False, kick_members=False, ban_members=False, manage_roles=False)),
+            self._create_mock_member("555", "RegularUser", 
+                manage_messages=False, kick_members=False, ban_members=False, manage_roles=False),
             
             # Should be included - multiple permissions
-            self._create_mock_member("666", "SuperMod", permissions=dict(
-                manage_messages=True, kick_members=True, ban_members=True, manage_roles=True)),
+            self._create_mock_member("666", "SuperMod", 
+                manage_messages=True, kick_members=True, ban_members=True, manage_roles=True),
         ]
         
         async def async_members():
@@ -224,20 +224,15 @@ class TestDiscordGetGuildModeratorsSuccess:
 
         assert result.success is True
         moderators = result.data["moderators"]
-        # All members with at least one moderator permission should be included
-        # The test setup has a bug - let's check what we actually got
+        
+        # Verify that only members with moderator permissions are included
         moderator_ids = {mod["user_id"] for mod in moderators}
         
         # Only RegularUser (555) should be excluded due to no moderator permissions
         expected_ids = {"111", "222", "333", "444", "666"}
         
-        # If RegularUser is included, the mock setup might have issues
-        if "555" in moderator_ids:
-            # The mock didn't properly set all permissions to False
-            assert len(moderators) == 6  # All members included due to mock setup
-        else:
-            assert len(moderators) == 5
-            assert moderator_ids == expected_ids
+        assert len(moderators) == 5
+        assert moderator_ids == expected_ids
 
 
 class TestDiscordGetGuildModeratorsECHOFiltering:

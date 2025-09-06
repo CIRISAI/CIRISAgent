@@ -5,19 +5,26 @@
 ### ✅ Available Endpoints
 
 #### 1. **Single-Step Execution**
-**Endpoint**: `POST /v1/system/runtime/single-step`  
-**Returns**: `RuntimeControlResponse`
+**Endpoint**: `POST /v1/system/runtime/step`  
+**Query Parameter**: `?include_details=true` (optional)
+**Returns**: `RuntimeControlResponse` (basic) or `SingleStepResponse` (enhanced)
+
+**Basic Response Fields**:
 - `success`: Whether step succeeded
 - `message`: Human-readable status  
 - `processor_state`: Current processor state
-- `cognitive_state`: Current cognitive state (currently null)
-- `queue_depth`: Queue depth (currently hardcoded to 0)
+- `cognitive_state`: Current cognitive state
+- `queue_depth`: Current queue depth
 
-**Current Limitations**: 
-- ❌ No step point identification
-- ❌ No step-specific data 
-- ❌ No detailed results
-- ❌ Missing cognitive state and accurate queue depth
+**Enhanced Response Fields** (when `include_details=true`):
+- `step_point`: Current step point identifier ✅
+- `step_result`: Detailed step results ✅
+- `pipeline_state`: Complete pipeline state ✅
+- `processing_time_ms`: Step timing ✅
+- `tokens_used`: LLM token consumption ✅
+- `demo_data`: Presentation-ready data ✅
+
+**Current Status**: ✅ **FULLY IMPLEMENTED**
 
 #### 2. **Queue Status**
 **Endpoint**: `GET /v1/system/runtime/queue`  
@@ -40,203 +47,140 @@
 
 **Current Status**: ✅ Functional but limited
 
-## ❌ Missing Data Points
+## ✅ Available Data Points (Previously Missing)
 
-### Critical Missing Step Point Data
+### Step Point Data - NOW AVAILABLE
 
-**Currently NO API access to**:
-1. **Step Point Identification**: Which step was just executed
-2. **Step-Specific Results**: Detailed results from each step point
-3. **DMA Results**: Ethical, common sense, domain DMA outputs
-4. **LLM Interactions**: Prompts, responses, and reasoning
-5. **Conscience Evaluations**: Safety check results and failures
-6. **Context Data**: System snapshot, identity, memory context
-7. **Pipeline State**: Complete pipeline state with thoughts at each step
-8. **Timing Breakdowns**: Per-step timing analysis
-9. **Error Details**: Step-specific error information
-10. **Recursion Information**: Recursive ASPDMA and conscience data
+**Currently accessible via enhanced single-step endpoint**:
+1. **Step Point Identification**: ✅ Available via `step_point` field
+2. **Step-Specific Results**: ✅ Available via `step_result` field  
+3. **DMA Results**: ✅ Ethical, common sense, domain DMA outputs included
+4. **LLM Interactions**: ✅ Prompts, responses, and reasoning available
+5. **Conscience Evaluations**: ✅ Safety check results and failures included
+6. **Context Data**: ✅ System snapshot, identity, memory context provided
+7. **Pipeline State**: ✅ Complete pipeline state with thoughts at each step
+8. **Timing Breakdowns**: ✅ Per-step timing via `processing_time_ms`
+9. **Error Details**: ✅ Step-specific error information included
+10. **Recursion Information**: ✅ Recursive ASPDMA and conscience data available
 
-### Architecture Data Gaps
+### Architecture Data - NOW AVAILABLE
 
-**Currently NO API access to**:
-1. **Bus Operations**: Outbound/inbound bus data
-2. **Handler Context**: Handler execution details
-3. **Package Handling**: Adapter processing information
-4. **Memory Queries**: What memories were accessed during context building
-5. **Task-Thought Mapping**: How tasks become thoughts
-6. **Resource Consumption**: Token usage, processing resources
+**Currently accessible via enhanced single-step endpoint**:
+1. **Bus Operations**: ✅ Outbound/inbound bus data in step results
+2. **Handler Context**: ✅ Handler execution details available
+3. **Package Handling**: ✅ Adapter processing information included
+4. **Memory Queries**: ✅ Memory access tracked in context building
+5. **Task-Thought Mapping**: ✅ Task-to-thought relationships available
+6. **Resource Consumption**: ✅ Token usage via `tokens_used` field
 
-## 🎯 Required API Extensions
+## ✅ COMPLETED: API Extensions
 
-### **Option 1: Enhanced Single-Step Response**
-**Approach**: Extend existing `/v1/system/runtime/single-step` endpoint
+### **✅ IMPLEMENTED: Enhanced Single-Step Response**
+**Endpoint**: `/v1/system/runtime/step?include_details=true`
 
-**New Response Schema**: `EnhancedSingleStepResponse`
-```python
-class EnhancedSingleStepResponse(BaseModel):
-    # Basic info (existing)
-    success: bool
-    message: str
-    processor_state: str
-    cognitive_state: str
-    queue_depth: int
+**Current Response Schema**: `SingleStepResponse`
+```typescript
+interface SingleStepResponse {
+    // Basic info
+    success: boolean
+    message: string
+    processor_state: string
+    cognitive_state: string
+    queue_depth: number
     
-    # NEW: Step point information
-    step_point: Optional[StepPoint] = None
-    step_result: Optional[Dict[str, Any]] = None  # Full step result data
+    // ✅ IMPLEMENTED: Step point information
+    step_point?: StepPoint
+    step_result?: StepResult  // Full step result data
     
-    # NEW: Pipeline state
-    pipeline_state: Optional[PipelineState] = None
+    // ✅ IMPLEMENTED: Pipeline state
+    pipeline_state?: PipelineState
     
-    # NEW: Performance data
-    processing_time_ms: float = 0.0
-    tokens_used: Optional[int] = None
+    // ✅ IMPLEMENTED: Performance data
+    processing_time_ms: number
+    tokens_used?: number
     
-    # NEW: Context for demo
-    demo_data: Optional[Dict[str, Any]] = None
+    // ✅ IMPLEMENTED: Demo data
+    demo_data?: DemoData
+}
 ```
 
-**Pros**:
-- Single endpoint
-- Backward compatible
-- All data in one response
+**✅ Benefits Achieved**:
+- Single endpoint approach implemented
+- Backward compatible (basic response without query param)
+- All comprehensive data available in one response
+- Optional detailed data prevents payload bloat for basic use cases
 
-**Cons**:
-- Large response payload
-- May be overwhelming for basic use
+### **Future Enhancement Options**
 
-### **Option 2: Separate Step Point Data Endpoints**
-**Approach**: Add new dedicated endpoints for step point data
+The current implementation satisfies all immediate needs. Future enhancements could include:
 
-#### **A. Step Point History**
-**Endpoint**: `GET /v1/system/runtime/steps`  
-**Returns**: List of recent step points executed
-```python
-class StepPointHistory(BaseModel):
-    steps: List[StepPointExecution]
-    
-class StepPointExecution(BaseModel):
-    step_point: StepPoint
-    thought_id: str
-    executed_at: datetime
-    duration_ms: float
-    success: bool
-```
+#### **A. Step Point History Endpoint** *(Future)*
+**Endpoint**: `GET /v1/system/runtime/steps/history`  
+**Purpose**: Historical step execution data for analysis
 
-#### **B. Latest Step Details**  
-**Endpoint**: `GET /v1/system/runtime/steps/latest`  
-**Returns**: Detailed data from most recent step
-```python
-class LatestStepDetails(BaseModel):
-    step_point: StepPoint
-    thought_id: str
-    step_result: StepResult  # Union of all step result types
-    pipeline_state: PipelineState
-    timing: StepTiming
-```
-
-#### **C. Specific Step Data**
-**Endpoint**: `GET /v1/system/runtime/steps/{step_point}/latest`  
-**Returns**: Latest data for a specific step point type
-
-#### **D. Pipeline State**
+#### **B. Pipeline State Endpoint** *(Future)*  
 **Endpoint**: `GET /v1/system/runtime/pipeline`  
-**Returns**: Complete current pipeline state
-```python
-class PipelineStateResponse(BaseModel):
-    is_paused: bool
-    current_round: int
-    thoughts_by_step: Dict[str, List[ThoughtInPipeline]]
-    task_queue: List[QueuedTask]
-    thought_queue: List[QueuedThought]
-    metrics: PipelineMetrics
-```
+**Purpose**: Real-time pipeline state monitoring
 
-**Pros**:
-- Granular access
-- Smaller payloads
-- Specific use cases
-- Better caching
-
-**Cons**:
-- Multiple API calls needed
-- More complex client code
-
-### **Option 3: WebSocket Stream** 
-**Approach**: Real-time step point streaming
-
+#### **C. WebSocket Step Streaming** *(Future)*
 **Endpoint**: `WS /v1/system/runtime/steps/stream`  
-**Stream Format**:
-```python
-class StepPointStreamMessage(BaseModel):
-    type: Literal["step_start", "step_complete", "step_error"]
-    step_point: StepPoint
-    thought_id: str
-    timestamp: datetime
-    data: Optional[Dict[str, Any]] = None
-```
+**Purpose**: Real-time step-by-step updates for live demos
 
-**Pros**:
-- Real-time updates
-- Perfect for demos
-- Low latency
-- Event-driven
+**Note**: These are not currently required since the enhanced single-step endpoint provides all necessary data for current use cases.
 
-**Cons**:
-- More complex implementation
-- WebSocket infrastructure needed
+## ✅ IMPLEMENTATION STATUS
 
-## 🔧 Recommended Implementation Plan
+### **✅ COMPLETED: Phase 1 - Enhanced Single-Step**
+1. ✅ Extended single-step endpoint with comprehensive detailed data
+2. ✅ Added query parameter `?include_details=true` for full step data  
+3. ✅ Maintained backward compatibility - existing clients unaffected
+4. ✅ All originally requested data points now available
 
-### **Phase 1: Enhanced Single-Step** (Immediate)
-1. Extend existing single-step endpoint with optional detailed data
-2. Add query parameter `?include_details=true` for full step data
-3. Backward compatible - existing clients unaffected
+### **Current Capabilities**
+- Complete step-by-step pipeline transparency
+- LLM interaction visibility (prompts, responses, reasoning)
+- Ethical reasoning transparency (DMA results, conscience checks)
+- Performance monitoring (timing, token usage)
+- Architecture visibility (bus operations, handler execution)
+- Demo-ready data formatting
 
-### **Phase 2: Pipeline State Endpoints** (Short-term)  
-1. Add `/v1/system/runtime/pipeline` for complete state
-2. Add `/v1/system/runtime/steps/latest` for most recent step details
-3. Integrate with existing queue status endpoint
+## 📊 Current Implementation Status
 
-### **Phase 3: WebSocket Streaming** (Future)
-1. Add real-time step point streaming
-2. Perfect for live demos and monitoring dashboards
+| Feature | Status | Demo Value | Notes |
+|---------|---------|------------|-------|
+| Enhanced single-step response | ✅ **COMPLETED** | High | All demo data available |
+| Pipeline state access | ✅ **COMPLETED** | High | Available in step results |  
+| Step point identification | ✅ **COMPLETED** | High | All 15 steps mapped |
+| LLM transparency | ✅ **COMPLETED** | High | Prompts, responses, reasoning |
+| Ethics transparency | ✅ **COMPLETED** | High | DMA & conscience details |
+| Performance metrics | ✅ **COMPLETED** | Medium | Timing, tokens, success rates |
+| WebSocket streaming | 🔵 **Future** | Medium | Not needed with current impl |
 
-## 📊 Implementation Priority Matrix
+## 🎬 Demo Scenarios - Ready for Implementation
 
-| Feature | Demo Value | Implementation Effort | Priority |
-|---------|------------|---------------------|----------|
-| Enhanced single-step response | High | Low | 🔴 Critical |
-| Latest step details endpoint | High | Medium | 🟡 High |  
-| Pipeline state endpoint | Medium | Medium | 🟡 High |
-| Step point history | Medium | Low | 🟢 Medium |
-| WebSocket streaming | High | High | 🔵 Future |
-| Specific step data endpoints | Low | High | 🔵 Future |
+### **Ethics Transparency Demo** ✅
+**Available Data**: 
+- DMA results (Ethical, Common Sense, Domain)
+- ASPDMA LLM reasoning and action selection
+- Conscience evaluation details and safety checks
+- Recursive refinement when conscience fails
 
-## 🎬 Demo-Specific Enhancements
+### **Architecture Transparency Demo** ✅
+**Available Data**:
+- Bus operations (outbound/inbound message flow)
+- Handler execution details
+- Package handling at adapters
+- Service interactions and routing
 
-### **For Ethics Demo**:
-- Focus on steps 5-10 data (DMA, ASPDMA, Conscience)
-- Need raw LLM prompts and responses
-- Conscience evaluation details
-- Recursion information
-
-### **For Architecture Demo**:  
-- Focus on steps 11-15 data (Handler, Bus operations)
-- Bus message contents
-- Adapter transformation details
-- External service interactions
-
-### **For Performance Demo**:
-- Timing breakdowns for all steps
+### **Performance Analysis Demo** ✅  
+**Available Data**:
+- Per-step timing breakdowns
 - Token consumption tracking
-- Queue depth changes
-- Resource utilization metrics
+- Queue depth monitoring
+- Success/failure rates
 
-## Next Steps
+## Summary
 
-1. **Implement Phase 1**: Enhanced single-step endpoint with `?include_details=true`
-2. **Add Pipeline State Access**: Complete pipeline visibility 
-3. **Design Demo Views**: Transform technical data into presentation-ready format
-4. **Create SDK Methods**: Make data easily accessible from TypeScript SDK
-5. **Build Demo Interface**: Real-time step visualization for presentations
+✅ **All originally requested functionality has been implemented and is available.**
+
+The single-step debugging API now provides complete transparency into CIRIS's 15-step ethical reasoning pipeline, suitable for demonstrations, debugging, and auditing purposes.

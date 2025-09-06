@@ -8,7 +8,10 @@ the thought processing pipeline.
 import asyncio
 from typing import Any, Dict, Optional, Protocol
 
-from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResult, ThoughtInPipeline
+from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResultUnion, ThoughtInPipeline
+
+# Alias for backwards compatibility
+StepResult = StepResultUnion
 
 
 class PipelineControlProtocol(Protocol):

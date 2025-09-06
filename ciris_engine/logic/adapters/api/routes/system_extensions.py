@@ -21,7 +21,7 @@ from ciris_engine.schemas.services.core.runtime import (
 )
 from ciris_engine.schemas.services.runtime_control import (
     StepPoint,
-    StepResult,
+    StepResultUnion as StepResult,
     PipelineState,
 )
 

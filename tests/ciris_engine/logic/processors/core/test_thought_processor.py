@@ -169,6 +169,11 @@ class TestThoughtProcessor:
     @pytest.mark.asyncio
     async def test_process_thought(self, thought_processor: ThoughtProcessor, mock_persistence: Mock) -> None:
         """Test processing a thought."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info("TEST: test_process_thought starting")
+        
         # Create a queue item
         thought = Thought(
             thought_id="test_thought",
@@ -186,14 +191,19 @@ class TestThoughtProcessor:
             parent_thought_id=None,
             final_action=None,
         )
+        logger.info(f"TEST: Created thought with thought_id={thought.thought_id}")
 
         item = ProcessingQueueItem.from_thought(thought)
+        logger.info(f"TEST: Created ProcessingQueueItem with thought_id={item.thought_id}")
 
         # Make sure the mock persistence returns this specific thought
         mock_persistence.async_get_thought_by_id.return_value = thought
+        logger.info(f"TEST: Set mock_persistence.async_get_thought_by_id.return_value to {thought.thought_id}")
 
         # Process - the mocks are already set up in the fixture
+        logger.info("TEST: About to call thought_processor.process_thought")
         result = await thought_processor.process_thought(item)
+        logger.info(f"TEST: thought_processor.process_thought completed, result={'present' if result else 'None'}")
 
         assert result is not None
         # The conscience system may change the action, so check that we got a valid result

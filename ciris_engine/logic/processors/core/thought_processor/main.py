@@ -94,6 +94,7 @@ class ThoughtProcessor(
         Executes all 7 phases using decorated step methods that handle
         streaming and single-step pause/resume automatically.
         """
+        logger.info(f"ThoughtProcessor.process_thought: ENTRY - thought_id={thought_item.thought_id}, context={'present' if context else 'None'}")
         start_time = self._time_service.now()
 
         # Initialize correlation for tracking
@@ -110,7 +111,9 @@ class ThoughtProcessor(
         persistence.add_correlation(correlation, self._time_service)
 
         # Fetch the actual thought
+        logger.info(f"ThoughtProcessor.process_thought: About to fetch thought_id={thought_item.thought_id}")
         thought = await self._fetch_thought(thought_item.thought_id)
+        logger.info(f"ThoughtProcessor.process_thought: Fetch completed for thought_id={thought_item.thought_id}, result={'present' if thought else 'None'}")
         if not thought:
             logger.warning(f"ThoughtProcessor: Could not fetch thought {thought_item.thought_id}")
             return None
@@ -307,9 +310,25 @@ class ThoughtProcessor(
     # Helper methods that will remain in main.py
     async def _fetch_thought(self, thought_id: str) -> Optional[Thought]:
         """Fetch thought from persistence layer."""
+        import asyncio
         from ciris_engine.logic import persistence
         
-        return await persistence.async_get_thought_by_id(thought_id)
+        logger.info(f"ThoughtProcessor._fetch_thought: Starting fetch for thought_id={thought_id}")
+        
+        try:
+            # Add timeout protection to prevent CI hangs
+            thought = await asyncio.wait_for(
+                persistence.async_get_thought_by_id(thought_id),
+                timeout=30.0  # 30 second timeout
+            )
+            logger.info(f"ThoughtProcessor._fetch_thought: Successfully fetched thought_id={thought_id}, thought={'present' if thought else 'None'}")
+            return thought
+        except asyncio.TimeoutError:
+            logger.error(f"ThoughtProcessor._fetch_thought: TIMEOUT after 30s fetching thought_id={thought_id}")
+            raise
+        except Exception as e:
+            logger.error(f"ThoughtProcessor._fetch_thought: ERROR fetching thought_id={thought_id}: {type(e).__name__}: {e}")
+            raise
 
     def _has_critical_failure(self, dma_results) -> bool:
         """Check if DMA results indicate critical failure requiring escalation."""

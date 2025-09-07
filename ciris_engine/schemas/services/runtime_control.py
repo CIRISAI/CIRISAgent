@@ -20,7 +20,7 @@ class StepPoint(str, Enum):
     """Points where single-stepping can pause in the H3ERE pipeline."""
 
     # H3ERE Pipeline - 10 step points (0 setup + 7 core + 2 optional recursive)
-    FINALIZE_TASKS_QUEUE = "finalize_tasks_queue"  # 0) Setup: Prepare thoughts for processing
+    START_ROUND = "start_round"  # 0) Setup: Tasks → Thoughts → Round Queue → Ready for context
     GATHER_CONTEXT = "gather_context"  # 1) Build context for DMA processing
     PERFORM_DMAS = "perform_dmas"  # 2) Execute multi-perspective DMAs
     PERFORM_ASPDMA = "perform_aspdma"  # 3) LLM-powered action selection
@@ -29,7 +29,8 @@ class StepPoint(str, Enum):
     RECURSIVE_CONSCIENCE = "recursive_conscience"  # 4B) Optional: Re-validate if recursive action failed
     FINALIZE_ACTION = "finalize_action"  # 5) Final action determination
     PERFORM_ACTION = "perform_action"  # 6) Dispatch action to handler
-    ACTION_COMPLETE = "action_complete"  # 7) Action execution completed
+    ACTION_COMPLETE = "action_complete"  # 9) Action execution completed
+    ROUND_COMPLETE = "round_complete"  # 10) Processing round completed
 
 
 class StepDuration(str, Enum):
@@ -275,6 +276,7 @@ class ThoughtInPipeline(BaseModel):
     task_id: str = Field(..., description="Source task ID")
     thought_type: str = Field(..., description="Type of thought")
     current_step: StepPoint = Field(..., description="Current step point in pipeline")
+    last_completed_step: Optional[StepPoint] = Field(None, description="Last completed step point")
     entered_step_at: datetime = Field(..., description="When thought entered current step")
     processing_time_ms: float = Field(0.0, description="Total processing time so far")
 
@@ -397,10 +399,10 @@ class ThoughtProcessingResult(BaseModel):
 
 
 
-class StepResultFinalizeTasksQueue(BaseModel):
-    """Result from FINALIZE_TASKS_QUEUE step - prepares thoughts for processing."""
+class StepResultStartRound(BaseModel):
+    """Result from START_ROUND step - moves thoughts from PENDING to PROCESSING."""
 
-    step_point: StepPoint = Field(StepPoint.FINALIZE_TASKS_QUEUE)
+    step_point: StepPoint = Field(StepPoint.START_ROUND)
     success: bool = Field(..., description="Whether step succeeded")
     
     # EXACT data from SUT step_data dict
@@ -409,9 +411,9 @@ class StepResultFinalizeTasksQueue(BaseModel):
     task_id: Optional[str] = Field(None, description="Task ID from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
-    # Setup-specific data
-    queue_size: int = Field(..., description="Number of thoughts queued for processing")
-    tasks_finalized: int = Field(..., description="Number of tasks finalized in this step")
+    # Round start specific data
+    thoughts_processed: int = Field(..., description="Number of thoughts processed in this step")
+    round_started: bool = Field(..., description="Whether round was successfully started")
 
     error: Optional[str] = Field(None)
 
@@ -559,6 +561,20 @@ class StepResultActionComplete(BaseModel):
     execution_time_ms: float = Field(..., description="Execution time from SUT")
     handler_completed: bool = Field(..., description="Handler completed from SUT")
     follow_up_processing_pending: bool = Field(..., description="Follow-up processing pending from SUT")
+
+
+class StepResultRoundComplete(BaseModel):
+    """Result from ROUND_COMPLETE step - processing round completed."""
+
+    step_point: StepPoint = Field(StepPoint.ROUND_COMPLETE)
+    success: bool = Field(..., description="Whether step succeeded")
+    
+    # EXACT data from SUT step_data dict
+    timestamp: Optional[str] = Field(None, description="Timestamp from SUT")
+    thought_id: str = Field(..., description="Thought ID from SUT")
+    processing_time_ms: float = Field(..., description="Processing time from SUT")
+    round_status: str = Field(..., description="Round completion status from SUT")
+    thoughts_processed: int = Field(..., description="Number of thoughts processed from SUT")
 
     error: Optional[str] = Field(None)
 

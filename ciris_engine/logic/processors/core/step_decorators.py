@@ -180,9 +180,9 @@ def _add_step_specific_data(
     step_data["task_id"] = getattr(thought_item, 'source_task_id', None)
     
     # Add step-specific data based on step type
-    if step == StepPoint.FINALIZE_TASKS_QUEUE:
+    if step == StepPoint.START_ROUND:
         step_data["thoughts_processed"] = len(args) if args else 1
-        step_data["queue_status"] = "finalized"
+        step_data["round_started"] = True
         
     elif step == StepPoint.GATHER_CONTEXT:
         step_data["context"] = str(result) if result else None
@@ -226,6 +226,10 @@ def _add_step_specific_data(
         step_data["execution_time_ms"] = getattr(result, 'execution_time_ms', 0.0)
         step_data["handler_completed"] = getattr(result, 'completed', True)
         step_data["follow_up_processing_pending"] = getattr(result, 'has_follow_up', False)
+        
+    elif step == StepPoint.ROUND_COMPLETE:
+        step_data["round_status"] = "completed"
+        step_data["thoughts_processed"] = len(args) if args else 1
 
 
 async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Dict[str, Any]) -> None:
@@ -234,7 +238,7 @@ async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Di
         # Import here to avoid circular dependency
         from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
         from ciris_engine.schemas.services.runtime_control import (
-            StepResultFinalizeTasksQueue,
+            StepResultStartRound,
             StepResultGatherContext,
             StepResultPerformDMAs,
             StepResultPerformASPDMA,
@@ -244,13 +248,14 @@ async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Di
             StepResultFinalizeAction,
             StepResultPerformAction,
             StepResultActionComplete,
+            StepResultRoundComplete,
         )
         
         # Create appropriate step result schema
         step_result = None
         
-        if step == StepPoint.FINALIZE_TASKS_QUEUE:
-            step_result = StepResultFinalizeTasksQueue(**step_data)
+        if step == StepPoint.START_ROUND:
+            step_result = StepResultStartRound(**step_data)
         elif step == StepPoint.GATHER_CONTEXT:
             step_result = StepResultGatherContext(**step_data)
         elif step == StepPoint.PERFORM_DMAS:
@@ -269,6 +274,8 @@ async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Di
             step_result = StepResultPerformAction(**step_data)
         elif step == StepPoint.ACTION_COMPLETE:
             step_result = StepResultActionComplete(**step_data)
+        elif step == StepPoint.ROUND_COMPLETE:
+            step_result = StepResultRoundComplete(**step_data)
         
         if step_result:
             await step_result_stream.broadcast_step_result(step_result.model_dump())

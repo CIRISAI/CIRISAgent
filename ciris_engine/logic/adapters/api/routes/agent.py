@@ -239,6 +239,42 @@ async def interact(
     # Track timing
     start_time = datetime.now(timezone.utc)
 
+    # Check if processor is paused - if so, add to queue and return immediately
+    try:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
+            if hasattr(runtime.agent_processor, "_is_paused") and runtime.agent_processor._is_paused:
+                # Processor is paused - still route the message to add it to queue
+                if hasattr(request.app.state, "on_message"):
+                    await request.app.state.on_message(msg)
+                else:
+                    raise HTTPException(status_code=503, detail="Message handler not configured")
+                
+                # Clean up response tracking since we're returning immediately
+                _response_events.pop(message_id, None)
+                
+                # Return immediately with paused status
+                processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+                
+                # Get the actual cognitive state (should still be WORK, etc.)
+                cognitive_state = "WORK"  # Default
+                try:
+                    if hasattr(runtime.agent_processor, 'get_current_state'):
+                        cognitive_state = runtime.agent_processor.get_current_state()
+                except Exception:
+                    pass
+                
+                return SuccessResponse(
+                    data=InteractResponse(
+                        message_id=message_id,
+                        response="Processor paused - task added to queue. Resume processing to continue.",
+                        state=cognitive_state,
+                        processing_time_ms=processing_time,
+                    )
+                )
+    except Exception as e:
+        logger.debug(f"Could not check pause state: {e}")
+
     # Route message through adapter's handler
     if hasattr(request.app.state, "on_message"):
         await request.app.state.on_message(msg)

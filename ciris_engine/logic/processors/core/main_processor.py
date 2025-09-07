@@ -161,7 +161,7 @@ class AgentProcessor:
         
         # Initialize pipeline controller for single-step debugging
         from ciris_engine.protocols.pipeline_control import PipelineController
-        self._pipeline_controller = PipelineController(is_paused=False)
+        self._pipeline_controller = PipelineController(is_paused=False, main_processor=self)
 
         # Track processing time for thoughts
         self._thought_processing_callback: Optional[Any] = None  # Callback for thought timing
@@ -767,13 +767,11 @@ class AgentProcessor:
 
             # Update pipeline controller state for paused mode
             self._pipeline_controller.is_paused = True
+            # Set step to 1 (START_ROUND) - index 0 in step_order
+            self._pipeline_controller._current_step_index = 0
 
-            # Inject pipeline controller into thought processor
-            if hasattr(self.thought_processor, "set_pipeline_controller"):
-                self.thought_processor.set_pipeline_controller(self._pipeline_controller)
-            else:
-                logger.warning("Thought processor does not support pipeline controller injection")
-                # Still return True as pause was successful even without controller
+            # Pipeline controller is always available at self._pipeline_controller
+            # No injection needed - components use it directly
 
             logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
             return True  # Successfully paused

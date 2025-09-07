@@ -100,6 +100,9 @@ class RuntimeControlResponse(BaseModel):
     processor_state: str = Field(..., description="Current processor state")
     cognitive_state: Optional[str] = Field(None, description="Current cognitive state")
     queue_depth: int = Field(0, description="Number of items in processing queue")
+    current_step: Optional[str] = Field(None, description="Current pipeline step when paused")
+    current_step_schema: Optional[Dict[str, Any]] = Field(None, description="Full schema object for current step")
+    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Current pipeline state")
 
 
 class SingleStepResponse(BaseModel):
@@ -294,7 +297,12 @@ class SystemResource:
         """
         params = {"include_details": str(include_details).lower()}
         result = await self._transport.request("POST", "/v1/system/runtime/step", params=params)
-        return SingleStepResponse(**result["data"])
+        
+        # Handle different response formats
+        if "data" in result:
+            return SingleStepResponse(**result["data"])
+        else:
+            return SingleStepResponse(**result)
 
     async def get_state(self) -> RuntimeControlResponse:
         """Get current runtime state. Requires: OBSERVER role"""

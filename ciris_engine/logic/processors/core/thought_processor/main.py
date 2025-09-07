@@ -28,6 +28,7 @@ from ciris_engine.schemas.telemetry.core import (
 )
 
 # Import phase mixins
+from .start_round import RoundInitializationPhase
 from .gather_context import ContextGatheringPhase
 from .perform_dmas import DMAExecutionPhase
 from .perform_aspdma import ActionSelectionPhase
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class ThoughtProcessor(
+    RoundInitializationPhase,
     ContextGatheringPhase,
     DMAExecutionPhase,
     ActionSelectionPhase,

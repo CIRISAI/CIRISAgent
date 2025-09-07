@@ -429,30 +429,33 @@ def _extract_pipeline_state_info(request: Request) -> tuple[str, dict, dict]:
     try:
         # Try to get current pipeline state from the runtime
         runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
-            pipeline_controller = runtime.pipeline_controller
-            
-            # Get current pipeline state
-            try:
-                pipeline_state = pipeline_controller.get_current_state()
-                if pipeline_state and hasattr(pipeline_state, 'current_step'):
-                    current_step = pipeline_state.current_step
-            except Exception as e:
-                logger.debug(f"Could not get current step from pipeline: {e}")
-            
-            # Get the full step schema/metadata
-            if current_step:
+        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
+            if hasattr(runtime.agent_processor, "_pipeline_controller") and runtime.agent_processor._pipeline_controller:
+                pipeline_controller = runtime.agent_processor._pipeline_controller
+                
+                # Get current pipeline state
                 try:
-                    # Get step schema - this would include all step metadata
-                    current_step_schema = {
-                        "step_point": current_step,
-                        "description": f"System paused at step: {current_step}",
-                        "timestamp": datetime.now().isoformat(),
-                        "can_single_step": True,
-                        "next_actions": ["single_step", "resume"]
-                    }
+                    pipeline_state_obj = pipeline_controller.get_current_state()
+                    if pipeline_state_obj and hasattr(pipeline_state_obj, 'current_step'):
+                        current_step = pipeline_state_obj.current_step
+                    if pipeline_state_obj and hasattr(pipeline_state_obj, 'pipeline_state'):
+                        pipeline_state = pipeline_state_obj.pipeline_state
                 except Exception as e:
-                    logger.debug(f"Could not get step schema: {e}")
+                    logger.debug(f"Could not get current step from pipeline: {e}")
+                
+                # Get the full step schema/metadata
+                if current_step:
+                    try:
+                        # Get step schema - this would include all step metadata
+                        current_step_schema = {
+                            "step_point": current_step,
+                            "description": f"System paused at step: {current_step}",
+                            "timestamp": datetime.now().isoformat(),
+                            "can_single_step": True,
+                            "next_actions": ["single_step", "resume"]
+                        }
+                    except Exception as e:
+                        logger.debug(f"Could not get step schema: {e}")
     except Exception as e:
         logger.debug(f"Could not get pipeline information: {e}")
     

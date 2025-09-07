@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Add the project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.db.core import get_db_connection
@@ -900,5 +900,40 @@ __all__ = [
 ]
 
 
+def list_tasks_direct():
+    """List tasks by accessing database directly - bypass config service."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect("data/ciris_engine.db")
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT task_id, description, status, priority, created_at 
+            FROM tasks 
+            ORDER BY created_at DESC 
+            LIMIT 20
+        """)
+        
+        rows = cursor.fetchall()
+        
+        print(f"\n{'='*100}")
+        print(f"TASKS ({len(rows)} total) - Direct Database Access")
+        print(f"{'='*100}")
+        print(f"{'Task ID':<40} {'Status':<15} {'Priority':<8} {'Description'}")
+        print(f"{'-'*100}")
+        
+        for task_id, desc, status, priority, created in rows:
+            desc_short = desc[:40] + "..." if len(desc) > 40 else desc
+            print(f"{task_id:<40} {status:<15} {priority:<8} {desc_short}")
+        
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error accessing database directly: {e}")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "tasks":
+        list_tasks_direct()
+    else:
+        main()

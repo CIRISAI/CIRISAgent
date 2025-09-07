@@ -72,20 +72,34 @@ def mock_body():
 
 def create_runtime_mock_with_agent_processor(cognitive_state="WORK", pipeline_state=None):
     """Helper to create a properly configured runtime mock."""
+    from ciris_engine.schemas.services.runtime_control import StepPoint
+    
     mock_runtime = MagicMock()
     
     # Setup agent_processor to return proper cognitive state
     mock_agent_processor = MagicMock()
     mock_agent_processor.get_current_state.return_value = cognitive_state
-    mock_runtime.agent_processor = mock_agent_processor
     
-    # Setup pipeline_controller if pipeline_state is provided
+    # Setup pipeline_controller with proper state structure if provided
     if pipeline_state:
         mock_pipeline_controller = MagicMock()
-        mock_pipeline_controller.get_current_state.return_value = pipeline_state
-        mock_runtime.pipeline_controller = mock_pipeline_controller
+        
+        # Create a mock pipeline state object with proper attributes
+        mock_pipeline_state_obj = MagicMock()
+        mock_pipeline_state_obj.current_step = pipeline_state if isinstance(pipeline_state, StepPoint) else StepPoint.PERFORM_DMAS
+        mock_pipeline_state_obj.pipeline_state = {
+            "current_round": 1,
+            "thoughts_in_flight": 1,
+            "total_thoughts_processed": 1,
+            "is_paused": True
+        }
+        
+        mock_pipeline_controller.get_current_state.return_value = mock_pipeline_state_obj
+        mock_agent_processor._pipeline_controller = mock_pipeline_controller
     else:
-        mock_runtime.pipeline_controller = None
+        mock_agent_processor._pipeline_controller = None
+    
+    mock_runtime.agent_processor = mock_agent_processor
     
     return mock_runtime
 
@@ -289,12 +303,10 @@ class TestPipelineStateEnhancement:
     @pytest.mark.asyncio
     async def test_pause_with_pipeline_state(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test pause operation captures pipeline state for UI display."""
-        # Mock pipeline state
-        mock_pipeline_state = MagicMock()
-        mock_pipeline_state.current_step = "PERFORM_DMAS"
+        from ciris_engine.schemas.services.runtime_control import StepPoint
         
-        # Setup runtime with proper mocks
-        mock_runtime = create_runtime_mock_with_agent_processor("WORK", mock_pipeline_state)
+        # Setup runtime with proper pipeline state using StepPoint enum
+        mock_runtime = create_runtime_mock_with_agent_processor("WORK", StepPoint.PERFORM_DMAS)
         mock_request.app.state.runtime = mock_runtime
         mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
@@ -304,12 +316,13 @@ class TestPipelineStateEnhancement:
         # Verify enhanced response includes pipeline information
         assert isinstance(result, SuccessResponse)
         assert result.data.success is True
-        assert "PERFORM_DMAS" in result.data.message  # Step info in message
+        # Message should contain either the enum name or value
+        assert ("PERFORM_DMAS" in result.data.message or StepPoint.PERFORM_DMAS.value in result.data.message)
         assert hasattr(result.data, 'current_step')
-        assert result.data.current_step == "PERFORM_DMAS"
+        assert result.data.current_step == StepPoint.PERFORM_DMAS
         assert hasattr(result.data, 'current_step_schema')
         assert result.data.current_step_schema is not None
-        assert result.data.current_step_schema["step_point"] == "PERFORM_DMAS"
+        assert result.data.current_step_schema["step_point"] == StepPoint.PERFORM_DMAS
         assert result.data.current_step_schema["can_single_step"] is True
 
     @pytest.mark.asyncio
@@ -356,10 +369,10 @@ class TestRuntimeControlResponseSchema:
     @pytest.mark.asyncio
     async def test_enhanced_response_fields(self, mock_request, mock_admin_auth_context, mock_body, mock_main_runtime_control_service):
         """Test that enhanced response includes the new optional fields."""
-        # Setup runtime with pipeline state
-        mock_pipeline_state = MagicMock()
-        mock_pipeline_state.current_step = "BUILD_CONTEXT"
-        mock_runtime = create_runtime_mock_with_agent_processor("WORK", mock_pipeline_state)
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        
+        # Setup runtime with pipeline state using proper enum
+        mock_runtime = create_runtime_mock_with_agent_processor("WORK", StepPoint.GATHER_CONTEXT)
         mock_request.app.state.runtime = mock_runtime
         mock_request.app.state.main_runtime_control_service = mock_main_runtime_control_service
 
@@ -373,10 +386,9 @@ class TestRuntimeControlResponseSchema:
         assert hasattr(response_data, 'pipeline_state')
         
         # Verify enhanced fields have correct types and content
-        assert isinstance(response_data.current_step, str)
+        assert response_data.current_step == StepPoint.GATHER_CONTEXT
         assert isinstance(response_data.current_step_schema, dict)
-        assert response_data.current_step == "BUILD_CONTEXT"
-        assert response_data.current_step_schema["step_point"] == "BUILD_CONTEXT"
+        assert response_data.current_step_schema["step_point"] == StepPoint.GATHER_CONTEXT
         assert "timestamp" in response_data.current_step_schema
         assert "next_actions" in response_data.current_step_schema
 

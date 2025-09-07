@@ -371,8 +371,6 @@ class ThoughtProcessingResult(BaseModel):
     # Final status
     final_status: str = Field(..., description="Final thought status")
 
-
-
     # Tasks selected for processing
     tasks_to_process: List[QueuedTask] = Field(
         default_factory=list, description="Tasks selected for thought generation"
@@ -395,16 +393,12 @@ class ThoughtProcessingResult(BaseModel):
     error: Optional[str] = Field(None)
 
 
-
-
-
-
 class StepResultStartRound(BaseModel):
     """Result from START_ROUND step - moves thoughts from PENDING to PROCESSING."""
 
     step_point: StepPoint = Field(StepPoint.START_ROUND)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
@@ -423,7 +417,7 @@ class StepResultGatherContext(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.GATHER_CONTEXT)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
@@ -438,10 +432,11 @@ class StepResultPerformDMAs(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.PERFORM_DMAS)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
-    thought_id: str = Field(..., description="Thought ID from SUT") 
+    thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     context: str = Field(..., description="Thought context from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
@@ -456,10 +451,11 @@ class StepResultPerformASPDMA(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.PERFORM_ASPDMA)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     dma_results: Optional[str] = Field(None, description="DMA results from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
@@ -471,10 +467,11 @@ class StepResultConscienceExecution(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.CONSCIENCE_EXECUTION)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     selected_action: str = Field(..., description="Selected action from SUT")
     action_result: Optional[str] = Field(None, description="Action result from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
@@ -487,12 +484,13 @@ class StepResultRecursiveASPDMA(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.RECURSIVE_ASPDMA)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     retry_reason: str = Field(..., description="Retry reason from SUT")
-    original_action: str = Field(..., description="Original action from SUT") 
+    original_action: str = Field(..., description="Original action from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
     error: Optional[str] = Field(None)
@@ -503,10 +501,11 @@ class StepResultRecursiveConscience(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.RECURSIVE_CONSCIENCE)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     retry_action: str = Field(..., description="Retry action from SUT")
     retry_result: Optional[str] = Field(None, description="Retry result from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
@@ -519,10 +518,11 @@ class StepResultFinalizeAction(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.FINALIZE_ACTION)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: str = Field(..., description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     selected_action: str = Field(..., description="Selected action from SUT")
     selection_reasoning: str = Field(..., description="Selection reasoning from SUT")
     conscience_passed: bool = Field(..., description="Conscience passed from SUT")
@@ -536,10 +536,11 @@ class StepResultPerformAction(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.PERFORM_ACTION)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: Optional[str] = Field(None, description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     selected_action: str = Field(..., description="Selected action from SUT")
     action_parameters: Optional[str] = Field(None, description="Action parameters from SUT")
     dispatch_context: str = Field(..., description="Dispatch context from SUT")
@@ -552,10 +553,11 @@ class StepResultActionComplete(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.ACTION_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: Optional[str] = Field(None, description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     action_executed: str = Field(..., description="Action executed from SUT")
     dispatch_success: bool = Field(..., description="Dispatch success from SUT")
     execution_time_ms: float = Field(..., description="Execution time from SUT")
@@ -568,10 +570,11 @@ class StepResultRoundComplete(BaseModel):
 
     step_point: StepPoint = Field(StepPoint.ROUND_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
-    
+
     # EXACT data from SUT step_data dict
     timestamp: Optional[str] = Field(None, description="Timestamp from SUT")
     thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
     round_status: str = Field(..., description="Round completion status from SUT")
     thoughts_processed: int = Field(..., description="Number of thoughts processed from SUT")
@@ -582,7 +585,7 @@ class StepResultRoundComplete(BaseModel):
 # Union type for all step results
 StepResultUnion = Union[
     StepResultGatherContext,
-    StepResultPerformDMAs, 
+    StepResultPerformDMAs,
     StepResultPerformASPDMA,
     StepResultConscienceExecution,
     StepResultRecursiveASPDMA,
@@ -591,5 +594,3 @@ StepResultUnion = Union[
     StepResultPerformAction,
     StepResultActionComplete,
 ]
-
-

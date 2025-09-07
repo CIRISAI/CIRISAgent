@@ -144,18 +144,8 @@ class ActionDispatcher:
         # Logging handled by logger.info above
 
         # Create a ProcessingQueueItem for step streaming
-        thought_item = (
-            ProcessingQueueItem.from_thought(thought)
-            if hasattr(ProcessingQueueItem, "from_thought")
-            else ProcessingQueueItem(
-                thought_id=thought.thought_id,
-                source_task_id=thought.source_task_id,
-                thought_type=thought.thought_type,
-                content=thought.content,
-                priority=getattr(thought, "priority", 0),
-                created_at=thought.created_at,
-            )
-        )
+        # Always use from_thought since it's a classmethod
+        thought_item = ProcessingQueueItem.from_thought(thought)
 
         # Step 9: PERFORM_ACTION - Signal that we're dispatching the action
         await self._perform_action_step(

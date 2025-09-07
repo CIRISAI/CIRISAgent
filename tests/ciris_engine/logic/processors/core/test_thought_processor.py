@@ -80,7 +80,9 @@ class TestThoughtProcessor:
 
         with patch("ciris_engine.logic.processors.core.thought_processor.main.persistence") as mock_persist, patch(
             "ciris_engine.logic.persistence"
-        ) as mock_persist_global:
+        ) as mock_persist_global, patch(
+            "ciris_engine.logic.processors.core.thought_processor.start_round.persistence"
+        ) as mock_persist_start:
             # Create a mock thought object
             mock_thought = Mock(
                 thought_id="test_thought",
@@ -92,6 +94,7 @@ class TestThoughtProcessor:
 
             # Mock async methods with AsyncMock
             mock_persist.async_get_thought_by_id = AsyncMock(return_value=mock_thought)
+            mock_persist.get_thought_by_id = Mock(return_value=mock_thought)  # Add synchronous version
             mock_persist.get_task_by_id = Mock(
                 return_value=Mock(task_id="test_task", description="Test task", status=TaskStatus.ACTIVE)
             )
@@ -104,6 +107,7 @@ class TestThoughtProcessor:
 
             # Configure the global mock the same way
             mock_persist_global.async_get_thought_by_id = mock_persist.async_get_thought_by_id
+            mock_persist_global.get_thought_by_id = mock_persist.get_thought_by_id  # Add synchronous version
             mock_persist_global.get_task_by_id = mock_persist.get_task_by_id
             mock_persist_global.add_thought = mock_persist.add_thought
             mock_persist_global.update_thought_status = mock_persist.update_thought_status
@@ -111,6 +115,17 @@ class TestThoughtProcessor:
             mock_persist_global.add_correlation = mock_persist.add_correlation
             mock_persist_global.add_correlation_with_telemetry = mock_persist.add_correlation_with_telemetry
             mock_persist_global.update_correlation = mock_persist.update_correlation
+
+            # Configure the start_round persistence mock
+            mock_persist_start.async_get_thought_by_id = mock_persist.async_get_thought_by_id
+            mock_persist_start.get_thought_by_id = mock_persist.get_thought_by_id
+            mock_persist_start.get_task_by_id = mock_persist.get_task_by_id
+            mock_persist_start.add_thought = mock_persist.add_thought
+            mock_persist_start.update_thought_status = mock_persist.update_thought_status
+            mock_persist_start.update_task_status = mock_persist.update_task_status
+            mock_persist_start.add_correlation = mock_persist.add_correlation
+            mock_persist_start.add_correlation_with_telemetry = mock_persist.add_correlation_with_telemetry
+            mock_persist_start.update_correlation = mock_persist.update_correlation
 
             yield mock_persist
 
@@ -168,14 +183,17 @@ class TestThoughtProcessor:
         return processor
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(os.environ.get("CI") == "true", reason="Timeout issues in CI environment - TODO: fix async race condition")
+    @pytest.mark.skipif(
+        os.environ.get("CI") == "true", reason="Timeout issues in CI environment - TODO: fix async race condition"
+    )
     async def test_process_thought(self, thought_processor: ThoughtProcessor, mock_persistence: Mock) -> None:
         """Test processing a thought."""
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         logger.info("TEST: test_process_thought starting")
-        
+
         # Create a queue item
         thought = Thought(
             thought_id="test_thought",
@@ -212,7 +230,9 @@ class TestThoughtProcessor:
         assert result.selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]
 
     @pytest.mark.asyncio
-    async def test_process_thought_with_ponder(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_with_ponder(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing a thought that results in pondering."""
         # Create a queue item
         thought = Thought(
@@ -234,6 +254,10 @@ class TestThoughtProcessor:
 
         item = ProcessingQueueItem.from_thought(thought)
 
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
+
         # Mock DMA result for PONDER
         mock_result = ActionSelectionDMAResult(
             selected_action=HandlerActionType.PONDER,
@@ -253,7 +277,9 @@ class TestThoughtProcessor:
         assert result.selected_action == HandlerActionType.PONDER
 
     @pytest.mark.asyncio
-    async def test_process_thought_with_defer(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_with_defer(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing a thought that results in deferral."""
         # Create a queue item
         thought = Thought(
@@ -275,6 +301,10 @@ class TestThoughtProcessor:
 
         item = ProcessingQueueItem.from_thought(thought)
 
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
+
         # Mock DMA result for DEFER
         mock_result = ActionSelectionDMAResult(
             selected_action=HandlerActionType.DEFER,
@@ -294,7 +324,9 @@ class TestThoughtProcessor:
         assert result.selected_action == HandlerActionType.DEFER
 
     @pytest.mark.asyncio
-    async def test_process_thought_with_error(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_with_error(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing a thought that encounters an error."""
         # Create a queue item
         thought = Thought(
@@ -316,6 +348,10 @@ class TestThoughtProcessor:
 
         item = ProcessingQueueItem.from_thought(thought)
 
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
+
         # Mock DMA to raise error
         thought_processor.dma_orchestrator.run_initial_dmas = AsyncMock(side_effect=DMAFailure("Test error"))
 
@@ -330,7 +366,9 @@ class TestThoughtProcessor:
         assert "DMA timeout" in result.action_parameters.reason
 
     @pytest.mark.asyncio
-    async def test_process_thought_with_circuit_breaker(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_with_circuit_breaker(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing thought with circuit breaker error."""
         # Create a queue item
         thought = Thought(
@@ -352,6 +390,10 @@ class TestThoughtProcessor:
 
         item = ProcessingQueueItem.from_thought(thought)
 
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
+
         # Mock DMA to raise circuit breaker error
         thought_processor.dma_orchestrator.run_initial_dmas = AsyncMock(
             side_effect=CircuitBreakerError("Circuit breaker open")
@@ -362,7 +404,9 @@ class TestThoughtProcessor:
             await thought_processor.process_thought(item)
 
     @pytest.mark.asyncio
-    async def test_process_thought_with_conscience(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_with_conscience(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing thought with conscience evaluation."""
         # Create a queue item
         thought = Thought(
@@ -383,6 +427,10 @@ class TestThoughtProcessor:
         )
 
         item = ProcessingQueueItem.from_thought(thought)
+
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
 
         # Mock DMA result
         mock_result = ActionSelectionDMAResult(
@@ -406,7 +454,9 @@ class TestThoughtProcessor:
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_process_thought_task_complete(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_task_complete(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing thought that completes a task."""
         # Create a queue item
         thought = Thought(
@@ -427,6 +477,10 @@ class TestThoughtProcessor:
         )
 
         item = ProcessingQueueItem.from_thought(thought)
+
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
 
         # Mock DMA result for TASK_COMPLETE
         from ciris_engine.schemas.actions.parameters import TaskCompleteParams
@@ -450,7 +504,9 @@ class TestThoughtProcessor:
         assert result.selected_action == HandlerActionType.TASK_COMPLETE
 
     @pytest.mark.asyncio
-    async def test_process_thought_with_context(self, thought_processor: ThoughtProcessor) -> None:
+    async def test_process_thought_with_context(
+        self, thought_processor: ThoughtProcessor, mock_persistence: Mock
+    ) -> None:
         """Test processing thought with additional context."""
         # Create a queue item with context
         thought = Thought(
@@ -473,6 +529,10 @@ class TestThoughtProcessor:
         item = ProcessingQueueItem.from_thought(
             thought, initial_ctx={"user_id": "test_user", "session_id": "test_session"}
         )
+
+        # Set up mock persistence to return this thought
+        mock_persistence.async_get_thought_by_id.return_value = thought
+        mock_persistence.get_thought_by_id.return_value = thought
 
         # Mock context builder - it's actually build_thought_context that's called
         thought_processor.context_builder.build_thought_context = AsyncMock(return_value={"full_context": True})

@@ -2,34 +2,35 @@
 
 ## Overview
 
-This guide covers implementing UI for CIRIS's single-step debugging system. The system pauses at 15 pipeline points to show transparent AI reasoning.
+This guide covers implementing UI for CIRIS's single-step debugging system. The H3ERE pipeline has 9 core steps + 2 optional recursive steps to show transparent AI reasoning.
 
 ## API Integration
 
-### Endpoint
+### Single-Step Endpoint
 ```
-POST /v1/system/runtime/step?include_details=true
+POST /v1/system/runtime/step
 ```
 
 ### Response Schema
 ```typescript
 interface SingleStepResponse {
-  // Basic fields
   success: boolean;
   message: string;
-  processor_state: string;
-  cognitive_state: string;
-  queue_depth: number;
-  
-  // Enhanced fields (when include_details=true)
   step_point?: StepPoint;
   step_result?: StepResult;
-  pipeline_state?: PipelineState;
   processing_time_ms: number;
-  tokens_used?: number;
-  demo_data?: DemoData;
+  pipeline_state?: PipelineState;
 }
 ```
+
+### Streaming Endpoint (Real-time)
+```
+GET /v1/system/runtime/reasoning-stream
+Authorization: Bearer {token} (OBSERVER role or higher)
+Accept: text/event-stream
+```
+
+Streams live step updates as Server-Sent Events during normal processing.
 
 ## UI Components
 
@@ -79,22 +80,18 @@ Show for each step:
 
 ## Step Points Reference
 
-### Pipeline Order
-1. `FINALIZE_TASKS_QUEUE` - Select tasks to process
-2. `POPULATE_THOUGHT_QUEUE` - Generate thoughts from tasks
-3. `POPULATE_ROUND` - Select thoughts for batch processing
-4. `BUILD_CONTEXT` - Build comprehensive context
-5. `PERFORM_DMAS` - Execute parallel DMAs
-6. `PERFORM_ASPDMA` - LLM action selection
-7. `CONSCIENCE_EXECUTION` - Safety checks
-8. `RECURSIVE_ASPDMA` - Retry if conscience failed *(conditional)*
-9. `RECURSIVE_CONSCIENCE` - Re-check refined action *(conditional)*
-10. `ACTION_SELECTION` - Finalize action choice
-11. `HANDLER_START` - Begin handler execution
-12. `BUS_OUTBOUND` - Send messages via bus
-13. `PACKAGE_HANDLING` - Process at adapters
-14. `BUS_INBOUND` - Receive results via bus
-15. `HANDLER_COMPLETE` - Complete execution
+### H3ERE Pipeline Order (Exact UI Team Specification)
+0. `START_ROUND` - Setup: Tasks → Thoughts → Round Queue
+1. `GATHER_CONTEXT` - Build comprehensive context
+2. `PERFORM_DMAS` - Execute parallel multi-perspective DMAs
+3. `PERFORM_ASPDMA` - LLM action selection
+4. `CONSCIENCE_EXECUTION` - Ethical safety validation
+3B. `RECURSIVE_ASPDMA` - Re-run action selection *(conditional - only if step 4 fails)*
+4B. `RECURSIVE_CONSCIENCE` - Re-validate refined action *(conditional - only if step 3B executes)*
+5. `FINALIZE_ACTION` - Final action determination
+6. `PERFORM_ACTION` - Dispatch action to handler
+7. `ACTION_COMPLETE` - Action execution completed
+8. `ROUND_COMPLETE` - Processing round completed
 
 ## Implementation Tips
 

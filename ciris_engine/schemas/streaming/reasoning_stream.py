@@ -14,39 +14,31 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.services.runtime_control import (
     StepPoint,
-    StepResultFinalizeTasksQueue,
-    StepResultPopulateThoughtQueue,
-    StepResultPopulateRound,
+    StepResultStartRound,
     StepResultGatherContext,
     StepResultPerformDMAs,
     StepResultPerformASPDMA,
     StepResultConscienceExecution,
     StepResultRecursiveASPDMA,
-    StepResultRecursiveConscienceExecution,
+    StepResultRecursiveConscience,
     StepResultFinalizeAction,
-    StepResultMultiServiceBus,
-    StepResultDeliveryPayload,
-    StepResultExecution,
-    StepResultFollowUpThought,
+    StepResultPerformAction,
+    StepResultActionComplete,
     StepResultRoundComplete,
 )
 
 # Union of all possible StepResult types for type safety
 StepResult = Union[
-    StepResultFinalizeTasksQueue,
-    StepResultPopulateThoughtQueue, 
-    StepResultPopulateRound,
+    StepResultStartRound,
     StepResultGatherContext,
     StepResultPerformDMAs,
     StepResultPerformASPDMA,
     StepResultConscienceExecution,
     StepResultRecursiveASPDMA,
-    StepResultRecursiveConscienceExecution,
+    StepResultRecursiveConscience,
     StepResultFinalizeAction,
-    StepResultMultiServiceBus,
-    StepResultDeliveryPayload,
-    StepResultExecution,
-    StepResultFollowUpThought,
+    StepResultPerformAction,
+    StepResultActionComplete,
     StepResultRoundComplete,
 ]
 
@@ -279,59 +271,47 @@ def create_stream_update_from_step_results(
 
 # Step metadata for UI display
 STEP_METADATA = {
-    StepPoint.FINALIZE_TASKS_QUEUE: {
-        "name": "Finalize Tasks Queue",
-        "description": "Organizing and prioritizing pending tasks",
+    StepPoint.START_ROUND: {
+        "name": "Start Round",
+        "description": "Initialize processing round",
         "category": StepCategory.PREPARATION,
         "svg_position": {"x": 50, "y": 100}
-    },
-    StepPoint.POPULATE_THOUGHT_QUEUE: {
-        "name": "Populate Thought Queue", 
-        "description": "Creating thoughts for task execution",
-        "category": StepCategory.PREPARATION,
-        "svg_position": {"x": 150, "y": 100}
-    },
-    StepPoint.POPULATE_ROUND: {
-        "name": "Populate Round",
-        "description": "Setting up processing round context",
-        "category": StepCategory.PREPARATION,
-        "svg_position": {"x": 250, "y": 100}
     },
     StepPoint.GATHER_CONTEXT: {
         "name": "Gather Context",
         "description": "Building comprehensive context for analysis",
         "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 50, "y": 200}
+        "svg_position": {"x": 150, "y": 100}
     },
     StepPoint.PERFORM_DMAS: {
         "name": "Perform DMAs",
         "description": "Multi-perspective decision-making analysis",
         "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 150, "y": 200}
+        "svg_position": {"x": 250, "y": 100}
     },
     StepPoint.PERFORM_ASPDMA: {
         "name": "Perform ASPDMA",
         "description": "LLM-powered action selection",
         "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 250, "y": 200}
+        "svg_position": {"x": 350, "y": 100}
     },
     StepPoint.CONSCIENCE_EXECUTION: {
         "name": "Conscience Execution",
         "description": "Ethical safety and alignment checks",
         "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 350, "y": 200}
+        "svg_position": {"x": 450, "y": 100}
     },
     StepPoint.RECURSIVE_ASPDMA: {
         "name": "Recursive ASPDMA",
         "description": "Optional re-analysis if conscience failed",
         "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 250, "y": 250}
+        "svg_position": {"x": 250, "y": 200}
     },
-    StepPoint.RECURSIVE_CONSCIENCE_EXECUTION: {
+    StepPoint.RECURSIVE_CONSCIENCE: {
         "name": "Recursive Conscience",
         "description": "Optional re-check if conscience failed",
         "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 350, "y": 250}
+        "svg_position": {"x": 350, "y": 200}
     },
     StepPoint.FINALIZE_ACTION: {
         "name": "Finalize Action",
@@ -339,35 +319,23 @@ STEP_METADATA = {
         "category": StepCategory.DECISION,
         "svg_position": {"x": 50, "y": 300}
     },
-    StepPoint.MULTI_SERVICE_BUS: {
-        "name": "Multi-Service Bus",
-        "description": "Routing to appropriate service handlers",
-        "category": StepCategory.DECISION,
+    StepPoint.PERFORM_ACTION: {
+        "name": "Perform Action",
+        "description": "Execute the selected action",
+        "category": StepCategory.EXECUTION,
         "svg_position": {"x": 150, "y": 300}
     },
-    StepPoint.DELIVERY_PAYLOAD: {
-        "name": "Delivery Payload",
-        "description": "Preparing action payload for delivery",
-        "category": StepCategory.EXECUTION,
-        "svg_position": {"x": 250, "y": 300}
-    },
-    StepPoint.EXECUTION: {
-        "name": "Execution",
-        "description": "Executing the selected action",
-        "category": StepCategory.EXECUTION,
-        "svg_position": {"x": 350, "y": 300}
-    },
-    StepPoint.FOLLOW_UP_THOUGHT: {
-        "name": "Follow-up Thought",
-        "description": "Processing execution results and follow-ups",
+    StepPoint.ACTION_COMPLETE: {
+        "name": "Action Complete",
+        "description": "Action execution completed",
         "category": StepCategory.COMPLETION,
-        "svg_position": {"x": 450, "y": 300}
+        "svg_position": {"x": 250, "y": 300}
     },
     StepPoint.ROUND_COMPLETE: {
         "name": "Round Complete",
         "description": "Finalizing round and updating metrics",
         "category": StepCategory.COMPLETION,
-        "svg_position": {"x": 550, "y": 300}
+        "svg_position": {"x": 350, "y": 300}
     }
 }
 

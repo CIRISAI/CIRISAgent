@@ -22,11 +22,11 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
 from ciris_engine.schemas.services.runtime_control import (
-    StepPoint, StepResult, ThoughtInPipeline, PipelineState,
+    StepPoint, ThoughtInPipeline, PipelineState,
     EthicalDMAResult, CSDMAResult, DSDMAResult, ActionSelectionDMAResult,
-    ConscienceResult, StepResultBuildContext, StepResultPerformDMAs,
+    ConscienceResult, StepResultGatherContext, StepResultPerformDMAs,
     StepResultPerformASPDMA, StepResultConscienceExecution,
-    StepResultActionSelection, StepResultHandlerComplete
+    StepResultActionComplete
 )
 from ciris_engine.schemas.dma.results import EthicalDMAResult as BaseDMAResult
 from ciris_engine.schemas.conscience.results import ConscienceResult as BaseConscienceResult
@@ -37,23 +37,19 @@ from ciris_engine.logic.config import ConfigAccessor
 class TestSingleStepCOVENANTCompliance:
     """Comprehensive 17-phase single-step COVENANT compliance test suite."""
 
-    # All 15 PDMA step points in execution order
-    PDMA_STEP_POINTS = [
-        StepPoint.FINALIZE_TASKS_QUEUE,
-        StepPoint.POPULATE_THOUGHT_QUEUE, 
-        StepPoint.POPULATE_ROUND,
-        StepPoint.BUILD_CONTEXT,
+    # All 11 step points in execution order
+    STEP_POINTS = [
+        StepPoint.START_ROUND,
+        StepPoint.GATHER_CONTEXT,
         StepPoint.PERFORM_DMAS,
         StepPoint.PERFORM_ASPDMA,
         StepPoint.CONSCIENCE_EXECUTION,
         StepPoint.RECURSIVE_ASPDMA,
         StepPoint.RECURSIVE_CONSCIENCE,
-        StepPoint.ACTION_SELECTION,
-        StepPoint.HANDLER_START,
-        StepPoint.BUS_OUTBOUND,
-        StepPoint.PACKAGE_HANDLING,
-        StepPoint.BUS_INBOUND,
-        StepPoint.HANDLER_COMPLETE,
+        StepPoint.FINALIZE_ACTION,
+        StepPoint.PERFORM_ACTION,
+        StepPoint.ACTION_COMPLETE,
+        StepPoint.ROUND_COMPLETE,
     ]
 
     @pytest.fixture
@@ -123,7 +119,7 @@ class TestSingleStepCOVENANTCompliance:
         
         def mock_drain_pipeline_step():
             """Mock draining pipeline step by step."""
-            if controller._current_step_index < len(self.PDMA_STEP_POINTS):
+            if controller._current_step_index < len(self.STEP_POINTS):
                 # Return thought ID for processing
                 return f"thought_{controller._current_step_index:03d}"
             return None  # No more thoughts to process
@@ -136,7 +132,7 @@ class TestSingleStepCOVENANTCompliance:
         def mock_get_pipeline_state():
             """Mock getting current pipeline state."""
             if controller._current_step_index > 0:
-                current_step = self.PDMA_STEP_POINTS[controller._current_step_index - 1]
+                current_step = self.STEP_POINTS[controller._current_step_index - 1]
                 thought_id = f"thought_{controller._current_step_index - 1:03d}"
                 
                 thoughts_by_step = {
@@ -166,8 +162,8 @@ class TestSingleStepCOVENANTCompliance:
 
         async def mock_execute_single_step_point_async():
             """Mock single step execution that returns proper COVENANT structure."""
-            if controller._current_step_index < len(self.PDMA_STEP_POINTS):
-                current_step = self.PDMA_STEP_POINTS[controller._current_step_index]
+            if controller._current_step_index < len(self.STEP_POINTS):
+                current_step = self.STEP_POINTS[controller._current_step_index]
                 step_result = {
                     "success": True,
                     "step_point": current_step.value,
@@ -178,7 +174,7 @@ class TestSingleStepCOVENANTCompliance:
                     "pipeline_state": {
                         "is_paused": True,
                         "current_round": 1,
-                        "thoughts_by_step": {step.value: [] for step in self.PDMA_STEP_POINTS},
+                        "thoughts_by_step": {step.value: [] for step in self.STEP_POINTS},
                         "total_thoughts": 0,
                         "completed_thoughts": 0,
                         "pipeline_health": "healthy",
@@ -198,7 +194,7 @@ class TestSingleStepCOVENANTCompliance:
                     "pipeline_state": {
                         "is_paused": True,
                         "current_round": 1,
-                        "thoughts_by_step": {step.value: [] for step in self.PDMA_STEP_POINTS},
+                        "thoughts_by_step": {step.value: [] for step in self.STEP_POINTS},
                         "total_thoughts": 0,
                         "completed_thoughts": 0,
                         "pipeline_health": "complete",
@@ -544,7 +540,7 @@ class TestSingleStepCOVENANTCompliance:
         
         # Phases 2-16: Execute all 15 step points
         step_results = []
-        for i, step_point in enumerate(self.PDMA_STEP_POINTS):
+        for i, step_point in enumerate(self.STEP_POINTS):
             agent_processor._pipeline_controller._current_step_index = i
             
             result = await agent_processor.single_step()

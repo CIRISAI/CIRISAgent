@@ -22,13 +22,11 @@ from ciris_engine.schemas.services.core.runtime import (
 )
 from ciris_engine.schemas.services.runtime_control import (
     StepPoint,
-    StepResult,
-    StepResultBuildContext,
+    StepResultGatherContext,
     StepResultPerformDMAs,
     StepResultPerformASPDMA,
     StepResultConscienceExecution,
-    StepResultActionSelection,
-    StepResultHandlerComplete,
+    StepResultActionComplete,
     ThoughtInPipeline,
     PipelineState,
     EthicalDMAResult,
@@ -148,7 +146,7 @@ class TestSingleStepEndpoint:
         
         return mock
 
-    def _create_mock_step_result(self) -> StepResult:
+    def _create_mock_step_result(self) -> StepResultPerformDMAs:
         """Create a comprehensive mock step result for testing."""
         # Return a PERFORM_DMAS result with rich data matching actual schemas
         return StepResultPerformDMAs(

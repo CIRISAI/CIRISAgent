@@ -19,7 +19,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
 from ciris_engine.schemas.services.runtime_control import (
-    StepPoint, StepResult, ThoughtInPipeline, PipelineState
+    StepPoint, ThoughtInPipeline, PipelineState
 )
 from ciris_engine.logic.config import ConfigAccessor
 # ServiceRegistry not needed - using Mock objects

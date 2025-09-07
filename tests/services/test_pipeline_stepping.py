@@ -21,10 +21,9 @@ from ciris_engine.schemas.services.runtime_control import (
     PipelineState,
     StepDuration,
     StepPoint,
-    StepResultActionSelection,
-    StepResultBuildContext,
-    StepResultFinalizeTasksQueue,
     StepResultPerformASPDMA,
+    StepResultGatherContext,
+    StepResultFinalizeAction,
     StepResultPerformDMAs,
     ThoughtInPipeline,
 )

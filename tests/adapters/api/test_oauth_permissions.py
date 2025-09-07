@@ -24,7 +24,7 @@ from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 @pytest_asyncio.fixture
-async def test_runtime():
+async def test_runtime(random_api_port):
     """Create a test runtime for OAuth testing."""
     # Allow runtime creation for this test
     allow_runtime_creation()
@@ -33,6 +33,10 @@ async def test_runtime():
         config = EssentialConfig()
         config.services.llm_endpoint = "mock://localhost"
         config.services.llm_model = "mock"
+        
+        # Use the randomized API port to avoid conflicts
+        import os
+        os.environ["CIRIS_API_PORT"] = str(random_api_port)
 
         runtime = CIRISRuntime(
             adapter_types=["api"], essential_config=config, startup_channel_id="test_oauth", mock_llm=True

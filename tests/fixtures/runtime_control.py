@@ -185,14 +185,14 @@ def mock_api_runtime_control_service():
     # Status method returns proper schema
     mock.get_runtime_status = AsyncMock(return_value=paused_status)
     
-    # Add queue status mock for API service
+    # Add queue status mock for API service - realistic queue with thoughts
     api_queue_status = ProcessorQueueStatus(
         processor_name="main_processor",
-        queue_size=0,
+        queue_size=3,  # Realistic queue depth with pending thoughts
         max_size=100,
         processing_rate=5.0,
         average_latency_ms=100.0,
-        oldest_message_age_seconds=None,
+        oldest_message_age_seconds=45.0,  # Some thoughts have been waiting
     )
     mock.get_processor_queue_status = AsyncMock(return_value=api_queue_status)
     

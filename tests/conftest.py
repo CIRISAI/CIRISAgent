@@ -56,6 +56,7 @@ from tests.fixtures.runtime_control import (  # noqa: E402
     single_step_control_response,
     mock_step_result_perform_dmas,
     mock_step_result_gather_context,
+    mock_api_runtime_control_service,
 )
 
 # Make fixtures available to all tests by explicitly referencing them
@@ -66,6 +67,7 @@ __all__ = [
     "single_step_control_response",
     "mock_step_result_perform_dmas",
     "mock_step_result_gather_context",
+    "mock_api_runtime_control_service",
 ]
 
 

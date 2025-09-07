@@ -62,38 +62,6 @@ class TestSingleStepEndpoint:
         """Get auth headers for testing using dev credentials."""
         return {"Authorization": "Bearer admin:ciris_admin_password"}
 
-    @pytest.fixture
-    def mock_runtime_control_service(self):
-        """Create enhanced mock runtime control service with step point data."""
-        mock = AsyncMock()
-        
-        # Configure basic single_step response with H3ERE step data
-        mock.single_step.return_value = ProcessorControlResponse(
-            success=True,
-            processor_name="agent",
-            operation="single_step",
-            new_status=ProcessorStatus.PAUSED,
-            error=None,
-            step_point="perform_dmas",  # Use lowercase enum value
-            step_results=[{"round_number": 2, "task_id": "task_001", "step_data": {"dmas_executed": ["ethical", "common_sense"]}}],
-            thoughts_processed=1,
-            processing_time_ms=850.0,
-            pipeline_state={"current_round": 2, "thoughts_in_pipeline": 1, "is_paused": True},
-            current_round=2,
-            pipeline_empty=False,
-        )
-        
-        # Configure queue status
-        mock.get_processor_queue_status.return_value = ProcessorQueueStatus(
-            processor_name="agent",
-            queue_size=3,
-            max_size=1000,
-            processing_rate=1.2,
-            average_latency_ms=150.0,
-            oldest_message_age_seconds=45.0,
-        )
-        
-        return mock
 
     @pytest.fixture
     def mock_pipeline_controller(self, mock_step_result_perform_dmas):
@@ -148,9 +116,9 @@ class TestSingleStepEndpoint:
 
 
     @pytest.fixture
-    def mock_app_with_services(self, app, mock_runtime_control_service, mock_pipeline_controller):
+    def mock_app_with_services(self, app, mock_api_runtime_control_service, mock_pipeline_controller):
         """Configure app with mocked services."""
-        app.state.main_runtime_control_service = mock_runtime_control_service
+        app.state.main_runtime_control_service = mock_api_runtime_control_service
         
         # Mock runtime with pipeline controller
         mock_runtime = MagicMock()
@@ -227,22 +195,27 @@ class TestSingleStepEndpoint:
         # Verify step point information (enum value, not string representation)
         assert step_data["step_point"] == StepPoint.PERFORM_DMAS.value
         
-        # Verify step result structure
+        # Verify step result structure - API consolidates step results
         step_result = step_data["step_result"]
-        assert "step_point" in step_result
-        assert "thought_id" in step_result
-        assert step_result["thought_id"] == "thought_001"
+        assert "steps_processed" in step_result
+        assert step_result["steps_processed"] == 1
+        assert "results_by_round" in step_result
+        assert "summary" in step_result
         
-        # Verify DMA results are included
-        assert "ethical_dma" in step_result
-        assert "common_sense_dma" in step_result
-        assert "domain_dma" in step_result
+        # Verify round results structure
+        results_by_round = step_result["results_by_round"]
+        assert "2" in results_by_round  # Round 2 from mock
         
-        # Verify DMA result details
-        ethical_dma = step_result["ethical_dma"]
-        assert "reasoning" in ethical_dma
-        assert "decision" in ethical_dma
-        assert ethical_dma["decision"] == "approve"
+        round_result = results_by_round["2"]
+        assert "round_number" in round_result
+        assert round_result["round_number"] == 2
+        assert "task_id" in round_result
+        assert round_result["task_id"] == "task_001"
+        
+        # Verify step data contains DMA information
+        step_data_inner = round_result["step_data"]
+        assert "dmas_executed" in step_data_inner
+        assert isinstance(step_data_inner["dmas_executed"], list)
 
     def test_enhanced_response_pipeline_state(self, client, auth_headers, mock_app_with_services):
         """Test that pipeline state is correctly included in enhanced response."""

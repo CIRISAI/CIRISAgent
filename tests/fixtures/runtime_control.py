@@ -196,6 +196,32 @@ def mock_api_runtime_control_service():
     )
     mock.get_processor_queue_status = AsyncMock(return_value=api_queue_status)
     
+    # Add single step functionality for single step endpoint tests
+    from ciris_engine.schemas.services.runtime_control import StepPoint
+    single_step_response = ProcessorControlResponse(
+        success=True,
+        processor_name="agent",
+        operation="single_step",
+        new_status=ProcessorStatus.PAUSED,
+        error=None,
+        step_point=StepPoint.PERFORM_DMAS.value,  # Use enum value
+        step_results=[{
+            "round_number": 2, 
+            "task_id": "task_001", 
+            "step_data": {"dmas_executed": ["ethical", "common_sense"]}
+        }],
+        thoughts_processed=1,
+        processing_time_ms=850.0,
+        pipeline_state={
+            "current_round": 2, 
+            "thoughts_in_pipeline": 1, 
+            "is_paused": True
+        },
+        current_round=2,
+        pipeline_empty=False,
+    )
+    mock.single_step = AsyncMock(return_value=single_step_response)
+    
     return mock
 
 

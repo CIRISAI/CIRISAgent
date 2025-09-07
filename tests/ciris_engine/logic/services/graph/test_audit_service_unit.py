@@ -2,10 +2,11 @@
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Generator
+from typing import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import pytest_asyncio
 
 from ciris_engine.logic.services.graph.audit_service import GraphAuditService
 from ciris_engine.schemas.runtime.audit import AuditActionContext
@@ -36,8 +37,10 @@ class TestGraphAuditService:
         bus.search = AsyncMock(return_value=[])
         return bus
 
-    @pytest.fixture
-    def audit_service(self, mock_time_service: Mock, mock_memory_bus: Mock) -> Generator[GraphAuditService, None, None]:
+    @pytest_asyncio.fixture
+    async def audit_service(
+        self, mock_time_service: Mock, mock_memory_bus: Mock
+    ) -> AsyncGenerator[GraphAuditService, None]:
         """Create GraphAuditService instance."""
         import tempfile
 
@@ -50,6 +53,12 @@ class TestGraphAuditService:
                 export_path=f"{temp_dir}/audit_export.jsonl",  # Provide export path
             )
             yield service
+            # Ensure service is stopped if it was started
+            if hasattr(service, "_export_task") and service._export_task:
+                try:
+                    await service.stop()
+                except Exception:
+                    pass  # Ignore errors during cleanup
 
     @pytest.mark.asyncio
     async def test_start_stop(self, audit_service: GraphAuditService) -> None:

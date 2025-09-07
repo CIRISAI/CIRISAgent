@@ -128,11 +128,9 @@ class TestAgentProcessorPause:
     @pytest.mark.asyncio
     async def test_single_step_requires_pause(self, agent_processor):
         """Test that single-stepping requires the processor to be paused."""
-        # Single-step without pause should fail
-        result = await agent_processor.single_step()
-
-        assert not result["success"]
-        assert "Cannot single-step unless paused" in result["error"]
+        # Single-step without pause should raise RuntimeError (FAIL FAST principle)
+        with pytest.raises(RuntimeError, match="Cannot single-step unless processor is paused"):
+            await agent_processor.single_step()
 
         # Pause first
         await agent_processor.pause_processing()
@@ -175,8 +173,8 @@ class TestPipelineController:
         assert len(pipeline_controller._resume_events) == 0
         assert not pipeline_controller._single_step_mode
 
-        # All step points enabled by default
-        assert len(pipeline_controller._enabled_step_points) == len(StepPoint)
+        # 9 step points enabled by default (2 recursive steps are conditional)
+        assert len(pipeline_controller._enabled_step_points) == 9
 
     @pytest.mark.asyncio
     async def test_should_pause_at_step_point(self, pipeline_controller):
@@ -212,7 +210,7 @@ class TestPipelineController:
             thought_id="thought_2",
             task_id="task_1",
             thought_type="standard",
-            current_step=StepPoint.HANDLER_COMPLETE,
+            current_step=StepPoint.ACTION_COMPLETE,
             entered_step_at=datetime.now(timezone.utc),
         )
 
@@ -220,16 +218,16 @@ class TestPipelineController:
             thought_id="thought_3",
             task_id="task_2",
             thought_type="standard",
-            current_step=StepPoint.ACTION_SELECTION,
+            current_step=StepPoint.PERFORM_ASPDMA,
             entered_step_at=datetime.now(timezone.utc),
         )
 
         # Add to pipeline state
         pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.GATHER_CONTEXT.value] = [thought1]
-        pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.HANDLER_COMPLETE.value] = [thought2]
-        pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.ACTION_SELECTION.value] = [thought3]
+        pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.ACTION_COMPLETE.value] = [thought2]
+        pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.PERFORM_ASPDMA.value] = [thought3]
 
-        # Drain should return thought2 first (HANDLER_COMPLETE is latest)
+        # Drain should return thought2 first (ACTION_COMPLETE is latest)
         next_thought = pipeline_controller.drain_pipeline_step()
         assert next_thought == "thought_2"
 
@@ -395,16 +393,16 @@ class TestPipelineStateTracking:
         """Test getting the next step in the pipeline."""
         # Get next step for various points
         next_step = pipeline_state.get_next_step(StepPoint.FINALIZE_ACTION)
-        assert next_step == StepPoint.POPULATE_THOUGHT_QUEUE
+        assert next_step == StepPoint.PERFORM_ACTION
 
         next_step = pipeline_state.get_next_step(StepPoint.GATHER_CONTEXT)
         assert next_step == StepPoint.PERFORM_DMAS
 
-        next_step = pipeline_state.get_next_step(StepPoint.ACTION_SELECTION)
-        assert next_step == StepPoint.HANDLER_START
+        next_step = pipeline_state.get_next_step(StepPoint.PERFORM_ASPDMA)
+        assert next_step == StepPoint.CONSCIENCE_EXECUTION
 
         # Last step has no next
-        next_step = pipeline_state.get_next_step(StepPoint.HANDLER_COMPLETE)
+        next_step = pipeline_state.get_next_step(StepPoint.ROUND_COMPLETE)
         assert next_step is None
 
 
@@ -412,7 +410,7 @@ class TestStepResultSchemas:
     """Test that step result schemas work correctly."""
 
     def test_step_result_finalize_tasks_queue(self):
-        """Test StepResultFinalizeTasksQueue schema."""
+        """Test StepResultFinalizeAction schema."""
         from ciris_engine.schemas.services.runtime_control import QueuedTask
 
         task = QueuedTask(
@@ -424,42 +422,35 @@ class TestStepResultSchemas:
             thoughts_generated=0,
         )
 
-        result = StepResultFinalizeTasksQueue(
+        result = StepResultFinalizeAction(
             success=True,
-            round_number=1,
-            current_state=AgentState.WORK,
-            tasks_to_process=[task],
-            tasks_deferred=[],
-            selection_criteria={"priority": "high"},
-            total_pending_tasks=5,
-            total_active_tasks=2,
-            tasks_selected_count=1,
-            processing_time_ms=50.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            thought_id="thought_1",
+            selected_action="speak",
+            selection_reasoning="Test reasoning",
+            conscience_passed=True,
+            processing_time_ms=150.0,
         )
 
         assert result.step_point == StepPoint.FINALIZE_ACTION
         assert result.success
-        assert len(result.tasks_to_process) == 1
-        assert result.tasks_to_process[0].task_id == "task_1"
+        assert result.thought_id == "thought_1"
+        assert result.selected_action == "speak"
 
     def test_step_result_build_context(self):
-        """Test StepResultBuildContext schema."""
-        result = StepResultBuildContext(
+        """Test StepResultGatherContext schema."""
+        result = StepResultGatherContext(
             success=True,
+            timestamp=datetime.now(timezone.utc).isoformat(),
             thought_id="thought_1",
-            system_snapshot={"memory_usage": 1024},
-            agent_identity={"name": "test_agent"},
-            thought_context={"task_id": "task_1"},
-            permitted_actions=["OBSERVE", "SPEAK"],
-            context_size_bytes=2048,
-            memory_queries_performed=3,
+            task_id="task_1",
             processing_time_ms=100.0,
         )
 
         assert result.step_point == StepPoint.GATHER_CONTEXT
         assert result.success
         assert result.thought_id == "thought_1"
-        assert "OBSERVE" in result.permitted_actions
+        assert result.task_id == "task_1"
 
     def test_step_result_perform_dmas(self):
         """Test StepResultPerformDMAs schema."""
@@ -487,22 +478,15 @@ class TestStepResultSchemas:
 
         result = StepResultPerformDMAs(
             success=True,
+            timestamp=datetime.now(timezone.utc).isoformat(),
             thought_id="thought_1",
-            ethical_dma=ethical_result,
-            common_sense_dma=csdma_result,
-            domain_dma=dsdma_result,
-            dmas_executed=["ethical", "common_sense", "domain"],
-            dma_failures=[],
-            longest_dma_time_ms=150.0,
-            total_time_ms=160.0,
+            context="Test context for DMA processing",
+            processing_time_ms=160.0,
         )
 
         assert result.step_point == StepPoint.PERFORM_DMAS
         assert result.success
-        assert len(result.dmas_executed) == 3
-        assert result.ethical_dma.decision == "approve"
-        assert result.common_sense_dma.plausibility_score == 0.9
-        assert result.domain_dma.domain == "general"
+        assert result.thought_id == "thought_1"
 
 
 class TestEndToEndPipelineStepping:

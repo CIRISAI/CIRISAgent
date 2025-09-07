@@ -78,7 +78,7 @@ class TestThoughtStreamData:
             current_step=StepPoint.PERFORM_DMAS,
             step_category=StepCategory.ANALYSIS,
             status=ThoughtStatus.PROCESSING,
-            steps_completed=[StepPoint.FINALIZE_ACTION, StepPoint.POPULATE_THOUGHT_QUEUE],
+            steps_completed=[StepPoint.START_ROUND, StepPoint.GATHER_CONTEXT],
             steps_remaining=[StepPoint.PERFORM_ASPDMA, StepPoint.CONSCIENCE_EXECUTION],
             progress_percentage=33.3,
             started_at=now,
@@ -431,23 +431,27 @@ class TestStepMetadataFunctions:
 
     def test_calculate_progress_percentage(self):
         """Test progress percentage calculation."""
-        # Test early step
-        progress = calculate_progress_percentage([], StepPoint.FINALIZE_ACTION)
+        # Test early step (START_ROUND is first - 0/11 = 0.0%)
+        progress = calculate_progress_percentage([], StepPoint.START_ROUND)
         assert progress == 0.0
         
-        # Test middle step
+        # Test middle step (PERFORM_DMAS is 3rd - around 18%)
         progress = calculate_progress_percentage([], StepPoint.PERFORM_DMAS)
-        assert progress > 0.0 and progress < 100.0
+        assert progress > 15.0 and progress < 25.0
         
-        # Test late step
+        # Test late step (ROUND_COMPLETE is last - around 90%+)
         progress = calculate_progress_percentage([], StepPoint.ROUND_COMPLETE)
-        assert progress > 50.0
+        assert progress > 90.0
 
     def test_get_remaining_steps(self):
         """Test getting remaining steps."""
-        # Test early step
+        # Test early step (START_ROUND should have 10 remaining steps)
+        remaining = get_remaining_steps(StepPoint.START_ROUND)
+        assert len(remaining) == len(list(StepPoint)) - 1  # 10 remaining
+        
+        # Test mid step (FINALIZE_ACTION should have 3 remaining steps)
         remaining = get_remaining_steps(StepPoint.FINALIZE_ACTION)
-        assert len(remaining) == len(list(StepPoint)) - 1
+        assert len(remaining) == 3  # PERFORM_ACTION, ACTION_COMPLETE, ROUND_COMPLETE
         
         # Test last step
         remaining = get_remaining_steps(StepPoint.ROUND_COMPLETE)

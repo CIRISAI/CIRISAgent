@@ -263,7 +263,7 @@ async def single_step_processor(
         safe_pipeline_state = result.pipeline_state
         safe_processing_time = result.processing_time_ms or 0.0
         safe_tokens_used = None  # Not yet implemented in ProcessorControlResponse
-        safe_demo_data = None  # Create from step data if needed
+        safe_transparency_data = None  # Real transparency data from step results
 
         single_step_response = SingleStepResponse(
             **basic_response_data,
@@ -272,7 +272,7 @@ async def single_step_processor(
             pipeline_state=safe_pipeline_state,
             processing_time_ms=safe_processing_time,
             tokens_used=safe_tokens_used,
-            demo_data=safe_demo_data,
+            transparency_data=safe_transparency_data,
         )
         
         return SuccessResponse(data=single_step_response)

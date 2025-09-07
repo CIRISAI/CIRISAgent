@@ -21,9 +21,6 @@ from ciris_engine.logic.adapters.api.routes.system_extensions import (
     update_service_priority,
     _extract_cognitive_state,
     _get_queue_depth,
-    _safe_step_point,
-    _safe_step_result,
-    _safe_pipeline_state,
 )
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.services.core.runtime import (
@@ -240,17 +237,10 @@ class TestSingleStepEndpoint:
         assert "failed" in result.data.message
 
     @pytest.mark.asyncio
-    async def test_single_step_enhanced_response(self, mock_request, mock_admin_auth_context, mock_runtime_control):
+    async def test_single_step_enhanced_response(self, mock_request, mock_admin_auth_context, mock_runtime_control, single_step_control_response):
         """Test single step with enhanced response including details."""
-        # Setup
-        control_response = ProcessorControlResponse(
-            success=True,
-            processor_name="agent",
-            operation="single_step",
-            new_status=ProcessorStatus.PAUSED,
-            message="Processed 1 thought with details",
-        )
-        mock_runtime_control.single_step.return_value = control_response
+        # Setup with existing fixture data
+        mock_runtime_control.single_step.return_value = single_step_control_response
         mock_runtime_control.get_processor_queue_status.return_value = ProcessorQueueStatus(
             processor_name="agent",
             is_paused=True,
@@ -261,129 +251,36 @@ class TestSingleStepEndpoint:
             oldest_message_age_seconds=0.0,
         )
         
-        # Mock runtime with pipeline controller (keeping mock structure for test setup)
+        # Minimal runtime mock for cognitive state extraction
         mock_runtime = MagicMock()
-        mock_pipeline_controller = MagicMock()
-        mock_runtime.pipeline_controller = mock_pipeline_controller
-        
-        # Mock agent processor with state manager (keeping mock structure for test setup)  
         mock_agent_processor = MagicMock()
         mock_state_manager = MagicMock()
         mock_state_manager.get_state.return_value = StepPoint.PERFORM_DMAS
         mock_agent_processor.state_manager = mock_state_manager
         mock_runtime.agent_processor = mock_agent_processor
         
-        # Mock pipeline state and step result
-        mock_pipeline_state = PipelineState(
-            is_paused=False,
-            current_round=1,
-            thoughts_by_step={},
-            task_queue=[],
-            thought_queue=[],
-            total_thoughts_processed=0,
-            total_thoughts_in_flight=0
-        )
-        mock_step_result = {
-            "step_point": "PERFORM_DMAS",
-            "thought_id": "test_thought_1",
-            "ethical_dma": {"decision": "PROCEED", "confidence": 0.85}
-        }
-        
-        mock_pipeline_controller.get_current_state.return_value = mock_pipeline_state
-        # Use real step result model for PERFORM_DMAS
-        from ciris_engine.schemas.services.runtime_control import StepResultPerformDMAs
-        from datetime import datetime, timezone
-        real_step_result = StepResultPerformDMAs(
-            thought_id="test_thought_1",
-            step_point=StepPoint.PERFORM_DMAS,
-            success=True,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            context="Test context for DMA execution",
-            processing_time_ms=150.0
-        )
-        mock_pipeline_controller.get_latest_step_result.return_value = real_step_result
-        mock_pipeline_controller.get_processing_metrics.return_value = {
-            "total_processing_time_ms": 150.0,
-            "tokens_used": 45,
-        }
-        
         mock_request.app.state.main_runtime_control_service = mock_runtime_control
         mock_request.app.state.runtime = mock_runtime
 
         # Execute with details (always included now)
         result = await single_step_processor(mock_request, mock_admin_auth_context, {})
 
-        # Verify enhanced response with real data
+        # Verify enhanced response with fixture data
         assert isinstance(result, SuccessResponse)
         assert isinstance(result.data, SingleStepResponse)
         assert result.data.success is True
-        assert result.data.step_point == StepPoint.PERFORM_DMAS
-        assert result.data.step_result is not None  # Should contain real step result data
-        assert result.data.pipeline_state is not None  # Should contain real pipeline state
-        assert result.data.processing_time_ms == 150.0
-        assert result.data.tokens_used == 45
-        # Transparency data will be None if no real transparency data is provided
-        # This is correct behavior - we don't generate fake transparency data
+        assert result.data.step_point == StepPoint.PERFORM_DMAS  # From fixture step_point
+        assert result.data.step_result is not None  # From fixture step_results
+        assert result.data.pipeline_state is not None  # From fixture pipeline_state
+        assert result.data.processing_time_ms == 150.0  # From fixture
+        assert result.data.tokens_used is None  # Not implemented yet per comment in API
+        # Transparency data will be None - we use real transparency data from step results
+        assert result.data.transparency_data is None
         
-        # Verify all mocks were called
+        # Verify runtime control service was called
         mock_runtime_control.single_step.assert_called_once()
         mock_runtime_control.get_processor_queue_status.assert_called_once()
-        mock_pipeline_controller.get_current_state.assert_called_once()
-        mock_pipeline_controller.get_latest_step_result.assert_called_once()
-        mock_pipeline_controller.get_processing_metrics.assert_called_once()
 
-    @pytest.mark.asyncio  
-    async def test_single_step_safe_filtering(self, mock_request, mock_admin_auth_context, mock_runtime_control):
-        """Test that mock objects are safely filtered out of enhanced response."""
-        # Setup
-        control_response = ProcessorControlResponse(
-            success=True,
-            processor_name="agent", 
-            operation="single_step",
-            new_status=ProcessorStatus.RUNNING,
-            message="Processed with mocks",
-        )
-        mock_runtime_control.single_step.return_value = control_response
-        mock_runtime_control.get_processor_queue_status.return_value = ProcessorQueueStatus(
-            processor_name="agent",
-            is_paused=False,
-            queue_size=1,
-            max_size=1000,
-            processing_rate=1.5,
-            average_latency_ms=100.0,
-            oldest_message_age_seconds=30.0,
-        )
-        
-        # Mock runtime with mock objects that should be filtered out
-        mock_runtime = MagicMock()
-        mock_pipeline_controller = MagicMock()
-        mock_runtime.pipeline_controller = mock_pipeline_controller
-        
-        # Mock objects with unittest.mock type that should be filtered
-        mock_step_point = MagicMock()
-        mock_step_point.__class__.__name__ = "MagicMock"
-        str_type = str(type(mock_step_point))
-        assert "unittest.mock" in str_type  # Verify mock detection works
-        
-        mock_pipeline_controller.get_current_state.return_value = mock_step_point
-        mock_pipeline_controller.get_latest_step_result.return_value = MagicMock()
-        mock_pipeline_controller.get_processing_metrics.return_value = "invalid_type"
-        
-        mock_request.app.state.main_runtime_control_service = mock_runtime_control
-        mock_request.app.state.runtime = mock_runtime
-
-        # Execute with details (always included now)
-        result = await single_step_processor(mock_request, mock_admin_auth_context, {})
-
-        # Verify mocks are filtered out (safe defaults)
-        assert isinstance(result, SuccessResponse)
-        assert isinstance(result.data, SingleStepResponse)
-        assert result.data.step_point is None  # Mock filtered out
-        assert result.data.step_result is None  # Mock filtered out
-        assert result.data.pipeline_state is None  # Mock filtered out
-        assert result.data.processing_time_ms == 0.0  # Safe default
-        assert result.data.tokens_used is None  # Safe default
-        assert result.data.transparency_data is None  # Safe default
 
 
 class TestHelperFunctions:
@@ -480,74 +377,6 @@ class TestHelperFunctions:
 
         assert result == 0
 
-    def test_safe_step_point_valid(self):
-        """Test safe step point extraction with valid enum."""
-        mock_step_point = MagicMock()
-        mock_step_point.value = "PERFORM_DMAS"
-        # Ensure it's not detected as a mock by the filter
-        mock_step_point.__class__.__module__ = "ciris_engine.schemas"
-        
-        result = _safe_step_point(mock_step_point)
-        assert result == mock_step_point
-
-    def test_safe_step_point_mock_filtered(self):
-        """Test that mock step points are filtered out."""
-        mock_step_point = MagicMock()
-        mock_step_point.value = "PERFORM_DMAS"
-        # This will be detected as unittest.mock type
-        
-        result = _safe_step_point(mock_step_point)
-        assert result is None
-
-    def test_safe_step_point_none(self):
-        """Test safe step point extraction with None."""
-        result = _safe_step_point(None)
-        assert result is None
-
-    def test_safe_step_result_valid(self):
-        """Test safe step result extraction with valid dict."""
-        step_result = {"step_point": "PERFORM_DMAS", "thought_id": "test_1"}
-        
-        result = _safe_step_result(step_result)
-        assert result == step_result
-
-    def test_safe_step_result_mock_filtered(self):
-        """Test that mock step results are filtered out."""
-        mock_step_result = MagicMock()
-        # Will be detected as unittest.mock type
-        
-        result = _safe_step_result(mock_step_result)
-        assert result is None
-
-    def test_safe_step_result_not_dict(self):
-        """Test safe step result extraction with non-dict."""
-        result = _safe_step_result("not_a_dict")
-        assert result is None
-
-    def test_safe_pipeline_state_with_model_dump(self):
-        """Test safe pipeline state extraction with model_dump method."""
-        mock_pipeline_state = MagicMock()
-        mock_pipeline_state.model_dump.return_value = {"current_round": 1}
-        # Make it not detected as mock
-        mock_pipeline_state.__class__.__module__ = "ciris_engine.schemas"
-        
-        result = _safe_pipeline_state(mock_pipeline_state)
-        assert result == {"current_round": 1}
-
-    def test_safe_pipeline_state_dict(self):
-        """Test safe pipeline state extraction with plain dict."""
-        pipeline_state = {"current_round": 2, "thoughts": []}
-        
-        result = _safe_pipeline_state(pipeline_state)
-        assert result == pipeline_state
-
-    def test_safe_pipeline_state_mock_filtered(self):
-        """Test that mock pipeline states are filtered out."""
-        mock_pipeline_state = MagicMock()
-        # Will be detected as unittest.mock type
-        
-        result = _safe_pipeline_state(mock_pipeline_state)
-        assert result is None
 
 # Demo data tests removed - we never show fake or mock data, only real transparency data
 

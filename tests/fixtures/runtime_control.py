@@ -197,3 +197,40 @@ def mock_api_runtime_control_service():
     mock.get_processor_queue_status = AsyncMock(return_value=api_queue_status)
     
     return mock
+
+
+@pytest.fixture
+def single_step_control_response():
+    """Create a ProcessorControlResponse for single step operation with H3ERE data."""
+    from ciris_engine.schemas.services.runtime_control import StepPoint
+    
+    return ProcessorControlResponse(
+        success=True,
+        processor_name="agent",
+        operation="single_step",
+        new_status=ProcessorStatus.PAUSED,
+        error=None,
+        # H3ERE step data - use string values as required by schema
+        step_point=StepPoint.PERFORM_DMAS.value,  # "perform_dmas"
+        step_results=[
+            {
+                "step_point": StepPoint.PERFORM_DMAS.value,  # Use enum value for consistency
+                "thought_id": "test_thought_1",
+                "success": True,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "processing_time_ms": 150.0,
+                "ethical_dma": {"decision": "PROCEED", "confidence": 0.85},
+                "round_number": 1
+            }
+        ],
+        thoughts_processed=1,
+        processing_time_ms=150.0,
+        pipeline_state={
+            "current_round": 1,
+            "thoughts_in_flight": 1,
+            "total_thoughts_processed": 1,
+            "is_paused": True
+        },
+        current_round=1,
+        pipeline_empty=False
+    )

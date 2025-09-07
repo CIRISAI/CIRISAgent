@@ -52,9 +52,10 @@ import time  # noqa: E402
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402
 from tests.fixtures.database import clean_db, test_db  # noqa: E402
+from tests.fixtures.runtime_control import single_step_control_response  # noqa: E402
 
 # Make fixtures available to all tests by explicitly referencing them
-__all__ = ["test_db", "clean_db", "random_api_port"]
+__all__ = ["test_db", "clean_db", "random_api_port", "single_step_control_response"]
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -1,19 +1,21 @@
 """
-Comprehensive Single-Step COVENANT Compliance Test Module.
+Comprehensive Single-Step H3ERE Pipeline Test Module.
 
-This module provides a single comprehensive test with 17 ordered phases that validate
-the complete PDMA ethical reasoning pipeline step-by-step for COVENANT compliance.
+This module tests the complete H3ERE ethical reasoning pipeline step-by-step,
+including real-time streaming integration and all 11 step points.
 
-17 Phases:
+Test Phases:
 1. Initial system state check
-2. Pause processor
-3. Create task via interact
-4. Verify task queued  
-5-19. Single step through all 15 PDMA step points with validation
-20. Resume processor
-21. Final validation
+2. Pause processor  
+3. Test reasoning stream connectivity
+4. Single step execution with step point validation
+5. Create task for processing
+6. Step through H3ERE pipeline (11 step points)
+7. Verify queue status and pipeline state
+8. Resume processor
+9. Final validation
 
-Each phase must pass before proceeding to the next.
+Tests both single-step control and real-time streaming functionality.
 """
 
 import asyncio
@@ -27,7 +29,7 @@ from ..config import QAConfig, QAModule, QATestCase
 
 
 class ComprehensiveSingleStepTestModule:
-    """Comprehensive single-step testing with 17 ordered phases."""
+    """Comprehensive single-step testing with H3ERE pipeline validation."""
 
     @staticmethod
     def get_comprehensive_single_step_tests() -> List[QATestCase]:
@@ -55,7 +57,18 @@ class ComprehensiveSingleStepTestModule:
                 requires_auth=True,
                 description="Pause the processor for single-step testing"
             ),
-            # Phase 3: Test single step functionality
+            # Phase 3: Test reasoning stream connectivity  
+            QATestCase(
+                name="Reasoning Stream Connectivity",
+                module=QAModule.SYSTEM,
+                endpoint="/v1/system/runtime/reasoning-stream",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Test Server-Sent Events stream for live reasoning data",
+                timeout=10  # Quick connectivity test
+            ),
+            # Phase 4: Test single step functionality  
             QATestCase(
                 name="Single Step Execution",
                 module=QAModule.SYSTEM,

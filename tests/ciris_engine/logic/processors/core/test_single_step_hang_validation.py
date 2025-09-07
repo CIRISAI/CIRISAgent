@@ -137,13 +137,10 @@ class TestSingleStepHangValidation:
         # ARRANGE: Processor is not paused
         assert not agent_processor.is_paused()
         
-        # ACT: Call single_step
-        result = await agent_processor.single_step()
-        
-        # ASSERT: Fails fast with clear error - NO HANG
-        assert result["success"] is False
-        assert "Cannot single-step unless paused" in result["error"]
-        # Should return immediately, not hang
+        # ACT & ASSERT: Call single_step should raise RuntimeError (FAIL FAST)
+        with pytest.raises(RuntimeError, match="Cannot single-step unless processor is paused"):
+            await agent_processor.single_step()
+        # Should fail immediately, not hang
 
     @pytest.mark.asyncio 
     async def test_single_step_works_with_always_present_pipeline_controller(self, agent_processor):

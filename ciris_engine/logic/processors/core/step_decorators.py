@@ -180,11 +180,17 @@ def _add_step_specific_data(
     step_data["task_id"] = getattr(thought_item, 'source_task_id', None)
     
     # Add step-specific data based on step type
-    if step == StepPoint.GATHER_CONTEXT:
+    if step == StepPoint.FINALIZE_TASKS_QUEUE:
+        step_data["thoughts_processed"] = len(args) if args else 1
+        step_data["queue_status"] = "finalized"
+        
+    elif step == StepPoint.GATHER_CONTEXT:
         step_data["context"] = str(result) if result else None
         
     elif step == StepPoint.PERFORM_DMAS:
         step_data["dma_results"] = str(result) if result else None
+        # Get context from thought_item.initial_context (always available per schema)
+        step_data["context"] = str(thought_item.initial_context) if thought_item.initial_context else ""
         
     elif step == StepPoint.PERFORM_ASPDMA:
         if hasattr(result, 'selected_action'):
@@ -228,6 +234,7 @@ async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Di
         # Import here to avoid circular dependency
         from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
         from ciris_engine.schemas.services.runtime_control import (
+            StepResultFinalizeTasksQueue,
             StepResultGatherContext,
             StepResultPerformDMAs,
             StepResultPerformASPDMA,
@@ -242,7 +249,9 @@ async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Di
         # Create appropriate step result schema
         step_result = None
         
-        if step == StepPoint.GATHER_CONTEXT:
+        if step == StepPoint.FINALIZE_TASKS_QUEUE:
+            step_result = StepResultFinalizeTasksQueue(**step_data)
+        elif step == StepPoint.GATHER_CONTEXT:
             step_result = StepResultGatherContext(**step_data)
         elif step == StepPoint.PERFORM_DMAS:
             step_result = StepResultPerformDMAs(**step_data)

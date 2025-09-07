@@ -19,7 +19,8 @@ from ciris_engine.schemas.processors.states import AgentState
 class StepPoint(str, Enum):
     """Points where single-stepping can pause in the H3ERE pipeline."""
 
-    # H3ERE Pipeline - 9 real step points (7 core + 2 optional recursive)
+    # H3ERE Pipeline - 10 step points (0 setup + 7 core + 2 optional recursive)
+    FINALIZE_TASKS_QUEUE = "finalize_tasks_queue"  # 0) Setup: Prepare thoughts for processing
     GATHER_CONTEXT = "gather_context"  # 1) Build context for DMA processing
     PERFORM_DMAS = "perform_dmas"  # 2) Execute multi-perspective DMAs
     PERFORM_ASPDMA = "perform_aspdma"  # 3) LLM-powered action selection
@@ -394,6 +395,25 @@ class ThoughtProcessingResult(BaseModel):
 
 
 
+
+
+class StepResultFinalizeTasksQueue(BaseModel):
+    """Result from FINALIZE_TASKS_QUEUE step - prepares thoughts for processing."""
+
+    step_point: StepPoint = Field(StepPoint.FINALIZE_TASKS_QUEUE)
+    success: bool = Field(..., description="Whether step succeeded")
+    
+    # EXACT data from SUT step_data dict
+    timestamp: str = Field(..., description="Timestamp from SUT")
+    thought_id: str = Field(..., description="Thought ID from SUT")
+    task_id: Optional[str] = Field(None, description="Task ID from SUT")
+    processing_time_ms: float = Field(..., description="Processing time from SUT")
+
+    # Setup-specific data
+    queue_size: int = Field(..., description="Number of thoughts queued for processing")
+    tasks_finalized: int = Field(..., description="Number of tasks finalized in this step")
+
+    error: Optional[str] = Field(None)
 
 
 class StepResultGatherContext(BaseModel):

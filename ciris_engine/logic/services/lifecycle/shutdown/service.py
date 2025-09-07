@@ -314,12 +314,14 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
             logger.critical(f"Sending SIGKILL to process {pid}")
 
             try:
-                os.kill(pid, signal.SIGKILL)
+                # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+                os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
             except OSError as e:
                 logger.error(f"Failed to force kill process: {e}")
                 # If SIGKILL fails, try SIGTERM as fallback
                 try:
-                    os.kill(pid, signal.SIGTERM)
+                    # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+                    os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
                 except OSError:
                     pass
 

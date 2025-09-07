@@ -203,104 +203,78 @@ class PipelineController:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
         # Import only the 9 real H3ERE step result schemas
         from ciris_engine.schemas.services.runtime_control import (
-            StepResultGatherContext,
-            StepResultPerformDMAs,
-            StepResultPerformASPDMA,
+            StepResultActionComplete,
             StepResultConscienceExecution,
+            StepResultFinalizeAction,
+            StepResultGatherContext,
+            StepResultPerformAction,
+            StepResultPerformASPDMA,
+            StepResultPerformDMAs,
             StepResultRecursiveASPDMA,
             StepResultRecursiveConscience,
-            StepResultFinalizeAction,
-            StepResultPerformAction,
-            StepResultActionComplete,
         )
 
         # Use EXACT SUT data - no fake data, no simulation!
         # FAIL FAST AND LOUD if step_point is not one of our 9 real H3ERE steps
         if step_point == StepPoint.GATHER_CONTEXT:
-            return StepResultGatherContext(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultGatherContext(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.PERFORM_DMAS:
-            return StepResultPerformDMAs(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultPerformDMAs(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.PERFORM_ASPDMA:
-            return StepResultPerformASPDMA(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultPerformASPDMA(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.CONSCIENCE_EXECUTION:
-            return StepResultConscienceExecution(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultConscienceExecution(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.RECURSIVE_ASPDMA:
-            return StepResultRecursiveASPDMA(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultRecursiveASPDMA(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.RECURSIVE_CONSCIENCE:
-            return StepResultRecursiveConscience(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultRecursiveConscience(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.FINALIZE_ACTION:
-            return StepResultFinalizeAction(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultFinalizeAction(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.PERFORM_ACTION:
-            return StepResultPerformAction(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
+            return StepResultPerformAction(success=True, **step_data)  # Use EXACT data from SUT
         elif step_point == StepPoint.ACTION_COMPLETE:
-            return StepResultActionComplete(
-                success=True,
-                **step_data  # Use EXACT data from SUT
-            )
-        
+            return StepResultActionComplete(success=True, **step_data)  # Use EXACT data from SUT
+
         # FAIL FAST AND LOUD - only 9 real H3ERE steps allowed!
         raise ValueError(f"Invalid step point: {step_point}. Only 9 real H3ERE pipeline steps are supported!")
 
     async def execute_single_step_point(self) -> Dict[str, Any]:
         """
         Execute exactly one step point in the H3ERE pipeline using step decorators.
-        
+
         This enables single-step mode and advances paused thoughts by one step,
         leveraging the existing step decorator infrastructure for pause/resume.
-        
+
         Returns:
             Dict containing:
             - success: bool
-            - step_point: str (the step point executed) 
+            - step_point: str (the step point executed)
             - message: str (description of what happened)
             - step_results: List[Dict] (results for each thought advanced)
             - processing_time_ms: float
             - pipeline_state: Dict
         """
         import asyncio
+
         from ciris_engine.logic.processors.core.step_decorators import (
             enable_single_step_mode,
             execute_all_steps,
             get_paused_thoughts,
         )
-        
+
         start_time = asyncio.get_event_loop().time()
-        
+
         # Enable single-step mode so that step decorators pause at each step
         enable_single_step_mode()
-        
+
         # Check if we have paused thoughts to advance
         paused_thoughts = get_paused_thoughts()
-        
+
         if paused_thoughts:
             # Advance all currently paused thoughts by one step
             result = await execute_all_steps()
             processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-            
+
             return {
                 "success": result["success"],
                 "step_point": "resume_paused_thoughts",
@@ -308,14 +282,16 @@ class PipelineController:
                 "thoughts_advanced": result["thoughts_advanced"],
                 "step_results": [{"thoughts_advanced": result["thoughts_advanced"], "message": result["message"]}],
                 "processing_time_ms": processing_time_ms,
-                "pipeline_state": self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), 'dict') else {},
+                "pipeline_state": (
+                    self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
+                ),
             }
         else:
             # No paused thoughts - need to start new thoughts in the pipeline
             # Get PENDING thoughts and start them in the processor
-            from ciris_engine.logic import persistence  
+            from ciris_engine.logic import persistence
             from ciris_engine.schemas.runtime.models import ThoughtStatus
-            
+
             pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)
             if not pending_thoughts:
                 processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
@@ -326,13 +302,15 @@ class PipelineController:
                     "thoughts_advanced": 0,
                     "step_results": [],
                     "processing_time_ms": processing_time_ms,
-                    "pipeline_state": self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), 'dict') else {},
+                    "pipeline_state": (
+                        self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
+                    ),
                 }
-            
+
             # Start processing the first pending thought
             # This will trigger the step decorators and pause at the first step point
             thought = pending_thoughts[0]
-            
+
             # We need to trigger the normal thought processing flow
             # The ThoughtProcessor will handle this and pause at step points
             if self.main_processor and self.main_processor.thought_processor:
@@ -340,15 +318,17 @@ class PipelineController:
                     # Start processing this thought - it will pause at the first decorated step
                     # For now, we'll simulate this by just indicating that processing was initiated
                     processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                    
+
                     return {
                         "success": True,
-                        "step_point": "initiate_processing", 
+                        "step_point": "initiate_processing",
                         "message": f"Initiated processing for thought {thought.thought_id} - will pause at first step",
                         "thought_id": thought.thought_id,
                         "step_results": [{"thought_id": thought.thought_id, "initiated": True}],
                         "processing_time_ms": processing_time_ms,
-                        "pipeline_state": self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), 'dict') else {},
+                        "pipeline_state": (
+                            self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
+                        ),
                     }
                 except Exception as e:
                     processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
@@ -358,7 +338,9 @@ class PipelineController:
                         "message": f"Error initiating processing: {e}",
                         "step_results": [],
                         "processing_time_ms": processing_time_ms,
-                        "pipeline_state": self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), 'dict') else {},
+                        "pipeline_state": (
+                            self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
+                        ),
                     }
             else:
                 processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
@@ -368,51 +350,53 @@ class PipelineController:
                     "message": "No thought processor available",
                     "step_results": [],
                     "processing_time_ms": processing_time_ms,
-                    "pipeline_state": self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), 'dict') else {},
+                    "pipeline_state": (
+                        self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
+                    ),
                 }
-    
+
     def _get_next_step_point(self) -> Optional[StepPoint]:
         """Get the next step point to execute in order."""
         # Define the execution order of step points
         step_order = [
             StepPoint.START_ROUND,  # 0) Setup: Tasks → Thoughts → Round Queue → Ready for context
-            StepPoint.GATHER_CONTEXT,        # 1) Build context for DMA processing
-            StepPoint.PERFORM_DMAS,          # 2) Execute multi-perspective DMAs
-            StepPoint.PERFORM_ASPDMA,        # 3) LLM-powered action selection
+            StepPoint.GATHER_CONTEXT,  # 1) Build context for DMA processing
+            StepPoint.PERFORM_DMAS,  # 2) Execute multi-perspective DMAs
+            StepPoint.PERFORM_ASPDMA,  # 3) LLM-powered action selection
             StepPoint.CONSCIENCE_EXECUTION,  # 4) Ethical safety validation
-            StepPoint.RECURSIVE_ASPDMA,      # 5) Optional: Re-run action selection if conscience failed
+            StepPoint.RECURSIVE_ASPDMA,  # 5) Optional: Re-run action selection if conscience failed
             StepPoint.RECURSIVE_CONSCIENCE,  # 6) Optional: Re-validate if recursive action failed
-            StepPoint.FINALIZE_ACTION,       # 7) Final action determination
-            StepPoint.PERFORM_ACTION,        # 8) Dispatch action to handler
-            StepPoint.ACTION_COMPLETE,       # 9) Action execution completed
+            StepPoint.FINALIZE_ACTION,  # 7) Final action determination
+            StepPoint.PERFORM_ACTION,  # 8) Dispatch action to handler
+            StepPoint.ACTION_COMPLETE,  # 9) Action execution completed
             StepPoint.ROUND_COMPLETE,
         ]
-        
+
         # Track current step point
-        if not hasattr(self, '_current_step_index'):
+        if not hasattr(self, "_current_step_index"):
             self._current_step_index = 0
-        
-        if self._current_step_index >= len(step_order):
+
+        if not step_order or self._current_step_index >= len(step_order):
             # Reset to start of pipeline for next round
             self._current_step_index = 0
-            return step_order[0]  # Start new round at START_ROUND
-            
+            return step_order[0] if step_order else StepPoint.START_ROUND  # Start new round at START_ROUND
+
         current_step = step_order[self._current_step_index]
         self._current_step_index += 1
         return current_step
-    
+
     def get_current_state(self):
         """Get the current pipeline state including next step to execute."""
         next_step = self._peek_next_step_point()
         pipeline_state = self.get_pipeline_state()
-        
+
         class CurrentPipelineState:
             def __init__(self, current_step, pipeline_state):
                 self.current_step = current_step
                 self.pipeline_state = pipeline_state
-        
+
         return CurrentPipelineState(next_step.value if next_step else None, pipeline_state)
-    
+
     def _peek_next_step_point(self) -> Optional[StepPoint]:
         """Peek at next step point without incrementing counter."""
         step_order = [
@@ -428,31 +412,31 @@ class PipelineController:
             StepPoint.ACTION_COMPLETE,
             StepPoint.ROUND_COMPLETE,
         ]
-        
+
         # Track current step point
-        if not hasattr(self, '_current_step_index'):
+        if not hasattr(self, "_current_step_index"):
             self._current_step_index = 0
-        
-        if self._current_step_index >= len(step_order):
+
+        if not step_order or self._current_step_index >= len(step_order):
             # Would reset to start of pipeline for next round
-            return step_order[0]  # START_ROUND
-            
+            return step_order[0] if step_order else StepPoint.START_ROUND  # START_ROUND
+
         return step_order[self._current_step_index]
-    
+
     def _get_thoughts_for_step_point(self, step_point: StepPoint) -> list:
         """Get thoughts that need processing at this step point."""
         pipeline_state = self.get_pipeline_state()
-        
-        if hasattr(pipeline_state, 'thoughts_by_step') and step_point in pipeline_state.thoughts_by_step:
+
+        if hasattr(pipeline_state, "thoughts_by_step") and step_point in pipeline_state.thoughts_by_step:
             return pipeline_state.thoughts_by_step[step_point][:5]  # Limit to 5 thoughts
-        
+
         # For early steps, we may need to create mock thoughts
         return []
-    
+
     def _create_thought_in_pipeline(self, thought, step_point: StepPoint) -> ThoughtInPipeline:
         """Create a ThoughtInPipeline from a Thought for processing."""
         from datetime import datetime
-        
+
         return ThoughtInPipeline(
             thought_id=thought.thought_id,
             task_id=thought.source_task_id,
@@ -462,7 +446,7 @@ class PipelineController:
             step_data={
                 "content": thought.content,
                 "created_at": self._extract_created_at_string(thought),
-                "tags": getattr(thought, 'tags', []),
+                "tags": getattr(thought, "tags", []),
             },
         )
 
@@ -470,54 +454,56 @@ class PipelineController:
         """Extract created_at as a string, handling various formats."""
         if not thought.created_at:
             return None
-        
-        if hasattr(thought.created_at, 'isoformat'):
+
+        if hasattr(thought.created_at, "isoformat"):
             return thought.created_at.isoformat()
         else:
             return thought.created_at
-    
+
     async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> Dict[str, Any]:
         """
         Execute a specific step point for a single thought.
-        
+
         Returns typed step result with round/task/thought identifiers.
         """
         processing_start = asyncio.get_event_loop().time()
-        
+
         # Execute REAL step logic based on step point - NO MOCK DATA
         step_data = await self._execute_real_step_logic(step_point, thought)
-        
+
         processing_time_ms = (asyncio.get_event_loop().time() - processing_start) * 1000
-        
+
         step_result = {
-            "thought_id": thought.thought_id if hasattr(thought, 'thought_id') else str(thought),
-            "round_id": getattr(self, '_current_round', 1),
-            "task_id": getattr(thought, 'task_id', getattr(thought, 'source_task_id', None)),
+            "thought_id": thought.thought_id if hasattr(thought, "thought_id") else str(thought),
+            "round_id": getattr(self, "_current_round", 1),
+            "task_id": getattr(thought, "task_id", getattr(thought, "source_task_id", None)),
             "step_point": step_point.value,
             "success": True,
             "step_data": step_data,
             "processing_time_ms": processing_time_ms,
             "timestamp": asyncio.get_event_loop().time(),
         }
-        
+
         # Always broadcast step results to connected clients
         try:
             from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+
             await step_result_stream.broadcast_step_result(step_result)
         except Exception as e:
             # Don't let streaming errors break step execution
             import logging
+
             logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
-        
+
         return step_result
-    
+
     # Note: All step execution is now handled by step decorators in ThoughtProcessor phases
     # No manual step execution methods needed - decorators handle pause/resume automatically
-    
+
     def _advance_thoughts_to_next_step(self, thoughts: list, current_step: StepPoint) -> None:
         """Advance thoughts to the next step in the pipeline."""
         pipeline_state = self.get_pipeline_state()
-        
+
         # Get the next step in the pipeline
         step_order = [
             StepPoint.START_ROUND,
@@ -532,20 +518,22 @@ class PipelineController:
             StepPoint.ACTION_COMPLETE,
             StepPoint.ROUND_COMPLETE,
         ]
-        
+
         current_index = step_order.index(current_step) if current_step in step_order else -1
-        next_step = step_order[current_index + 1] if current_index >= 0 and current_index + 1 < len(step_order) else None
-        
+        next_step = (
+            step_order[current_index + 1] if current_index >= 0 and current_index + 1 < len(step_order) else None
+        )
+
         # Update each thought's state and move to next step bucket
         for thought in thoughts:
             # Update thought object state
-            if hasattr(thought, 'last_completed_step'):
+            if hasattr(thought, "last_completed_step"):
                 thought.last_completed_step = current_step
-            if hasattr(thought, 'current_step') and next_step:
+            if hasattr(thought, "current_step") and next_step:
                 thought.current_step = next_step
-            
+
             # Move thought to next step bucket in pipeline state
-            if next_step and hasattr(pipeline_state, 'thoughts_by_step'):
+            if next_step and hasattr(pipeline_state, "thoughts_by_step"):
                 if next_step.value not in pipeline_state.thoughts_by_step:
                     pipeline_state.thoughts_by_step[next_step.value] = []
                 pipeline_state.thoughts_by_step[next_step.value].append(thought)

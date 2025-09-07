@@ -121,6 +121,11 @@ class ThoughtProcessor(
         # 2. PERFORM_DMAS - Multi-perspective analysis
         dma_results = await self._perform_dmas_step(thought_item, thought_context)
 
+        # 2a. If DMA step returned an ActionSelectionDMAResult (due to failure), return it directly
+        if isinstance(dma_results, ActionSelectionDMAResult):
+            logger.info(f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}")
+            return dma_results
+
         # 3. Check for failures/escalations
         if self._has_critical_failure(dma_results):
             end_time = self._time_service.now()
@@ -143,6 +148,9 @@ class ThoughtProcessor(
 
         # 4. PERFORM_ASPDMA - LLM-powered action selection
         action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
+        
+        # Get profile name for potential conscience retry
+        profile_name = self._get_profile_name(thought)
 
         # Debug logging for action result
         if action_result:

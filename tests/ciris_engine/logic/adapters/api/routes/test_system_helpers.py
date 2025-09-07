@@ -128,7 +128,9 @@ class TestRuntimeControlHelpers:
         """Test _extract_pipeline_state_info with no pipeline controller."""
         request = Mock(spec=Request)
         runtime = Mock()
-        runtime.pipeline_controller = None
+        agent_processor = Mock()
+        agent_processor._pipeline_controller = None
+        runtime.agent_processor = agent_processor
         request.app.state.runtime = runtime
         
         current_step, current_step_schema, pipeline_state = _extract_pipeline_state_info(request)
@@ -141,12 +143,15 @@ class TestRuntimeControlHelpers:
         """Test _extract_pipeline_state_info with current step available."""
         request = Mock(spec=Request)
         runtime = Mock()
+        agent_processor = Mock()
         pipeline_controller = Mock()
         pipeline_state_obj = Mock()
         pipeline_state_obj.current_step = "BUILD_CONTEXT"
+        pipeline_state_obj.pipeline_state = {"current_round": 1}
         
         pipeline_controller.get_current_state.return_value = pipeline_state_obj
-        runtime.pipeline_controller = pipeline_controller
+        agent_processor._pipeline_controller = pipeline_controller
+        runtime.agent_processor = agent_processor
         request.app.state.runtime = runtime
         
         current_step, current_step_schema, pipeline_state = _extract_pipeline_state_info(request)
@@ -155,15 +160,17 @@ class TestRuntimeControlHelpers:
         assert current_step_schema is not None
         assert current_step_schema["step_point"] == "BUILD_CONTEXT"
         assert current_step_schema["can_single_step"] is True
-        assert pipeline_state == pipeline_state_obj
+        assert pipeline_state == {"current_round": 1}
 
     def test_extract_pipeline_state_info_controller_error(self):
         """Test _extract_pipeline_state_info with controller error."""
         request = Mock(spec=Request)
         runtime = Mock()
+        agent_processor = Mock()
         pipeline_controller = Mock()
         pipeline_controller.get_current_state.side_effect = Exception("Controller error")
-        runtime.pipeline_controller = pipeline_controller
+        agent_processor._pipeline_controller = pipeline_controller
+        runtime.agent_processor = agent_processor
         request.app.state.runtime = runtime
         
         current_step, current_step_schema, pipeline_state = _extract_pipeline_state_info(request)

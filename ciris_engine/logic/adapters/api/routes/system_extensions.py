@@ -201,6 +201,48 @@ def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, A
 
 
 
+def _get_runtime_control_service_for_step(request: Request):
+    """Get runtime control service for single step operations."""
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    if not runtime_control:
+        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+    return runtime_control
+
+def _create_basic_response_data(result, cognitive_state: str, queue_depth: int) -> dict:
+    """Create basic response data for single step."""
+    return {
+        "success": result.success,
+        "message": f"Single step {'completed' if result.success else 'failed'}: {result.error or 'No additional info'}",
+        "processor_state": result.new_status.value if hasattr(result.new_status, "value") else str(result.new_status),
+        "cognitive_state": cognitive_state,
+        "queue_depth": queue_depth,
+    }
+
+def _convert_step_point(result) -> Optional[Any]:
+    """Convert step_point string to enum if needed."""
+    from ciris_engine.schemas.services.runtime_control import StepPoint
+    
+    if not result.step_point:
+        return None
+        
+    try:
+        return StepPoint(result.step_point.lower()) if isinstance(result.step_point, str) else result.step_point
+    except (ValueError, AttributeError):
+        return None
+
+def _consolidate_step_results(result) -> Optional[dict]:
+    """Convert step_results list to consolidated step_result dict for API response."""
+    if not (result.step_results and isinstance(result.step_results, list)):
+        return None
+        
+    return {
+        "steps_processed": len(result.step_results),
+        "results_by_round": {str(item.get("round_number", 0)): item for item in result.step_results if isinstance(item, dict)},
+        "summary": result.step_results[0] if result.step_results else None
+    }
+
 @router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
 async def single_step_processor(
     request: Request, 
@@ -214,12 +256,7 @@ async def single_step_processor(
     Always returns detailed H3ERE step data for transparency.
     Requires ADMIN role.
     """
-    # Try main runtime control service first (has all methods), fall back to API runtime control
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-    if not runtime_control:
-        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+    runtime_control = _get_runtime_control_service_for_step(request)
 
     try:
         result = await runtime_control.single_step()
@@ -229,37 +266,12 @@ async def single_step_processor(
         cognitive_state = _extract_cognitive_state(runtime)
         queue_depth = await _get_queue_depth(runtime_control)
 
-        # Basic response data
-        basic_response_data = {
-            "success": result.success,
-            "message": f"Single step {'completed' if result.success else 'failed'}: {result.error or 'No additional info'}",
-            "processor_state": result.new_status.value if hasattr(result.new_status, "value") else str(result.new_status),
-            "cognitive_state": cognitive_state,
-            "queue_depth": queue_depth,
-        }
-
-        # Always provide comprehensive H3ERE step data directly from ProcessorControlResponse
-        # The runtime control service now passes through all H3ERE step data
+        # Create response components
+        basic_response_data = _create_basic_response_data(result, cognitive_state, queue_depth)
+        safe_step_point = _convert_step_point(result)
+        safe_step_result = _consolidate_step_results(result)
         
-        # Convert step_point string to enum if needed
-        from ciris_engine.schemas.services.runtime_control import StepPoint
-        safe_step_point = None
-        if result.step_point:
-            try:
-                safe_step_point = StepPoint(result.step_point.lower()) if isinstance(result.step_point, str) else result.step_point
-            except (ValueError, AttributeError):
-                safe_step_point = None
-        
-        # Convert step_results list to consolidated step_result dict for API response
-        safe_step_result = None
-        if result.step_results and isinstance(result.step_results, list):
-            # Consolidate list of step results into a single dict for API response
-            safe_step_result = {
-                "steps_processed": len(result.step_results),
-                "results_by_round": {str(item.get("round_number", 0)): item for item in result.step_results if isinstance(item, dict)},
-                "summary": result.step_results[0] if result.step_results else None
-            }
-        
+        # Extract other safe data
         safe_pipeline_state = result.pipeline_state
         safe_processing_time = result.processing_time_ms or 0.0
         safe_tokens_used = None  # Not yet implemented in ProcessorControlResponse

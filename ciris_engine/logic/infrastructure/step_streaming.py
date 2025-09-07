@@ -33,7 +33,7 @@ class StepResultStream:
         self._subscribers.discard(queue)
         logger.debug(f"Subscriber removed, total: {len(self._subscribers)}")
         
-    async def broadcast_step_result(self, step_result: Dict[str, Any]) -> None:
+    def broadcast_step_result(self, step_result: Dict[str, Any]) -> None:
         """
         Broadcast a step result to all connected subscribers.
         
@@ -73,7 +73,7 @@ class StepResultStream:
         
         # Broadcast to all subscribers
         dead_queues = []
-        for queue in list(self._subscribers):
+        for queue in self._subscribers:
             try:
                 # Use put_nowait to avoid blocking
                 queue.put_nowait(enriched_result)

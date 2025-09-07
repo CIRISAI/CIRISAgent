@@ -871,72 +871,98 @@ class APIAuthService:
             print(f"Signature verification error: {e}")
             return False
 
+    def _update_user_wa_role(self, user: User, wa_role: WARole, minted_by: str) -> None:
+        """Update user's WA role and related fields."""
+        user.wa_role = wa_role
+        user.wa_parent_id = minted_by
+        user.wa_auto_minted = False
+
+    def _upgrade_api_role_if_needed(self, user: User, wa_role: WARole) -> None:
+        """Upgrade user's API role if WA role requires higher access."""
+        if wa_role == WARole.AUTHORITY and user.api_role.value < APIRole.AUTHORITY.value:
+            user.api_role = APIRole.AUTHORITY
+        elif wa_role == WARole.OBSERVER and user.api_role.value < APIRole.OBSERVER.value:
+            user.api_role = APIRole.OBSERVER
+
+    async def _update_existing_wa(self, user_id: str, wa_role: WARole) -> None:
+        """Update existing WA certificate."""
+        await self._auth_service.update_wa(
+            user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
+        )
+        print(f"Updated existing WA {user_id} to role {wa_role}")
+
+    def _create_wa_email(self, user_name: str) -> str:
+        """Create email for WA certificate."""
+        return user_name + "@ciris.local" if "@" not in user_name else user_name
+
+    def _get_wa_permissions(self, user: User) -> List[str]:
+        """Get permissions for WA certificate."""
+        base_permissions = self.get_permissions_for_role(user.api_role)
+        return base_permissions + [
+            "wa.resolve_deferral",  # Critical for deferral resolution
+            "wa.mint"  # Allow WA to mint others
+        ]
+
+    async def _create_new_wa(self, user: User, wa_role: WARole) -> Any:
+        """Create new WA certificate."""
+        wa_permissions = self._get_wa_permissions(user)
+        wa_email = self._create_wa_email(user.name)
+        
+        wa_cert = await self._auth_service.create_wa(
+            name=user.name,
+            email=wa_email,
+            scopes=wa_permissions,
+            role=wa_role
+        )
+        print(f"Created new WA certificate {wa_cert.wa_id} for user {user.name} with role {wa_role}")
+        return wa_cert
+
+    async def _link_oauth_identity(self, user_id: str, wa_cert_id: str) -> None:
+        """Link WA certificate to OAuth identity if applicable."""
+        if ":" in user_id:  # OAuth users have format "provider:external_id"
+            provider, external_id = user_id.split(":", 1)
+            await self._auth_service.update_wa(
+                wa_cert_id,
+                oauth_provider=provider,
+                oauth_external_id=external_id
+            )
+            print(f"Linked WA {wa_cert_id} to OAuth identity {provider}:{external_id}")
+
+    def _update_user_records(self, user: User, user_id: str, wa_cert_id: str) -> None:
+        """Update user records with new WA ID."""
+        user.wa_id = wa_cert_id
+        self._users[wa_cert_id] = user  # Store under new WA ID
+        if user_id != wa_cert_id:
+            self._users.pop(user_id, None)  # Remove old OAuth-based entry
+
+    async def _handle_wa_database_operations(self, user: User, user_id: str, wa_role: WARole) -> None:
+        """Handle WA database create/update operations."""
+        existing_wa = await self._auth_service.get_wa(user_id)
+        
+        if existing_wa:
+            await self._update_existing_wa(user_id, wa_role)
+        else:
+            wa_cert = await self._create_new_wa(user, wa_role)
+            await self._link_oauth_identity(user_id, wa_cert.wa_id)
+            self._update_user_records(user, user_id, wa_cert.wa_id)
+
     async def mint_wise_authority(self, user_id: str, wa_role: WARole, minted_by: str) -> Optional[User]:
         """Mint a user as a Wise Authority."""
         user = self.get_user(user_id)
         if not user:
             return None
 
-        # Update WA role
-        user.wa_role = wa_role
-        user.wa_parent_id = minted_by
-        user.wa_auto_minted = False
-
-        # If user doesn't have sufficient API role, upgrade it
-        if wa_role == WARole.AUTHORITY and user.api_role.value < APIRole.AUTHORITY.value:
-            user.api_role = APIRole.AUTHORITY
-        elif wa_role == WARole.OBSERVER and user.api_role.value < APIRole.OBSERVER.value:
-            user.api_role = APIRole.OBSERVER
+        # Update user WA role and API role if needed
+        self._update_user_wa_role(user, wa_role, minted_by)
+        self._upgrade_api_role_if_needed(user, wa_role)
 
         # Store updated user
         self._users[user_id] = user
 
-        # Also update/create in database if we have auth service
+        # Handle database operations if auth service is available
         if self._auth_service:
             try:
-                # Check if WA certificate exists first
-                existing_wa = await self._auth_service.get_wa(user_id)
-                
-                if existing_wa:
-                    # WA exists - update it
-                    await self._auth_service.update_wa(
-                        user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
-                    )
-                    print(f"Updated existing WA {user_id} to role {wa_role}")
-                else:
-                    # WA doesn't exist - create it
-                    # This happens when user was created via OAuth but never had a WA certificate
-                    # Get base permissions for the role and add WA-specific permissions
-                    base_permissions = self.get_permissions_for_role(user.api_role)
-                    wa_permissions = base_permissions + [
-                        "wa.resolve_deferral",  # Critical for deferral resolution
-                        "wa.mint"  # Allow WA to mint others
-                    ]
-                    
-                    wa_cert = await self._auth_service.create_wa(
-                        name=user.name,
-                        email=user.name + "@ciris.local" if not "@" in user.name else user.name,
-                        scopes=wa_permissions,
-                        role=wa_role
-                    )
-                    print(f"Created new WA certificate {wa_cert.wa_id} for user {user_id} with role {wa_role}")
-                    
-                    # For OAuth users, link the WA to their OAuth identity
-                    if ":" in user_id:  # OAuth users have format "provider:external_id"
-                        provider, external_id = user_id.split(":", 1)
-                        await self._auth_service.update_wa(
-                            wa_cert.wa_id,
-                            oauth_provider=provider,
-                            oauth_external_id=external_id
-                        )
-                        print(f"Linked WA {wa_cert.wa_id} to OAuth identity {provider}:{external_id}")
-                    
-                    # Update user record with the new WA ID
-                    user.wa_id = wa_cert.wa_id
-                    self._users[wa_cert.wa_id] = user  # Store under new WA ID
-                    if user_id != wa_cert.wa_id:
-                        self._users.pop(user_id, None)  # Remove old OAuth-based entry
-                        
+                await self._handle_wa_database_operations(user, user_id, wa_role)
                 # Note: parent_wa_id and auto_minted are not supported by the protocol's update_wa method
                 # They would need to be set during creation or via a different mechanism
             except Exception as e:

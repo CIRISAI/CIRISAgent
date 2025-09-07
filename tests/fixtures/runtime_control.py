@@ -234,3 +234,68 @@ def single_step_control_response():
         current_round=1,
         pipeline_empty=False
     )
+
+
+@pytest.fixture
+def mock_step_result_perform_dmas():
+    """Create a mock step result for PERFORM_DMAS step - reusable across tests."""
+    from unittest.mock import MagicMock
+    from ciris_engine.schemas.services.runtime_control import StepPoint
+    
+    mock_result = MagicMock()
+    mock_result.step_point = StepPoint.PERFORM_DMAS
+    mock_result.success = True
+    mock_result.thought_id = "thought_001"
+    mock_result.timestamp = "2024-01-01T12:00:00Z"
+    mock_result.context = "test context"
+    mock_result.processing_time_ms = 800.0
+    mock_result.error = None
+    
+    # Add DMA results as mock attributes
+    mock_result.ethical_dma = MagicMock()
+    mock_result.ethical_dma.decision = "approve"
+    mock_result.ethical_dma.reasoning = "Analyzed ethical implications thoroughly"
+    
+    mock_result.common_sense_dma = MagicMock()
+    mock_result.common_sense_dma.plausibility_score = 0.90
+    mock_result.common_sense_dma.reasoning = "Applied common sense principles"
+    
+    mock_result.domain_dma = MagicMock()
+    mock_result.domain_dma.domain = "api_development"
+    mock_result.domain_dma.reasoning = "Domain expertise applied"
+    
+    mock_result.dmas_executed = ["ethical", "common_sense", "domain"]
+    mock_result.dma_failures = []
+    mock_result.longest_dma_time_ms = 300.0
+    mock_result.total_time_ms = 800.0
+    
+    return mock_result
+
+
+@pytest.fixture
+def mock_step_result_gather_context():
+    """Create a mock step result for GATHER_CONTEXT step - reusable across tests."""
+    from unittest.mock import MagicMock
+    from ciris_engine.schemas.services.runtime_control import StepPoint
+    
+    mock_result = MagicMock()
+    mock_result.step_point = StepPoint.GATHER_CONTEXT
+    mock_result.success = True
+    mock_result.thought_id = "thought_002"
+    mock_result.timestamp = "2024-01-01T12:00:00Z"
+    mock_result.context = "gather context test"
+    mock_result.processing_time_ms = 200.0
+    mock_result.error = None
+    
+    # Context building specific fields
+    mock_result.system_snapshot = {"agent_state": "active", "services": 25}
+    mock_result.agent_identity = {"agent_id": "test_agent", "role": "assistant"}
+    mock_result.thought_context = {"user_id": "test_user", "channel": "test_channel"}
+    mock_result.channel_context = {"type": "discord", "permissions": ["read", "write"]}
+    mock_result.memory_context = {"relevant_memories": 3}
+    mock_result.permitted_actions = ["speak", "observe"]
+    mock_result.constraints = ["no_harmful_content"]
+    mock_result.context_size_bytes = 2048
+    mock_result.memory_queries_performed = 2
+    
+    return mock_result

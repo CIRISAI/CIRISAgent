@@ -96,7 +96,7 @@ class TestSingleStepEndpoint:
         return mock
 
     @pytest.fixture
-    def mock_pipeline_controller(self):
+    def mock_pipeline_controller(self, mock_step_result_perform_dmas):
         """Create mock pipeline controller with step point data."""
         mock = MagicMock()
         
@@ -105,12 +105,12 @@ class TestSingleStepEndpoint:
             is_paused=True,
             current_round=5,
             thoughts_by_step={
-                str(StepPoint.BUILD_CONTEXT): [
+                str(StepPoint.GATHER_CONTEXT): [
                     ThoughtInPipeline(
                         thought_id="thought_001",
                         task_id="task_001",
                         thought_type="user_request",
-                        current_step=StepPoint.BUILD_CONTEXT,
+                        current_step=StepPoint.GATHER_CONTEXT,
                         entered_step_at=datetime.now(timezone.utc),
                         processing_time_ms=200.0,
                     )
@@ -130,15 +130,15 @@ class TestSingleStepEndpoint:
             thought_queue=[],
         )
         
-        # Mock latest step result
-        mock.get_latest_step_result.return_value = self._create_mock_step_result()
+        # Use centralized mock step result
+        mock.get_latest_step_result.return_value = mock_step_result_perform_dmas
         
         # Mock processing metrics
         mock.get_processing_metrics.return_value = {
             "total_processing_time_ms": 1250.0,
             "tokens_used": 150,
             "step_timings": {
-                "BUILD_CONTEXT": 200.0,
+                "GATHER_CONTEXT": 200.0,
                 "PERFORM_DMAS": 800.0,
                 "PERFORM_ASPDMA": 250.0,
             }
@@ -146,34 +146,6 @@ class TestSingleStepEndpoint:
         
         return mock
 
-    def _create_mock_step_result(self) -> StepResultPerformDMAs:
-        """Create a comprehensive mock step result for testing."""
-        # Return a PERFORM_DMAS result with rich data matching actual schemas
-        return StepResultPerformDMAs(
-            step_point=StepPoint.PERFORM_DMAS,
-            success=True,
-            thought_id="thought_001",
-            ethical_dma=EthicalDMAResult(
-                decision="approve",
-                reasoning="Analyzed ethical implications thoroughly",
-                alignment_check="All CIRIS principles satisfied: transparency maintained, user wellbeing prioritized",
-            ),
-            common_sense_dma=CSDMAResult(
-                plausibility_score=0.90,
-                flags=["standard_request"],
-                reasoning="Applied common sense principles - request is straightforward",
-            ),
-            domain_dma=DSDMAResult(
-                domain="api_development",
-                domain_alignment=0.80,
-                flags=["technical_accuracy"],
-                reasoning="Domain expertise applied following API best practices",
-            ),
-            dmas_executed=["ethical", "common_sense", "domain"],
-            dma_failures=[],  # List, not dict
-            longest_dma_time_ms=300.0,
-            total_time_ms=800.0,
-        )
 
     @pytest.fixture
     def mock_app_with_services(self, app, mock_runtime_control_service, mock_pipeline_controller):
@@ -293,11 +265,11 @@ class TestSingleStepEndpoint:
         
         # Verify thoughts by step data
         thoughts_by_step = pipeline_state["thoughts_by_step"]
-        assert str(StepPoint.BUILD_CONTEXT) in thoughts_by_step
+        assert str(StepPoint.GATHER_CONTEXT) in thoughts_by_step
         assert str(StepPoint.PERFORM_DMAS) in thoughts_by_step
         
         # Verify thought structure  
-        context_thoughts = thoughts_by_step[str(StepPoint.BUILD_CONTEXT)]
+        context_thoughts = thoughts_by_step[str(StepPoint.GATHER_CONTEXT)]
         assert len(context_thoughts) == 1
         assert context_thoughts[0]["thought_id"] == "thought_001"
         assert context_thoughts[0]["task_id"] == "task_001"
@@ -320,8 +292,8 @@ class TestSingleStepEndpoint:
         # Verify demo data includes timing breakdowns
         demo_data = step_data["demo_data"]
         assert "step_timings" in demo_data
-        assert "BUILD_CONTEXT" in demo_data["step_timings"]
-        assert demo_data["step_timings"]["BUILD_CONTEXT"] == 200.0
+        assert "GATHER_CONTEXT" in demo_data["step_timings"]
+        assert demo_data["step_timings"]["GATHER_CONTEXT"] == 200.0
 
     def test_enhanced_response_demo_data_structure(self, client, auth_headers, mock_app_with_services):
         """Test that demo data has proper structure for presentation."""
@@ -348,27 +320,11 @@ class TestSingleStepEndpoint:
         assert "dmas_executed" in key_insights
         assert len(key_insights["dmas_executed"]) == 3
 
-    def test_enhanced_response_with_different_step_points(self, client, auth_headers, mock_app_with_services):
+    def test_enhanced_response_with_different_step_points(self, client, auth_headers, mock_app_with_services, mock_step_result_gather_context):
         """Test enhanced response adapts to different step points."""
-        # Mock a different step result
-        mock_build_context_result = StepResultBuildContext(
-            step_point=StepPoint.BUILD_CONTEXT,
-            success=True,
-            thought_id="thought_002",
-            system_snapshot={"agent_state": "active", "services": 25},
-            agent_identity={"agent_id": "test_agent", "role": "assistant"},
-            thought_context={"user_id": "test_user", "channel": "test_channel"},
-            channel_context={"type": "discord", "permissions": ["read", "write"]},
-            memory_context={"relevant_memories": 3},
-            permitted_actions=["speak", "observe"],
-            constraints=["no_harmful_content"],
-            context_size_bytes=2048,
-            memory_queries_performed=2,
-        )
-        
-        # Update pipeline controller mock
+        # Update pipeline controller mock to use centralized fixture
         runtime = mock_app_with_services.state.runtime
-        runtime.pipeline_controller.get_latest_step_result.return_value = mock_build_context_result
+        runtime.pipeline_controller.get_latest_step_result.return_value = mock_step_result_gather_context
         
         response = client.post(
             "/v1/system/runtime/step",
@@ -380,9 +336,9 @@ class TestSingleStepEndpoint:
         step_data = response.json()["data"]
         
         # Verify step point changed  
-        assert step_data["step_point"] == StepPoint.BUILD_CONTEXT.value
+        assert step_data["step_point"] == StepPoint.GATHER_CONTEXT.value
         
-        # Verify step result structure for BUILD_CONTEXT
+        # Verify step result structure for GATHER_CONTEXT
         step_result = step_data["step_result"]
         assert "system_snapshot" in step_result
         assert "agent_identity" in step_result

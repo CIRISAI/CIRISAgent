@@ -58,6 +58,17 @@ from tests.fixtures.runtime_control import (  # noqa: E402
     mock_step_result_gather_context,
     mock_api_runtime_control_service,
 )
+from tests.fixtures.mocks import MockRuntime  # noqa: E402
+
+
+@pytest.fixture
+def mock_runtime(mock_step_result_perform_dmas):
+    """Create a centralized MockRuntime with step result data."""
+    runtime = MockRuntime()
+    # Connect the centralized step result fixture
+    runtime.pipeline_controller.get_latest_step_result.return_value = mock_step_result_perform_dmas
+    return runtime
+
 
 # Make fixtures available to all tests by explicitly referencing them
 __all__ = [
@@ -68,6 +79,7 @@ __all__ = [
     "mock_step_result_perform_dmas",
     "mock_step_result_gather_context",
     "mock_api_runtime_control_service",
+    "mock_runtime",
 ]
 
 

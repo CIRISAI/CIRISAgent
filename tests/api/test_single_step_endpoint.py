@@ -64,70 +64,10 @@ class TestSingleStepEndpoint:
 
 
     @pytest.fixture
-    def mock_pipeline_controller(self, mock_step_result_perform_dmas):
-        """Create mock pipeline controller with step point data."""
-        mock = MagicMock()
-        
-        # Mock current pipeline state
-        mock.get_current_state.return_value = PipelineState(
-            is_paused=True,
-            current_round=5,
-            thoughts_by_step={
-                str(StepPoint.GATHER_CONTEXT): [
-                    ThoughtInPipeline(
-                        thought_id="thought_001",
-                        task_id="task_001",
-                        thought_type="user_request",
-                        current_step=StepPoint.GATHER_CONTEXT,
-                        entered_step_at=datetime.now(timezone.utc),
-                        processing_time_ms=200.0,
-                    )
-                ],
-                str(StepPoint.PERFORM_DMAS): [
-                    ThoughtInPipeline(
-                        thought_id="thought_001",
-                        task_id="task_001", 
-                        thought_type="user_request",
-                        current_step=StepPoint.PERFORM_DMAS,
-                        entered_step_at=datetime.now(timezone.utc),
-                        processing_time_ms=800.0,
-                    )
-                ],
-            },
-            task_queue=[],
-            thought_queue=[],
-        )
-        
-        # Use centralized mock step result
-        mock.get_latest_step_result.return_value = mock_step_result_perform_dmas
-        
-        # Mock processing metrics
-        mock.get_processing_metrics.return_value = {
-            "total_processing_time_ms": 1250.0,
-            "tokens_used": 150,
-            "step_timings": {
-                "GATHER_CONTEXT": 200.0,
-                "PERFORM_DMAS": 800.0,
-                "PERFORM_ASPDMA": 250.0,
-            }
-        }
-        
-        return mock
-
-
-    @pytest.fixture
-    def mock_app_with_services(self, app, mock_api_runtime_control_service, mock_pipeline_controller):
-        """Configure app with mocked services."""
+    def mock_app_with_services(self, app, mock_api_runtime_control_service, mock_runtime):
+        """Configure app with centralized mocked services."""
         app.state.main_runtime_control_service = mock_api_runtime_control_service
-        
-        # Mock runtime with pipeline controller
-        mock_runtime = MagicMock()
-        mock_runtime.pipeline_controller = mock_pipeline_controller
-        mock_runtime.agent_processor = MagicMock()
-        mock_runtime.agent_processor.state_manager = MagicMock()
-        mock_runtime.agent_processor.state_manager.get_state.return_value = "WORK"
         app.state.runtime = mock_runtime
-        
         return app
 
     def test_basic_single_step_backward_compatibility(self, client, auth_headers, mock_app_with_services):
@@ -233,16 +173,16 @@ class TestSingleStepEndpoint:
         assert "is_paused" in pipeline_state
         assert pipeline_state["is_paused"] is True
         assert "current_round" in pipeline_state
-        assert pipeline_state["current_round"] == 5
+        assert pipeline_state["current_round"] == 2
         assert "thoughts_by_step" in pipeline_state
         
-        # Verify thoughts by step data
+        # Verify thoughts by step data - use enum values, not string representation
         thoughts_by_step = pipeline_state["thoughts_by_step"]
-        assert str(StepPoint.GATHER_CONTEXT) in thoughts_by_step
-        assert str(StepPoint.PERFORM_DMAS) in thoughts_by_step
+        assert StepPoint.GATHER_CONTEXT.value in thoughts_by_step  # "gather_context"
+        assert StepPoint.PERFORM_DMAS.value in thoughts_by_step    # "perform_dmas"
         
-        # Verify thought structure  
-        context_thoughts = thoughts_by_step[str(StepPoint.GATHER_CONTEXT)]
+        # Verify thought structure using enum values
+        context_thoughts = thoughts_by_step[StepPoint.GATHER_CONTEXT.value]
         assert len(context_thoughts) == 1
         assert context_thoughts[0]["thought_id"] == "thought_001"
         assert context_thoughts[0]["task_id"] == "task_001"

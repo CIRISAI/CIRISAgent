@@ -10,7 +10,10 @@ import shutil
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 class DirectorySetupError(Exception):
@@ -211,6 +214,7 @@ def setup_application_directories(
     group_id: Optional[int] = None,
     fail_fast: bool = True,
     check_database_access: bool = True,
+    essential_config: Optional["EssentialConfig"] = None,
 ) -> None:
     """
     Set up all required application directories with correct permissions.
@@ -224,6 +228,7 @@ def setup_application_directories(
         group_id: Group ID to own the directories (defaults to current group)
         fail_fast: If True, exit immediately on any error (default True)
         check_database_access: If True, verify exclusive database access (default True)
+        essential_config: Optional EssentialConfig for database path (avoids service registry lookup)
 
     Raises:
         DirectorySetupError: If any directory setup fails
@@ -239,15 +244,21 @@ def setup_application_directories(
 
     # First, ensure exclusive database access (before any other checks)
     if check_database_access:
-        try:
-            from ciris_engine.logic.config import get_sqlite_db_full_path
-            main_db_path = get_sqlite_db_full_path()
+        if essential_config:
+            # Use the provided config directly
+            main_db_path = str(Path(essential_config.database.main_db).resolve())
             ensure_database_exclusive_access(main_db_path, fail_fast)
-        except ImportError:
-            # During early bootstrap, config may not be available yet
-            # Default to checking the most likely database path
-            default_db_path = str(base_dir / "data" / "ciris_engine.db")
-            ensure_database_exclusive_access(default_db_path, fail_fast)
+        else:
+            # Try to get config from service registry
+            try:
+                from ciris_engine.logic.config import get_sqlite_db_full_path
+                main_db_path = get_sqlite_db_full_path()
+                ensure_database_exclusive_access(main_db_path, fail_fast)
+            except (ImportError, RuntimeError):
+                # During early bootstrap, config may not be available yet
+                # Default to checking the most likely database path
+                default_db_path = str(base_dir / "data" / "ciris_engine.db")
+                ensure_database_exclusive_access(default_db_path, fail_fast)
 
     # Check disk space
     _check_disk_space_or_fail(base_dir, fail_fast)

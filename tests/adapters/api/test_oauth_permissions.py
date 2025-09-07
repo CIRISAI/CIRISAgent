@@ -22,9 +22,12 @@ from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
 from ciris_engine.logic.runtime.prevent_sideeffects import allow_runtime_creation
 from ciris_engine.schemas.config.essential import EssentialConfig
 
+# Import the existing central mock fixture
+from tests.conftest_config_mock import mock_runtime_db_setup
+
 
 @pytest_asyncio.fixture
-async def test_runtime(random_api_port):
+async def test_runtime(random_api_port, mock_runtime_db_setup):
     """Create a test runtime for OAuth testing."""
     # Allow runtime creation for this test
     allow_runtime_creation()

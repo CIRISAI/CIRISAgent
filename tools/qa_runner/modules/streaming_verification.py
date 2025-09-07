@@ -36,21 +36,21 @@ from ..config import QAConfig, QAModule, QATestCase
 class StreamingVerificationModule:
     """Verify all 11 H3ERE pipeline steps are streaming correctly."""
 
-    # All possible step points in the H3ERE pipeline
+    # All possible step points in the H3ERE pipeline (lowercase to match actual streaming)
     EXPECTED_STEPS = {
-        "START_ROUND",
-        "GATHER_CONTEXT",
-        "PERFORM_DMAS",
-        "PERFORM_ASPDMA",
-        "CONSCIENCE_EXECUTION",
-        "FINALIZE_ACTION",
-        "PERFORM_ACTION",
-        "ACTION_COMPLETE",
-        "ROUND_COMPLETE",
+        "start_round",
+        "gather_context",
+        "perform_dmas",
+        "perform_aspdma",
+        "conscience_execution",
+        "finalize_action",
+        "perform_action",
+        "action_complete",
+        "round_complete",
     }
 
     # Conditional steps that may not always fire
-    CONDITIONAL_STEPS = {"RECURSIVE_ASPDMA", "RECURSIVE_CONSCIENCE"}
+    CONDITIONAL_STEPS = {"recursive_aspdma", "recursive_conscience"}
 
     @staticmethod
     def verify_streaming_steps(base_url: str, token: str, timeout: int = 30) -> Dict[str, Any]:
@@ -99,9 +99,13 @@ class StreamingVerificationModule:
                         try:
                             data = json.loads(line[6:])  # Skip "data: " prefix
 
+                            # Debug: print raw data structure
+                            print(f"[DEBUG] Raw SSE data keys: {list(data.keys())}")
+
                             # Extract step information from updated thoughts
                             for thought in data.get("updated_thoughts", []):
                                 step_point = thought.get("current_step")
+                                print(f"[DEBUG] Thought {thought.get('thought_id')} has step: {step_point}")
                                 if step_point:
                                     received_steps.add(step_point)
                                     step_details.append(
@@ -117,7 +121,9 @@ class StreamingVerificationModule:
                             # Also check step summaries
                             for summary in data.get("step_summaries", []):
                                 step_point = summary.get("step_point")
-                                if step_point and summary.get("processing_count", 0) > 0:
+                                count = summary.get("processing_count", 0)
+                                print(f"[DEBUG] Step summary: {step_point} with count: {count}")
+                                if step_point and count > 0:
                                     received_steps.add(step_point)
 
                         except json.JSONDecodeError as e:
@@ -218,7 +224,7 @@ class StreamingVerificationModule:
     def run_custom_test(test_case: QATestCase, config: QAConfig, token: str) -> Dict[str, Any]:
         """Run custom streaming verification test."""
         if test_case.custom_handler == "verify_streaming_steps":
-            result = StreamingVerificationModule.verify_streaming_steps(config.url, token, test_case.timeout)
+            result = StreamingVerificationModule.verify_streaming_steps(config.base_url, token, test_case.timeout)
 
             # Format result for QA runner
             if result["success"]:

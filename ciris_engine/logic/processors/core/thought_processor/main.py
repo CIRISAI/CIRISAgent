@@ -125,6 +125,9 @@ class ThoughtProcessor(
             logger.warning(f"ThoughtProcessor: Could not fetch thought {thought_item.thought_id}")
             return None
 
+        # 0. START_ROUND - Initialize processing round
+        await self._start_round_step(thought_item, context)
+
         # 1. GATHER_CONTEXT - Build processing context
         thought_context = await self._gather_context_step(thought_item, context)
 

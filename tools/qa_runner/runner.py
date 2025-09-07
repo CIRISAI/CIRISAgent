@@ -89,14 +89,14 @@ class QARunner:
 
     def _check_incidents_for_test(self, test_name: str) -> List[str]:
         """Check incidents log for errors during a specific test.
-        
+
         Returns list of critical incidents found.
         """
         incidents_log = Path("logs/incidents_latest.log")
-        
+
         if not incidents_log.exists():
             return []
-        
+
         # Patterns to ignore (non-critical)
         ignore_patterns = [
             "MOCK_MODULE_LOADED",
@@ -110,28 +110,28 @@ class QARunner:
             "APIToolService not started",
             "APICommunicationService not started",
         ]
-        
+
         critical_errors = []
-        
+
         try:
             # Get file size to track new entries
             current_size = incidents_log.stat().st_size
-            
+
             # Only read new entries since last check
-            if not hasattr(self, '_last_incidents_position'):
+            if not hasattr(self, "_last_incidents_position"):
                 self._last_incidents_position = 0
-                
+
             if current_size > self._last_incidents_position:
-                with open(incidents_log, 'r') as f:
+                with open(incidents_log, "r") as f:
                     f.seek(self._last_incidents_position)
-                    
+
                     for line in f:
                         # Check if line contains ERROR or CRITICAL
                         if "ERROR" in line or "CRITICAL" in line:
                             # Skip if it matches an ignore pattern
                             if any(pattern in line for pattern in ignore_patterns):
                                 continue
-                            
+
                             # Extract the error message
                             if " - ERROR - " in line:
                                 parts = line.split(" - ERROR - ")
@@ -140,12 +140,12 @@ class QARunner:
                                     # Skip very long errors (likely stack traces)
                                     if len(error_msg) < 500:
                                         critical_errors.append(f"[{test_name}] {error_msg}")
-                                        
+
                 self._last_incidents_position = current_size
-                
+
         except Exception as e:
             logger.error(f"Error checking incidents log: {e}")
-            
+
         return critical_errors
 
     def _check_incidents_log(self):
@@ -287,7 +287,9 @@ class QARunner:
                     if incidents:
                         result["incidents"] = incidents
                         if self.config.verbose:
-                            self.console.print(f"[yellow]⚠️  Found {len(incidents)} incidents during {test.name}[/yellow]")
+                            self.console.print(
+                                f"[yellow]⚠️  Found {len(incidents)} incidents during {test.name}[/yellow]"
+                            )
 
                     if not passed:
                         all_passed = False
@@ -299,28 +301,28 @@ class QARunner:
     def _run_single_test(self, test: QATestCase) -> Tuple[bool, Dict]:
         """Run a single test case with enhanced validation support."""
         # Handle repeat_count for multi-execution tests
-        if hasattr(test, 'repeat_count') and test.repeat_count > 1:
+        if hasattr(test, "repeat_count") and test.repeat_count > 1:
             return self._run_repeated_test(test)
-        
+
         return self._execute_single_test(test)
-    
+
     def _run_repeated_test(self, test: QATestCase) -> Tuple[bool, Dict]:
         """Run a test multiple times and aggregate results."""
         results = []
         all_passed = True
-        
+
         # Store auth token in config for custom validators
-        if hasattr(self.config, '_auth_token') is False:
+        if hasattr(self.config, "_auth_token") is False:
             self.config._auth_token = self.token
-        
+
         for i in range(test.repeat_count):
             passed, result = self._execute_single_test(test)
             result["execution_number"] = i + 1
             results.append(result)
-            
+
             if not passed:
                 all_passed = False
-        
+
         # Aggregate results
         aggregated_result = {
             "success": all_passed,
@@ -329,9 +331,9 @@ class QARunner:
             "successful_executions": sum(1 for r in results if r.get("success")),
             "duration": sum(r.get("duration", 0) for r in results),
         }
-        
+
         return all_passed, aggregated_result
-    
+
     def _execute_single_test(self, test: QATestCase) -> Tuple[bool, Dict]:
         """Run a single test case."""
         headers = {}
@@ -343,9 +345,21 @@ class QARunner:
         for attempt in range(self.config.retry_count):
             try:
                 if test.method == "GET":
-                    response = requests.get(
-                        f"{self.config.base_url}{test.endpoint}", headers=headers, timeout=test.timeout
-                    )
+                    # Special handling for SSE endpoints
+                    if test.endpoint and "reasoning-stream" in test.endpoint:
+                        # SSE endpoint - just verify it connects
+                        response = requests.get(
+                            f"{self.config.base_url}{test.endpoint}",
+                            headers=headers,
+                            stream=True,
+                            timeout=2,  # Short timeout for connection
+                        )
+                        # Close immediately after verifying connection
+                        response.close()
+                    else:
+                        response = requests.get(
+                            f"{self.config.base_url}{test.endpoint}", headers=headers, timeout=test.timeout
+                        )
                 elif test.method == "POST":
                     response = requests.post(
                         f"{self.config.base_url}{test.endpoint}",
@@ -368,7 +382,7 @@ class QARunner:
                     # WebSocket testing support
                     if self.config.verbose:
                         self.console.print(f"[cyan]Testing WebSocket: {test.endpoint}[/cyan]")
-                    
+
                     try:
                         import websocket
                     except ImportError:
@@ -377,61 +391,59 @@ class QARunner:
                             "error": "websocket-client not installed",
                             "duration": time.time() - start_time,
                         }
-                    
+
                     # Convert HTTP URL to WebSocket URL
                     ws_url = self.config.base_url.replace("http://", "ws://").replace("https://", "wss://")
                     ws_url = f"{ws_url}{test.endpoint}"
-                    
+
                     if self.config.verbose:
                         self.console.print(f"[cyan]WebSocket URL: {ws_url}[/cyan]")
-                    
+
                     try:
                         # Add auth header if needed
                         ws_headers = []
                         if test.requires_auth and self.token:
                             ws_headers.append(f"Authorization: Bearer {self.token}")
-                        
+
                         # Try to connect with short timeout
                         if self.config.verbose:
                             self.console.print(f"[cyan]Attempting WebSocket connection...[/cyan]")
-                        
+
                         ws = websocket.create_connection(
-                            ws_url,
-                            header=ws_headers,
-                            timeout=2  # Short timeout for WebSocket handshake
+                            ws_url, header=ws_headers, timeout=2  # Short timeout for WebSocket handshake
                         )
                         ws.close()
-                        
+
                         # WebSocket connected successfully (101 Switching Protocols)
                         if self.config.verbose:
                             self.console.print(f"[green]✅ {test.name} - Connected![/green]")
-                        
+
                         result = {
                             "success": True,
                             "status_code": 101,
                             "duration": time.time() - start_time,
                             "attempts": attempt + 1,
-                            "message": "WebSocket connection established"
+                            "message": "WebSocket connection established",
                         }
                         break  # Success, exit retry loop
-                        
+
                     except websocket.WebSocketException as e:
                         error_msg = str(e)
                         if self.config.verbose:
                             self.console.print(f"[yellow]WebSocket error: {error_msg}[/yellow]")
-                        
+
                         # Check if it's an auth/forbidden error (endpoint exists but auth failed)
                         if any(code in error_msg for code in ["401", "403", "Handshake status"]):
                             # This is expected - endpoint exists but requires proper auth
                             if self.config.verbose:
                                 self.console.print(f"[green]✅ {test.name} (endpoint verified)[/green]")
-                            
+
                             result = {
                                 "success": True,
                                 "status_code": 101,
                                 "duration": time.time() - start_time,
                                 "attempts": attempt + 1,
-                                "message": "WebSocket endpoint verified (auth required)"
+                                "message": "WebSocket endpoint verified (auth required)",
                             }
                             break  # Success, exit retry loop
                         else:
@@ -440,12 +452,12 @@ class QARunner:
                                 # Last attempt, fail the test
                                 if self.config.verbose:
                                     self.console.print(f"[red]❌ {test.name}: {error_msg[:100]}[/red]")
-                                
+
                                 return False, {
                                     "success": False,
                                     "error": f"WebSocket failed: {error_msg[:200]}",
                                     "duration": time.time() - start_time,
-                                    "attempts": attempt + 1
+                                    "attempts": attempt + 1,
                                 }
                             else:
                                 # Not last attempt, wait and retry
@@ -458,11 +470,39 @@ class QARunner:
                                 "success": False,
                                 "error": f"Unexpected error: {str(e)[:200]}",
                                 "duration": time.time() - start_time,
-                                "attempts": attempt + 1
+                                "attempts": attempt + 1,
                             }
                         else:
                             time.sleep(retry_delay)
                             continue
+                elif test.method == "CUSTOM":
+                    # Custom method handler for special tests like streaming verification
+                    if test.custom_handler:
+                        from .modules.streaming_verification import StreamingVerificationModule
+
+                        custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
+                        if custom_result["success"]:
+                            result = {
+                                "success": True,
+                                "status_code": 200,
+                                "duration": time.time() - start_time,
+                                "attempts": attempt + 1,
+                                "custom_result": custom_result,
+                            }
+                        else:
+                            return False, {
+                                "success": False,
+                                "error": custom_result.get("message", "Custom test failed"),
+                                "duration": time.time() - start_time,
+                                "custom_result": custom_result,
+                            }
+                        break
+                    else:
+                        return False, {
+                            "success": False,
+                            "error": f"Custom handler not found for test: {test.name}",
+                            "duration": time.time() - start_time,
+                        }
                 else:
                     return False, {
                         "success": False,
@@ -504,7 +544,7 @@ class QARunner:
                     # Enhanced validation support
                     validation_passed, validation_result = self._validate_response(test, response)
                     result.update(validation_result)
-                    
+
                     if not validation_passed:
                         result["success"] = False
                         if self.config.verbose:
@@ -554,15 +594,13 @@ class QARunner:
         # If we got here and result was set (e.g., by WebSocket test breaking loop), return it
         if "result" in locals() and result:
             return result.get("success", False), result
-        
+
         return False, {"success": False, "error": "Max retries exceeded"}
-    
+
     def _validate_response(self, test: QATestCase, response) -> Tuple[bool, Dict]:
         """Validate response using validation rules and custom validation."""
-        validation_result = {
-            "validation": {"passed": True, "details": {}, "errors": []}
-        }
-        
+        validation_result = {"validation": {"passed": True, "details": {}, "errors": []}}
+
         try:
             # Get response data for validation
             response_data = None
@@ -570,43 +608,43 @@ class QARunner:
                 response_data = response.json()
             except:
                 response_data = {"raw_text": response.text}
-            
+
             # Apply validation rules
-            if hasattr(test, 'validation_rules') and test.validation_rules:
+            if hasattr(test, "validation_rules") and test.validation_rules:
                 for rule_name, rule_func in test.validation_rules.items():
                     try:
                         rule_passed = rule_func(response_data)
                         validation_result["validation"]["details"][rule_name] = rule_passed
-                        
+
                         if not rule_passed:
                             validation_result["validation"]["errors"].append(f"Rule '{rule_name}' failed")
                             validation_result["validation"]["passed"] = False
                     except Exception as e:
                         validation_result["validation"]["errors"].append(f"Rule '{rule_name}' error: {str(e)}")
                         validation_result["validation"]["passed"] = False
-            
+
             # Apply custom validation
-            if hasattr(test, 'custom_validation') and test.custom_validation:
-                # Store auth token in config for custom validators  
-                if hasattr(self.config, '_auth_token') is False:
+            if hasattr(test, "custom_validation") and test.custom_validation:
+                # Store auth token in config for custom validators
+                if hasattr(self.config, "_auth_token") is False:
                     self.config._auth_token = self.token
-                
+
                 try:
                     custom_result = test.custom_validation(response, self.config)
                     validation_result["validation"]["custom"] = custom_result
-                    
+
                     if not custom_result.get("passed", True):
                         validation_result["validation"]["passed"] = False
                         validation_result["validation"]["errors"].extend(custom_result.get("errors", []))
-                
+
                 except Exception as e:
                     validation_result["validation"]["errors"].append(f"Custom validation error: {str(e)}")
                     validation_result["validation"]["passed"] = False
-            
+
         except Exception as e:
             validation_result["validation"]["errors"].append(f"Validation framework error: {str(e)}")
             validation_result["validation"]["passed"] = False
-        
+
         return validation_result["validation"]["passed"], validation_result
 
     def _generate_reports(self):
@@ -769,7 +807,7 @@ class QARunner:
         for key, result in self.results.items():
             if "incidents" in result and result["incidents"]:
                 tests_with_incidents.append((key, result["incidents"]))
-        
+
         if tests_with_incidents:
             self.console.print("\n[yellow]Tests with Incidents:[/yellow]")
             for key, incidents in tests_with_incidents:

@@ -386,30 +386,35 @@ class TestIntegrationFlow:
         """Test step execution with pause/resume in single-step mode."""
         enable_single_step_mode()
         
-        execution_log = []
-        
-        # Mock pause to simulate single-step behavior
-        async def mock_pause(thought_id, step):
-            execution_log.append(f"paused_at_{step.value}")
-            # Immediate resume for testing
-        
-        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result'):
-            with patch('ciris_engine.logic.processors.core.step_decorators._pause_thought_execution', mock_pause):
-                
-                @streaming_step(StepPoint.PERFORM_ASPDMA)
-                @step_point(StepPoint.PERFORM_ASPDMA)
-                async def step_with_pause(self, thought_item):
-                    execution_log.append("step_executed")
-                    return "result"
-                
-                mock_processor = Mock()
-                mock_processor._time_service = Mock()
-                mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
-                
-                mock_thought = Mock(thought_id="pause-test")
-                
-                result = await step_with_pause(mock_processor, mock_thought)
-                
-                # Verify pause occurred before execution
-                assert execution_log == ["paused_at_perform_aspdma", "step_executed"]
-                assert result == "result"
+        try:
+            execution_log = []
+            
+            # Mock pause to simulate single-step behavior
+            async def mock_pause(thought_id, step):
+                execution_log.append(f"paused_at_{step.value}")
+                # Immediate resume for testing
+            
+            with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result'):
+                with patch('ciris_engine.logic.processors.core.step_decorators._pause_thought_execution', mock_pause):
+                    
+                    @streaming_step(StepPoint.PERFORM_ASPDMA)
+                    @step_point(StepPoint.PERFORM_ASPDMA)
+                    async def step_with_pause(self, thought_item):
+                        execution_log.append("step_executed")
+                        return "result"
+                    
+                    mock_processor = Mock()
+                    mock_processor._time_service = Mock()
+                    mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+                    
+                    mock_thought = Mock(thought_id="pause-test")
+                    
+                    result = await step_with_pause(mock_processor, mock_thought)
+                    
+                    # Verify pause occurred before execution
+                    assert execution_log == ["paused_at_perform_aspdma", "step_executed"]
+                    assert result == "result"
+        finally:
+            # CRITICAL: Always disable single-step mode to prevent test order dependencies
+            disable_single_step_mode()
+            _paused_thoughts.clear()

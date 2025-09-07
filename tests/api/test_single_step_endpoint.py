@@ -303,10 +303,10 @@ class TestSingleStepEndpoint:
         assert "tokens_used" in step_data  # Field exists, may be None
 
     def test_enhanced_response_error_handling_step_result_exception(self, client, auth_headers, mock_app_with_services):
-        """Test enhanced response handles step result extraction errors."""
-        # Mock pipeline controller to raise exception
-        runtime = mock_app_with_services.state.runtime
-        runtime.pipeline_controller.get_latest_step_result.side_effect = Exception("Step result error")
+        """Test API error handling when runtime control service fails."""
+        # Mock runtime control service to raise exception (line 225 in SUT)
+        runtime_control = mock_app_with_services.state.main_runtime_control_service
+        runtime_control.single_step.side_effect = Exception("Runtime control error")
         
         response = client.post(
             "/v1/system/runtime/step",
@@ -314,14 +314,11 @@ class TestSingleStepEndpoint:
             json={}
         )
         
-        assert response.status_code == status.HTTP_200_OK
-        step_data = response.json()["data"]
-        
-        # Verify basic response still succeeds
-        assert step_data["success"] is True
-        
-        # Verify enhanced fields handle errors gracefully
-        assert step_data["step_result"] is None
+        # SUT raises HTTPException(500) when runtime_control.single_step() fails (lines 280-282)
+        assert response.status_code == 500
+        error_data = response.json()
+        assert "detail" in error_data
+        assert "Runtime control error" in error_data["detail"]
 
     def test_enhanced_response_queue_depth_accuracy(self, client, auth_headers, mock_app_with_services):
         """Test that enhanced response provides accurate queue depth."""

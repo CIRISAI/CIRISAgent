@@ -73,99 +73,40 @@ class RecursiveProcessingPhase:
 
     @streaming_step(StepPoint.RECURSIVE_ASPDMA)
     @step_point(StepPoint.RECURSIVE_ASPDMA, conditional=True)
-    async def _recursive_aspdma_step(self, thought_item, thought_context, dma_results, conscience_result):
-        """
-        Step 5a: Retry action selection with conscience guidance (conditional).
+    async def _recursive_aspdma_step(self, thought_item: ProcessingQueueItem, thought_context, dma_results, override_reason: str):
+        """Step 3B: Optional retry action selection after conscience failure."""
+        thought = await self._fetch_thought(thought_item.thought_id)
         
-        This decorated method automatically handles:
-        - Real-time streaming of retry progress
-        - Single-step pause/resume capability (conditional execution)
-        - Conscience feedback integration
-        
-        Args:
-            thought_item: The thought being processed
-            thought_context: Processing context
-            dma_results: Original DMA results
-            conscience_result: Failed conscience validation with guidance
-            
-        Returns:
-            New ActionSelectionDMAResult or None if retry fails
-        """
         try:
-            # Extract conscience feedback for guidance
-            override_reason = conscience_result.override_reason or "Action failed conscience checks"
-            attempted_action = self._describe_action(conscience_result.original_action)
-
-            # Create enhanced context with conscience feedback
-            retry_context = thought_context
-            if hasattr(thought_context, "model_copy"):
-                retry_context = thought_context.model_copy()
-
-            # Set flag indicating this is a conscience retry
-            retry_context.is_conscience_retry = True
-
-            # Add conscience guidance to the thought item
-            setattr(
-                thought_item,
-                "conscience_feedback",
-                {
-                    "failed_action": attempted_action,
-                    "failure_reason": override_reason,
-                    "retry_guidance": (
-                        f"Your previous attempt to {attempted_action} was rejected because: {override_reason}. "
-                        "Please select a DIFFERENT action that better aligns with ethical principles and safety guidelines. "
-                        "Consider: Is there a more cautious approach? Should you gather more information first? "
-                        "Can this task be marked as complete without further action? "
-                        "Remember: DEFER only if the task MUST be done AND requires human approval."
-                    ),
-                },
+            # Re-run action selection with guidance about why previous action failed
+            retry_result = await self._perform_aspdma_with_guidance(
+                thought, thought_context, dma_results, override_reason, max_retries=3
             )
-
-            logger.debug(f"Attempting recursive ASPDMA for thought {thought_item.thought_id}")
-            
-            # Re-run action selection with guidance
-            retry_result = await self._perform_aspdma_with_retry(
-                thought_item, retry_context, dma_results, max_retries=1
-            )
-            
-            logger.info(f"Recursive ASPDMA completed for thought {thought_item.thought_id}")
             return retry_result
-            
         except Exception as e:
             logger.error(f"Recursive ASPDMA failed for thought {thought_item.thought_id}: {e}")
             return None
 
     @streaming_step(StepPoint.RECURSIVE_CONSCIENCE)
     @step_point(StepPoint.RECURSIVE_CONSCIENCE, conditional=True)
-    async def _recursive_conscience_step(self, thought_item, retry_result):
-        """
-        Step 5b: Re-validate retry action with consciences (conditional).
-        
-        This decorated method automatically handles:
-        - Real-time streaming of re-validation progress
-        - Single-step pause/resume capability (conditional execution)
-        - Final conscience decision
-        
-        Args:
-            thought_item: The thought being processed
-            retry_result: Action result from recursive ASPDMA
+    async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result):
+        """Step 4B: Optional re-validation if recursive action failed."""
+        if not retry_result:
+            return retry_result, []
             
-        Returns:
-            Conscience result for the retry attempt
-        """
         try:
-            logger.debug(f"Re-applying consciences to retry for thought {thought_item.thought_id}")
-            
-            conscience_results = await self.conscience_registry.apply_all_consciences(
+            recursive_conscience_results = await self.conscience_registry.apply_all_consciences(
                 retry_result, thought_item
             )
             
-            logger.info(f"Recursive conscience validation completed for thought {thought_item.thought_id}")
-            return conscience_results
+            # Check if recursive conscience passed
+            final_conscience_passed = all(result.passed for result in recursive_conscience_results)
+            retry_result.conscience_passed = final_conscience_passed
             
+            return retry_result, recursive_conscience_results
         except Exception as e:
             logger.error(f"Recursive conscience execution failed for thought {thought_item.thought_id}: {e}")
-            return retry_result
+            return retry_result, []
 
     async def _perform_aspdma_with_retry(self, thought_item, thought_context, dma_results, max_retries=3):
         """Helper method for ASPDMA execution with retry logic."""

@@ -28,37 +28,20 @@ class ConscienceExecutionPhase:
     @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
     @step_point(StepPoint.CONSCIENCE_EXECUTION)
     async def _conscience_execution_step(self, thought_item: ProcessingQueueItem, action_result):
-        """
-        Step 4: Apply ethical safety validation to selected action.
-        
-        This decorated method automatically handles:
-        - Real-time streaming of conscience validation progress
-        - Single-step pause/resume capability
-        - Comprehensive conscience result processing
-        
-        Args:
-            thought_item: The thought being processed
-            action_result: Action selected in ASPDMA step
-            
-        Returns:
-            Conscience result with validation outcome and any overrides
-        """
+        """Step 4: Ethical safety validation."""
         if not action_result:
-            logger.warning(f"No action result to validate for thought {thought_item.thought_id}")
             return action_result
             
         try:
-            logger.debug(f"Applying consciences for thought {thought_item.thought_id}")
-            
-            # Apply all registered consciences to the selected action
             conscience_results = await self.conscience_registry.apply_all_consciences(
                 action_result, thought_item
             )
             
-            logger.info(f"Conscience validation completed for thought {thought_item.thought_id}")
-            return conscience_results
+            # Check if conscience passed
+            conscience_passed = all(result.passed for result in conscience_results)
+            action_result.conscience_passed = conscience_passed
             
+            return action_result, conscience_results
         except Exception as e:
             logger.error(f"Conscience execution failed for thought {thought_item.thought_id}: {e}")
-            # Return the original action if conscience fails
-            return action_result
+            return action_result, []

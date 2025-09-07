@@ -77,7 +77,7 @@ class TestThoughtProcessor:
         # Patch persistence in multiple places where it's imported
         from unittest.mock import AsyncMock
 
-        with patch("ciris_engine.logic.processors.core.thought_processor.persistence") as mock_persist, patch(
+        with patch("ciris_engine.logic.processors.core.thought_processor.main.persistence") as mock_persist, patch(
             "ciris_engine.logic.persistence"
         ) as mock_persist_global:
             # Create a mock thought object

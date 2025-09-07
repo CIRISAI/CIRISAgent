@@ -26,61 +26,21 @@ class ActionExecutionPhase:
 
     @streaming_step(StepPoint.PERFORM_ACTION)
     @step_point(StepPoint.PERFORM_ACTION)
-    async def _perform_action_step(self, thought_item: ProcessingQueueItem, action_result, context: dict):
-        """
-        Step 7a: Dispatch action to handler for execution.
-        
-        This decorated method automatically handles:
-        - Real-time streaming of action dispatch progress
-        - Single-step pause/resume capability
-        - Action preparation for handler dispatch
-        
-        Args:
-            thought_item: The thought being processed
-            action_result: Final action to execute
-            context: Dispatch context
-            
-        Returns:
-            The action result (unchanged - actual dispatch happens in base processor)
-        """
-        logger.debug(f"Preparing action dispatch for thought {thought_item.thought_id}")
-        
-        # This step is primarily for streaming and step-point functionality
-        # The actual dispatch logic is handled by the base processor's dispatch_action method
-        # We just pass through the result and let the orchestrator handle the actual dispatch
-        
-        logger.info(f"Action prepared for dispatch: {action_result.selected_action} for thought {thought_item.thought_id}")
-        return action_result
+    async def _perform_action_step(self, thought_item: ProcessingQueueItem, result, context: dict):
+        """Step 6: Dispatch action to handler."""
+        # This step is handled by base_processor dispatch_action method
+        # Just pass through the result - actual dispatch happens after this
+        return result
 
     @streaming_step(StepPoint.ACTION_COMPLETE)
     @step_point(StepPoint.ACTION_COMPLETE)
     async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result):
-        """
-        Step 7b: Mark action execution as complete.
-        
-        This decorated method automatically handles:
-        - Real-time streaming of completion status
-        - Single-step pause/resume capability
-        - Final result processing
-        
-        Args:
-            thought_item: The thought being processed
-            dispatch_result: Result from action handler execution
-            
-        Returns:
-            Completion status information
-        """
-        logger.debug(f"Marking action complete for thought {thought_item.thought_id}")
-        
-        # Process the dispatch result and create completion status
-        completion_status = {
+        """Step 7: Action execution completed."""
+        # This step is handled by base_processor after dispatch
+        # Mark the completion status
+        return {
             "thought_id": thought_item.thought_id,
             "action_completed": True,
             "dispatch_success": dispatch_result.get("success", True) if isinstance(dispatch_result, dict) else True,
             "execution_time_ms": dispatch_result.get("execution_time_ms", 0.0) if isinstance(dispatch_result, dict) else 0.0,
-            "handler_completed": dispatch_result.get("completed", True) if isinstance(dispatch_result, dict) else True,
-            "follow_up_processing_pending": dispatch_result.get("has_follow_up", False) if isinstance(dispatch_result, dict) else False,
         }
-        
-        logger.info(f"Action execution completed for thought {thought_item.thought_id}")
-        return completion_status

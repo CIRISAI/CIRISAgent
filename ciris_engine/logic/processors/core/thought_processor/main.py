@@ -97,16 +97,13 @@ class ThoughtProcessor(
         # Initialize correlation for tracking
         correlation = ServiceCorrelation(
             correlation_id=f"thought_processing_{thought_item.thought_id}_{start_time.timestamp()}",
-            correlation_type=CorrelationType.THOUGHT_PROCESSING,
-            service_name="ThoughtProcessor",
-            operation_name="process_thought",
-            initiated_at=start_time.isoformat(),
-            request_context=TraceContext(
-                thought_id=thought_item.thought_id,
-                task_id=thought_item.source_task_id,
-                correlation_id=f"thought_processing_{thought_item.thought_id}_{start_time.timestamp()}",
-                operation_type="process_thought",
-            ),
+            correlation_type=CorrelationType.SERVICE_INTERACTION,
+            service_type="ThoughtProcessor",
+            handler_name="process_thought",
+            action_type="PROCESS_THOUGHT",
+            created_at=start_time,
+            updated_at=start_time,
+            timestamp=start_time,
         )
         persistence.create_correlation(correlation, self._time_service)
 
@@ -203,11 +200,9 @@ class ThoughtProcessor(
     # Helper methods that will remain in main.py
     async def _fetch_thought(self, thought_id: str) -> Optional[Thought]:
         """Fetch thought from persistence layer."""
-        from ciris_engine.schemas.persistence.core import ThoughtQuery
+        from ciris_engine.logic import persistence
         
-        query = ThoughtQuery(thought_id=thought_id)
-        thoughts = persistence.get_thoughts(query)
-        return thoughts[0] if thoughts else None
+        return await persistence.async_get_thought_by_id(thought_id)
 
     def _has_critical_failure(self, dma_results) -> bool:
         """Check if DMA results indicate critical failure requiring escalation."""
@@ -225,13 +220,25 @@ class ThoughtProcessor(
 
     def _create_deferral_result(self, dma_results, thought) -> ActionSelectionDMAResult:
         """Create a deferral result for failed processing."""
-        context = {"dma_failure": str(dma_results)} if dma_results else {"error": "No DMA results"}
-        defer_params = DeferParams(reason="Critical processing failure", context=context, defer_until=None)
-        
+        from ciris_engine.logic.utils.constants import DEFAULT_WA
+
+        defer_reason = "Critical DMA failure or conscience override."
+        # Convert dma_results to string representation for context
+        dma_results_str = str(dma_results) if not isinstance(dma_results, str) else dma_results
+        defer_params = DeferParams(
+            reason=defer_reason,
+            context={
+                "original_thought_id": thought.thought_id,
+                "dma_results_summary": dma_results_str,
+                "target_wa_ual": str(DEFAULT_WA) if DEFAULT_WA else "",
+            },
+            defer_until=None,
+        )
+
         return ActionSelectionDMAResult(
             selected_action=HandlerActionType.DEFER,
             action_parameters=defer_params,
-            rationale="Critical failure during thought processing",
+            rationale=defer_reason,
             raw_llm_response=None,
             reasoning=None,
             evaluation_time_ms=None,
@@ -239,19 +246,55 @@ class ThoughtProcessor(
         )
 
     def _get_profile_name(self, thought: Thought) -> str:
-        """Get profile name for DMA processing."""
-        # Extract profile from thought context or use default
-        if hasattr(thought, 'context') and thought.context:
-            return getattr(thought.context, 'profile_name', 'default')
-        return 'default'
+        """Extract profile name from thought context or use default."""
+        profile_name = None
+        if hasattr(thought, "context") and thought.context:
+            context = thought.context
+            if hasattr(context, "agent_profile_name"):
+                profile_name = context.agent_profile_name
+        if not profile_name and hasattr(self.app_config, "agent_profiles"):
+            for name, profile in self.app_config.agent_profiles.items():
+                if name != "default" and profile:
+                    profile_name = name
+                    break
+        if not profile_name and hasattr(self.app_config, "default_profile"):
+            profile_name = self.app_config.default_profile
+        if not profile_name:
+            profile_name = "default"
+        logger.debug(f"Determined profile name '{profile_name}' for thought {thought.thought_id}")
+        return profile_name
 
     def _describe_action(self, action_result) -> str:
-        """Get human-readable description of an action."""
-        if not action_result:
+        """Generate a human-readable description of an action."""
+        if not hasattr(action_result, 'selected_action'):
             return "unknown action"
-        
-        action_type = getattr(action_result, 'selected_action', 'UNKNOWN')
-        return f"{action_type.value.lower()}" if hasattr(action_type, 'value') else str(action_type).lower()
+            
+        action_type = action_result.selected_action
+        params = action_result.action_parameters
+
+        descriptions = {
+            HandlerActionType.SPEAK: lambda p: (
+                f"speak: '{p.content[:50]}...'"
+                if hasattr(p, "content") and len(str(p.content)) > 50
+                else f"speak: '{p.content}'" if hasattr(p, "content") else "speak"
+            ),
+            HandlerActionType.TOOL: lambda p: f"use tool '{p.tool_name}'" if hasattr(p, "tool_name") else "use a tool",
+            HandlerActionType.OBSERVE: lambda p: (
+                f"observe channel '{p.channel_id}'" if hasattr(p, "channel_id") else "observe"
+            ),
+            HandlerActionType.MEMORIZE: lambda p: "memorize information",
+            HandlerActionType.RECALL: lambda p: "recall information",
+            HandlerActionType.FORGET: lambda p: "forget information",
+        }
+
+        desc_func = descriptions.get(action_type, lambda p: f"{action_type.value}")
+        try:
+            return desc_func(params)
+        except Exception as e:
+            logger.warning(
+                f"Failed to generate action description for {action_type.value}: {e}. Using default description."
+            )
+            return f"{action_type.value}"
 
     def _handle_special_cases(self, conscience_result, thought, thought_context):
         """Handle special processing cases (PONDER, DEFER overrides)."""

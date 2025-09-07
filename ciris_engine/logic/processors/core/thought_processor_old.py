@@ -55,7 +55,6 @@ class ThoughtProcessor:
         self.auth_service = auth_service
         
         # Pipeline controller for single-stepping (injected when paused)
-        self._pipeline_controller: Optional[Any] = None
 
     async def process_thought(
         self, thought_item: ProcessingQueueItem, context: Optional[dict] = None
@@ -277,13 +276,6 @@ class ThoughtProcessor:
 
         # 6. Apply consciences
         # STEP POINT: CONSCIENCE_EXECUTION
-        await self._stream_step_point(StepPoint.CONSCIENCE_EXECUTION, thought_item.thought_id, {
-            "timestamp": self._time_service.now().isoformat(),
-            "thought_id": thought_item.thought_id,
-            "selected_action": str(getattr(action_result, 'selected_action', 'UNKNOWN')),
-            "action_result": str(action_result) if action_result else None,
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-        })
         
         logger.info(
             f"ThoughtProcessor: Applying consciences for {thought.thought_id} with action {getattr(action_result, 'selected_action', 'UNKNOWN')}"
@@ -332,13 +324,6 @@ class ThoughtProcessor:
 
             # Re-run action selection with guidance
             # STEP POINT: RECURSIVE_ASPDMA
-            await self._stream_step_point(StepPoint.RECURSIVE_ASPDMA, thought_item.thought_id, {
-                "timestamp": self._time_service.now().isoformat(),
-                "thought_id": thought_item.thought_id,
-                "retry_reason": override_reason,
-                "original_action": str(getattr(action_result, 'selected_action', 'UNKNOWN')),
-                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-            })
             
             try:
                 retry_result = await self.dma_orchestrator.run_action_selection(
@@ -352,13 +337,6 @@ class ThoughtProcessor:
                 if retry_result:
                     # Always re-apply consciences, even if same action type (parameters may differ)
                     # STEP POINT: RECURSIVE_CONSCIENCE
-                    await self._stream_step_point(StepPoint.RECURSIVE_CONSCIENCE, thought_item.thought_id, {
-                        "timestamp": self._time_service.now().isoformat(),
-                        "thought_id": thought_item.thought_id,
-                        "retry_action": str(retry_result.selected_action),
-                        "retry_result": str(retry_result) if retry_result else None,
-                        "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-                    })
                     
                     logger.info(
                         f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}"
@@ -435,14 +413,6 @@ class ThoughtProcessor:
                 )
 
         # STEP POINT: FINALIZE_ACTION (final action determined)
-        await self._stream_step_point(StepPoint.FINALIZE_ACTION, thought_item.thought_id, {
-            "timestamp": self._time_service.now().isoformat(),
-            "thought_id": thought_item.thought_id,
-            "selected_action": str(getattr(final_result, 'selected_action', 'UNKNOWN')),
-            "selection_reasoning": getattr(final_result, 'rationale', ''),
-            "conscience_passed": not getattr(conscience_result, 'overridden', True) if conscience_result else True,
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-        })
         
         # Store conscience result on the action result for later access
         # This allows handlers to access epistemic data through dispatch context
@@ -630,9 +600,6 @@ class ThoughtProcessor:
 
         return await persistence.async_get_thought_by_id(thought_id)
 
-    def set_pipeline_controller(self, pipeline_controller: Any) -> None:
-        """Inject pipeline controller for single-stepping support."""
-        self._pipeline_controller = pipeline_controller
 
     # === H3ERE Pipeline Step Methods with Decorators ===
     
@@ -842,18 +809,6 @@ class ThoughtProcessor:
             "execution_time_ms": dispatch_result.get("execution_time_ms", 0.0) if isinstance(dispatch_result, dict) else 0.0,
         }
         
-    async def _stream_step_point(self, step_point: "StepPoint", thought_id: str, step_data: Dict[str, Any]) -> None:
-        """Stream step result data from this step point."""
-        if not self._pipeline_controller:
-            return
-            
-        # Import here to avoid circular dependency
-        from ciris_engine.schemas.services.runtime_control import StepPoint
-        
-        if await self._pipeline_controller.should_pause_at(step_point, thought_id):
-            logger.info(f"Pausing at step point {step_point.value} for thought {thought_id}")
-            step_result = await self._pipeline_controller.pause_at_step_point(step_point, thought_id, step_data)
-            logger.info(f"Resumed from step point {step_point.value} with result: {type(step_result).__name__}")
 
     async def _verify_task_authorization(self, thought: Thought) -> bool:
         """Verify that the thought's parent task is signed by at least an observer."""

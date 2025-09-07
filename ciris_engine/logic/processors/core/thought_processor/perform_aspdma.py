@@ -32,34 +32,15 @@ class ActionSelectionPhase:
     @streaming_step(StepPoint.PERFORM_ASPDMA)
     @step_point(StepPoint.PERFORM_ASPDMA)
     async def _perform_aspdma_step(self, thought_item: ProcessingQueueItem, thought_context, dma_results):
-        """
-        Step 3: LLM-powered action selection from 3 DMA results.
-        
-        This decorated method automatically handles:
-        - Real-time streaming of action selection progress
-        - Single-step pause/resume capability
-        - DMA failure handling with deferral
-        - Wise Authority deferral checks
-        
-        Args:
-            thought_item: The thought being processed
-            thought_context: Context from step 1
-            dma_results: Results from 3 parallel DMAs in step 2
-            
-        Returns:
-            ActionSelectionDMAResult with selected action and parameters
-        """
+        """Step 3: LLM-powered action selection."""
         thought = await self._fetch_thought(thought_item.thought_id)
         
-        # Check for Wise Authority deferral first
+        # Check for WA deferral first
         if dma_results and hasattr(dma_results, 'should_defer_to_wise_authority') and dma_results.should_defer_to_wise_authority:
-            logger.info(f"Deferring to Wise Authority for thought {thought_item.thought_id}")
             return self._create_deferral_result(dma_results, thought)
 
         profile_name = self._get_profile_name(thought)
         try:
-            logger.debug(f"Starting ASPDMA for thought {thought_item.thought_id}")
-            
             action_result = await self.dma_orchestrator.run_action_selection(
                 thought_item=thought_item,
                 actual_thought=thought,
@@ -67,22 +48,13 @@ class ActionSelectionPhase:
                 dma_results=dma_results,
                 profile_name=profile_name,
             )
-            
-            logger.info(f"ASPDMA completed for thought {thought_item.thought_id}: {action_result.selected_action}")
             return action_result
-            
         except DMAFailure as dma_err:
             logger.error(
                 f"DMA failure during action selection for {thought_item.thought_id}: {dma_err}",
                 exc_info=True,
             )
-            
-            defer_params = DeferParams(
-                reason="DMA timeout", 
-                context={"error": str(dma_err)}, 
-                defer_until=None
-            )
-            
+            defer_params = DeferParams(reason="DMA timeout", context={"error": str(dma_err)}, defer_until=None)
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.DEFER,
                 action_parameters=defer_params,

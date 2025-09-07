@@ -92,8 +92,8 @@ class SingleStepResponse(RuntimeControlResponse):
     processing_time_ms: float = Field(0.0, description="Total processing time for this step in milliseconds")
     tokens_used: Optional[int] = Field(None, description="LLM tokens consumed during this step")
     
-    # Demo-Ready Data
-    demo_data: Optional[Dict[str, Any]] = Field(None, description="Presentation-ready data for demos and transparency")
+    # Transparency Data
+    transparency_data: Optional[Dict[str, Any]] = Field(None, description="Detailed reasoning and system state data for transparency")
     
     class Config:
         """Pydantic configuration."""

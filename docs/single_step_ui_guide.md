@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide covers implementing UI for CIRIS's single-step debugging system. The H3ERE pipeline has 9 core steps + 2 optional recursive steps to show transparent AI reasoning.
+This guide covers implementing UI for CIRIS's single-step debugging system. The H3ERE pipeline has 11 step points (0-10) for transparent AI reasoning inspection.
 
 ## API Integration
 
@@ -23,41 +23,42 @@ interface SingleStepResponse {
 }
 ```
 
-### Streaming Endpoint (Real-time)
+### Streaming Endpoint (Real-time) - PRIMARY UI DATA SOURCE
 ```
 GET /v1/system/runtime/reasoning-stream
 Authorization: Bearer {token} (OBSERVER role or higher)
 Accept: text/event-stream
 ```
 
-Streams live step updates as Server-Sent Events during normal processing.
+**THIS IS HOW THE UI WORKS**: Streams live step updates as Server-Sent Events during all processing. The UI connects to this stream and displays real-time reasoning data as it occurs, independent of processor state.
 
 ## UI Components
 
 ### 1. Pipeline Visualization
-- SVG diagram showing 15 step points in sequence
+- SVG diagram showing 11 step points in sequence
 - Highlight current step with color/animation
 - Show step names and brief descriptions
 
 ### 2. Step Data Panel
 Display step-specific information based on `step_point`:
 
-**Queue Management Steps (1-3)**:
-- Task selection and prioritization
-- Thought generation from tasks
-- Batch processing setup
-
-**Reasoning Steps (4-9)**:
+**Setup Steps (0-1)**:
+- Round initialization and thought status transitions
 - Context building with system state
+
+**Reasoning Steps (2-4)**:
 - Parallel DMA execution (Ethical, Common Sense, Domain)
 - ASPDMA action selection with LLM reasoning
 - Conscience safety checks
-- Recursive refinement if needed
 
-**Execution Steps (10-15)**:
-- Handler and bus processing
-- Package handling at adapters
-- Completion and results
+**Recursive Steps (3B-4B)** *(conditional)*:
+- Recursive ASPDMA if conscience fails
+- Recursive conscience validation
+
+**Execution Steps (5-10)**:
+- Final action determination
+- Action dispatch and execution
+- Completion and round cleanup
 
 ### 3. Performance Metrics
 Show for each step:
@@ -68,30 +69,30 @@ Show for each step:
 
 ### 4. Transparency Features
 
-**For Ethics Demos**:
+**Ethical Reasoning**:
 - DMA reasoning and results
 - Conscience evaluation details
 - Safety check outcomes
 
-**For Architecture Demos**:
+**System Architecture**:
 - Bus message flow
 - Handler execution details
 - Service interactions
 
 ## Step Points Reference
 
-### H3ERE Pipeline Order (Exact UI Team Specification)
+### H3ERE Pipeline Step Points
 0. `START_ROUND` - Setup: Tasks → Thoughts → Round Queue
 1. `GATHER_CONTEXT` - Build comprehensive context
 2. `PERFORM_DMAS` - Execute parallel multi-perspective DMAs
 3. `PERFORM_ASPDMA` - LLM action selection
 4. `CONSCIENCE_EXECUTION` - Ethical safety validation
-3B. `RECURSIVE_ASPDMA` - Re-run action selection *(conditional - only if step 4 fails)*
-4B. `RECURSIVE_CONSCIENCE` - Re-validate refined action *(conditional - only if step 3B executes)*
-5. `FINALIZE_ACTION` - Final action determination
-6. `PERFORM_ACTION` - Dispatch action to handler
-7. `ACTION_COMPLETE` - Action execution completed
-8. `ROUND_COMPLETE` - Processing round completed
+5. `RECURSIVE_ASPDMA` - Re-run action selection *(conditional)*
+6. `RECURSIVE_CONSCIENCE` - Re-validate refined action *(conditional)*
+7. `FINALIZE_ACTION` - Final action determination
+8. `PERFORM_ACTION` - Dispatch action to handler
+9. `ACTION_COMPLETE` - Action execution completed
+10. `ROUND_COMPLETE` - Processing round completed
 
 ## Implementation Tips
 
@@ -130,9 +131,9 @@ function updateUI(stepData: SingleStepResponse) {
     success: stepData.success
   });
   
-  // Show demo data if available
-  if (stepData.demo_data) {
-    updateDemoPanel(stepData.demo_data);
+  // Show transparency data if available
+  if (stepData.transparency_data) {
+    updateTransparencyPanel(stepData.transparency_data);
   }
 }
 ```
@@ -146,30 +147,41 @@ function handleStepError(error) {
 }
 ```
 
-## Demo Scenarios
 
-### Ethics Transparency Demo
-Focus on steps 5-7 (DMA → ASPDMA → Conscience) to show:
-- Multi-perspective ethical evaluation
-- LLM reasoning process
-- Safety mechanism activation
+## Real-Time Streaming Integration
 
-### Architecture Demo
-Focus on steps 11-15 (Handler → Bus → Package → Complete) to show:
-- Message bus operations
-- Adapter transformations  
-- Service orchestration
+### Primary UI Architecture
+The UI should ALWAYS connect to `/v1/system/runtime/reasoning-stream` for live data:
 
-### Performance Demo
-Show timing and resource usage across all steps to demonstrate:
-- Parallel processing efficiency
-- Resource optimization
-- System responsiveness
+```typescript
+const eventSource = new EventSource('/v1/system/runtime/reasoning-stream', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+
+eventSource.addEventListener('step_update', (event) => {
+  const stepData = JSON.parse(event.data);
+  updateUI(stepData);
+});
+
+eventSource.addEventListener('keepalive', (event) => {
+  // Connection maintained every 30 seconds
+});
+
+eventSource.addEventListener('error', (event) => {
+  handleStreamError(JSON.parse(event.data));
+});
+```
+
+### Stream Event Types
+- `connected` - Initial connection established
+- `step_update` - Live step result data (primary UI updates)
+- `keepalive` - Connection maintenance (every 30s)
+- `error` - Stream error information
 
 ## Notes
 
-- Always use `include_details=true` for comprehensive step data
-- Handle conditional steps (8-9) that may not always execute
-- Implement proper error boundaries around step execution
-- Cache step results for replay/analysis features
-- Consider WebSocket connection for real-time updates in future versions
+- UI displays live stream data continuously during processing
+- Handle conditional steps (RECURSIVE_ASPDMA/RECURSIVE_CONSCIENCE) that may not always execute
+- Implement proper error boundaries around stream connection
+- Cache stream results for replay/analysis features
+- Stream operates independent of single-step mode

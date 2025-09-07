@@ -2,7 +2,7 @@
 
 ## Overview
 
-The CIRIS Agent H3ERE processing pipeline includes **9 core step points + 2 optional recursive steps** where execution can be paused for detailed inspection during demo presentations and debugging. This enables transparent analysis of ethical reasoning and decision-making processes.
+The CIRIS Agent H3ERE processing pipeline includes **11 step points** where execution can be paused for detailed inspection and debugging. This enables transparent analysis of ethical reasoning and decision-making processes.
 
 ## Step Points in Execution Order (H3ERE Pipeline)
 
@@ -85,17 +85,17 @@ The agent processes thoughts through these sequential stages, each with its own 
 - Handler execution via message bus
 - Action completion and round cleanup
 
-## Demo Applications
+## Transparency Features
 
-### **Ethical Decision Transparency**
-Steps 5-10 provide complete visibility into:
+### **Ethical Decision Analysis**
+Steps 2-4 (plus recursive steps) provide complete visibility into:
 - How ethical considerations influence decisions
 - Why specific actions are selected or rejected
 - How conscience failures trigger refinement
 - The complete reasoning chain from context to action
 
-### **System Architecture Understanding**  
-Steps 11-15 demonstrate:
+### **System Architecture Analysis**  
+Steps 5-10 show:
 - How internal decisions become external actions
 - Bus-based architecture and message flow
 - Adapter patterns for different interfaces
@@ -108,9 +108,9 @@ All steps include timing data for:
 - Resource utilization tracking
 - Queue depth monitoring
 
-## Next Steps
+## Implementation Status
 
-1. **Data Inspection Schemas**: Define what data is available at each step point
-2. **API Availability Audit**: Determine which data is currently accessible via API
-3. **API Extensions**: Design endpoints to expose missing step point data
-4. **Demo Integration**: Create presentation-ready views of step point data
+1. **✅ Step Points Defined**: All 11 step points are implemented and functional
+2. **✅ Real-time Streaming**: Live step data available via `/v1/system/runtime/reasoning-stream`
+3. **✅ Single-step Control**: Pause/resume functionality via `/v1/system/runtime/step`
+4. **✅ UI Integration**: Server-Sent Events provide continuous data flow to UI

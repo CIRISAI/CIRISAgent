@@ -7,6 +7,7 @@ before the application starts. FAILS FAST with clear error messages.
 
 import os
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -46,6 +47,66 @@ class WriteTestError(DirectorySetupError):
     """Raised when write test fails."""
 
     pass
+
+
+class DatabaseAccessError(DirectorySetupError):
+    """Raised when database cannot be accessed exclusively."""
+
+    pass
+
+
+def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> None:
+    """
+    Ensure only one agent can run on this database using WAL Mode + Busy Timeout.
+
+    Uses SQLite's WAL (Write-Ahead Logging) mode with IMMEDIATE transaction
+    to detect if another process is already using the database.
+
+    Args:
+        db_path: Path to the SQLite database file
+        fail_fast: If True, exit immediately on access conflict (default True)
+
+    Raises:
+        DatabaseAccessError: If database is already in use by another agent
+    """
+    db_path_obj = Path(db_path)
+    
+    # Create database parent directory if needed
+    db_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Quick connectivity test with minimal timeout
+        # Using timeout=0.1 to fail fast if database is locked
+        conn = sqlite3.connect(db_path, timeout=0.1)
+        
+        # Enable WAL mode for better concurrency detection
+        conn.execute("PRAGMA journal_mode=WAL")
+        
+        # Attempt exclusive lock - this will fail immediately if another agent is running
+        conn.execute("BEGIN IMMEDIATE")  # Exclusive lock attempt
+        conn.rollback()  # Release the lock immediately
+        conn.close()
+        
+        print(f"✓ Database exclusive access confirmed: {db_path}")
+        
+    except sqlite3.OperationalError as e:
+        error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        print(f"  SQLite Error: {e}", file=sys.stderr)
+        print(f"  Only one CIRIS agent can run per database file", file=sys.stderr)
+        print(f"  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
+        
+        if fail_fast:
+            sys.exit(1)
+        raise DatabaseAccessError(error_msg)
+        
+    except Exception as e:
+        error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
+        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        
+        if fail_fast:
+            sys.exit(1)
+        raise DatabaseAccessError(error_msg)
 
 
 def check_disk_space(path: Path, required_mb: int = 100) -> Tuple[bool, float]:
@@ -149,6 +210,7 @@ def setup_application_directories(
     user_id: Optional[int] = None,
     group_id: Optional[int] = None,
     fail_fast: bool = True,
+    check_database_access: bool = True,
 ) -> None:
     """
     Set up all required application directories with correct permissions.
@@ -161,6 +223,7 @@ def setup_application_directories(
         user_id: User ID to own the directories (defaults to current user)
         group_id: Group ID to own the directories (defaults to current group)
         fail_fast: If True, exit immediately on any error (default True)
+        check_database_access: If True, verify exclusive database access (default True)
 
     Raises:
         DirectorySetupError: If any directory setup fails
@@ -174,7 +237,19 @@ def setup_application_directories(
     if group_id is None:
         group_id = os.getgid()
 
-    # First, check disk space
+    # First, ensure exclusive database access (before any other checks)
+    if check_database_access:
+        try:
+            from ciris_engine.logic.config import get_sqlite_db_full_path
+            main_db_path = get_sqlite_db_full_path()
+            ensure_database_exclusive_access(main_db_path, fail_fast)
+        except ImportError:
+            # During early bootstrap, config may not be available yet
+            # Default to checking the most likely database path
+            default_db_path = str(base_dir / "data" / "ciris_engine.db")
+            ensure_database_exclusive_access(default_db_path, fail_fast)
+
+    # Check disk space
     _check_disk_space_or_fail(base_dir, fail_fast)
 
     # Define directories and their required permissions

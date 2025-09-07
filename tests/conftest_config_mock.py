@@ -36,7 +36,13 @@ def mock_config_service_registry(tmp_path):
 def mock_db_path(tmp_path):
     """
     Direct mock of get_sqlite_db_full_path for simpler tests.
+    
+    Mocks both the direct import path and the module import path to support
+    different usage patterns in the codebase.
     """
-    with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path") as mock_get_db:
-        mock_get_db.return_value = str(tmp_path / "test.db")
-        yield mock_get_db
+    test_db_path = str(tmp_path / "test.db")
+    
+    # Patch both possible import paths
+    with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", return_value=test_db_path) as mock1:
+        with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=test_db_path) as mock2:
+            yield test_db_path

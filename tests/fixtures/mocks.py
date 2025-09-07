@@ -174,32 +174,11 @@ class MockRuntime:
         
         mock = MagicMock()
         
-        # Mock current pipeline state - consistent with runtime control fixtures
+        # Mock current pipeline state - realistic empty state (common in production)
         mock.get_current_state.return_value = PipelineState(
             is_paused=True,
             current_round=2,
-            thoughts_by_step={
-                str(StepPoint.GATHER_CONTEXT): [
-                    ThoughtInPipeline(
-                        thought_id="thought_001",
-                        task_id="task_001",
-                        thought_type="user_request",
-                        current_step=StepPoint.GATHER_CONTEXT,
-                        entered_step_at=datetime.now(timezone.utc),
-                        processing_time_ms=200.0,
-                    )
-                ],
-                str(StepPoint.PERFORM_DMAS): [
-                    ThoughtInPipeline(
-                        thought_id="thought_001",
-                        task_id="task_001", 
-                        thought_type="user_request",
-                        current_step=StepPoint.PERFORM_DMAS,
-                        entered_step_at=datetime.now(timezone.utc),
-                        processing_time_ms=800.0,
-                    )
-                ],
-            },
+            # thoughts_by_step will use default factory: empty arrays for all steps
             task_queue=[],
             thought_queue=[],
         )

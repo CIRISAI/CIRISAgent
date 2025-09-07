@@ -204,7 +204,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             try:
                 await self._export_task
             except asyncio.CancelledError:
-                pass  # Expected when stopping the service - don't re-raise
+                # Re-raise after cleanup as per asyncio best practices
+                raise
 
         # Log final shutdown event BEFORE closing database
         from ciris_engine.schemas.services.graph.audit import AuditEventData

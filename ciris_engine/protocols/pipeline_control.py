@@ -379,7 +379,9 @@ class PipelineController:
         if not step_order or self._current_step_index >= len(step_order):
             # Reset to start of pipeline for next round
             self._current_step_index = 0
-            return step_order[0] if step_order else StepPoint.START_ROUND  # Start new round at START_ROUND
+            return (
+                step_order[0] if (step_order and len(step_order) > 0) else StepPoint.START_ROUND
+            )  # Start new round at START_ROUND
 
         current_step = step_order[self._current_step_index]
         self._current_step_index += 1
@@ -419,7 +421,7 @@ class PipelineController:
 
         if not step_order or self._current_step_index >= len(step_order):
             # Would reset to start of pipeline for next round
-            return step_order[0] if step_order else StepPoint.START_ROUND  # START_ROUND
+            return step_order[0] if (step_order and len(step_order) > 0) else StepPoint.START_ROUND  # START_ROUND
 
         return step_order[self._current_step_index]
 

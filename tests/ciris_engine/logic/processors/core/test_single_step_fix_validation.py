@@ -90,7 +90,7 @@ class TestSingleStepFixValidation:
             This represents the architectural fix - direct step execution
             instead of calling _process_single_thought().
             """
-            step_point = StepPoint.BUILD_CONTEXT  # Example step point
+            step_point = StepPoint.GATHER_CONTEXT  # Example step point
             
             step_result = {
                 "success": True,
@@ -302,7 +302,7 @@ class TestSingleStepFixValidation:
         await fixed_agent_processor.pause_processing()
         
         step_points = [
-            StepPoint.BUILD_CONTEXT,
+            StepPoint.GATHER_CONTEXT,
             StepPoint.PERFORM_DMAS,
             StepPoint.CONSCIENCE_EXECUTION,
         ]

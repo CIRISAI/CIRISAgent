@@ -71,7 +71,7 @@ class TestStepResultStream:
         
         step_result = {
             "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_TASKS_QUEUE.value,
+            "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
             "processing_time_ms": 100.0
         }
@@ -89,7 +89,7 @@ class TestStepResultStream:
         
         step_result = {
             "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_TASKS_QUEUE.value,
+            "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
             "processing_time_ms": 100.0
         }
@@ -110,7 +110,7 @@ class TestStepResultStream:
             "thought_id": "test-thought",
             "task_id": "test-task", 
             "round_id": 1,
-            "step_point": StepPoint.FINALIZE_TASKS_QUEUE.value,
+            "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
             "processing_time_ms": 100.0,
             "step_data": {"thought_content": "Test thought content"}
@@ -145,7 +145,7 @@ class TestStepResultStream:
         
         step_result = {
             "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_TASKS_QUEUE.value,
+            "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
             "processing_time_ms": 100.0
         }
@@ -158,7 +158,7 @@ class TestStepResultStream:
         broadcasted_result = await queue.get()
         
         assert broadcasted_result["thought_id"] == "test-thought"
-        assert broadcasted_result["step_point"] == StepPoint.FINALIZE_TASKS_QUEUE.value
+        assert broadcasted_result["step_point"] == StepPoint.FINALIZE_ACTION.value
         assert "stream_sequence" in broadcasted_result
         assert "broadcast_timestamp" in broadcasted_result
 
@@ -174,7 +174,7 @@ class TestStepResultStream:
         
         step_result = {
             "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_TASKS_QUEUE.value,
+            "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True
         }
         
@@ -200,7 +200,7 @@ class TestStepResultStream:
         
         step_result = {
             "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_TASKS_QUEUE.value,
+            "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True
         }
         

@@ -78,7 +78,7 @@ class TestThoughtStreamData:
             current_step=StepPoint.PERFORM_DMAS,
             step_category=StepCategory.ANALYSIS,
             status=ThoughtStatus.PROCESSING,
-            steps_completed=[StepPoint.FINALIZE_TASKS_QUEUE, StepPoint.POPULATE_THOUGHT_QUEUE],
+            steps_completed=[StepPoint.FINALIZE_ACTION, StepPoint.POPULATE_THOUGHT_QUEUE],
             steps_remaining=[StepPoint.PERFORM_ASPDMA, StepPoint.CONSCIENCE_EXECUTION],
             progress_percentage=33.3,
             started_at=now,
@@ -144,7 +144,7 @@ class TestThoughtStreamData:
                 thought_id="test",
                 task_id="test",
                 round_number=1,
-                current_step=StepPoint.FINALIZE_TASKS_QUEUE,
+                current_step=StepPoint.FINALIZE_ACTION,
                 step_category=StepCategory.PREPARATION,
                 status=ThoughtStatus.PROCESSING,
                 progress_percentage=150.0,  # Invalid: > 100
@@ -162,7 +162,7 @@ class TestThoughtStreamData:
                 thought_id="test",
                 task_id="test",
                 round_number=1,
-                current_step=StepPoint.FINALIZE_TASKS_QUEUE,
+                current_step=StepPoint.FINALIZE_ACTION,
                 step_category=StepCategory.PREPARATION,
                 status=ThoughtStatus.PROCESSING,
                 progress_percentage=-5.0,  # Invalid: < 0
@@ -309,7 +309,7 @@ class TestReasoningStreamUpdate:
             thought_id="test-thought",
             task_id="test-task",
             round_number=1,
-            current_step=StepPoint.FINALIZE_TASKS_QUEUE,
+            current_step=StepPoint.FINALIZE_ACTION,
             step_category=StepCategory.PREPARATION,
             status=ThoughtStatus.PROCESSING,
             progress_percentage=10.0,
@@ -322,7 +322,7 @@ class TestReasoningStreamUpdate:
         )
         
         step_summary = StepPointSummary(
-            step_point=StepPoint.FINALIZE_TASKS_QUEUE,
+            step_point=StepPoint.FINALIZE_ACTION,
             step_category=StepCategory.PREPARATION,
             step_name="Finalize Tasks Queue",
             step_description="Test description",
@@ -432,7 +432,7 @@ class TestStepMetadataFunctions:
     def test_calculate_progress_percentage(self):
         """Test progress percentage calculation."""
         # Test early step
-        progress = calculate_progress_percentage([], StepPoint.FINALIZE_TASKS_QUEUE)
+        progress = calculate_progress_percentage([], StepPoint.FINALIZE_ACTION)
         assert progress == 0.0
         
         # Test middle step
@@ -446,7 +446,7 @@ class TestStepMetadataFunctions:
     def test_get_remaining_steps(self):
         """Test getting remaining steps."""
         # Test early step
-        remaining = get_remaining_steps(StepPoint.FINALIZE_TASKS_QUEUE)
+        remaining = get_remaining_steps(StepPoint.FINALIZE_ACTION)
         assert len(remaining) == len(list(StepPoint)) - 1
         
         # Test last step

@@ -185,17 +185,17 @@ class TestPipelineController:
 
         # Not paused - should not pause at any step
         pipeline_controller.is_paused = False
-        assert not await pipeline_controller.should_pause_at(StepPoint.BUILD_CONTEXT, thought_id)
+        assert not await pipeline_controller.should_pause_at(StepPoint.GATHER_CONTEXT, thought_id)
 
         # Paused but step point not enabled
         pipeline_controller.is_paused = True
         pipeline_controller._enabled_step_points = set()
-        assert not await pipeline_controller.should_pause_at(StepPoint.BUILD_CONTEXT, thought_id)
+        assert not await pipeline_controller.should_pause_at(StepPoint.GATHER_CONTEXT, thought_id)
 
         # Paused and step point enabled in single-step mode
-        pipeline_controller._enabled_step_points = {StepPoint.BUILD_CONTEXT}
+        pipeline_controller._enabled_step_points = {StepPoint.GATHER_CONTEXT}
         pipeline_controller._single_step_mode = True
-        assert await pipeline_controller.should_pause_at(StepPoint.BUILD_CONTEXT, thought_id)
+        assert await pipeline_controller.should_pause_at(StepPoint.GATHER_CONTEXT, thought_id)
 
     def test_drain_pipeline_step(self, pipeline_controller):
         """Test draining pipeline processes later steps first."""
@@ -204,7 +204,7 @@ class TestPipelineController:
             thought_id="thought_1",
             task_id="task_1",
             thought_type="standard",
-            current_step=StepPoint.BUILD_CONTEXT,
+            current_step=StepPoint.GATHER_CONTEXT,
             entered_step_at=datetime.now(timezone.utc),
         )
 
@@ -225,7 +225,7 @@ class TestPipelineController:
         )
 
         # Add to pipeline state
-        pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.BUILD_CONTEXT.value] = [thought1]
+        pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.GATHER_CONTEXT.value] = [thought1]
         pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.HANDLER_COMPLETE.value] = [thought2]
         pipeline_controller.pipeline_state.thoughts_by_step[StepPoint.ACTION_SELECTION.value] = [thought3]
 
@@ -374,17 +374,17 @@ class TestPipelineStateTracking:
             thought_id="test_thought",
             task_id="test_task",
             thought_type="standard",
-            current_step=StepPoint.BUILD_CONTEXT,
+            current_step=StepPoint.GATHER_CONTEXT,
             entered_step_at=datetime.now(timezone.utc),
         )
 
-        pipeline_state.thoughts_by_step[StepPoint.BUILD_CONTEXT.value] = [thought]
+        pipeline_state.thoughts_by_step[StepPoint.GATHER_CONTEXT.value] = [thought]
 
         # Move to PERFORM_DMAS
-        success = pipeline_state.move_thought("test_thought", StepPoint.BUILD_CONTEXT, StepPoint.PERFORM_DMAS)
+        success = pipeline_state.move_thought("test_thought", StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS)
 
         assert success
-        assert len(pipeline_state.get_thoughts_at_step(StepPoint.BUILD_CONTEXT)) == 0
+        assert len(pipeline_state.get_thoughts_at_step(StepPoint.GATHER_CONTEXT)) == 0
         assert len(pipeline_state.get_thoughts_at_step(StepPoint.PERFORM_DMAS)) == 1
 
         moved_thought = pipeline_state.get_thoughts_at_step(StepPoint.PERFORM_DMAS)[0]
@@ -394,10 +394,10 @@ class TestPipelineStateTracking:
     def test_get_next_step(self, pipeline_state):
         """Test getting the next step in the pipeline."""
         # Get next step for various points
-        next_step = pipeline_state.get_next_step(StepPoint.FINALIZE_TASKS_QUEUE)
+        next_step = pipeline_state.get_next_step(StepPoint.FINALIZE_ACTION)
         assert next_step == StepPoint.POPULATE_THOUGHT_QUEUE
 
-        next_step = pipeline_state.get_next_step(StepPoint.BUILD_CONTEXT)
+        next_step = pipeline_state.get_next_step(StepPoint.GATHER_CONTEXT)
         assert next_step == StepPoint.PERFORM_DMAS
 
         next_step = pipeline_state.get_next_step(StepPoint.ACTION_SELECTION)
@@ -437,7 +437,7 @@ class TestStepResultSchemas:
             processing_time_ms=50.0,
         )
 
-        assert result.step_point == StepPoint.FINALIZE_TASKS_QUEUE
+        assert result.step_point == StepPoint.FINALIZE_ACTION
         assert result.success
         assert len(result.tasks_to_process) == 1
         assert result.tasks_to_process[0].task_id == "task_1"
@@ -456,7 +456,7 @@ class TestStepResultSchemas:
             processing_time_ms=100.0,
         )
 
-        assert result.step_point == StepPoint.BUILD_CONTEXT
+        assert result.step_point == StepPoint.GATHER_CONTEXT
         assert result.success
         assert result.thought_id == "thought_1"
         assert "OBSERVE" in result.permitted_actions
@@ -529,7 +529,7 @@ class TestEndToEndPipelineStepping:
         }
 
         # Would pause at BUILD_CONTEXT
-        should_pause = await controller.should_pause_at(StepPoint.BUILD_CONTEXT, thought_id)
+        should_pause = await controller.should_pause_at(StepPoint.GATHER_CONTEXT, thought_id)
         assert should_pause
 
         # Create the thought in pipeline
@@ -537,7 +537,7 @@ class TestEndToEndPipelineStepping:
             thought_id=thought_id,
             task_id="task_1",
             thought_type="standard",
-            current_step=StepPoint.BUILD_CONTEXT,
+            current_step=StepPoint.GATHER_CONTEXT,
             entered_step_at=datetime.now(timezone.utc),
             context_built={"test": "data"},
         )
@@ -545,7 +545,7 @@ class TestEndToEndPipelineStepping:
         controller._paused_thoughts[thought_id] = thought
 
         # Verify we can track it through the pipeline
-        assert thought.current_step == StepPoint.BUILD_CONTEXT
+        assert thought.current_step == StepPoint.GATHER_CONTEXT
         assert thought.context_built == {"test": "data"}
 
 

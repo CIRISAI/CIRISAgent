@@ -27,15 +27,17 @@ from ciris_engine.schemas.telemetry.core import (
     TraceContext,
 )
 
+from .action_execution import ActionExecutionPhase
+from .conscience_execution import ConscienceExecutionPhase
+from .finalize_action import ActionFinalizationPhase
+from .gather_context import ContextGatheringPhase
+from .perform_aspdma import ActionSelectionPhase
+from .perform_dmas import DMAExecutionPhase
+from .recursive_processing import RecursiveProcessingPhase
+from .round_complete import RoundCompletePhase
+
 # Import phase mixins
 from .start_round import RoundInitializationPhase
-from .gather_context import ContextGatheringPhase
-from .perform_dmas import DMAExecutionPhase
-from .perform_aspdma import ActionSelectionPhase
-from .conscience_execution import ConscienceExecutionPhase
-from .recursive_processing import RecursiveProcessingPhase
-from .finalize_action import ActionFinalizationPhase
-from .action_execution import ActionExecutionPhase
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +51,11 @@ class ThoughtProcessor(
     RecursiveProcessingPhase,
     ActionFinalizationPhase,
     ActionExecutionPhase,
+    RoundCompletePhase,
 ):
     """
     Main orchestrator for the H3ERE (Hyper3 Ethical Recursive Engine) pipeline.
-    
+
     Inherits phase-specific methods from mixin classes and coordinates
     the 7-step ethical reasoning process:
     1. GATHER_CONTEXT - Build processing context
@@ -90,11 +93,13 @@ class ThoughtProcessor(
     ) -> Optional[ActionSelectionDMAResult]:
         """
         Main H3ERE pipeline orchestration.
-        
+
         Executes all 7 phases using decorated step methods that handle
         streaming and single-step pause/resume automatically.
         """
-        logger.info(f"ThoughtProcessor.process_thought: ENTRY - thought_id={thought_item.thought_id}, context={'present' if context else 'None'}")
+        logger.info(
+            f"ThoughtProcessor.process_thought: ENTRY - thought_id={thought_item.thought_id}, context={'present' if context else 'None'}"
+        )
         start_time = self._time_service.now()
 
         # Initialize correlation for tracking
@@ -113,7 +118,9 @@ class ThoughtProcessor(
         # Fetch the actual thought
         logger.info(f"ThoughtProcessor.process_thought: About to fetch thought_id={thought_item.thought_id}")
         thought = await self._fetch_thought(thought_item.thought_id)
-        logger.info(f"ThoughtProcessor.process_thought: Fetch completed for thought_id={thought_item.thought_id}, result={'present' if thought else 'None'}")
+        logger.info(
+            f"ThoughtProcessor.process_thought: Fetch completed for thought_id={thought_item.thought_id}, result={'present' if thought else 'None'}"
+        )
         if not thought:
             logger.warning(f"ThoughtProcessor: Could not fetch thought {thought_item.thought_id}")
             return None
@@ -126,7 +133,9 @@ class ThoughtProcessor(
 
         # 2a. If DMA step returned an ActionSelectionDMAResult (due to failure), return it directly
         if isinstance(dma_results, ActionSelectionDMAResult):
-            logger.info(f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}")
+            logger.info(
+                f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
+            )
             return dma_results
 
         # 3. Check for failures/escalations
@@ -151,7 +160,7 @@ class ThoughtProcessor(
 
         # 4. PERFORM_ASPDMA - LLM-powered action selection
         action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
-        
+
         # Get profile name for potential conscience retry
         profile_name = self._get_profile_name(thought)
 
@@ -168,7 +177,9 @@ class ThoughtProcessor(
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
 
         # 5. CONSCIENCE_EXECUTION - Apply ethical safety validation
-        conscience_result = await self._apply_conscience_simple(action_result, thought, dma_results, thought_context)
+        conscience_result = await self._conscience_execution_step(
+            thought_item, action_result, thought, dma_results, thought_context
+        )
 
         # 6a. If consciences overrode to PONDER, try action selection once more with guidance
         if (
@@ -222,12 +233,12 @@ class ThoughtProcessor(
 
                 if retry_result:
                     # Always re-apply consciences, even if same action type (parameters may differ)
-                    
+
                     logger.info(
                         f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}"
                     )
-                    retry_conscience_result = await self._apply_conscience_simple(
-                        retry_result, thought, dma_results, retry_context
+                    retry_conscience_result = await self._conscience_execution_step(
+                        thought_item, retry_result, thought, dma_results, retry_context
                     )
 
                     # If the retry passes consciences, use it
@@ -264,8 +275,9 @@ class ThoughtProcessor(
                     f"ThoughtProcessor: conscience result for {thought.thought_id}: final_action={final_action}"
                 )
 
-        # 7. Determine final result
-        final_result = self._handle_special_cases(conscience_result, thought, thought_context)
+        # 6. FINALIZE_ACTION - Determine final result
+        action_from_conscience = self._handle_special_cases(conscience_result, thought, thought_context)
+        final_result = await self._finalize_action_step(thought_item, action_from_conscience)
 
         # Record successful completion
         if self.telemetry_service:
@@ -305,43 +317,50 @@ class ThoughtProcessor(
         )
         persistence.update_correlation(update_req, self._time_service)
 
+        # 7. ROUND_COMPLETE - Finalize the processing round
+        final_result = await self._round_complete_step(thought_item, final_result)
+
         return final_result
 
     # Helper methods that will remain in main.py
     async def _fetch_thought(self, thought_id: str) -> Optional[Thought]:
         """Fetch thought from persistence layer."""
         import asyncio
+
         from ciris_engine.logic import persistence
-        
+
         logger.info(f"ThoughtProcessor._fetch_thought: Starting fetch for thought_id={thought_id}")
-        
+
         try:
             # Add timeout protection to prevent CI hangs
             thought = await asyncio.wait_for(
-                persistence.async_get_thought_by_id(thought_id),
-                timeout=30.0  # 30 second timeout
+                persistence.async_get_thought_by_id(thought_id), timeout=30.0  # 30 second timeout
             )
-            logger.info(f"ThoughtProcessor._fetch_thought: Successfully fetched thought_id={thought_id}, thought={'present' if thought else 'None'}")
+            logger.info(
+                f"ThoughtProcessor._fetch_thought: Successfully fetched thought_id={thought_id}, thought={'present' if thought else 'None'}"
+            )
             return thought
         except asyncio.TimeoutError:
             logger.error(f"ThoughtProcessor._fetch_thought: TIMEOUT after 30s fetching thought_id={thought_id}")
             raise
         except Exception as e:
-            logger.error(f"ThoughtProcessor._fetch_thought: ERROR fetching thought_id={thought_id}: {type(e).__name__}: {e}")
+            logger.error(
+                f"ThoughtProcessor._fetch_thought: ERROR fetching thought_id={thought_id}: {type(e).__name__}: {e}"
+            )
             raise
 
     def _has_critical_failure(self, dma_results) -> bool:
         """Check if DMA results indicate critical failure requiring escalation."""
         if not dma_results:
             return True
-        
+
         # Check for specific failure indicators
-        if hasattr(dma_results, 'critical_failure') and dma_results.critical_failure:
+        if hasattr(dma_results, "critical_failure") and dma_results.critical_failure:
             return True
-            
-        if hasattr(dma_results, 'should_escalate') and dma_results.should_escalate:
+
+        if hasattr(dma_results, "should_escalate") and dma_results.should_escalate:
             return True
-            
+
         return False
 
     def _create_deferral_result(self, dma_results, thought) -> ActionSelectionDMAResult:
@@ -392,9 +411,9 @@ class ThoughtProcessor(
 
     def _describe_action(self, action_result) -> str:
         """Generate a human-readable description of an action."""
-        if not hasattr(action_result, 'selected_action'):
+        if not hasattr(action_result, "selected_action"):
             return "unknown action"
-            
+
         action_type = action_result.selected_action
         params = action_result.action_parameters
 

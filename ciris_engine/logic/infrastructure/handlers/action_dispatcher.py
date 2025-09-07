@@ -3,11 +3,14 @@ import logging
 from typing import Awaitable, Callable, Dict, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
+from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.services.runtime_control import StepPoint
 
 from . import BaseActionHandler
 
@@ -19,6 +22,7 @@ class ActionDispatcher:
         self,
         handlers: Dict[HandlerActionType, BaseActionHandler],
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
+        time_service=None,
     ) -> None:
         """
         Initializes the ActionDispatcher with a map of action types to their handler instances.
@@ -26,10 +30,22 @@ class ActionDispatcher:
         Args:
             handlers: A dictionary mapping HandlerActionType to an instance of a BaseActionHandler subclass.
             telemetry_service: Optional telemetry service for metrics collection.
+            time_service: Optional time service for step decorators.
         """
         self.handlers: Dict[HandlerActionType, BaseActionHandler] = handlers
         self.action_filter: Optional[Callable[[ActionSelectionDMAResult, dict], Awaitable[bool] | bool]] = None
         self.telemetry_service = telemetry_service
+        self._time_service = time_service
+
+        # If no time service provided, use a simple fallback
+        if not self._time_service:
+            from datetime import datetime
+
+            class SimpleTimeService:
+                def now(self):
+                    return datetime.now()
+
+            self._time_service = SimpleTimeService()
 
         for action_type, handler_instance in self.handlers.items():
             logger.info(
@@ -39,6 +55,21 @@ class ActionDispatcher:
     def get_handler(self, action_type: HandlerActionType) -> Optional[BaseActionHandler]:
         """Get a handler by action type."""
         return self.handlers.get(action_type)
+
+    @streaming_step(StepPoint.PERFORM_ACTION)
+    @step_point(StepPoint.PERFORM_ACTION)
+    async def _perform_action_step(self, thought_item: ProcessingQueueItem, result, context: dict):
+        """Step 9: Dispatch action to handler - streaming decorator for visibility."""
+        # This is a pass-through that just enables streaming
+        # The actual dispatch happens in the dispatch method
+        return result
+
+    @streaming_step(StepPoint.ACTION_COMPLETE)
+    @step_point(StepPoint.ACTION_COMPLETE)
+    async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result):
+        """Step 10: Action execution completed - streaming decorator for visibility."""
+        # This marks the completion of action execution
+        return dispatch_result
 
     async def dispatch(
         self,
@@ -112,6 +143,27 @@ class ActionDispatcher:
                 return
         # Logging handled by logger.info above
 
+        # Create a ProcessingQueueItem for step streaming
+        thought_item = (
+            ProcessingQueueItem.from_thought(thought)
+            if hasattr(ProcessingQueueItem, "from_thought")
+            else ProcessingQueueItem(
+                thought_id=thought.thought_id,
+                source_task_id=thought.source_task_id,
+                thought_type=thought.thought_type,
+                content=thought.content,
+                priority=getattr(thought, "priority", 0),
+                created_at=thought.created_at,
+            )
+        )
+
+        # Step 9: PERFORM_ACTION - Signal that we're dispatching the action
+        await self._perform_action_step(
+            thought_item,
+            action_selection_result,
+            dispatch_context.model_dump() if hasattr(dispatch_context, "model_dump") else {},
+        )
+
         try:
             # Record handler invocation as HOT PATH
             if self.telemetry_service:
@@ -138,6 +190,15 @@ class ActionDispatcher:
             # The handler's `handle` method will take care of everything.
             follow_up_thought_id = await handler_instance.handle(action_selection_result, thought, dispatch_context)
 
+            # Step 10: ACTION_COMPLETE - Signal that action execution is complete
+            dispatch_result = {
+                "follow_up_thought_id": follow_up_thought_id,
+                "action_type": action_type.value,
+                "handler": handler_instance.__class__.__name__,
+                "success": True,
+            }
+            await self._action_complete_step(thought_item, dispatch_result)
+
             # Log completion with follow-up thought ID if available
             import datetime
 
@@ -155,6 +216,16 @@ class ActionDispatcher:
             logger.exception(
                 f"Error executing handler {handler_instance.__class__.__name__} for action {action_type.value} on thought {thought.thought_id}: {e}"
             )
+
+            # Step 10: ACTION_COMPLETE - Signal that action execution failed
+            dispatch_result = {
+                "follow_up_thought_id": None,
+                "action_type": action_type.value,
+                "handler": handler_instance.__class__.__name__,
+                "success": False,
+                "error": str(e),
+            }
+            await self._action_complete_step(thought_item, dispatch_result)
 
             # Record handler error
             if self.telemetry_service:

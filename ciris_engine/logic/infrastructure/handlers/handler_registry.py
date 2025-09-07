@@ -51,6 +51,6 @@ def build_action_dispatcher(
         HandlerActionType.FORGET: ForgetHandler(deps),
         HandlerActionType.PONDER: PonderHandler(deps, max_rounds=max_rounds),
     }
-    dispatcher = ActionDispatcher(handlers, telemetry_service=telemetry_service)
+    dispatcher = ActionDispatcher(handlers, telemetry_service=telemetry_service, time_service=time_service)
 
     return dispatcher

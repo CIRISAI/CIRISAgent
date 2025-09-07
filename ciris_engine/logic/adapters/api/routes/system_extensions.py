@@ -8,8 +8,6 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 
-# Constants to avoid duplication
-UNITTEST_MOCK_TYPE_PREFIX = "<class 'unittest.mock"
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
@@ -190,8 +188,8 @@ def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, A
                 if metrics:
                     processing_time_ms = metrics.get("total_processing_time_ms", 0.0)
                     tokens_used = metrics.get("tokens_used")
-                    # Create demo data based on step point
-                    demo_data = _create_demo_data(step_point, step_result, metrics)
+                    # Demo data removed - using transparency_data from real step results
+                    demo_data = None
             except Exception as e:
                 logger.debug(f"Could not get processing metrics: {e}")
     
@@ -201,49 +199,6 @@ def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, A
     return step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data
 
 
-def _safe_step_point(step_point) -> Optional[Any]:
-    """Safely extract step point, filtering out mock objects."""
-    if step_point and hasattr(step_point, 'value') and not str(type(step_point)).startswith(UNITTEST_MOCK_TYPE_PREFIX):
-        return step_point
-    return None
-
-
-def _safe_step_result(step_result) -> Optional[Dict[str, Any]]:
-    """Safely extract step result, filtering out mock objects."""
-    if step_result and isinstance(step_result, dict) and not str(type(step_result)).startswith(UNITTEST_MOCK_TYPE_PREFIX):
-        return step_result
-    return None
-
-
-def _safe_pipeline_state(pipeline_state) -> Optional[Dict[str, Any]]:
-    """Safely extract pipeline state, filtering out mock objects."""
-    if pipeline_state and not str(type(pipeline_state)).startswith(UNITTEST_MOCK_TYPE_PREFIX):
-        if hasattr(pipeline_state, 'model_dump'):
-            return pipeline_state.model_dump()
-        elif isinstance(pipeline_state, dict):
-            return pipeline_state
-    return None
-
-
-def _safe_processing_time(processing_time_ms) -> float:
-    """Safely extract processing time."""
-    if isinstance(processing_time_ms, (int, float)):
-        return processing_time_ms
-    return 0.0
-
-
-def _safe_tokens_used(tokens_used) -> Optional[int]:
-    """Safely extract tokens used."""
-    if tokens_used and isinstance(tokens_used, int):
-        return tokens_used
-    return None
-
-
-def _safe_demo_data(demo_data) -> Optional[Dict[str, Any]]:
-    """Safely extract demo data."""
-    if demo_data and isinstance(demo_data, dict):
-        return demo_data
-    return None
 
 
 @router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
@@ -327,70 +282,6 @@ async def single_step_processor(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _create_demo_data(step_point: Optional[StepPoint], step_result: Optional[Dict[str, Any]], metrics: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Create presentation-ready demo data based on step point and results."""
-    if not step_point:
-        return None
-    
-    # Categorize step points for demo presentation
-    step_categories = {
-        StepPoint.FINALIZE_TASKS_QUEUE: "queue_management", 
-        StepPoint.POPULATE_THOUGHT_QUEUE: "queue_management",
-        StepPoint.POPULATE_ROUND: "queue_management",
-        StepPoint.BUILD_CONTEXT: "system_architecture",
-        StepPoint.PERFORM_DMAS: "ethical_reasoning",
-        StepPoint.PERFORM_ASPDMA: "decision_making",
-        StepPoint.CONSCIENCE_EXECUTION: "ethical_reasoning", 
-        StepPoint.RECURSIVE_ASPDMA: "learning_adaptation",
-        StepPoint.RECURSIVE_CONSCIENCE: "learning_adaptation",
-        StepPoint.ACTION_SELECTION: "decision_making",
-        StepPoint.HANDLER_START: "system_architecture",
-        StepPoint.BUS_OUTBOUND: "system_architecture", 
-        StepPoint.PACKAGE_HANDLING: "system_architecture",
-        StepPoint.BUS_INBOUND: "system_architecture",
-        StepPoint.HANDLER_COMPLETE: "performance_completion",
-    }
-    
-    step_descriptions = {
-        StepPoint.PERFORM_DMAS: "Multi-perspective DMA analysis",
-        StepPoint.PERFORM_ASPDMA: "LLM-powered action selection",
-        StepPoint.CONSCIENCE_EXECUTION: "Ethical safety checks",
-        StepPoint.BUILD_CONTEXT: "System state and context building",
-        StepPoint.ACTION_SELECTION: "Final action determination",
-        # Add more as needed
-    }
-    
-    demo_data = {
-        "category": step_categories.get(step_point, "processing"),
-        "step_description": step_descriptions.get(step_point, f"Step point: {step_point}"),
-        "step_timings": metrics.get("step_timings", {}) if metrics else {},
-    }
-    
-    # Add step-specific insights
-    key_insights = {}
-    
-    if step_result:
-        if step_point == StepPoint.PERFORM_DMAS:
-            # Extract DMA insights
-            if "ethical_dma" in step_result:
-                key_insights["ethical_decision"] = step_result["ethical_dma"].get("decision")
-            if "dmas_executed" in step_result:
-                key_insights["dmas_executed"] = step_result["dmas_executed"]
-        elif step_point == StepPoint.PERFORM_ASPDMA:
-            # Extract LLM reasoning insights
-            if "aspdma_result" in step_result:
-                aspdma = step_result["aspdma_result"]
-                key_insights["selected_action"] = aspdma.get("selected_action")
-                key_insights["confidence"] = aspdma.get("confidence_level")
-        elif step_point == StepPoint.BUILD_CONTEXT:
-            # Extract context insights
-            key_insights["context_size"] = step_result.get("context_size_bytes")
-            key_insights["memory_queries"] = step_result.get("memory_queries_performed")
-    
-    if key_insights:
-        demo_data["key_insights"] = key_insights
-    
-    return demo_data
 
 
 # Service Management Extensions

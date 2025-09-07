@@ -5,6 +5,7 @@ Adds runtime queue, service management, and processor state endpoints.
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 
 # Constants to avoid duplication
@@ -638,14 +639,14 @@ async def get_processor_states(
 @router.get("/runtime/reasoning-stream")
 async def reasoning_stream(
     request: Request, 
-    auth: AuthContext = Depends(require_admin)
+    auth: AuthContext = Depends(require_observer)
 ):
     """
     Stream live H3ERE reasoning steps as they occur.
     
     Provides real-time streaming of step-by-step reasoning for live UI generation.
     Returns Server-Sent Events (SSE) with step data as processing happens.
-    Requires ADMIN role.
+    Requires OBSERVER role or higher.
     """
     from fastapi.responses import StreamingResponse
     import json

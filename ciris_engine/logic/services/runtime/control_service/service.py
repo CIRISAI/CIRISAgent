@@ -1218,17 +1218,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     ) -> ServicePriorityUpdateResponse:
         """Update service provider priority and selection strategy."""
         try:
-            registry_check = self._validate_service_registry_access(provider_name)
-            if not registry_check.success:
-                return registry_check
+            if not self._has_service_registry():
+                return ServicePriorityUpdateResponse(
+                    success=False, provider_name=provider_name, error=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE
+                )
 
-            validation_result = self._validate_priority_and_strategy(
-                provider_name, new_priority, new_strategy
-            )
-            if not validation_result.success:
+            validation_result = self._validate_priority_and_strategy(provider_name, new_priority, new_strategy)
+            if validation_result is not None:
                 return validation_result
 
-            new_priority_enum, new_strategy_enum = validation_result.changes["priority"], validation_result.changes.get("strategy")
+            new_priority_enum, new_strategy_enum = self._parse_priority_and_strategy(new_priority, new_strategy)
             
             update_result = await self._update_provider_priority(
                 provider_name, new_priority_enum, new_priority_group, new_strategy_enum
@@ -1241,23 +1240,19 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             await self._record_event("service_management", "update_priority", success=False, error=str(e))
             return ServicePriorityUpdateResponse(success=False, provider_name=provider_name, error=str(e))
 
-    def _validate_service_registry_access(self, provider_name: str) -> ServicePriorityUpdateResponse:
-        """Validate that service registry is available."""
-        if not self.runtime or not hasattr(self.runtime, "service_registry"):
-            return ServicePriorityUpdateResponse(
-                success=False, provider_name=provider_name, error=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE
-            )
-        return ServicePriorityUpdateResponse(success=True, provider_name=provider_name)
+    def _has_service_registry(self) -> bool:
+        """Check if service registry is available."""
+        return self.runtime and hasattr(self.runtime, "service_registry")
 
     def _validate_priority_and_strategy(
         self, provider_name: str, new_priority: str, new_strategy: Optional[str]
-    ) -> ServicePriorityUpdateResponse:
-        """Validate priority and strategy parameters."""
+    ) -> Optional[ServicePriorityUpdateResponse]:
+        """Validate priority and strategy parameters. Return error response if invalid, None if valid."""
         from ciris_engine.logic.registries.base import Priority, SelectionStrategy
 
         # Validate priority
         try:
-            new_priority_enum = Priority[new_priority.upper()]
+            Priority[new_priority.upper()]
         except KeyError:
             valid_priorities = [p.name for p in Priority]
             return ServicePriorityUpdateResponse(
@@ -1267,10 +1262,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             )
 
         # Validate strategy if provided
-        new_strategy_enum = None
         if new_strategy:
             try:
-                new_strategy_enum = SelectionStrategy[new_strategy.upper()]
+                SelectionStrategy[new_strategy.upper()]
             except KeyError:
                 valid_strategies = [s.name for s in SelectionStrategy]
                 return ServicePriorityUpdateResponse(
@@ -1279,11 +1273,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     error=f"Invalid strategy '{new_strategy}'. Valid strategies: {valid_strategies}",
                 )
 
-        return ServicePriorityUpdateResponse(
-            success=True,
-            provider_name=provider_name,
-            changes={"priority": new_priority_enum, "strategy": new_strategy_enum}
-        )
+        return None  # Valid
+
+    def _parse_priority_and_strategy(self, new_priority: str, new_strategy: Optional[str]):
+        """Parse and return priority and strategy enums."""
+        from ciris_engine.logic.registries.base import Priority, SelectionStrategy
+        
+        new_priority_enum = Priority[new_priority.upper()]
+        new_strategy_enum = SelectionStrategy[new_strategy.upper()] if new_strategy else None
+        
+        return new_priority_enum, new_strategy_enum
 
     async def _update_provider_priority(
         self, provider_name: str, new_priority_enum: Any, 
@@ -1365,9 +1364,14 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     async def reset_circuit_breakers(self, service_type: Optional[str] = None) -> CircuitBreakerResetResponse:
         """Reset circuit breakers for services."""
         try:
-            registry_check = self._check_service_registry_availability(service_type)
-            if not registry_check.success:
-                return registry_check
+            if not self._has_circuit_breaker_registry():
+                return CircuitBreakerResetResponse(
+                    success=False,
+                    message=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE,
+                    timestamp=self._now(),
+                    service_type=service_type,
+                    error=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE,
+                )
 
             if service_type:
                 reset_result = await self._reset_specific_service_type_breakers(service_type)
@@ -1392,24 +1396,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return CircuitBreakerResetResponse(
                 success=False,
                 message=f"Failed to reset circuit breakers: {str(e)}",
+                timestamp=self._now(),
                 service_type=service_type,
                 error=str(e),
             )
 
-    def _check_service_registry_availability(self, service_type: Optional[str]) -> CircuitBreakerResetResponse:
+    def _has_circuit_breaker_registry(self) -> bool:
         """Check if service registry is available for circuit breaker operations."""
-        if (
-            not self.runtime
-            or not hasattr(self.runtime, "service_registry")
-            or self.runtime.service_registry is None
-        ):
-            return CircuitBreakerResetResponse(
-                success=False,
-                message=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE,
-                service_type=service_type,
-                error=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE,
-            )
-        return CircuitBreakerResetResponse(success=True, service_type=service_type)
+        return (
+            self.runtime
+            and hasattr(self.runtime, "service_registry")
+            and self.runtime.service_registry is not None
+        )
 
     async def _reset_specific_service_type_breakers(self, service_type: str) -> CircuitBreakerResetResponse:
         """Reset circuit breakers for a specific service type."""
@@ -1431,6 +1429,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return CircuitBreakerResetResponse(
                 success=False,
                 message=f"Invalid service type: {service_type}",
+                timestamp=self._now(),
                 service_type=service_type,
                 error=f"Invalid service type: {service_type}",
             )

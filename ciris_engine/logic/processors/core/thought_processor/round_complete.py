@@ -34,15 +34,19 @@ class RoundCompletePhase:
 
         # Update round metrics if telemetry service is available
         if hasattr(self, "telemetry_service") and self.telemetry_service:
-            await self.telemetry_service.record_metric(
-                "round_completed",
-                value=1.0,
-                tags={
-                    "thought_id": thought_item.thought_id,
-                    "round_number": getattr(self, "current_round_number", 0),
-                    "final_action": final_result.selected_action.value if final_result else "none",
-                },
-            )
+            try:
+                await self.telemetry_service.record_metric(
+                    "round_completed",
+                    value=1.0,
+                    tags={
+                        "thought_id": thought_item.thought_id,
+                        "round_number": str(getattr(self, "current_round_number", 0)),
+                        "final_action": final_result.selected_action.value if final_result else "none",
+                    },
+                )
+            except Exception as e:
+                logger.error(f"Error recording round completion metric: {e}")
+                # Don't let telemetry errors break the round completion
 
         # Return the final result unchanged
         return final_result

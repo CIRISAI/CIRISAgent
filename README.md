@@ -22,7 +22,7 @@ CIRIS wraps LLM calls with:
 - **Multiple evaluation passes** - Every decision gets ethical, common-sense, and domain checks
 - **Human escalation** - Uncertain decisions defer to designated "Wise Authorities" 
 - **Complete audit trails** - Every decision is logged with reasoning
-- **Type safety** - Zero `Dict[str, Any]` in production code
+- **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
 - **Identity system** - Agents have persistent identity across restarts
 
 **Philosophy**: "No Dicts, No Strings, No Kings" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
@@ -67,7 +67,7 @@ python main.py --adapter api --port 8000
 ## Contributing
 
 1. Read the [Architecture Guide](docs/ARCHITECTURE.md) - Understand the three-legged stool
-2. Follow [Type Safety Rules](CLAUDE.md#type-safety) - No `Dict[str, Any]`
+2. Follow [Type Safety Rules](CLAUDE.md#type-safety) - Minimal `Dict[str, Any]` usage
 3. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup
 
 ## Support

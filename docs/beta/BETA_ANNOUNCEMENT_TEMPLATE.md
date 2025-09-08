@@ -170,9 +170,9 @@ Hey everyone,
 Excited to announce the beta release of CIRIS Agent, an AI agent framework with some unique architectural choices:
 
 **Type Safety First**
-- Zero `Dict[str, Any]` in production code
-- All data flows through Pydantic models
-- Full mypy strict compliance
+- Minimal `Dict[str, Any]` usage, none in critical paths
+- All data flows through Pydantic models  
+- Enhanced mypy configuration (strict=True + additional flags)
 
 **Architecture**
 - 22 core services (all required)

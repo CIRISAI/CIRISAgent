@@ -18,7 +18,7 @@ The CIRIS Agent's core **H3ERE (Hyper3 Ethical Recursive Engine)** is architectu
 - **10 Handlers**: Exactly 10 action handlers in 3×3×3+1 structure
 - **6 Message Buses**: Complete communication infrastructure
 - **22 Core Services**: All essential services implemented and documented
-- **Complete Type Safety**: Zero `Dict[str, Any]` in production code
+- **Strong Type Safety**: Minimal `Dict[str, Any]` usage, none in critical paths
 
 ## 🎯 **How to Contribute**
 
@@ -230,7 +230,7 @@ new_task = Task(..., context=task_context)
 
 ### **PR Requirements:**
 - [ ] All tests pass
-- [ ] Type safety maintained (no new `Dict[str, Any]`)
+- [ ] Type safety maintained (minimal new `Dict[str, Any]` usage)
 - [ ] Documentation updated
 - [ ] Follows H3ERE architectural principles
 - [ ] No breaking changes to core engine

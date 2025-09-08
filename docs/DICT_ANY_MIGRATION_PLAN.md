@@ -195,7 +195,7 @@ After migration:
 
 ## Validation
 
-1. Run mypy strict mode after each phase
+1. Run mypy enhanced mode (strict=True + additional flags) after each phase
 2. Ensure all tests pass
 3. Document any new schemas needed
 4. Track reduction in Dict[str, Any] count

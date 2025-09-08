@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.config_service import GraphConfigService
@@ -52,6 +52,10 @@ from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, Kill
 
 
 logger = logging.getLogger(__name__)
+
+# Error message constants
+_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE = "Agent processor not available"
+_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE = "Service registry not available"
 
 
 class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
@@ -142,7 +146,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     processor_name="agent",
                     operation="single_step",
                     new_status=self._processor_status,
-                    error="Agent processor not available",
+                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
                 )
 
             # Ensure processor is paused
@@ -218,7 +222,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     processor_name="agent",
                     operation="pause",
                     new_status=self._processor_status,
-                    error="Agent processor not available",
+                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
                 )
 
             success = await self.runtime.agent_processor.pause_processing()
@@ -262,7 +266,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     processor_name="agent",
                     operation="resume",
                     new_status=self._processor_status,
-                    error="Agent processor not available",
+                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
                 )
 
             success = await self.runtime.agent_processor.resume_processing()
@@ -644,103 +648,133 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def list_adapters(self) -> List[AdapterInfo]:
         """List all loaded adapters including bootstrap adapters."""
-        # Lazy initialization of adapter_manager if needed
+        self._ensure_adapter_manager_initialized()
+        
+        adapters_list = []
+        adapters_list.extend(await self._get_bootstrap_adapters())
+        adapters_list.extend(await self._get_managed_adapters())
+        
+        return adapters_list
+
+    def _ensure_adapter_manager_initialized(self) -> None:
+        """Ensure adapter manager is initialized lazily."""
         if not self.adapter_manager and self.runtime:
             if self._time_service is None:
                 from ciris_engine.logic.services.lifecycle.time import TimeService
-
                 self._time_service = TimeService()
+            
             from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-
             self.adapter_manager = RuntimeAdapterManager(cast(CIRISRuntime, self.runtime), self._time_service)
             logger.info("Lazy-initialized adapter_manager in list_adapters")
 
-        adapters_list = []
+    async def _get_bootstrap_adapters(self) -> List[AdapterInfo]:
+        """Get bootstrap adapters from runtime."""
+        adapters = []
+        
+        if not (self.runtime and hasattr(self.runtime, "adapters")):
+            return adapters
+            
+        for adapter in self.runtime.adapters:
+            adapter_type = self._extract_adapter_type(adapter)
+            
+            if await self._should_skip_bootstrap_adapter(adapter_type):
+                continue
+                
+            adapter_info = await self._create_bootstrap_adapter_info(adapter, adapter_type)
+            adapters.append(adapter_info)
+            
+        return adapters
 
-        # First, add bootstrap adapters from runtime
-        if self.runtime and hasattr(self.runtime, "adapters"):
-            for adapter in self.runtime.adapters:
-                # Get adapter type from class name
-                adapter_type = adapter.__class__.__name__.lower().replace("platform", "").replace("adapter", "")
+    def _extract_adapter_type(self, adapter: Any) -> str:
+        """Extract adapter type from class name."""
+        return adapter.__class__.__name__.lower().replace("platform", "").replace("adapter", "")
 
-                # Skip creating bootstrap entries for adapters that are managed by adapter_manager
-                # Only create bootstrap entries for adapters that were started with --adapter flag
-                if (
-                    adapter_type == "discord"
-                    and self.adapter_manager
-                    and any(a.adapter_type == "discord" for a in await self.adapter_manager.list_adapters())
-                ):
-                    continue
+    async def _should_skip_bootstrap_adapter(self, adapter_type: str) -> bool:
+        """Check if bootstrap adapter should be skipped because it's managed."""
+        return (
+            adapter_type == "discord"
+            and self.adapter_manager
+            and any(a.adapter_type == "discord" for a in await self.adapter_manager.list_adapters())
+        )
 
-                adapter_id = f"{adapter_type}_bootstrap"
+    async def _create_bootstrap_adapter_info(self, adapter: Any, adapter_type: str) -> AdapterInfo:
+        """Create AdapterInfo for a bootstrap adapter."""
+        tools = await self._extract_adapter_tools(adapter, adapter_type)
+        
+        return AdapterInfo(
+            adapter_id=f"{adapter_type}_bootstrap",
+            adapter_type=adapter_type,
+            status=AdapterStatus.RUNNING,  # Bootstrap adapters are always running
+            started_at=self._start_time,  # Use service start time
+            messages_processed=0,  # Tracked via telemetry service
+            error_count=0,
+            last_error=None,
+            tools=tools,
+        )
 
-                # Check if adapter has tools
-                tools = []
-                if hasattr(adapter, "tool_service") and adapter.tool_service:
-                    try:
-                        if hasattr(adapter.tool_service, "list_tools"):
-                            tool_names = await adapter.tool_service.list_tools()
-                            for tool_name in tool_names:
-                                tool_info = {"name": tool_name, "description": f"{tool_name} tool"}
-                                if hasattr(adapter.tool_service, "get_tool_schema"):
-                                    schema = await adapter.tool_service.get_tool_schema(tool_name)
-                                    if schema:
-                                        tool_info["schema"] = schema.dict() if hasattr(schema, "dict") else schema
-                                tools.append(tool_info)
-                    except Exception as e:
-                        logger.debug(f"Could not get tools from {adapter_type}: {e}")
+    async def _extract_adapter_tools(self, adapter: Any, adapter_type: str) -> List[Dict[str, Any]]:
+        """Extract tools from adapter tool service."""
+        tools = []
+        
+        if not (hasattr(adapter, "tool_service") and adapter.tool_service):
+            return tools
+            
+        try:
+            if hasattr(adapter.tool_service, "list_tools"):
+                tool_names = await adapter.tool_service.list_tools()
+                for tool_name in tool_names:
+                    tool_info = await self._create_tool_info(adapter.tool_service, tool_name)
+                    tools.append(tool_info)
+        except Exception as e:
+            logger.debug(f"Could not get tools from {adapter_type}: {e}")
+            
+        return tools
 
-                # Create adapter info
-                adapters_list.append(
-                    AdapterInfo(
-                        adapter_id=adapter_id or "unknown",
-                        adapter_type=adapter_type,
-                        status=AdapterStatus.RUNNING,  # Bootstrap adapters are always running
-                        started_at=self._start_time,  # Use service start time
-                        messages_processed=0,  # Tracked via telemetry service
-                        error_count=0,
-                        last_error=None,
-                        tools=tools,  # Include tools information
-                    )
-                )
+    async def _create_tool_info(self, tool_service: Any, tool_name: str) -> Dict[str, Any]:
+        """Create tool info dictionary."""
+        tool_info = {"name": tool_name, "description": f"{tool_name} tool"}
+        
+        if hasattr(tool_service, "get_tool_schema"):
+            schema = await tool_service.get_tool_schema(tool_name)
+            if schema:
+                tool_info["schema"] = schema.dict() if hasattr(schema, "dict") else schema
+                
+        return tool_info
 
-        # Then add adapters from adapter_manager
-        if self.adapter_manager:
-            adapters_raw = await self.adapter_manager.list_adapters()
-            for adapter_status in adapters_raw:
-                # AdapterStatus from adapter_manager already has the right fields
-                # Convert is_running to status enum
-                if adapter_status.is_running:
-                    status = AdapterStatus.RUNNING
-                else:
-                    status = AdapterStatus.STOPPED
+    async def _get_managed_adapters(self) -> List[AdapterInfo]:
+        """Get adapters from adapter manager."""
+        if not self.adapter_manager:
+            return []
+            
+        adapters = []
+        adapters_raw = await self.adapter_manager.list_adapters()
+        
+        for adapter_status in adapters_raw:
+            adapter_info = self._convert_managed_adapter_status(adapter_status)
+            adapters.append(adapter_info)
+            
+        return adapters
 
-                adapters_list.append(
-                    AdapterInfo(
-                        adapter_id=adapter_status.adapter_id,
-                        adapter_type=adapter_status.adapter_type,
-                        status=status,
-                        started_at=adapter_status.loaded_at,
-                        messages_processed=(
-                            adapter_status.metrics.get("messages_processed", 0)
-                            if adapter_status.metrics and hasattr(adapter_status.metrics, "get")
-                            else 0
-                        ),
-                        error_count=(
-                            adapter_status.metrics.get("errors_count", 0)
-                            if adapter_status.metrics and hasattr(adapter_status.metrics, "get")
-                            else 0
-                        ),
-                        last_error=(
-                            adapter_status.metrics.get("last_error")
-                            if adapter_status.metrics and hasattr(adapter_status.metrics, "get")
-                            else None
-                        ),
-                        tools=adapter_status.tools if hasattr(adapter_status, "tools") else None,
-                    )
-                )
+    def _convert_managed_adapter_status(self, adapter_status: Any) -> AdapterInfo:
+        """Convert adapter manager status to AdapterInfo."""
+        status = AdapterStatus.RUNNING if adapter_status.is_running else AdapterStatus.STOPPED
+        
+        return AdapterInfo(
+            adapter_id=adapter_status.adapter_id,
+            adapter_type=adapter_status.adapter_type,
+            status=status,
+            started_at=adapter_status.loaded_at,
+            messages_processed=self._safe_get_metric(adapter_status, "messages_processed", 0),
+            error_count=self._safe_get_metric(adapter_status, "errors_count", 0),
+            last_error=self._safe_get_metric(adapter_status, "last_error", None),
+            tools=adapter_status.tools if hasattr(adapter_status, "tools") else None,
+        )
 
-        return adapters_list
+    def _safe_get_metric(self, adapter_status: Any, metric_name: str, default: Any) -> Any:
+        """Safely get metric value from adapter status."""
+        if adapter_status.metrics and hasattr(adapter_status.metrics, "get"):
+            return adapter_status.metrics.get(metric_name, default)
+        return default
 
     async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
         """Get detailed information about a specific adapter."""
@@ -840,12 +874,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     ) -> ConfigOperationResponse:
         """Update a configuration value."""
         try:
-            # Convert string parameters to enums
-            config_scope = ConfigScope(scope) if isinstance(scope, str) else scope
-            config_validation = (
-                ConfigValidationLevel(validation_level) if isinstance(validation_level, str) else validation_level
-            )
-
             # GraphConfigService uses set_config, not update_config_value
             # Convert object to appropriate type
             config_value = value if isinstance(value, (str, int, float, bool, list, dict)) else str(value)
@@ -933,49 +961,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     async def restore_config(self, backup_name: str) -> ConfigOperationResponse:
         """Restore configuration from backup."""
         try:
-            # Get backup config and restore all values
             backup_config = await self._get_config_manager().get_config(backup_name)
             if not backup_config:
                 raise ValueError(f"Backup '{backup_name}' not found")
 
-            # Restore each config value
-            # ConfigValue is a special type, need to extract the actual value
-            backup_raw = backup_config.value
+            actual_backup = self._extract_backup_configs(backup_config)
+            await self._restore_configs_from_backup(actual_backup)
 
-            # Extract actual value from ConfigValue wrapper
-            backup_value = backup_raw.value if hasattr(backup_raw, "value") else backup_raw
-
-            # Try to reconstruct ConfigBackupData
-            actual_backup: Dict[str, Union[str, int, float, bool, list, dict]]
-            if isinstance(backup_value, dict) and "configs" in backup_value:
-                # Create ConfigBackupData from the stored dict
-                timestamp_str = backup_value.get("backup_timestamp")
-                if not isinstance(timestamp_str, str):
-                    raise ValueError("backup_timestamp must be a string")
-
-                backup_data = ConfigBackupData(
-                    configs=backup_value["configs"],
-                    backup_timestamp=datetime.fromisoformat(timestamp_str),
-                    backup_version=str(backup_value.get("backup_version", "1.0.0")),
-                    backup_by=str(backup_value.get("backup_by", "RuntimeControlService")),
-                )
-                actual_backup = backup_data.configs
-            else:
-                # Fallback - try to use as direct config dict
-                if isinstance(backup_value, dict):
-                    # Filter out None values to match the expected type
-                    actual_backup = {k: v for k, v in backup_value.items() if v is not None}
-                else:
-                    raise ValueError("Backup data is not in expected format")
-
-            # Restore configs
-            for key, value in actual_backup.items():
-                if not key.startswith("backup_"):  # Don't restore backups
-                    # Ensure value is proper type for set_config
-                    config_val = value if isinstance(value, (str, int, float, bool, list, dict)) else str(value)
-                    await self._get_config_manager().set_config(key, config_val, "RuntimeControlService")
-
-            # Convert to ConfigOperationResponse
             return ConfigOperationResponse(
                 success=True,
                 operation="restore_config",
@@ -996,6 +988,40 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 details={"backup_name": backup_name, "timestamp": self._now().isoformat()},
                 error=str(e),
             )
+
+    def _extract_backup_configs(self, backup_config: Any) -> Dict[str, Union[str, int, float, bool, list, dict]]:
+        """Extract backup configuration data from ConfigValue wrapper."""
+        backup_raw = backup_config.value
+        backup_value = backup_raw.value if hasattr(backup_raw, "value") else backup_raw
+
+        if isinstance(backup_value, dict) and "configs" in backup_value:
+            return self._parse_structured_backup(backup_value)
+        elif isinstance(backup_value, dict):
+            # Filter out None values to match the expected type
+            return {k: v for k, v in backup_value.items() if v is not None}
+        else:
+            raise ValueError("Backup data is not in expected format")
+
+    def _parse_structured_backup(self, backup_value: dict) -> Dict[str, Union[str, int, float, bool, list, dict]]:
+        """Parse structured backup data with metadata."""
+        timestamp_str = backup_value.get("backup_timestamp")
+        if not isinstance(timestamp_str, str):
+            raise ValueError("backup_timestamp must be a string")
+
+        backup_data = ConfigBackupData(
+            configs=backup_value["configs"],
+            backup_timestamp=datetime.fromisoformat(timestamp_str),
+            backup_version=str(backup_value.get("backup_version", "1.0.0")),
+            backup_by=str(backup_value.get("backup_by", "RuntimeControlService")),
+        )
+        return backup_data.configs
+
+    async def _restore_configs_from_backup(self, configs: Dict[str, Union[str, int, float, bool, list, dict]]) -> None:
+        """Restore individual configuration values from backup."""
+        for key, value in configs.items():
+            if not key.startswith("backup_"):  # Don't restore backups
+                config_val = value if isinstance(value, (str, int, float, bool, list, dict)) else str(value)
+                await self._get_config_manager().set_config(key, config_val, "RuntimeControlService")
 
     async def list_config_backups(self) -> List[ConfigBackup]:
         """List available configuration backups."""
@@ -1089,7 +1115,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Get complete runtime state snapshot."""
         try:
             current_time = self._now()
-            uptime = (current_time - self._start_time).total_seconds()  # type: ignore[operator]
 
             # Get runtime status
             runtime_status = await self.get_runtime_status()
@@ -1193,164 +1218,174 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     ) -> ServicePriorityUpdateResponse:
         """Update service provider priority and selection strategy."""
         try:
-            if not self.runtime or not hasattr(self.runtime, "service_registry"):
-                return ServicePriorityUpdateResponse(
-                    success=False, provider_name=provider_name, error="Service registry not available"
-                )
+            registry_check = self._validate_service_registry_access(provider_name)
+            if not registry_check.success:
+                return registry_check
 
-            registry = self.runtime.service_registry
-
-            # Import the Priority and SelectionStrategy enums
-            from ciris_engine.logic.registries.base import Priority, SelectionStrategy
-
-            # Validate priority string
-            try:
-                new_priority_enum = Priority[new_priority.upper()]
-            except KeyError:
-                valid_priorities = [p.name for p in Priority]
-                return ServicePriorityUpdateResponse(
-                    success=False,
-                    provider_name=provider_name,
-                    error=f"Invalid priority '{new_priority}'. Valid priorities: {valid_priorities}",
-                )
-
-            # Validate selection strategy if provided
-            new_strategy_enum = None
-            if new_strategy:
-                try:
-                    new_strategy_enum = SelectionStrategy[new_strategy.upper()]
-                except KeyError:
-                    valid_strategies = [s.name for s in SelectionStrategy]
-                    return ServicePriorityUpdateResponse(
-                        success=False,
-                        provider_name=provider_name,
-                        error=f"Invalid strategy '{new_strategy}'. Valid strategies: {valid_strategies}",
-                    )
-
-            # Find the provider in handler-specific services
-            provider_found = False
-            updated_info = {}
-
-            # Check in the main services registry
-            for service_type, providers in registry._services.items():
-                for provider in providers:
-                    if provider.name == provider_name:
-                        provider_found = True
-                        old_priority = provider.priority.name
-                        old_priority_group = provider.priority_group
-                        old_strategy = provider.strategy.name
-
-                        # Update provider attributes
-                        provider.priority = new_priority_enum
-                        if new_priority_group is not None:
-                            provider.priority_group = new_priority_group
-                        if new_strategy_enum is not None:
-                            provider.strategy = new_strategy_enum
-
-                        # Re-sort providers by priority
-                        providers.sort(key=lambda x: (x.priority_group, x.priority.value))
-
-                        updated_info = {
-                            "service_type": str(service_type),
-                            "old_priority": old_priority,
-                            "new_priority": provider.priority.name,
-                            "old_priority_group": old_priority_group,
-                            "new_priority_group": provider.priority_group,
-                            "old_strategy": old_strategy,
-                            "new_strategy": provider.strategy.name,
-                        }
-                        break
-                if provider_found:
-                    break
-
-            if not provider_found:
-                return ServicePriorityUpdateResponse(
-                    success=False,
-                    provider_name=provider_name,
-                    error=f"Service provider '{provider_name}' not found in registry",
-                )
-
-            # Record the event
-            await self._record_event("service_management", "update_priority", success=True, result=updated_info)
-
-            logger.info(
-                f"Updated service provider '{provider_name}' priority from "
-                f"{updated_info['old_priority']} to {updated_info['new_priority']}"
+            validation_result = self._validate_priority_and_strategy(
+                provider_name, new_priority, new_strategy
             )
+            if not validation_result.success:
+                return validation_result
 
-            return ServicePriorityUpdateResponse(
-                success=True,
-                message=f"Successfully updated provider '{provider_name}' priority",
-                provider_name=provider_name,
-                changes=updated_info,
-                timestamp=self._now(),
+            new_priority_enum, new_strategy_enum = validation_result.changes["priority"], validation_result.changes.get("strategy")
+            
+            update_result = await self._update_provider_priority(
+                provider_name, new_priority_enum, new_priority_group, new_strategy_enum
             )
+            
+            return update_result
 
         except Exception as e:
             logger.error(f"Failed to update service priority: {e}")
             await self._record_event("service_management", "update_priority", success=False, error=str(e))
             return ServicePriorityUpdateResponse(success=False, provider_name=provider_name, error=str(e))
 
+    def _validate_service_registry_access(self, provider_name: str) -> ServicePriorityUpdateResponse:
+        """Validate that service registry is available."""
+        if not self.runtime or not hasattr(self.runtime, "service_registry"):
+            return ServicePriorityUpdateResponse(
+                success=False, provider_name=provider_name, error=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE
+            )
+        return ServicePriorityUpdateResponse(success=True, provider_name=provider_name)
+
+    def _validate_priority_and_strategy(
+        self, provider_name: str, new_priority: str, new_strategy: Optional[str]
+    ) -> ServicePriorityUpdateResponse:
+        """Validate priority and strategy parameters."""
+        from ciris_engine.logic.registries.base import Priority, SelectionStrategy
+
+        # Validate priority
+        try:
+            new_priority_enum = Priority[new_priority.upper()]
+        except KeyError:
+            valid_priorities = [p.name for p in Priority]
+            return ServicePriorityUpdateResponse(
+                success=False,
+                provider_name=provider_name,
+                error=f"Invalid priority '{new_priority}'. Valid priorities: {valid_priorities}",
+            )
+
+        # Validate strategy if provided
+        new_strategy_enum = None
+        if new_strategy:
+            try:
+                new_strategy_enum = SelectionStrategy[new_strategy.upper()]
+            except KeyError:
+                valid_strategies = [s.name for s in SelectionStrategy]
+                return ServicePriorityUpdateResponse(
+                    success=False,
+                    provider_name=provider_name,
+                    error=f"Invalid strategy '{new_strategy}'. Valid strategies: {valid_strategies}",
+                )
+
+        return ServicePriorityUpdateResponse(
+            success=True,
+            provider_name=provider_name,
+            changes={"priority": new_priority_enum, "strategy": new_strategy_enum}
+        )
+
+    async def _update_provider_priority(
+        self, provider_name: str, new_priority_enum: Any, 
+        new_priority_group: Optional[int], new_strategy_enum: Optional[Any]
+    ) -> ServicePriorityUpdateResponse:
+        """Update the provider priority in the registry."""
+        registry = self.runtime.service_registry
+        
+        provider_info = self._find_provider_in_registry(registry, provider_name)
+        if not provider_info:
+            return ServicePriorityUpdateResponse(
+                success=False,
+                provider_name=provider_name,
+                error=f"Service provider '{provider_name}' not found in registry",
+            )
+
+        updated_info = self._apply_priority_updates(
+            provider_info, new_priority_enum, new_priority_group, new_strategy_enum
+        )
+
+        await self._record_event("service_management", "update_priority", success=True, result=updated_info)
+        logger.info(
+            f"Updated service provider '{provider_name}' priority from "
+            f"{updated_info['old_priority']} to {updated_info['new_priority']}"
+        )
+
+        return ServicePriorityUpdateResponse(
+            success=True,
+            message=f"Successfully updated provider '{provider_name}' priority",
+            provider_name=provider_name,
+            changes=updated_info,
+            timestamp=self._now(),
+        )
+
+    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[Dict[str, Any]]:
+        """Find a provider in the service registry."""
+        for service_type, providers in registry._services.items():
+            for provider in providers:
+                if provider.name == provider_name:
+                    return {
+                        "provider": provider,
+                        "providers_list": providers,
+                        "service_type": str(service_type)
+                    }
+        return None
+
+    def _apply_priority_updates(
+        self, provider_info: Dict[str, Any], new_priority_enum: Any,
+        new_priority_group: Optional[int], new_strategy_enum: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Apply priority and strategy updates to provider."""
+        provider = provider_info["provider"]
+        providers_list = provider_info["providers_list"]
+        
+        old_priority = provider.priority.name
+        old_priority_group = provider.priority_group
+        old_strategy = provider.strategy.name
+
+        # Update provider attributes
+        provider.priority = new_priority_enum
+        if new_priority_group is not None:
+            provider.priority_group = new_priority_group
+        if new_strategy_enum is not None:
+            provider.strategy = new_strategy_enum
+
+        # Re-sort providers by priority
+        providers_list.sort(key=lambda x: (x.priority_group, x.priority.value))
+
+        return {
+            "service_type": provider_info["service_type"],
+            "old_priority": old_priority,
+            "new_priority": provider.priority.name,
+            "old_priority_group": old_priority_group,
+            "new_priority_group": provider.priority_group,
+            "old_strategy": old_strategy,
+            "new_strategy": provider.strategy.name,
+        }
+
     async def reset_circuit_breakers(self, service_type: Optional[str] = None) -> CircuitBreakerResetResponse:
         """Reset circuit breakers for services."""
         try:
-            if (
-                not self.runtime
-                or not hasattr(self.runtime, "service_registry")
-                or self.runtime.service_registry is None
-            ):
-                return CircuitBreakerResetResponse(
-                    success=False,
-                    message="Service registry not available",
-                    service_type=service_type,
-                    error="Service registry not available",
-                )
+            registry_check = self._check_service_registry_availability(service_type)
+            if not registry_check.success:
+                return registry_check
 
-            # Reset circuit breakers - either all or for specific service type
             if service_type:
-                # Get all providers of this service type and reset their breakers
-                from ciris_engine.schemas.runtime.enums import ServiceType
-
-                try:
-                    service_type_enum = ServiceType(service_type)
-                    providers_reset = []
-
-                    # Get all providers for this service type
-                    if service_type_enum in self.runtime.service_registry._services:
-                        for provider in self.runtime.service_registry._services[service_type_enum]:
-                            if provider.circuit_breaker:
-                                provider.circuit_breaker.reset()
-                                providers_reset.append(provider.name)
-
-                    message = f"Reset {len(providers_reset)} circuit breakers for {service_type} services"
-                except ValueError:
-                    # Invalid service type
-                    return CircuitBreakerResetResponse(
-                        success=False,
-                        message=f"Invalid service type: {service_type}",
-                        service_type=service_type,
-                        error=f"Invalid service type: {service_type}",
-                    )
+                reset_result = await self._reset_specific_service_type_breakers(service_type)
             else:
-                # Reset all circuit breakers
-                self.runtime.service_registry.reset_circuit_breakers()
-                providers_reset = list(self.runtime.service_registry._circuit_breakers.keys())
-                message = f"Reset all {len(providers_reset)} circuit breakers"
+                reset_result = await self._reset_all_circuit_breakers()
+
+            if not reset_result.success:
+                return reset_result
 
             await self._record_event(
                 "service_management",
-                "reset_circuit_breakers",
+                "reset_circuit_breakers", 
                 True,
-                result={"service_type": service_type, "providers_reset": len(providers_reset)},
+                result={"service_type": service_type, "providers_reset": reset_result.reset_count},
             )
 
-            return CircuitBreakerResetResponse(
-                success=True,
-                message=message,
-                timestamp=self._now(),
-                service_type=service_type,
-                reset_count=len(providers_reset),
-            )
+            return reset_result
+
         except Exception as e:
             logger.error(f"Failed to reset circuit breakers: {e}")
             await self._record_event("service_management", "reset_circuit_breakers", False, error=str(e))
@@ -1360,6 +1395,71 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 service_type=service_type,
                 error=str(e),
             )
+
+    def _check_service_registry_availability(self, service_type: Optional[str]) -> CircuitBreakerResetResponse:
+        """Check if service registry is available for circuit breaker operations."""
+        if (
+            not self.runtime
+            or not hasattr(self.runtime, "service_registry")
+            or self.runtime.service_registry is None
+        ):
+            return CircuitBreakerResetResponse(
+                success=False,
+                message=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE,
+                service_type=service_type,
+                error=_ERROR_SERVICE_REGISTRY_NOT_AVAILABLE,
+            )
+        return CircuitBreakerResetResponse(success=True, service_type=service_type)
+
+    async def _reset_specific_service_type_breakers(self, service_type: str) -> CircuitBreakerResetResponse:
+        """Reset circuit breakers for a specific service type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        try:
+            service_type_enum = ServiceType(service_type)
+            providers_reset = self._reset_providers_by_service_type(service_type_enum)
+            message = f"Reset {len(providers_reset)} circuit breakers for {service_type} services"
+            
+            return CircuitBreakerResetResponse(
+                success=True,
+                message=message,
+                timestamp=self._now(),
+                service_type=service_type,
+                reset_count=len(providers_reset),
+            )
+        except ValueError:
+            return CircuitBreakerResetResponse(
+                success=False,
+                message=f"Invalid service type: {service_type}",
+                service_type=service_type,
+                error=f"Invalid service type: {service_type}",
+            )
+
+    def _reset_providers_by_service_type(self, service_type_enum: Any) -> List[str]:
+        """Reset circuit breakers for providers of a specific service type."""
+        providers_reset = []
+        
+        if service_type_enum in self.runtime.service_registry._services:
+            for provider in self.runtime.service_registry._services[service_type_enum]:
+                if provider.circuit_breaker:
+                    provider.circuit_breaker.reset()
+                    providers_reset.append(provider.name)
+                    
+        return providers_reset
+
+    async def _reset_all_circuit_breakers(self) -> CircuitBreakerResetResponse:
+        """Reset all circuit breakers in the registry."""
+        self.runtime.service_registry.reset_circuit_breakers()
+        providers_reset = list(self.runtime.service_registry._circuit_breakers.keys())
+        message = f"Reset all {len(providers_reset)} circuit breakers"
+        
+        return CircuitBreakerResetResponse(
+            success=True,
+            message=message,
+            timestamp=self._now(),
+            service_type=None,
+            reset_count=len(providers_reset),
+        )
 
     async def get_circuit_breaker_status(self, service_type: Optional[str] = None) -> Dict[str, CircuitBreakerStatus]:
         """Get circuit breaker status for services."""

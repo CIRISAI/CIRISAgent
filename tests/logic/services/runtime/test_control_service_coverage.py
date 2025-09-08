@@ -478,3 +478,64 @@ class TestRuntimeControlServiceCoverage:
         
         # Should fallback to 0 when no agent processor
         assert status.queue_depth == 0, f"Expected queue_depth=0 when no agent processor, got {status.queue_depth}"
+
+    @pytest.mark.asyncio
+    async def test_get_processor_queue_status_no_processor(self, control_service):
+        """Test get_processor_queue_status when agent processor is None."""
+        # Set agent processor to None to trigger the uncovered branch
+        control_service.runtime.agent_processor = None
+        
+        with patch('ciris_engine.logic.services.runtime.control_service.service.logger') as mock_logger:
+            status = await control_service.get_processor_queue_status()
+            
+            # Should log debug message and return empty queue status
+            mock_logger.debug.assert_called_once_with("Agent processor not yet initialized, returning empty queue status")
+            assert status.processor_name == "agent"
+            assert status.queue_size == 0
+            assert status.max_size == 1000
+            assert status.processing_rate == 0.0
+            assert status.average_latency_ms == 0.0
+            assert status.oldest_message_age_seconds is None
+
+    @pytest.mark.asyncio
+    async def test_get_processor_queue_status_success_path(self, control_service, mock_runtime):
+        """Test get_processor_queue_status successful execution path."""
+        # Setup mock to return queue status
+        mock_queue_status = Mock(pending_thoughts=5, pending_tasks=3)
+        mock_runtime.agent_processor.get_queue_status.return_value = mock_queue_status
+        
+        # Set up calculation methods to return values
+        control_service._calculate_processing_rate = Mock(return_value=2.5)
+        control_service._calculate_average_latency = Mock(return_value=45.0)
+        
+        status = await control_service.get_processor_queue_status()
+        
+        assert status.processor_name == "agent"
+        assert status.queue_size == 8  # 5 thoughts + 3 tasks
+        assert status.max_size == 1000
+        assert status.processing_rate == 2.5
+        assert status.average_latency_ms == 45.0
+        assert status.oldest_message_age_seconds is None
+        
+        mock_runtime.agent_processor.get_queue_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_processor_queue_status_exception_handling(self, control_service, mock_runtime):
+        """Test get_processor_queue_status exception handling."""
+        # Make get_queue_status raise an exception
+        mock_runtime.agent_processor.get_queue_status.side_effect = RuntimeError("Queue access failed")
+        
+        with patch('ciris_engine.logic.services.runtime.control_service.service.logger') as mock_logger:
+            status = await control_service.get_processor_queue_status()
+            
+            # Should log error and return error status
+            mock_logger.error.assert_called_once()
+            error_call = mock_logger.error.call_args[0][0]
+            assert "Failed to get queue status:" in error_call
+            
+            assert status.processor_name == "agent"
+            assert status.queue_size == 0
+            assert status.max_size == 0
+            assert status.processing_rate == 0.0
+            assert status.average_latency_ms == 0.0
+            assert status.oldest_message_age_seconds is None

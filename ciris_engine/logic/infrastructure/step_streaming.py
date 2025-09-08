@@ -33,7 +33,7 @@ class StepResultStream:
         self._subscribers.discard(queue)
         logger.debug(f"Subscriber removed, total: {len(self._subscribers)}")
         
-    def broadcast_step_result(self, step_result: Dict[str, Any]) -> None:
+    async def broadcast_step_result(self, step_result: Dict[str, Any]) -> None:
         """
         Broadcast a step result to all connected subscribers.
         

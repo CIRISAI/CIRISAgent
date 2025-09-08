@@ -24,12 +24,8 @@ def get_auth_service(request: Request) -> APIAuthService:
     return auth_service
 
 
-async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency injection
-    request: Request,
-    authorization: Optional[str] = Header(None),
-    auth_service: APIAuthService = Depends(get_auth_service),
-) -> AuthContext:
-    """Extract and validate authentication from request."""
+def _extract_bearer_token(authorization: Optional[str]) -> str:
+    """Extract and validate bearer token from authorization header."""
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -37,7 +33,6 @@ async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency in
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract bearer token
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -45,92 +40,89 @@ async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency in
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    api_key = authorization[7:]  # Remove "Bearer " prefix
+    return authorization[7:]  # Remove "Bearer " prefix
 
-    # Check if this is a service token
-    if api_key.startswith("service:"):
-        service_token = api_key[8:]  # Remove "service:" prefix
-        service_user = auth_service.validate_service_token(service_token)
-        if not service_user:
-            # Audit failed service token attempt
-            audit_service = getattr(request.app.state, "audit_service", None)
-            if audit_service:
-                import hashlib
 
-                from ciris_engine.schemas.services.graph.audit import AuditEventData
+def _audit_failed_service_token(request: Request, service_token: str) -> None:
+    """Audit failed service token authentication attempt."""
+    audit_service = getattr(request.app.state, "audit_service", None)
+    if not audit_service:
+        return
 
-                # Hash the token for audit logging (don't log the actual token)
-                token_hash = hashlib.sha256(service_token.encode()).hexdigest()[:16]
-                audit_event = AuditEventData(
-                    entity_id="auth_service",
-                    actor=f"service_token_hash:{token_hash}",
-                    outcome="failure",
-                    severity="warning",
-                    action="service_token_validation",
-                    resource="api_auth",
-                    reason="invalid_service_token",
-                    metadata={
-                        "ip_address": request.client.host if request.client else "unknown",
-                        "user_agent": request.headers.get("user-agent", "unknown"),
-                        "token_hash": token_hash,
-                    },
-                )
-                import asyncio
+    import hashlib
+    import asyncio
+    from ciris_engine.schemas.services.graph.audit import AuditEventData
 
-                # Save task reference to prevent premature garbage collection
-                _ = asyncio.create_task(audit_service.log_event("service_token_auth_failed", audit_event))
+    # Hash the token for audit logging (don't log the actual token)
+    token_hash = hashlib.sha256(service_token.encode()).hexdigest()[:16]
+    audit_event = AuditEventData(
+        entity_id="auth_service",
+        actor=f"service_token_hash:{token_hash}",
+        outcome="failure",
+        severity="warning",
+        action="service_token_validation",
+        resource="api_auth",
+        reason="invalid_service_token",
+        metadata={
+            "ip_address": request.client.host if request.client else "unknown",
+            "user_agent": request.headers.get("user-agent", "unknown"),
+            "token_hash": token_hash,
+        },
+    )
+    
+    # Save task reference to prevent premature garbage collection
+    _ = asyncio.create_task(audit_service.log_event("service_token_auth_failed", audit_event))
 
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 
-        # Service token authentication successful
-        # NOTE: We do not audit successful service token auth to avoid log spam
-        # Service tokens are used frequently by the manager and other services
-        # Only failed attempts are audited for security monitoring
+def _handle_service_token_auth(request: Request, auth_service: APIAuthService, service_token: str) -> AuthContext:
+    """Handle service token authentication."""
+    service_user = auth_service.validate_service_token(service_token)
+    if not service_user:
+        _audit_failed_service_token(request, service_token)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 
-        # Create auth context for service account
-        from ciris_engine.schemas.api.auth import UserRole as AuthUserRole
+    # Service token authentication successful
+    # NOTE: We do not audit successful service token auth to avoid log spam
+    # Service tokens are used frequently by the manager and other services
+    # Only failed attempts are audited for security monitoring
 
-        context = AuthContext(
-            user_id=service_user.wa_id,
-            role=AuthUserRole.SERVICE_ACCOUNT,
-            permissions=ROLE_PERMISSIONS.get(AuthUserRole.SERVICE_ACCOUNT, set()),
-            api_key_id=None,
-            authenticated_at=datetime.now(timezone.utc),
-        )
-        context.request = request
-        return context
+    from ciris_engine.schemas.api.auth import UserRole as AuthUserRole
 
-    # Check if this is username:password format (for legacy support)
-    if ":" in api_key:
-        username, password = api_key.split(":", 1)
-        user = await auth_service.verify_user_password(username, password)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+    context = AuthContext(
+        user_id=service_user.wa_id,
+        role=AuthUserRole.SERVICE_ACCOUNT,
+        permissions=ROLE_PERMISSIONS.get(AuthUserRole.SERVICE_ACCOUNT, set()),
+        api_key_id=None,
+        authenticated_at=datetime.now(timezone.utc),
+    )
+    context.request = request
+    return context
 
-        # Create auth context for password auth
-        from ciris_engine.schemas.api.auth import UserRole as AuthUserRole
 
-        # Map APIRole to UserRole
-        user_role = AuthUserRole[user.api_role.value]
-        context = AuthContext(
-            user_id=user.wa_id,
-            role=user_role,
-            permissions=ROLE_PERMISSIONS.get(user_role, set()),
-            api_key_id=None,
-            authenticated_at=datetime.now(timezone.utc),
-        )
-        context.request = request
-        return context
+async def _handle_password_auth(request: Request, auth_service: APIAuthService, api_key: str) -> AuthContext:
+    """Handle username:password authentication."""
+    username, password = api_key.split(":", 1)
+    user = await auth_service.verify_user_password(username, password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
-    # Otherwise, validate as regular API key
-    key_info = auth_service.validate_api_key(api_key)
-    if not key_info:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+    from ciris_engine.schemas.api.auth import UserRole as AuthUserRole
 
-    # Get user to check for custom permissions
-    user = auth_service.get_user(key_info.user_id)
+    # Map APIRole to UserRole
+    user_role = AuthUserRole[user.api_role.value]
+    context = AuthContext(
+        user_id=user.wa_id,
+        role=user_role,
+        permissions=ROLE_PERMISSIONS.get(user_role, set()),
+        api_key_id=None,
+        authenticated_at=datetime.now(timezone.utc),
+    )
+    context.request = request
+    return context
 
-    # Start with role-based permissions
+
+def _build_permissions_set(key_info, user) -> set:
+    """Build permissions set from role and custom permissions."""
     permissions = set(ROLE_PERMISSIONS.get(key_info.role, set()))
 
     # Add any custom permissions if user exists and has them
@@ -144,6 +136,21 @@ async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency in
             except ValueError:
                 # Skip invalid permission strings
                 pass
+    
+    return permissions
+
+
+def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key: str) -> AuthContext:
+    """Handle regular API key authentication."""
+    key_info = auth_service.validate_api_key(api_key)
+    if not key_info:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+
+    # Get user to check for custom permissions
+    user = auth_service.get_user(key_info.user_id)
+
+    # Build permissions set
+    permissions = _build_permissions_set(key_info, user)
 
     # Create auth context with request reference
     context = AuthContext(
@@ -156,8 +163,28 @@ async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency in
 
     # Attach request to context for service access in routes
     context.request = request
-
     return context
+
+
+async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency injection
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    auth_service: APIAuthService = Depends(get_auth_service),
+) -> AuthContext:
+    """Extract and validate authentication from request."""
+    api_key = _extract_bearer_token(authorization)
+
+    # Check if this is a service token
+    if api_key.startswith("service:"):
+        service_token = api_key[8:]  # Remove "service:" prefix
+        return _handle_service_token_auth(request, auth_service, service_token)
+
+    # Check if this is username:password format (for legacy support)
+    if ":" in api_key:
+        return await _handle_password_auth(request, auth_service, api_key)
+
+    # Otherwise, validate as regular API key
+    return _handle_api_key_auth(request, auth_service, api_key)
 
 
 async def optional_auth(

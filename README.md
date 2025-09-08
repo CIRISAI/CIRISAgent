@@ -36,6 +36,7 @@ CIRIS wraps LLM calls with:
 git clone https://github.com/CIRISAI/CIRISAgent.git
 cd CIRISAgent
 pip install -r requirements.txt
+# For development: pip install -r requirements-dev.txt
 
 # 2. Start with Discord adapter (easiest)
 python main.py --adapter discord --guild-id YOUR_GUILD_ID

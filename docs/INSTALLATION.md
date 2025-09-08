@@ -30,7 +30,8 @@ Step-by-step installation guide for CIRIS Agent across different environments.
 
 ### Dependencies
 
-- **Python packages**: Listed in `requirements.txt`
+- **Runtime dependencies**: Listed in `requirements.txt`
+- **Development dependencies**: Listed in `requirements-dev.txt` (testing, type checking, code analysis)
 - **System packages**: OpenSSL, SQLite3, Git
 - **Optional**: Docker, Docker Compose for containerized deployment
 
@@ -123,6 +124,9 @@ source ~/ciris/venv/bin/activate
 
 # Install Python dependencies
 pip install -r requirements.txt
+
+# For development (testing, type checking, code analysis):
+pip install -r requirements-dev.txt
 
 # Install CIRIS package in development mode
 pip install -e .
@@ -549,6 +553,7 @@ cd CIRISAgent
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+# For development: pip install -r requirements-dev.txt
 
 # Create Windows batch file for easy startup
 cat > /mnt/c/Users/$USER/Desktop/start-ciris.bat << 'EOF'
@@ -575,6 +580,7 @@ EOF
    source ~/ciris/venv/bin/activate
    # Reinstall dependencies
    pip install -r requirements.txt
+   # For development: pip install -r requirements-dev.txt
    ```
 
 3. **Database Lock Errors**:

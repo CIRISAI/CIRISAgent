@@ -26,8 +26,11 @@ Comprehensive deployment guide for CIRIS Agent with enterprise security features
 ### Dependencies
 
 ```bash
-# Core dependencies
+# Production dependencies only
 pip install -r requirements.txt
+
+# For development environments also install:
+pip install -r requirements-dev.txt
 
 # Optional: For development
 pip install pytest mypy

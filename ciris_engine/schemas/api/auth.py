@@ -132,12 +132,13 @@ ROLE_PERMISSIONS: Dict[UserRole, Set[Permission]] = {
         Permission.MANAGE_SENSITIVE_CONFIG,
     },
     UserRole.SERVICE_ACCOUNT: {
-        # Limited permissions for service-to-service operations
+        # Permissions for service-to-service operations and system administration
         Permission.VIEW_TELEMETRY,
         Permission.VIEW_CONFIG,
         Permission.RUNTIME_CONTROL,  # For shutdown operations
         Permission.VIEW_TOOLS,
         Permission.VIEW_LOGS,
+        Permission.SEND_MESSAGES,  # For system admin agent interaction and testing
     },
 }
 

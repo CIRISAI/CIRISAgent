@@ -520,10 +520,15 @@ class TestOpenAICompatibleClient:
         """Test initialization with TOOLS instructor mode."""
         config = OpenAIConfig(api_key="test-key", instructor_mode="TOOLS")
 
-        with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
+        # Remove MOCK_LLM from environment to avoid RuntimeError
+        mock_env = {}
+        if "MOCK_LLM" in os.environ:
+            mock_env = {k: v for k, v in os.environ.items() if k != "MOCK_LLM"}
+        
+        with patch.dict(os.environ, mock_env, clear=True):
             with patch("sys.argv", []):
-                with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI"):
-                    with patch("ciris_engine.logic.services.runtime.llm_service.instructor") as mock_instructor:
+                with patch("ciris_engine.logic.services.runtime.llm_service.service.AsyncOpenAI"):
+                    with patch("ciris_engine.logic.services.runtime.llm_service.service.instructor") as mock_instructor:
                         mock_instructor.Mode.TOOLS = "TOOLS"
                         mock_instructor.from_openai = MagicMock()
 
@@ -538,10 +543,15 @@ class TestOpenAICompatibleClient:
         """Test initialization with custom base URL."""
         config = OpenAIConfig(api_key="test-key", base_url="https://custom.openai.com/v1")
 
-        with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
+        # Remove MOCK_LLM from environment to avoid RuntimeError
+        mock_env = {}
+        if "MOCK_LLM" in os.environ:
+            mock_env = {k: v for k, v in os.environ.items() if k != "MOCK_LLM"}
+        
+        with patch.dict(os.environ, mock_env, clear=True):
             with patch("sys.argv", []):
-                with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI") as mock_openai:
-                    with patch("ciris_engine.logic.services.runtime.llm_service.instructor"):
+                with patch("ciris_engine.logic.services.runtime.llm_service.service.AsyncOpenAI") as mock_openai:
+                    with patch("ciris_engine.logic.services.runtime.llm_service.service.instructor"):
                         service = OpenAICompatibleClient(config=config, time_service=mock_time_service)
 
                         # Verify base_url was passed to AsyncOpenAI

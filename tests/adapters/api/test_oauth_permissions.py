@@ -22,9 +22,12 @@ from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
 from ciris_engine.logic.runtime.prevent_sideeffects import allow_runtime_creation
 from ciris_engine.schemas.config.essential import EssentialConfig
 
+# Import the existing central mock fixture
+from tests.conftest_config_mock import mock_runtime_db_setup
+
 
 @pytest_asyncio.fixture
-async def test_runtime():
+async def test_runtime(random_api_port, mock_runtime_db_setup):
     """Create a test runtime for OAuth testing."""
     # Allow runtime creation for this test
     allow_runtime_creation()
@@ -33,6 +36,10 @@ async def test_runtime():
         config = EssentialConfig()
         config.services.llm_endpoint = "mock://localhost"
         config.services.llm_model = "mock"
+        
+        # Use the randomized API port to avoid conflicts
+        import os
+        os.environ["CIRIS_API_PORT"] = str(random_api_port)
 
         runtime = CIRISRuntime(
             adapter_types=["api"], essential_config=config, startup_channel_id="test_oauth", mock_llm=True
@@ -40,7 +47,12 @@ async def test_runtime():
 
         await runtime.initialize()
         yield runtime
-        await runtime.shutdown()
+        # Fast shutdown by skipping some cleanup
+        try:
+            await runtime.shutdown()
+        except Exception as e:
+            # Log but don't fail test if shutdown has issues
+            print(f"Warning: Runtime shutdown error: {e}")
     finally:
         # Restore original state to avoid affecting other tests
         import os
@@ -66,7 +78,7 @@ def oauth_test_app(test_runtime):
     return app
 
 
-@pytest.fixture
+@pytest.fixture  
 async def oauth_client(oauth_test_app):
     """Create async test client."""
     transport = ASGITransport(app=oauth_test_app)

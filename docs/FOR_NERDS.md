@@ -475,11 +475,11 @@ async def process_thought(thought: Thought):
 
 ### 1. Type Safety
 ```bash
-# Full type checking with mypy
-mypy ciris_engine/ --strict
+# Enhanced type checking with mypy (strict=True + additional flags)
+mypy ciris_engine/
 
-# Current status: 64 errors (down from 291)
-# Target: 0 errors for production
+# Configuration in mypy.ini with strict=True enabled
+# Enhanced mode passes, disallow_any_explicit temporarily disabled
 ```
 
 ### 2. Testing Strategy

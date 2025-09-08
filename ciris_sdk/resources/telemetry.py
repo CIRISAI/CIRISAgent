@@ -580,7 +580,7 @@ class TelemetryResource:
         Get ALL system metrics through the unified telemetry endpoint.
 
         This is the RECOMMENDED method for accessing telemetry data as it provides
-        parallel collection from all 21 services with smart caching.
+        parallel collection from all 22 services with smart caching.
 
         Args:
             view: Type of view to return
@@ -654,7 +654,7 @@ class TelemetryResource:
         """
         Convenience method to get ALL metrics in detailed view.
 
-        This returns complete telemetry data from all 21 services including:
+        This returns complete telemetry data from all 22 services including:
         - All 6 message buses
         - All 6 graph services
         - All 7 infrastructure services

@@ -48,6 +48,7 @@ Available modules:
   guidance        - Guidance system
   handlers        - Message handlers
   simple_handlers - Simple handler tests
+  streaming       - H3ERE pipeline streaming verification
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
   single_step_comprehensive - Complete 17-phase COVENANT single-step validation

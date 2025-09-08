@@ -52,9 +52,35 @@ import time  # noqa: E402
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402
 from tests.fixtures.database import clean_db, test_db  # noqa: E402
+from tests.fixtures.runtime_control import (  # noqa: E402
+    single_step_control_response,
+    mock_step_result_perform_dmas,
+    mock_step_result_gather_context,
+    mock_api_runtime_control_service,
+)
+from tests.fixtures.mocks import MockRuntime  # noqa: E402
+
+
+@pytest.fixture
+def mock_runtime(mock_step_result_perform_dmas):
+    """Create a centralized MockRuntime with step result data."""
+    runtime = MockRuntime()
+    # Connect the centralized step result fixture
+    runtime.pipeline_controller.get_latest_step_result.return_value = mock_step_result_perform_dmas
+    return runtime
+
 
 # Make fixtures available to all tests by explicitly referencing them
-__all__ = ["test_db", "clean_db", "random_api_port"]
+__all__ = [
+    "test_db", 
+    "clean_db", 
+    "random_api_port", 
+    "single_step_control_response",
+    "mock_step_result_perform_dmas",
+    "mock_step_result_gather_context",
+    "mock_api_runtime_control_service",
+    "mock_runtime",
+]
 
 
 @pytest.fixture(scope="session", autouse=True)

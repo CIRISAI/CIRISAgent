@@ -173,31 +173,6 @@ class TestAPIRuntimeControlStateTransitions:
 class TestAPIRuntimeControlDebugging:
     """Test debugging functionality."""
 
-    @pytest.mark.asyncio
-    async def test_single_step(self, runtime_control_service, mock_runtime):
-        """Test single-step debugging."""
-        # Must be paused to single-step
-        mock_runtime.state = "PAUSED"
-
-        # single_step is not implemented in APIRuntimeControlService
-        # This test should check if the runtime's single_step is called
-        if hasattr(runtime_control_service, "single_step"):
-            result = await runtime_control_service.single_step()
-        else:
-            # Skip test as method doesn't exist
-            pytest.skip("single_step not implemented in APIRuntimeControlService")
-
-    @pytest.mark.asyncio
-    async def test_single_step_not_paused(self, runtime_control_service, mock_runtime):
-        """Test single-step when not paused."""
-        mock_runtime.state = "RUNNING"
-
-        # single_step is not implemented in APIRuntimeControlService
-        if hasattr(runtime_control_service, "single_step"):
-            result = await runtime_control_service.single_step()
-        else:
-            # Skip test as method doesn't exist
-            pytest.skip("single_step not implemented in APIRuntimeControlService")
 
     @pytest.mark.asyncio
     async def test_get_queue_status(self, runtime_control_service, mock_runtime):

@@ -19,7 +19,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
 from ciris_engine.schemas.services.runtime_control import (
-    StepPoint, StepResult, ThoughtInPipeline, PipelineState
+    StepPoint, ThoughtInPipeline, PipelineState
 )
 from ciris_engine.logic.config import ConfigAccessor
 # ServiceRegistry not needed - using Mock objects
@@ -90,7 +90,7 @@ class TestSingleStepFixValidation:
             This represents the architectural fix - direct step execution
             instead of calling _process_single_thought().
             """
-            step_point = StepPoint.BUILD_CONTEXT  # Example step point
+            step_point = StepPoint.GATHER_CONTEXT  # Example step point
             
             step_result = {
                 "success": True,
@@ -302,7 +302,7 @@ class TestSingleStepFixValidation:
         await fixed_agent_processor.pause_processing()
         
         step_points = [
-            StepPoint.BUILD_CONTEXT,
+            StepPoint.GATHER_CONTEXT,
             StepPoint.PERFORM_DMAS,
             StepPoint.CONSCIENCE_EXECUTION,
         ]
@@ -405,30 +405,20 @@ class TestSingleStepFixValidation:
     @pytest.mark.asyncio
     async def test_single_step_fix_error_handling(self, fixed_agent_processor, sample_thought):
         """Test that the fix maintains proper error handling."""
-        # Test 1: Still fails fast when not paused
-        result = await fixed_agent_processor.single_step()
-        assert result["success"] is False
-        assert "Cannot single-step unless paused" in result["error"]
+        # Test 1: Still fails fast when not paused (FAIL FAST principle)
+        with pytest.raises(RuntimeError, match="Cannot single-step unless processor is paused"):
+            await fixed_agent_processor.single_step()
         
-        # Test 2: Handles pipeline controller errors gracefully
+        # Test 2: Pipeline controller errors propagate (FAIL FAST principle)
         await fixed_agent_processor.pause_processing()
         
-        def mock_error_execution(thought):
+        def mock_error_execution():
             raise ValueError("Test pipeline error")
         
-        fixed_agent_processor._pipeline_controller.execute_single_step_point = Mock(side_effect=mock_error_execution)
+        fixed_agent_processor._pipeline_controller.execute_single_step_point = AsyncMock(side_effect=mock_error_execution)
         
-        async def fixed_single_step():
-            try:
-                step_result = fixed_agent_processor._pipeline_controller.execute_single_step_point(sample_thought)
-                return {"success": True, "step_result": step_result}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
-        
-        fixed_agent_processor.single_step = fixed_single_step
-        
-        result = await fixed_agent_processor.single_step()
-        assert result["success"] is False
-        assert "Test pipeline error" in result["error"]
+        # The SUT should propagate the error, not catch it (FAIL FAST)
+        with pytest.raises(ValueError, match="Test pipeline error"):
+            await fixed_agent_processor.single_step()
         
         # FAIL FAST AND LOUD - no silent failures!

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from unittest.mock import AsyncMock, Mock, patch
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.services.governance.consent import ConsentService
+from ciris_engine.logic.services.governance.consent import ConsentService, ConsentNotFoundError
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream, ConsentCategory
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -29,11 +29,90 @@ class TestConsentServiceCleanup:
 
     @pytest.fixture
     def mock_memory_bus(self):
-        """Create a mock memory bus."""
+        """Create a mock memory bus with real TSDB node data."""
         mock = AsyncMock(spec=MemoryBus)
         # Pre-configure the query_nodes method to avoid AttributeError
         mock.query_nodes = AsyncMock()
         return mock
+
+    @pytest.fixture
+    def conversation_summary_nodes(self):
+        """Create mock conversation summary nodes with participant data."""
+        # Conversation with test_user and others
+        summary1 = Mock()
+        summary1.attributes = {
+            "participants": {
+                "test_user": {"user_id": "test_user", "message_count": 15},
+                "other_user_1": {"user_id": "other_user_1", "message_count": 8},
+                "other_user_2": {"user_id": "other_user_2", "message_count": 5}
+            }
+        }
+        
+        # Another conversation with test_user
+        summary2 = Mock()
+        summary2.attributes = {
+            "participants": {
+                "test_user": {"user_id": "test_user", "message_count": 10},
+                "another_user": {"user_id": "another_user", "message_count": 3}
+            }
+        }
+        
+        # Conversation without test_user
+        summary3 = Mock()
+        summary3.attributes = {
+            "participants": {
+                "random_user": {"user_id": "random_user", "message_count": 20},
+                "other_random": {"user_id": "other_random", "message_count": 12}
+            }
+        }
+        
+        return [summary1, summary2, summary3]
+    
+    @pytest.fixture
+    def task_summary_nodes(self):
+        """Create mock task summary nodes with author data."""
+        # Tasks authored by test_user
+        task1 = Mock()
+        task1.attributes = {"author_id": "test_user", "task_type": "research", "completion_status": "completed"}
+        
+        task2 = Mock()
+        task2.attributes = {"author_id": "test_user", "task_type": "improvement", "completion_status": "completed"}
+        
+        # Task by other user
+        task3 = Mock()
+        task3.attributes = {"author_id": "other_user", "task_type": "feature", "completion_status": "pending"}
+        
+        # Task with no author (should be ignored)
+        task4 = Mock()
+        task4.attributes = {"task_type": "system", "completion_status": "completed"}
+        
+        return [task1, task2, task3, task4]
+
+    @pytest.fixture
+    def enhanced_consent_service(self, mock_time_service, mock_memory_bus, conversation_summary_nodes, task_summary_nodes):
+        """Create consent service with enhanced mock data."""
+        service = ConsentService(
+            time_service=mock_time_service,
+            memory_bus=mock_memory_bus,
+            db_path=None
+        )
+        
+        def mock_query_nodes(node_type=None, scope=None, attributes=None):
+            if node_type == NodeType.CONVERSATION_SUMMARY:
+                return conversation_summary_nodes
+            elif node_type == NodeType.TASK_SUMMARY:
+                return task_summary_nodes
+            elif node_type == NodeType.CONSENT:
+                # Return consent nodes for audit trail tests
+                return []
+            elif node_type == NodeType.AUDIT_ENTRY:
+                # Return audit entry nodes  
+                return []
+            return []
+        
+        mock_memory_bus.query_nodes.side_effect = mock_query_nodes
+        service._get_example_contributions = AsyncMock(return_value=["Real contribution example"])
+        return service
 
     @pytest.fixture
     def consent_service(self, mock_time_service, mock_memory_bus):
@@ -295,7 +374,7 @@ class TestConsentServiceCleanup:
         }
         current_time = mock_time_service.now()
         
-        with patch('ciris_engine.logic.services.governance.consent.logger') as mock_logger:
+        with patch('ciris_engine.logic.services.governance.consent.service.logger') as mock_logger:
             result = consent_service._extract_expired_user_from_node(node, current_time)
             
             assert result is None
@@ -379,7 +458,7 @@ class TestConsentServiceCleanup:
             "other_user": Mock()
         }
         
-        with patch('ciris_engine.logic.services.governance.consent.logger') as mock_logger:
+        with patch('ciris_engine.logic.services.governance.consent.service.logger') as mock_logger:
             result = consent_service._perform_cleanup(["expired_user"])
             
             assert result == 1
@@ -447,3 +526,166 @@ class TestConsentServiceCleanup:
         assert result == 1
         assert "expired_user" not in service._consent_cache
         assert "valid_user" in service._consent_cache
+
+    @pytest.mark.asyncio
+    async def test_check_expiry_expired_temporary(self, consent_service, mock_time_service):
+        """Test check_expiry returns True for expired temporary consent."""
+        # Create an expired temporary consent
+        now = mock_time_service.now()
+        expired_consent = ConsentStatus(
+            user_id="test_user",
+            stream=ConsentStream.TEMPORARY,
+            categories=[ConsentCategory.RESEARCH],
+            granted_at=now - timedelta(days=15),
+            expires_at=now - timedelta(days=1),  # Expired
+            last_modified=now - timedelta(days=1),
+            attribution_count=1,
+            impact_score=0.5
+        )
+        
+        # Mock get_consent to return expired consent
+        consent_service.get_consent = AsyncMock(return_value=expired_consent)
+        
+        result = await consent_service.check_expiry("test_user")
+        
+        assert result is True
+        consent_service.get_consent.assert_called_once_with("test_user")
+
+    @pytest.mark.asyncio
+    async def test_check_expiry_valid_temporary(self, consent_service, mock_time_service):
+        """Test check_expiry returns False for valid temporary consent."""
+        # Create a valid temporary consent
+        now = mock_time_service.now()
+        valid_consent = ConsentStatus(
+            user_id="test_user",
+            stream=ConsentStream.TEMPORARY,
+            categories=[ConsentCategory.RESEARCH],
+            granted_at=now - timedelta(days=1),
+            expires_at=now + timedelta(days=13),  # Still valid
+            last_modified=now - timedelta(days=1),
+            attribution_count=1,
+            impact_score=0.5
+        )
+        
+        # Mock get_consent to return valid consent
+        consent_service.get_consent = AsyncMock(return_value=valid_consent)
+        
+        result = await consent_service.check_expiry("test_user")
+        
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_check_expiry_partnered_consent(self, consent_service, mock_time_service):
+        """Test check_expiry returns False for partnered consent (never expires)."""
+        # Create a partnered consent
+        now = mock_time_service.now()
+        partnered_consent = ConsentStatus(
+            user_id="test_user",
+            stream=ConsentStream.PARTNERED,
+            categories=[ConsentCategory.RESEARCH, ConsentCategory.IMPROVEMENT],
+            granted_at=now - timedelta(days=30),
+            expires_at=None,  # Partnered consents don't expire
+            last_modified=now - timedelta(days=1),
+            attribution_count=5,
+            impact_score=2.5
+        )
+        
+        # Mock get_consent to return partnered consent
+        consent_service.get_consent = AsyncMock(return_value=partnered_consent)
+        
+        result = await consent_service.check_expiry("test_user")
+        
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_check_expiry_no_consent_found(self, consent_service):
+        """Test check_expiry returns True when no consent is found."""
+        
+        # Mock get_consent to raise ConsentNotFoundError
+        consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError("No consent found"))
+        
+        result = await consent_service.check_expiry("nonexistent_user")
+        
+        assert result is True  # No consent = expired
+
+    @pytest.mark.asyncio
+    async def test_get_impact_report_with_real_tsdb_data(self, enhanced_consent_service, mock_time_service):
+        """Test get_impact_report with real TSDB conversation and task summaries using fixtures."""
+        # Create consent status
+        now = mock_time_service.now()
+        test_consent = ConsentStatus(
+            user_id="test_user",
+            stream=ConsentStream.PARTNERED,
+            categories=[ConsentCategory.RESEARCH, ConsentCategory.IMPROVEMENT],
+            granted_at=now - timedelta(days=30),
+            expires_at=None,
+            last_modified=now - timedelta(days=1),
+            attribution_count=3,
+            impact_score=1.5
+        )
+        
+        # Mock get_consent
+        enhanced_consent_service.get_consent = AsyncMock(return_value=test_consent)
+        
+        result = await enhanced_consent_service.get_impact_report("test_user")
+        
+        # Verify report uses REAL TSDB data from fixtures
+        assert result.user_id == "test_user"
+        assert result.total_interactions == 25  # 15 + 10 from conversation summaries (test_user participations)
+        assert result.patterns_contributed == 2  # 2 task summaries authored by test_user
+        assert result.users_helped == 5  # All unique participants from ALL conversations excluding test_user (other_user_1, other_user_2, another_user, random_user, other_random)
+        assert result.categories_active == [ConsentCategory.RESEARCH, ConsentCategory.IMPROVEMENT]
+        assert result.impact_score == 1.5
+        assert result.example_contributions == ["Real contribution example"]
+
+    @pytest.mark.asyncio
+    async def test_get_impact_report_without_memory_bus_fails_fast(self, consent_service, mock_time_service):
+        """Test get_impact_report fails fast without memory bus - no fallbacks allowed."""
+        # Create consent status
+        now = mock_time_service.now()
+        test_consent = ConsentStatus(
+            user_id="test_user",
+            stream=ConsentStream.TEMPORARY,
+            categories=[ConsentCategory.RESEARCH],
+            granted_at=now - timedelta(days=5),
+            expires_at=now + timedelta(days=9),
+            last_modified=now - timedelta(days=1),
+            attribution_count=2,
+            impact_score=0.8
+        )
+        
+        # Mock get_consent
+        consent_service.get_consent = AsyncMock(return_value=test_consent)
+        
+        # Remove memory bus to test failure
+        consent_service._memory_bus = None
+        
+        # Should raise ValueError - no fallbacks allowed
+        with pytest.raises(ValueError, match="Memory bus required for impact reporting - no fake data allowed"):
+            await consent_service.get_impact_report("test_user")
+
+    @pytest.mark.asyncio
+    async def test_get_impact_report_memory_query_exception_propagates(self, consent_service, mock_time_service):
+        """Test get_impact_report propagates memory bus query exceptions - no fallbacks."""
+        # Create consent status
+        now = mock_time_service.now()
+        test_consent = ConsentStatus(
+            user_id="test_user",
+            stream=ConsentStream.PARTNERED,
+            categories=[ConsentCategory.RESEARCH],
+            granted_at=now - timedelta(days=30),
+            expires_at=None,
+            last_modified=now - timedelta(days=1),
+            attribution_count=4,
+            impact_score=2.0
+        )
+        
+        # Mock get_consent
+        consent_service.get_consent = AsyncMock(return_value=test_consent)
+        
+        # Mock memory bus to raise exception on first query
+        consent_service._memory_bus.query_nodes.side_effect = Exception("Graph query failed")
+        
+        # Should propagate the exception - no fallbacks allowed
+        with pytest.raises(Exception, match="Graph query failed"):
+            await consent_service.get_impact_report("test_user")

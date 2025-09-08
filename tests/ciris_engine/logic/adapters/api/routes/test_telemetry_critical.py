@@ -40,7 +40,7 @@ def fully_initialized_app():
     # Include router
     app.include_router(router)
 
-    # Initialize ALL 21 core services as they would be in production
+    # Initialize ALL 22 core services as they would be in production
 
     # Graph Services (6)
     app.state.memory_service = MagicMock()

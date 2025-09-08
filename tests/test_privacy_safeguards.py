@@ -229,7 +229,7 @@ class TestAdaptiveFilter:
 
     def test_adaptive_filter_exists(self):
         """Test that AdaptiveFilterService exists."""
-        from ciris_engine.logic.services.governance.filter import AdaptiveFilterService
+        from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
 
         # Should be importable
         assert AdaptiveFilterService is not None

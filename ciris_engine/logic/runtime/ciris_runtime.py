@@ -343,7 +343,7 @@ class CIRISRuntime:
                     validate_directories()
                 else:
                     logger.info("Development environment - setting up directories...")
-                    setup_application_directories()
+                    setup_application_directories(essential_config=self.essential_config)
 
             except DirectorySetupError as e:
                 logger.critical(f"DIRECTORY SETUP FAILED: {e}")

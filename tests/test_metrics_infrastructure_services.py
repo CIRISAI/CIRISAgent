@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 import pytest_asyncio
 
-from ciris_engine.logic.persistence.maintenance import DatabaseMaintenanceService
+from ciris_engine.logic.services.infrastructure.database_maintenance import DatabaseMaintenanceService
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
 from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService

@@ -4,7 +4,7 @@ WA Authentication Protocol Interfaces.
 IMPORTANT: This is NOT a separate service - these are protocols/interfaces!
 
 This file contains protocol definitions used by the WiseAuthorityService and
-AuthenticationService. There is no separate "wa_auth" service in the 21 core services.
+AuthenticationService. There is no separate "wa_auth" service in the 22 core services.
 
 The protocols defined here are:
 - WAStore: Interface for WA certificate storage (implemented by AuthenticationService)
@@ -15,7 +15,7 @@ The protocols defined here are:
 These protocols support the Wise Authority system as specified in FSD/AUTHENTICATION.md
 section 11, but they are NOT a standalone service.
 
-The 21 core services include:
+The 22 core services include:
 - WiseAuthorityService (authorization, deferrals, guidance)
 - AuthenticationService (authentication, WA certificates, JWT, OAuth)
 

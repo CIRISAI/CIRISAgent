@@ -115,7 +115,7 @@ grep -r "Dict\[str, Any\]" ciris_engine/ --include="*.py" | grep -v test | wc -l
 ### Step 4: Validation Rules
 
 #### Rule 1: Count Consistency
-- All service counts must be 21
+- All service counts must be 22
 - All handler counts must be 10
 - Schema directory count must match LS output
 
@@ -160,7 +160,7 @@ grep -r "Dict\[str, Any\]" ciris_engine/ --include="*.py" | grep -v test | wc -l
 ## Red Flags
 
 These indicate documentation drift:
-1. Service count != 21 anywhere
+1. Service count != 22 anywhere
 2. "Coming soon" or "planned" features
 3. Import paths that don't exist
 4. Code examples that don't run
@@ -200,14 +200,14 @@ Ensures they compile and run.
 ## Current Status (July 2025)
 
 ### Completed Updates
-- [x] protocols/README.md - Updated to 21 services
+- [x] protocols/README.md - Updated to 22 services
 - [x] schemas/README.md - Documented 24 directories
 - [x] handler protocols/README.md - Removed non-existent files
 - [x] memory service/README.md - Removed aspirational features
 - [x] service protocols/README.md - Fixed categorizations
 
 ### Validation Results
-- Service count: Verified 21 services
+- Service count: Verified 22 services
 - Dict[str, Any] count: 216 instances (README claim of 0 is false)
 - Schema directories: 24 (verified by LS)
 - Handler count: 10 (verified)

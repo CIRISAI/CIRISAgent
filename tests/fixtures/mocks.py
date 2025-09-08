@@ -153,11 +153,52 @@ class MockMemoryService:
 
 
 class MockRuntime:
-    """Mock runtime with proper attributes."""
+    """Mock runtime with proper attributes and pipeline controller."""
     
     def __init__(self):
         self.agent_id = "test_agent"
         self.current_shutdown_context = create_shutdown_context()
+        
+        # Add pipeline controller mock with H3ERE step point data
+        self.pipeline_controller = self._create_pipeline_controller()
+        
+        # Add agent processor mock
+        self.agent_processor = MagicMock()
+        self.agent_processor.state_manager = MagicMock()
+        self.agent_processor.state_manager.get_state.return_value = "WORK"
+        self.agent_processor._pipeline_controller = self.pipeline_controller
+        
+    def _create_pipeline_controller(self):
+        """Create a mock pipeline controller with consistent H3ERE data."""
+        from ciris_engine.schemas.services.runtime_control import StepPoint, PipelineState, ThoughtInPipeline
+        
+        mock = MagicMock()
+        
+        # Mock current pipeline state - realistic empty state (common in production)
+        mock.get_current_state.return_value = PipelineState(
+            is_paused=True,
+            current_round=2,
+            # thoughts_by_step will use default factory: empty arrays for all steps
+            task_queue=[],
+            thought_queue=[],
+        )
+        
+        # Mock processing metrics - consistent with runtime control fixture
+        mock.get_processing_metrics.return_value = {
+            "total_processing_time_ms": 850.0,  # Match runtime control fixture
+            "tokens_used": 150,
+            "step_timings": {
+                "GATHER_CONTEXT": 200.0,
+                "PERFORM_DMAS": 800.0,
+                "PERFORM_ASPDMA": 250.0,
+            }
+        }
+        
+        # Use the centralized step result mock by default
+        # Tests can override this by accessing the fixture directly
+        mock.get_latest_step_result.return_value = None  # Will be set by test fixtures
+        
+        return mock
         
         
 class MockSecretsService:

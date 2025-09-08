@@ -161,7 +161,7 @@ class AgentProcessor:
         
         # Initialize pipeline controller for single-step debugging
         from ciris_engine.protocols.pipeline_control import PipelineController
-        self._pipeline_controller = PipelineController(is_paused=False)
+        self._pipeline_controller = PipelineController(is_paused=False, main_processor=self)
 
         # Track processing time for thoughts
         self._thought_processing_callback: Optional[Any] = None  # Callback for thought timing
@@ -767,13 +767,11 @@ class AgentProcessor:
 
             # Update pipeline controller state for paused mode
             self._pipeline_controller.is_paused = True
+            # Set step to 1 (START_ROUND) - index 0 in step_order
+            self._pipeline_controller._current_step_index = 0
 
-            # Inject pipeline controller into thought processor
-            if hasattr(self.thought_processor, "set_pipeline_controller"):
-                self.thought_processor.set_pipeline_controller(self._pipeline_controller)
-            else:
-                logger.warning("Thought processor does not support pipeline controller injection")
-                # Still return True as pause was successful even without controller
+            # Pipeline controller is always available at self._pipeline_controller
+            # No injection needed - components use it directly
 
             logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
             return True  # Successfully paused
@@ -825,10 +823,10 @@ class AgentProcessor:
     async def single_step(self) -> dict:
         """
         Execute one step point in the PDMA pipeline when paused.
-
-        This executes exactly one step point (e.g., BUILD_CONTEXT, PERFORM_DMAS, etc.)
-        and may process multiple thoughts simultaneously at that step point.
-
+        
+        FAIL FAST: No fallbacks, no fake data. Either the pipeline controller 
+        has execute_single_step_point or we fail loudly.
+        
         Returns:
             Dict containing:
             - success: bool
@@ -838,173 +836,51 @@ class AgentProcessor:
             - processing_time_ms: float
             - pipeline_state: dict
         """
-        logger.info(f"[DEBUG] single_step() called, current _is_paused: {self._is_paused}")
+        logger.info(f"single_step() called, paused: {self._is_paused}")
         
         if not self._is_paused:
-            logger.info(f"[DEBUG] single_step() failed - processor not paused, _is_paused: {self._is_paused}")
-            return {"success": False, "error": "Cannot single-step unless paused"}
-
-
+            raise RuntimeError("Cannot single-step unless processor is paused")
+            
+        if not self._pipeline_controller:
+            raise RuntimeError("No pipeline controller available")
+            
+        if not hasattr(self._pipeline_controller, 'execute_single_step_point'):
+            raise NotImplementedError(
+                f"Pipeline controller {type(self._pipeline_controller).__name__} missing execute_single_step_point method. "
+                "Single-step functionality requires a proper pipeline controller implementation."
+            )
+        
         start_time = self._time_service.now()
-
+        
         # Enable single-step mode
         self._single_step_mode = True
         self._pipeline_controller._single_step_mode = True
-
+        
         try:
-            # Execute single step point via pipeline controller
-            logger.info("[DEBUG] Executing single step point via pipeline controller")
+            logger.info("Executing single step point via pipeline controller")
+            step_result = await self._pipeline_controller.execute_single_step_point()
             
-            if hasattr(self._pipeline_controller, 'execute_single_step_point'):
-                step_result = await self._pipeline_controller.execute_single_step_point()
-            else:
-                # Fallback for existing pipeline controller
-                logger.warning("Pipeline controller missing execute_single_step_point, using fallback")
-                return await self._fallback_single_step(start_time)
-
-            processing_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000
-
-            # Validate step result structure
             if not step_result or not isinstance(step_result, dict):
-                return {
-                    "success": False,
-                    "error": "Invalid step result from pipeline controller",
-                    "processing_time_ms": processing_time_ms,
-                }
-
-            # Return structured result with all thoughts processed at this step
+                raise ValueError(f"Invalid step result from pipeline controller: {step_result}")
+            
+            processing_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000
+            
             return {
                 "success": True,
-                "step_point": step_result.get("step_point", "unknown"),
-                "step_results": step_result.get("step_results", []),
-                "thoughts_processed": len(step_result.get("step_results", [])),
+                "step_point": step_result["step_point"],  # Fail if missing
+                "step_results": step_result["step_results"],  # Fail if missing
+                "thoughts_processed": len(step_result["step_results"]),
                 "processing_time_ms": processing_time_ms,
-                "pipeline_state": step_result.get("pipeline_state", {}),
+                "pipeline_state": step_result["pipeline_state"],  # Fail if missing
                 "current_round": step_result.get("current_round"),
                 "pipeline_empty": step_result.get("pipeline_empty", False),
             }
-
-        except Exception as e:
-            logger.error(f"Error in single_step: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-            }
-        finally:
-            # Disable single-step mode
-            self._single_step_mode = False
-            self._pipeline_controller._single_step_mode = False
-
-    async def _fallback_single_step(self, start_time) -> dict:
-        """
-        Fallback single-step implementation for compatibility.
-        
-        This maintains backward compatibility while we implement the proper
-        execute_single_step_point method in the pipeline controller.
-        """
-        try:
-            pipeline_state = self._pipeline_controller.get_pipeline_state()
             
-            if not pipeline_state.thoughts_by_step:
-                return await self._handle_empty_pipeline_fallback(start_time)
-            else:
-                return self._handle_existing_pipeline_fallback(pipeline_state, start_time)
-
-        except Exception as e:
-            logger.error(f"Error in fallback single_step: {e}", exc_info=True)
-            return self._create_fallback_error_response(e, start_time)
-
-    async def _handle_empty_pipeline_fallback(self, start_time) -> dict:
-        """Handle fallback when pipeline is empty - fetch pending thoughts."""
-        from ciris_engine.logic import persistence
-        from ciris_engine.schemas.runtime.models import ThoughtStatus
-
-        pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=5)
-
-        if not pending_thoughts:
-            return self._create_empty_pipeline_response(start_time)
-
-        step_results = self._create_mock_step_results_from_thoughts(pending_thoughts)
-        return self._create_fallback_success_response("finalize_tasks_queue", step_results, start_time)
-
-    def _handle_existing_pipeline_fallback(self, pipeline_state, start_time) -> dict:
-        """Handle fallback when pipeline has existing thoughts."""
-        step_results = []
-        first_step_point = None
-        
-        for step_point, thoughts in pipeline_state.thoughts_by_step.items():
-            if not first_step_point:
-                first_step_point = step_point
-                
-            step_results.extend(self._create_step_results_from_existing_thoughts(thoughts[:5], step_point))
-            break  # Only process one step point
-
-        return self._create_fallback_success_response(first_step_point or "unknown", step_results, start_time)
-
-    def _create_empty_pipeline_response(self, start_time) -> dict:
-        """Create response when pipeline is completely empty."""
-        return {
-            "success": True,
-            "step_point": "pipeline_empty",
-            "step_results": [],
-            "thoughts_processed": 0,
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-            "pipeline_empty": True,
-        }
-
-    def _create_mock_step_results_from_thoughts(self, thoughts) -> list:
-        """Create mock step results from pending thoughts."""
-        step_results = []
-        for thought in thoughts:
-            step_results.append({
-                "thought_id": thought.thought_id,
-                "round_id": getattr(thought, 'round_id', None),
-                "task_id": thought.source_task_id,
-                "step_point": "finalize_tasks_queue",  # First step
-                "success": True,
-                "step_data": {
-                    "thought_content": thought.content,
-                    "thought_type": thought.thought_type.value if thought.thought_type else "unknown",
-                    "fallback_mode": True,
-                },
-                "processing_time_ms": 10.0,  # Mock processing time
-            })
-        return step_results
-
-    def _create_step_results_from_existing_thoughts(self, thoughts, step_point: str) -> list:
-        """Create step results from existing pipeline thoughts."""
-        step_results = []
-        for thought in thoughts:
-            step_results.append({
-                "thought_id": thought.thought_id,
-                "round_id": getattr(thought, 'round_id', None),
-                "task_id": getattr(thought, 'source_task_id', None),
-                "step_point": step_point,
-                "success": True,
-                "step_data": thought.step_data or {},
-                "processing_time_ms": getattr(thought, 'processing_time_ms', 15.0),
-            })
-        return step_results
-
-    def _create_fallback_success_response(self, step_point: str, step_results: list, start_time) -> dict:
-        """Create successful fallback response."""
-        return {
-            "success": True,
-            "step_point": step_point,
-            "step_results": step_results,
-            "thoughts_processed": len(step_results),
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-            "pipeline_state": {"fallback_mode": True},
-        }
-
-    def _create_fallback_error_response(self, error: Exception, start_time) -> dict:
-        """Create error response for fallback single step."""
-        return {
-            "success": False,
-            "error": f"Fallback single-step error: {str(error)}",
-            "processing_time_ms": (self._time_service.now() - start_time).total_seconds() * 1000,
-        }
+        finally:
+            # Always disable single-step mode
+            self._single_step_mode = False
+            if self._pipeline_controller:
+                self._pipeline_controller._single_step_mode = False
 
     async def stop_processing(self) -> None:
         """Stop the processing loop gracefully."""

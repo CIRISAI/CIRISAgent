@@ -38,6 +38,7 @@ class QAModule(Enum):
     PAUSE_STEP = "pause_step"
     SINGLE_STEP_SIMPLE = "single_step_simple"
     SINGLE_STEP_COMPREHENSIVE = "single_step_comprehensive"
+    STREAMING = "streaming"  # H3ERE pipeline streaming verification
 
     # Full suites
     API_FULL = "api_full"
@@ -58,11 +59,12 @@ class QATestCase:
     requires_auth: bool = True
     description: Optional[str] = None
     timeout: float = 30.0
-    
+
     # Advanced validation
     validation_rules: Optional[Dict[str, Callable[[Dict], bool]]] = None
     custom_validation: Optional[Callable] = None
-    
+    custom_handler: Optional[str] = None  # For CUSTOM method tests
+
     # Test execution options
     repeat_count: int = 1
 
@@ -102,8 +104,8 @@ class QAConfig:
         """Get test cases for a specific module."""
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
-        from .modules.filter_tests import FilterTestModule
         from .modules.comprehensive_single_step_tests import ComprehensiveSingleStepTestModule
+        from .modules.filter_tests import FilterTestModule
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
         # API test modules
@@ -146,18 +148,24 @@ class QAConfig:
         # Extended API tests
         elif module == QAModule.EXTENDED_API:
             return ComprehensiveAPITestModule.get_all_extended_tests()
-        
+
         # Pause/step testing (redirected to comprehensive single-step)
         elif module == QAModule.PAUSE_STEP:
             return ComprehensiveSingleStepTestModule.get_comprehensive_single_step_tests()
-        
+
         # Simple single-step testing
         elif module == QAModule.SINGLE_STEP_SIMPLE:
             return SimpleSingleStepTestModule.get_simple_single_step_tests()
-        
+
         # Comprehensive single-step testing
         elif module == QAModule.SINGLE_STEP_COMPREHENSIVE:
             return ComprehensiveSingleStepTestModule.get_comprehensive_single_step_tests()
+
+        # Streaming verification
+        elif module == QAModule.STREAMING:
+            from .modules.streaming_verification import StreamingVerificationModule
+
+            return StreamingVerificationModule.get_streaming_verification_tests()
 
         # Aggregate modules
         elif module == QAModule.API_FULL:
@@ -184,7 +192,7 @@ class QAConfig:
 
         elif module == QAModule.ALL:
             tests = []
-            for m in [QAModule.API_FULL, QAModule.HANDLERS_FULL, QAModule.FILTERS, QAModule.SDK]:
+            for m in [QAModule.API_FULL, QAModule.HANDLERS_FULL, QAModule.FILTERS, QAModule.SDK, QAModule.STREAMING]:
                 tests.extend(self.get_module_tests(m))
             return tests
 

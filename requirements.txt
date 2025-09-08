@@ -1,5 +1,5 @@
-# CIRIS Agent Requirements
-# Last updated: 2025-06-15
+# CIRIS Agent Requirements - Runtime Dependencies Only
+# Last updated: 2025-01-08
 # Python >= 3.10 required
 
 # Core Dependencies
@@ -22,11 +22,10 @@ PyJWT[crypto]>=2.8.0,<3.0.0
 bcrypt>=4.0.0,<5.0.0
 PyNaCl>=1.5.0,<2.0.0
 
-# Web Framework (API/GUI)
+# Web Framework (API)
 fastapi>=0.111.0,<1.0.0
 uvicorn[standard]>=0.29.0,<1.0.0
 websockets>=12.0,<13.0
-websocket-client>=1.6.0,<2.0.0  # For QA runner WebSocket testing
 python-multipart>=0.0.6,<1.0.0
 aiofiles>=23.2.0,<24.0.0
 
@@ -37,21 +36,8 @@ psutil>=5.9.0,<6.0.0
 croniter>=2.0.0,<3.0.0
 backoff>=2.2.0,<3.0.0
 
-# Development and Testing
-pytest>=7.4.0,<8.0.0
-pytest-asyncio>=0.21.0,<1.0.0
-pytest-cov>=4.1.0,<5.0.0
-pytest-timeout>=2.2.0,<3.0.0
-hypothesis>=6.0.0,<7.0.0
-mypy>=1.8.0,<2.0.0
-types-psutil>=5.9.0,<6.0.0
-
-# CLI and UI
+# CLI
 click>=8.1.0,<9.0.0
-streamlit-shadcn-ui>=0.1.0,<1.0.0
-
-# Code Analysis (for mypy toolkit)
-astunparse>=1.6.3,<2.0.0
 
 # Container Management
 docker>=6.0.0,<8.0.0

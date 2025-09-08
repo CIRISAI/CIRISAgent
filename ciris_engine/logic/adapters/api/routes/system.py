@@ -194,94 +194,18 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     Returns comprehensive system health including service status,
     initialization state, and current cognitive state.
     """
-    # Get time service for uptime calculation
-    time_service: Optional[TimeServiceProtocol] = getattr(request.app.state, "time_service", None)
-    start_time = getattr(time_service, "_start_time", None) if time_service else None
-    current_time = time_service.now() if time_service else datetime.now(timezone.utc)
-    uptime_seconds = (current_time - start_time).total_seconds() if start_time else 0.0
-
-    # Check cognitive state if runtime is available
-    cognitive_state = None
-    runtime = getattr(request.app.state, "runtime", None)
-    if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None:
-        try:
-            cognitive_state = runtime.agent_processor.get_current_state()
-        except Exception as e:
-            logger.warning(
-                f"Failed to retrieve cognitive state: {type(e).__name__}: {str(e)} - Agent processor may not be initialized"
-            )
-            pass
-
-    # Check initialization status
-    init_complete = True
-    init_service = getattr(request.app.state, "initialization_service", None)
-    if init_service and hasattr(init_service, "is_initialized"):
-        init_complete = init_service.is_initialized()
-
-    # Collect service health
-    services = {}
-    if hasattr(request.app.state, "service_registry") and request.app.state.service_registry is not None:
-        service_registry = request.app.state.service_registry
-        try:
-            for service_type in ServiceType:
-                providers = service_registry.get_services_by_type(service_type)
-                if providers:
-                    healthy_count = 0
-                    for provider in providers:
-                        try:
-                            if hasattr(provider, "is_healthy"):
-                                if asyncio.iscoroutinefunction(provider.is_healthy):
-                                    is_healthy = await provider.is_healthy()
-                                else:
-                                    is_healthy = provider.is_healthy()
-                                if is_healthy:
-                                    healthy_count += 1
-                            else:
-                                healthy_count += 1  # Assume healthy if no method
-                        except Exception as e:
-                            logger.warning(
-                                f"Service health check failed for {service_type.value}: {type(e).__name__}: {str(e)} - Service may not implement is_healthy()"
-                            )
-                            # Continue with service counted as unhealthy
-
-                    services[service_type.value] = {"available": len(providers), "healthy": healthy_count}
-        except Exception as e:
-            logger.error(f"Error checking service health: {e}")
-
-    # Check processor thread health
-    processor_healthy = False
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-
-    if runtime_control:
-        try:
-            # Get processor queue status - if this succeeds, processor thread is alive
-            queue_status = await runtime_control.get_processor_queue_status()
-            # If we can get queue status and processor name is not "unknown", thread is alive
-            processor_healthy = queue_status.processor_name != "unknown"
-
-            # Also check runtime status for additional validation
-            runtime_status = await runtime_control.get_runtime_status()
-            processor_healthy = processor_healthy and runtime_status.is_running
-        except Exception as e:
-            logger.warning(f"Failed to check processor health: {e}")
-            processor_healthy = False
-
-    # Determine overall status
-    total_services = sum(s.get("available", 0) for s in services.values())
-    healthy_services = sum(s.get("healthy", 0) for s in services.values())
-
-    if not init_complete:
-        status = "initializing"
-    elif not processor_healthy:
-        status = "critical"  # Processor thread dead = critical
-    elif healthy_services == total_services:
-        status = "healthy"
-    elif healthy_services >= total_services * 0.8:
-        status = "degraded"
-    else:
-        status = "critical"
+    # Get basic system info
+    uptime_seconds = _get_system_uptime(request)
+    current_time = _get_current_time(request)
+    cognitive_state = _get_cognitive_state_safe(request)
+    init_complete = _check_initialization_status(request)
+    
+    # Collect service health data
+    services = await _collect_service_health(request)
+    processor_healthy = await _check_processor_health(request)
+    
+    # Determine overall system status
+    status = _determine_overall_status(init_complete, processor_healthy, services)
 
     response = SystemHealthResponse(
         status=status,
@@ -429,30 +353,33 @@ def _extract_pipeline_state_info(request: Request) -> tuple[str, dict, dict]:
     try:
         # Try to get current pipeline state from the runtime
         runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
-            pipeline_controller = runtime.pipeline_controller
-            
-            # Get current pipeline state
-            try:
-                pipeline_state = pipeline_controller.get_current_state()
-                if pipeline_state and hasattr(pipeline_state, 'current_step'):
-                    current_step = pipeline_state.current_step
-            except Exception as e:
-                logger.debug(f"Could not get current step from pipeline: {e}")
-            
-            # Get the full step schema/metadata
-            if current_step:
+        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
+            if hasattr(runtime.agent_processor, "_pipeline_controller") and runtime.agent_processor._pipeline_controller:
+                pipeline_controller = runtime.agent_processor._pipeline_controller
+                
+                # Get current pipeline state
                 try:
-                    # Get step schema - this would include all step metadata
-                    current_step_schema = {
-                        "step_point": current_step,
-                        "description": f"System paused at step: {current_step}",
-                        "timestamp": datetime.now().isoformat(),
-                        "can_single_step": True,
-                        "next_actions": ["single_step", "resume"]
-                    }
+                    pipeline_state_obj = pipeline_controller.get_current_state()
+                    if pipeline_state_obj and hasattr(pipeline_state_obj, 'current_step'):
+                        current_step = pipeline_state_obj.current_step
+                    if pipeline_state_obj and hasattr(pipeline_state_obj, 'pipeline_state'):
+                        pipeline_state = pipeline_state_obj.pipeline_state
                 except Exception as e:
-                    logger.debug(f"Could not get step schema: {e}")
+                    logger.debug(f"Could not get current step from pipeline: {e}")
+                
+                # Get the full step schema/metadata
+                if current_step:
+                    try:
+                        # Get step schema - this would include all step metadata
+                        current_step_schema = {
+                            "step_point": current_step,
+                            "description": f"System paused at step: {current_step}",
+                            "timestamp": datetime.now().isoformat(),
+                            "can_single_step": True,
+                            "next_actions": ["single_step", "resume"]
+                        }
+                    except Exception as e:
+                        logger.debug(f"Could not get step schema: {e}")
     except Exception as e:
         logger.debug(f"Could not get pipeline information: {e}")
     
@@ -514,6 +441,115 @@ async def _execute_state_action(runtime_control) -> RuntimeControlResponse:
         cognitive_state=status.cognitive_state or "UNKNOWN", 
         queue_depth=actual_queue_depth,
     )
+
+def _get_system_uptime(request: Request) -> float:
+    """Get system uptime in seconds."""
+    time_service: Optional[TimeServiceProtocol] = getattr(request.app.state, "time_service", None)
+    start_time = getattr(time_service, "_start_time", None) if time_service else None
+    current_time = time_service.now() if time_service else datetime.now(timezone.utc)
+    return (current_time - start_time).total_seconds() if start_time else 0.0
+
+def _get_current_time(request: Request) -> datetime:
+    """Get current system time."""
+    time_service: Optional[TimeServiceProtocol] = getattr(request.app.state, "time_service", None)
+    return time_service.now() if time_service else datetime.now(timezone.utc)
+
+def _get_cognitive_state_safe(request: Request) -> Optional[str]:
+    """Safely get cognitive state from agent processor."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if not (runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None):
+        return None
+        
+    try:
+        return runtime.agent_processor.get_current_state()
+    except Exception as e:
+        logger.warning(
+            f"Failed to retrieve cognitive state: {type(e).__name__}: {str(e)} - Agent processor may not be initialized"
+        )
+        return None
+
+def _check_initialization_status(request: Request) -> bool:
+    """Check if system initialization is complete."""
+    init_service = getattr(request.app.state, "initialization_service", None)
+    if init_service and hasattr(init_service, "is_initialized"):
+        return init_service.is_initialized()
+    return True
+
+async def _check_provider_health(provider) -> bool:
+    """Check if a single provider is healthy."""
+    try:
+        if hasattr(provider, "is_healthy"):
+            if asyncio.iscoroutinefunction(provider.is_healthy):
+                return await provider.is_healthy()
+            else:
+                return provider.is_healthy()
+        else:
+            return True  # Assume healthy if no method
+    except Exception:
+        return False
+
+async def _collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
+    """Collect service health data from service registry."""
+    services = {}
+    if not (hasattr(request.app.state, "service_registry") and request.app.state.service_registry is not None):
+        return services
+    
+    service_registry = request.app.state.service_registry
+    try:
+        for service_type in ServiceType:
+            providers = service_registry.get_services_by_type(service_type)
+            if providers:
+                healthy_count = 0
+                for provider in providers:
+                    if await _check_provider_health(provider):
+                        healthy_count += 1
+                    else:
+                        logger.warning(
+                            f"Service health check failed for {service_type.value}: Service may not implement is_healthy()"
+                        )
+                services[service_type.value] = {"available": len(providers), "healthy": healthy_count}
+    except Exception as e:
+        logger.error(f"Error checking service health: {e}")
+    
+    return services
+
+async def _check_processor_health(request: Request) -> bool:
+    """Check if processor thread is healthy."""
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+
+    if not runtime_control:
+        return False
+        
+    try:
+        # Get processor queue status - if this succeeds, processor thread is alive
+        queue_status = await runtime_control.get_processor_queue_status()
+        # If we can get queue status and processor name is not "unknown", thread is alive
+        processor_healthy = queue_status.processor_name != "unknown"
+
+        # Also check runtime status for additional validation
+        runtime_status = await runtime_control.get_runtime_status()
+        return processor_healthy and runtime_status.is_running
+    except Exception as e:
+        logger.warning(f"Failed to check processor health: {e}")
+        return False
+
+def _determine_overall_status(init_complete: bool, processor_healthy: bool, services: Dict[str, Dict[str, int]]) -> str:
+    """Determine overall system status based on components."""
+    total_services = sum(s.get("available", 0) for s in services.values())
+    healthy_services = sum(s.get("healthy", 0) for s in services.values())
+
+    if not init_complete:
+        return "initializing"
+    elif not processor_healthy:
+        return "critical"  # Processor thread dead = critical
+    elif healthy_services == total_services:
+        return "healthy"
+    elif healthy_services >= total_services * 0.8:
+        return "degraded"
+    else:
+        return "critical"
 
 def _get_cognitive_state(request: Request) -> str:
     """Get cognitive state from agent processor if available."""

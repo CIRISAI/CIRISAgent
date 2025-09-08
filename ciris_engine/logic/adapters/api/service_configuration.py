@@ -31,7 +31,7 @@ class ApiServiceConfiguration:
     Declarative configuration for API adapter service requirements.
 
     This clearly documents:
-    1. The 21 core CIRIS services organized by category
+    1. The 22 core CIRIS services organized by category
     2. Additional services needed by the API
     3. Adapter-specific services that will be created
 

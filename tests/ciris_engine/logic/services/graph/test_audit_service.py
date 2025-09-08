@@ -1,5 +1,6 @@
 """Unit tests for GraphAuditService."""
 
+import asyncio
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -68,7 +69,10 @@ async def audit_service(memory_bus, temp_db, time_service):
         )
         await service.start()
         yield service
-        await service.stop()
+        try:
+            await service.stop()
+        except asyncio.CancelledError:
+            pass  # Expected when cancelling export task
 
 
 @pytest.mark.asyncio

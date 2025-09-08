@@ -8,7 +8,7 @@ from fastapi import HTTPException, Request
 
 from ciris_engine.logic.adapters.api.dependencies.auth import get_auth_context
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
-from ciris_engine.schemas.api.auth import UserRole
+from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, Permission, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 
 
@@ -124,6 +124,10 @@ class TestServiceTokenAuthentication:
         assert Permission.VIEW_TELEMETRY in service_permissions
         assert Permission.VIEW_CONFIG in service_permissions
         assert Permission.VIEW_LOGS in service_permissions
+        assert Permission.VIEW_TOOLS in service_permissions
+
+        # Should have agent interaction for system administration
+        assert Permission.SEND_MESSAGES in service_permissions
 
         # Should NOT have sensitive permissions
         assert Permission.EMERGENCY_SHUTDOWN not in service_permissions

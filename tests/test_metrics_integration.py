@@ -4,7 +4,7 @@ Comprehensive integration test for full metric collection across all CIRIS servi
 This is the master test that ensures the entire telemetry system works correctly:
 
 ## Core Functionality Tests
-- Tests that all 21 core services can produce metrics via get_metrics() interface
+- Tests that all 22 core services can produce metrics via get_metrics() interface
 - Verifies total metric count meets expectations (179+ metrics collected)
 - Tests metric aggregation across services for system-wide visibility
 - Validates all metrics are numeric (float convertible) for proper telemetry
@@ -28,7 +28,7 @@ still providing comprehensive validation of the telemetry system.
 
 ## Results Summary
 The integration test validates:
-- ✓ 21 services with 179+ metrics total
+- ✓ 22 services with 179+ metrics total
 - ✓ Performance: <0.1ms average per service (100ms threshold)
 - ✓ All metrics numeric and properly typed
 - ✓ Proper namespacing and taxonomy compliance
@@ -56,7 +56,7 @@ class TestMetricsIntegration(BaseMetricsTest):
 
     # Known metrics from comprehensive_metrics.json analysis
     KNOWN_METRICS = {
-        # Service availability metrics (21 services)
+        # Service availability metrics (22 services)
         "adaptive_filter.available",
         "adaptive_filter.healthy",
         "audit.available",
@@ -143,13 +143,13 @@ class TestMetricsIntegration(BaseMetricsTest):
 
     # Expected minimum metric count based on comprehensive_metrics.json (135+ metrics)
     MINIMUM_EXPECTED_METRICS = 135  # From actual analysis
-    EXPECTED_SERVICE_COUNT = 21  # Core services
+    EXPECTED_SERVICE_COUNT = 22  # Core services
     PERFORMANCE_THRESHOLD_MS = 100  # Maximum time per service metric collection
 
     @pytest.fixture
     def mock_service_metrics(self):
         """Create mock service metrics that simulate a complete CIRIS system."""
-        # Simulate metrics from all 21 core services based on comprehensive_metrics.json
+        # Simulate metrics from all 22 core services based on comprehensive_metrics.json
         return {
             # Time Service
             "time": {
@@ -225,6 +225,17 @@ class TestMetricsIntegration(BaseMetricsTest):
                 "secrets_tool.audit_events_generated": 12.0,
                 "secrets_tool.success_rate": 1.0,
                 "secrets_tool.error_rate": 0.0,
+            },
+            # Database Maintenance Service
+            "database_maintenance": {
+                "uptime_seconds": 7200.0,
+                "request_count": 8.0,
+                "error_count": 0.0,
+                "error_rate": 0.0,
+                "healthy": 1.0,
+                "maintenance_operations": 5.0,
+                "database_size_mb": 128.0,
+                "cleanup_operations": 3.0,
             },
             # Graph Services
             "memory": {

@@ -482,18 +482,17 @@ class TestAgentProcessor:
 
     @pytest.mark.asyncio
     async def test_single_step_not_paused(self, main_processor):
-        """Test single_step fails when not paused."""
+        """Test single_step raises error when not paused."""
         # Ensure not paused
         assert not main_processor.is_paused()
         
-        # Single step should fail
-        result = await main_processor.single_step()
-        assert result["success"] is False
-        assert "Cannot single-step unless paused" in result["error"]
+        # Single step should raise RuntimeError
+        with pytest.raises(RuntimeError, match="Cannot single-step unless processor is paused"):
+            await main_processor.single_step()
 
     @pytest.mark.asyncio
     async def test_single_step_pipeline_controller_error(self, main_processor):
-        """Test single_step handles pipeline controller errors gracefully."""
+        """Test single_step propagates pipeline controller errors (FAIL FAST)."""
         # Properly pause processor (pipeline controller is always initialized now)
         await main_processor.pause_processing()
         assert main_processor.is_paused()
@@ -503,14 +502,16 @@ class TestAgentProcessor:
             side_effect=Exception("Pipeline error")
         )
         
-        # Single step should handle the error gracefully
-        result = await main_processor.single_step()
-        assert result["success"] is False
-        assert "Pipeline error" in result["error"]
+        # Single step should propagate the error (FAIL FAST principle)
+        with pytest.raises(Exception, match="Pipeline error"):
+            await main_processor.single_step()
+        
+        # Verify single-step mode is properly disabled in finally block
+        assert not main_processor._single_step_mode
 
     @pytest.mark.asyncio
     async def test_single_step_fallback_mode(self, main_processor):
-        """Test single_step fallback when execute_single_step_point is missing."""
+        """Test single_step raises error when execute_single_step_point is missing (FAIL FAST)."""
         # Properly pause processor
         await main_processor.pause_processing()
         assert main_processor.is_paused()
@@ -521,26 +522,13 @@ class TestAgentProcessor:
             def __init__(self):
                 self.is_paused = True
                 self._single_step_mode = False
-                
-            def get_pipeline_state(self):
-                # Return empty pipeline state to trigger pending thoughts check
-                mock_state = Mock()
-                mock_state.thoughts_by_step = {}
-                return mock_state
         
         mock_controller = MockPipelineController()
         main_processor._pipeline_controller = mock_controller
         
-        # Mock persistence for fallback
-        with patch('ciris_engine.logic.persistence.get_thoughts_by_status') as mock_get_thoughts:
-            mock_get_thoughts.return_value = []
-            
-            # Single step should use fallback
-            result = await main_processor.single_step()
-            assert result["success"] is True
-            assert result["step_point"] == "pipeline_empty"
-            assert result["thoughts_processed"] == 0
-            assert "processing_time_ms" in result
+        # Single step should raise NotImplementedError (FAIL FAST principle)
+        with pytest.raises(NotImplementedError, match="missing execute_single_step_point method"):
+            await main_processor.single_step()
 
     @pytest.mark.asyncio
     async def test_single_step_with_pipeline_controller(self, main_processor):
@@ -552,14 +540,21 @@ class TestAgentProcessor:
         # Mock pipeline controller with execute_single_step_point method
         mock_controller = AsyncMock()
         mock_step_result = {
-            "step_point": "BUILD_CONTEXT",
+            "step_point": "GATHER_CONTEXT",
             "step_results": [
                 {
                     "thought_id": "test-thought-1",
                     "success": True,
                     "step_data": {"context": "test"}
                 }
-            ]
+            ],
+            "pipeline_state": {
+                "current_round": 1,
+                "pipeline_empty": False,
+                "thoughts_by_step": {}
+            },
+            "current_round": 1,
+            "pipeline_empty": False
         }
         mock_controller.execute_single_step_point.return_value = mock_step_result
         main_processor._pipeline_controller = mock_controller
@@ -567,7 +562,7 @@ class TestAgentProcessor:
         # Single step should succeed
         result = await main_processor.single_step()
         assert result["success"] is True
-        assert result["step_point"] == "BUILD_CONTEXT"
+        assert result["step_point"] == "GATHER_CONTEXT"
         assert result["thoughts_processed"] == 1
         assert "processing_time_ms" in result
         assert "pipeline_state" in result
@@ -577,7 +572,7 @@ class TestAgentProcessor:
 
     @pytest.mark.asyncio
     async def test_single_step_error_handling(self, main_processor):
-        """Test single_step error handling."""
+        """Test single_step propagates errors (FAIL FAST principle)."""
         # Properly pause processor
         await main_processor.pause_processing()
         
@@ -586,13 +581,11 @@ class TestAgentProcessor:
         mock_controller.execute_single_step_point.side_effect = Exception("Step failed")
         main_processor._pipeline_controller = mock_controller
         
-        # Single step should handle error gracefully
-        result = await main_processor.single_step()
-        assert result["success"] is False
-        assert "Step failed" in result["error"]
-        assert "processing_time_ms" in result
+        # Single step should propagate the error (FAIL FAST)
+        with pytest.raises(Exception, match="Step failed"):
+            await main_processor.single_step()
         
-        # Single step mode should be disabled after error
+        # Single step mode should be disabled after error (via finally block)
         assert not main_processor._single_step_mode
 
     @pytest.mark.asyncio
@@ -638,7 +631,7 @@ class TestAgentProcessor:
 
     @pytest.mark.asyncio
     async def test_fallback_single_step_with_thoughts(self, main_processor):
-        """Test fallback single_step with pending thoughts."""
+        """Test single_step raises NotImplementedError when pipeline controller lacks method."""
         # Properly pause processor
         await main_processor.pause_processing()
         
@@ -657,26 +650,13 @@ class TestAgentProcessor:
         mock_controller = MockPipelineController()
         main_processor._pipeline_controller = mock_controller
         
-        # Mock pending thoughts for finalize_tasks_queue step
-        mock_thought = Mock()
-        mock_thought.thought_id = "test-thought-1"
-        mock_thought.source_task_id = "test-task-1"
-        mock_thought.content = "Test thought content"
-        
-        with patch('ciris_engine.logic.persistence.get_thoughts_by_status') as mock_get_thoughts:
-            mock_get_thoughts.return_value = [mock_thought]
-            
-            # Single step should process the thought
-            result = await main_processor.single_step()
-            assert result["success"] is True
-            assert result["step_point"] == "finalize_tasks_queue"
-            assert result["thoughts_processed"] == 1
-            assert len(result["step_results"]) == 1
-            assert result["step_results"][0]["thought_id"] == "test-thought-1"
+        # Single step should raise NotImplementedError (FAIL FAST principle)
+        with pytest.raises(NotImplementedError, match="missing execute_single_step_point method"):
+            await main_processor.single_step()
 
     @pytest.mark.asyncio
     async def test_fallback_single_step_error_handling(self, main_processor):
-        """Test fallback single_step error handling."""
+        """Test single_step raises NotImplementedError (no fallback, FAIL FAST principle)."""
         # Properly pause processor
         await main_processor.pause_processing()
         
@@ -685,22 +665,10 @@ class TestAgentProcessor:
             def __init__(self):
                 self.is_paused = True
                 self._single_step_mode = False
-                
-            def get_pipeline_state(self):
-                # Return empty pipeline state to trigger pending thoughts check
-                mock_state = Mock()
-                mock_state.thoughts_by_step = {}
-                return mock_state
         
         mock_controller = MockPipelineController()
         main_processor._pipeline_controller = mock_controller
         
-        # Mock persistence to raise error
-        with patch('ciris_engine.logic.persistence.get_thoughts_by_status') as mock_get_thoughts:
-            mock_get_thoughts.side_effect = Exception("Database error")
-            
-            # Single step should handle error gracefully
-            result = await main_processor.single_step()
-            assert result["success"] is False
-            assert "Fallback single-step error" in result["error"]
-            assert "Database error" in result["error"]
+        # Single step should raise NotImplementedError before any fallback logic
+        with pytest.raises(NotImplementedError, match="missing execute_single_step_point method"):
+            await main_processor.single_step()

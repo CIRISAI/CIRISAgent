@@ -49,7 +49,7 @@ class ProtocolAnalyzer:
         # New special services path
         self.special_path = self.project_root / "logic" / "services" / "special"
 
-        # The actual 21 CIRIS core services as per CLAUDE.md
+        # The actual 22 CIRIS core services as per CLAUDE.md
         self.known_services = {
             # Graph Services (6)
             "MemoryService",

@@ -436,35 +436,48 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Get consent status first
         status = await self.get_consent(user_id)
 
-        # Query actual metrics from graph
-        total_interactions = status.attribution_count * 10  # Default estimate
-        patterns_contributed = status.attribution_count  # Default estimate  
-        users_helped = int(status.impact_score * 100)  # Default estimate
+        # Query REAL data from TSDB summaries - NO FALLBACKS
+        if not self._memory_bus:
+            raise ValueError("Memory bus required for impact reporting - no fake data allowed")
+            
+        # Get real interaction data from TSDB conversation summaries
+        conversation_summaries = await self._memory_bus.query_nodes(
+            node_type=NodeType.CONVERSATION_SUMMARY,
+            scope=GraphScope.COMMUNITY,
+            attributes={}
+        )
         
-        if self._memory_bus:
-            try:
-                # Query interaction nodes for this user
-                interaction_nodes = await self._memory_bus.query_nodes(
-                    node_type=NodeType.INTERACTION,
-                    scope=GraphScope.SOCIAL,
-                    attributes={"user_id": user_id}
-                )
-                if interaction_nodes:
-                    total_interactions = len(interaction_nodes)
-                
-                # Query contribution nodes 
-                contribution_nodes = await self._memory_bus.query_nodes(
-                    node_type=NodeType.CONCEPT,
-                    scope=GraphScope.BEHAVIORAL, 
-                    attributes={"contributor_id": user_id}
-                )
-                if contribution_nodes:
-                    patterns_contributed = len(contribution_nodes)
-                    
-                logger.debug(f"Queried graph metrics for {user_id}: {total_interactions} interactions, {patterns_contributed} contributions")
-            except Exception as e:
-                logger.warning(f"Failed to query graph metrics for {user_id}: {e}")
-                # Fall back to estimates
+        # Count interactions where this user participated
+        total_interactions = 0
+        for summary in conversation_summaries:
+            if summary.attributes and "participants" in summary.attributes:
+                participants = summary.attributes["participants"]
+                # Check if user_id is in any participant data
+                for participant_data in participants.values():
+                    if isinstance(participant_data, dict) and participant_data.get("user_id") == user_id:
+                        total_interactions += participant_data.get("message_count", 0)
+        
+        # Get real contribution data from task summaries
+        task_summaries = await self._memory_bus.query_nodes(
+            node_type=NodeType.TASK_SUMMARY,
+            scope=GraphScope.IDENTITY,
+            attributes={}
+        )
+        
+        patterns_contributed = 0
+        for task_summary in task_summaries:
+            if task_summary.attributes and task_summary.attributes.get("author_id") == user_id:
+                patterns_contributed += 1
+        
+        # Calculate users helped from actual conversation engagement
+        users_helped = len(set(
+            participant_id for summary in conversation_summaries
+            if summary.attributes and "participants" in summary.attributes
+            for participant_id, participant_data in summary.attributes["participants"].items()
+            if participant_id != user_id and isinstance(participant_data, dict)
+        ))
+        
+        logger.info(f"Real impact metrics for {user_id}: {total_interactions} interactions, {patterns_contributed} contributions, {users_helped} users helped")
         
         report = ConsentImpactReport(
             user_id=user_id,

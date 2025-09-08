@@ -39,7 +39,7 @@ class RoundCompletePhase:
                 value=1.0,
                 tags={
                     "thought_id": thought_item.thought_id,
-                    "round_number": getattr(self, "current_round_number", 0),
+                    "round_number": str(getattr(self, "current_round_number", 0)),
                     "final_action": final_result.selected_action.value if final_result else "none",
                 },
             )

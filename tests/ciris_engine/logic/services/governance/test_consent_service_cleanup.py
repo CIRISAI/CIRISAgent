@@ -600,7 +600,7 @@ class TestConsentServiceCleanup:
     @pytest.mark.asyncio
     async def test_check_expiry_no_consent_found(self, consent_service):
         """Test check_expiry returns True when no consent is found."""
-        from ciris_engine.schemas.consent.exceptions import ConsentNotFoundError
+        from ciris_engine.logic.services.governance.consent.service import ConsentNotFoundError
         
         # Mock get_consent to raise ConsentNotFoundError
         consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError("No consent found"))

@@ -85,9 +85,8 @@ class TestStreamingStepDecorator:
             mock_broadcast.assert_called_once()
             call_args = mock_broadcast.call_args
             assert call_args[0][0] == StepPoint.GATHER_CONTEXT
-            assert call_args[0][1] == "test-thought-123"
             
-            step_data = call_args[0][2]
+            step_data = call_args[0][1]
             assert step_data["thought_id"] == "test-thought-123"
             assert step_data["success"] is True
             assert "processing_time_ms" in step_data
@@ -113,7 +112,7 @@ class TestStreamingStepDecorator:
             # Verify error streaming was called
             mock_broadcast.assert_called_once()
             call_args = mock_broadcast.call_args
-            step_data = call_args[0][2]
+            step_data = call_args[0][1]
             assert step_data["success"] is False
             assert step_data["error"] == "Test error message"
 
@@ -180,7 +179,7 @@ class TestStepPointDecorator:
             return "after_pause"
         
         # Mock the pause mechanism
-        async def mock_pause(thought_id, step):
+        async def mock_pause(thought_id):
             # Simulate immediate resume for testing
             pass
             
@@ -304,7 +303,7 @@ class TestStepDataExtraction:
             await gather_context_step(mock_processor, mock_thought)
             
             # Verify step-specific data was added
-            call_args = mock_broadcast.call_args[0][2]
+            call_args = mock_broadcast.call_args[0][1]
             assert call_args["task_id"] == "task-456"
             assert call_args["context"] is not None
 
@@ -331,7 +330,7 @@ class TestStepDataExtraction:
             await aspdma_step(mock_processor, mock_thought)
             
             # Verify ASPDMA-specific data was added
-            call_args = mock_broadcast.call_args[0][2]
+            call_args = mock_broadcast.call_args[0][1]
             assert call_args["selected_action"] == "SPEAK"
             assert call_args["action_rationale"] == "Test reasoning"
 
@@ -390,8 +389,8 @@ class TestIntegrationFlow:
             execution_log = []
             
             # Mock pause to simulate single-step behavior
-            async def mock_pause(thought_id, step):
-                execution_log.append(f"paused_at_{step.value}")
+            async def mock_pause(thought_id):
+                execution_log.append(f"paused_at_perform_aspdma")
                 # Immediate resume for testing
             
             with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result'):

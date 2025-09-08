@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from unittest.mock import AsyncMock, Mock, patch
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.services.governance.consent import ConsentService
+from ciris_engine.logic.services.governance.consent import ConsentService, ConsentNotFoundError
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream, ConsentCategory
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -600,7 +600,6 @@ class TestConsentServiceCleanup:
     @pytest.mark.asyncio
     async def test_check_expiry_no_consent_found(self, consent_service):
         """Test check_expiry returns True when no consent is found."""
-        from ciris_engine.logic.services.governance.consent.service import ConsentNotFoundError
         
         # Mock get_consent to raise ConsentNotFoundError
         consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError("No consent found"))

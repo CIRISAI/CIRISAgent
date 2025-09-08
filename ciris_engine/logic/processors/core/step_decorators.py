@@ -22,8 +22,6 @@ from ciris_engine.schemas.services.runtime_control import StepPoint
 
 logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable[..., Any])
-
 # Global registry for paused thought coroutines
 _paused_thoughts: Dict[str, asyncio.Event] = {}
 _single_step_mode = False
@@ -48,7 +46,7 @@ def streaming_step(step: StepPoint):
             return context_data
     """
 
-    def decorator(func: F) -> F:
+    def decorator[F: Callable[..., Any]](func: F) -> F:
         @wraps(func)
         async def wrapper(self, thought_item, *args, **kwargs):
             thought_id = getattr(thought_item, "thought_id", "unknown")
@@ -79,7 +77,7 @@ def streaming_step(step: StepPoint):
                 _add_step_specific_data(step, step_data, thought_item, result, args, kwargs)
 
                 # Stream the step result
-                await _broadcast_step_result(step, thought_id, step_data)
+                await _broadcast_step_result(step, step_data)
 
                 return result
 
@@ -96,7 +94,7 @@ def streaming_step(step: StepPoint):
                     "error": str(e),
                 }
 
-                await _broadcast_step_result(step, thought_id, error_step_data)
+                await _broadcast_step_result(step, error_step_data)
                 raise
 
         return cast(F, wrapper)
@@ -104,7 +102,7 @@ def streaming_step(step: StepPoint):
     return decorator
 
 
-def step_point(step: StepPoint, conditional: bool = False):
+def step_point(step: StepPoint):
     """
     Decorator that handles pause/resume mechanics for single-step debugging.
 
@@ -116,24 +114,23 @@ def step_point(step: StepPoint, conditional: bool = False):
 
     Args:
         step: The StepPoint enum for this step
-        conditional: If True, this step only runs conditionally (recursive steps)
 
     Usage:
-        @step_point(StepPoint.RECURSIVE_ASPDMA, conditional=True)
+        @step_point(StepPoint.RECURSIVE_ASPDMA)
         async def _recursive_action_selection(self, thought_item, ...):
             # Only runs if previous step failed
             return retry_result
     """
 
-    def decorator(func: F) -> F:
+    def decorator[F: Callable[..., Any]](func: F) -> F:
         @wraps(func)
         async def wrapper(self, thought_item, *args, **kwargs):
             thought_id = getattr(thought_item, "thought_id", "unknown")
 
             # Check if we should pause at this step point
-            if _should_pause_at_step(step, thought_id):
+            if _should_pause_at_step(step):
                 logger.info(f"Pausing at step point {step.value} for thought {thought_id}")
-                await _pause_thought_execution(thought_id, step)
+                await _pause_thought_execution(thought_id)
                 logger.info(f"Resuming from step point {step.value} for thought {thought_id}")
 
             # Execute the original function (thought continues naturally)
@@ -147,7 +144,7 @@ def step_point(step: StepPoint, conditional: bool = False):
 # Helper functions for decorator implementation
 
 
-def _should_pause_at_step(step: StepPoint, thought_id: str) -> bool:
+def _should_pause_at_step(step: StepPoint) -> bool:
     """Check if we should pause at this step point."""
     global _single_step_mode
 
@@ -159,7 +156,7 @@ def _should_pause_at_step(step: StepPoint, thought_id: str) -> bool:
     return True
 
 
-async def _pause_thought_execution(thought_id: str, step: StepPoint) -> None:
+async def _pause_thought_execution(thought_id: str) -> None:
     """Pause this thought's execution until resumed."""
     global _paused_thoughts
 
@@ -178,11 +175,39 @@ def _add_step_specific_data(
     step: StepPoint, step_data: Dict[str, Any], thought_item: Any, result: Any, args: tuple, kwargs: dict
 ) -> None:
     """Add step-specific data to step_data dict based on step type."""
-    # Add common data
+    # Add common data and debug logging
+    _add_common_step_data(step_data, thought_item, step)
+    
+    # Add step-specific data based on step type
+    if step == StepPoint.START_ROUND:
+        _add_start_round_data(step_data, args)
+    elif step == StepPoint.GATHER_CONTEXT:
+        _add_gather_context_data(step_data, result)
+    elif step == StepPoint.PERFORM_DMAS:
+        _add_perform_dmas_data(step_data, result, thought_item)
+    elif step == StepPoint.PERFORM_ASPDMA:
+        _add_perform_aspdma_data(step_data, result)
+    elif step == StepPoint.CONSCIENCE_EXECUTION:
+        _add_conscience_execution_data(step_data, result, args)
+    elif step == StepPoint.RECURSIVE_ASPDMA:
+        _add_recursive_aspdma_data(step_data, result, args)
+    elif step == StepPoint.RECURSIVE_CONSCIENCE:
+        _add_recursive_conscience_data(step_data, result)
+    elif step == StepPoint.FINALIZE_ACTION:
+        _add_finalize_action_data(step_data, result)
+    elif step == StepPoint.PERFORM_ACTION:
+        _add_perform_action_data(step_data, result, args, kwargs)
+    elif step == StepPoint.ACTION_COMPLETE:
+        _add_action_complete_data(step_data, result)
+    elif step == StepPoint.ROUND_COMPLETE:
+        _add_round_complete_data(step_data, args)
+
+
+def _add_common_step_data(step_data: Dict[str, Any], thought_item: Any, step: StepPoint) -> None:
+    """Add common data and perform debug logging."""
     task_id = getattr(thought_item, "source_task_id", None)
     step_data["task_id"] = task_id
 
-    # Debug logging
     thought_id = getattr(thought_item, "thought_id", "unknown")
     logger.debug(
         f"Step {step.value} for thought {thought_id}: task_id={task_id}, thought_item type={type(thought_item).__name__}"
@@ -190,60 +215,80 @@ def _add_step_specific_data(
     if not task_id:
         logger.warning(f"Missing task_id for thought {thought_id} at step {step.value}")
 
-    # Add step-specific data based on step type
-    if step == StepPoint.START_ROUND:
-        step_data["thoughts_processed"] = len(args) if args else 1
-        step_data["round_started"] = True
 
-    elif step == StepPoint.GATHER_CONTEXT:
-        step_data["context"] = str(result) if result else None
-
-    elif step == StepPoint.PERFORM_DMAS:
-        step_data["dma_results"] = str(result) if result else None
-        # Get context from thought_item.initial_context (always available per schema)
-        step_data["context"] = str(thought_item.initial_context) if thought_item.initial_context else ""
-
-    elif step == StepPoint.PERFORM_ASPDMA:
-        if hasattr(result, "selected_action"):
-            step_data["selected_action"] = str(result.selected_action)
-        if hasattr(result, "rationale"):
-            step_data["action_rationale"] = str(result.rationale)
-
-    elif step == StepPoint.CONSCIENCE_EXECUTION:
-        step_data["selected_action"] = str(getattr(result, "selected_action", args[0] if args else "UNKNOWN"))
-        step_data["conscience_passed"] = getattr(result, "conscience_passed", True)
-
-    elif step == StepPoint.RECURSIVE_ASPDMA:
-        step_data["retry_reason"] = str(args[0]) if args else "retry_required"
-        step_data["original_action"] = str(getattr(result, "selected_action", "UNKNOWN"))
-
-    elif step == StepPoint.RECURSIVE_CONSCIENCE:
-        step_data["retry_action"] = str(getattr(result, "selected_action", "UNKNOWN"))
-        step_data["retry_result"] = str(result) if result else None
-
-    elif step == StepPoint.FINALIZE_ACTION:
-        step_data["selected_action"] = str(getattr(result, "selected_action", "UNKNOWN"))
-        step_data["selection_reasoning"] = getattr(result, "rationale", "")
-        step_data["conscience_passed"] = True  # If we reach here, conscience passed
-
-    elif step == StepPoint.PERFORM_ACTION:
-        step_data["selected_action"] = str(getattr(result, "selected_action", args[0] if args else "UNKNOWN"))
-        step_data["action_parameters"] = str(getattr(result, "action_parameters", None))
-        step_data["dispatch_context"] = str(kwargs.get("context", args[1] if len(args) > 1 else {}))
-
-    elif step == StepPoint.ACTION_COMPLETE:
-        step_data["action_executed"] = str(getattr(result, "selected_action", "UNKNOWN"))
-        step_data["dispatch_success"] = getattr(result, "success", True)
-        step_data["execution_time_ms"] = getattr(result, "execution_time_ms", 0.0)
-        step_data["handler_completed"] = getattr(result, "completed", True)
-        step_data["follow_up_processing_pending"] = getattr(result, "has_follow_up", False)
-
-    elif step == StepPoint.ROUND_COMPLETE:
-        step_data["round_status"] = "completed"
-        step_data["thoughts_processed"] = len(args) if args else 1
+def _add_start_round_data(step_data: Dict[str, Any], args: tuple) -> None:
+    """Add START_ROUND specific data."""
+    step_data["thoughts_processed"] = len(args) if args else 1
+    step_data["round_started"] = True
 
 
-async def _broadcast_step_result(step: StepPoint, thought_id: str, step_data: Dict[str, Any]) -> None:
+def _add_gather_context_data(step_data: Dict[str, Any], result: Any) -> None:
+    """Add GATHER_CONTEXT specific data."""
+    step_data["context"] = str(result) if result else None
+
+
+def _add_perform_dmas_data(step_data: Dict[str, Any], result: Any, thought_item: Any) -> None:
+    """Add PERFORM_DMAS specific data."""
+    step_data["dma_results"] = str(result) if result else None
+    step_data["context"] = str(thought_item.initial_context) if thought_item.initial_context else ""
+
+
+def _add_perform_aspdma_data(step_data: Dict[str, Any], result: Any) -> None:
+    """Add PERFORM_ASPDMA specific data."""
+    if hasattr(result, "selected_action"):
+        step_data["selected_action"] = str(result.selected_action)
+    if hasattr(result, "rationale"):
+        step_data["action_rationale"] = str(result.rationale)
+
+
+def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any, args: tuple) -> None:
+    """Add CONSCIENCE_EXECUTION specific data."""
+    step_data["selected_action"] = str(getattr(result, "selected_action", args[0] if args else "UNKNOWN"))
+    step_data["conscience_passed"] = getattr(result, "conscience_passed", True)
+
+
+def _add_recursive_aspdma_data(step_data: Dict[str, Any], result: Any, args: tuple) -> None:
+    """Add RECURSIVE_ASPDMA specific data."""
+    step_data["retry_reason"] = str(args[0]) if args else "retry_required"
+    step_data["original_action"] = str(getattr(result, "selected_action", "UNKNOWN"))
+
+
+def _add_recursive_conscience_data(step_data: Dict[str, Any], result: Any) -> None:
+    """Add RECURSIVE_CONSCIENCE specific data."""
+    step_data["retry_action"] = str(getattr(result, "selected_action", "UNKNOWN"))
+    step_data["retry_result"] = str(result) if result else None
+
+
+def _add_finalize_action_data(step_data: Dict[str, Any], result: Any) -> None:
+    """Add FINALIZE_ACTION specific data."""
+    step_data["selected_action"] = str(getattr(result, "selected_action", "UNKNOWN"))
+    step_data["selection_reasoning"] = getattr(result, "rationale", "")
+    step_data["conscience_passed"] = True  # If we reach here, conscience passed
+
+
+def _add_perform_action_data(step_data: Dict[str, Any], result: Any, args: tuple, kwargs: dict) -> None:
+    """Add PERFORM_ACTION specific data."""
+    step_data["selected_action"] = str(getattr(result, "selected_action", args[0] if args else "UNKNOWN"))
+    step_data["action_parameters"] = str(getattr(result, "action_parameters", None))
+    step_data["dispatch_context"] = str(kwargs.get("context", args[1] if len(args) > 1 else {}))
+
+
+def _add_action_complete_data(step_data: Dict[str, Any], result: Any) -> None:
+    """Add ACTION_COMPLETE specific data."""
+    step_data["action_executed"] = str(getattr(result, "selected_action", "UNKNOWN"))
+    step_data["dispatch_success"] = getattr(result, "success", True)
+    step_data["execution_time_ms"] = getattr(result, "execution_time_ms", 0.0)
+    step_data["handler_completed"] = getattr(result, "completed", True)
+    step_data["follow_up_processing_pending"] = getattr(result, "has_follow_up", False)
+
+
+def _add_round_complete_data(step_data: Dict[str, Any], args: tuple) -> None:
+    """Add ROUND_COMPLETE specific data."""
+    step_data["round_status"] = "completed"
+    step_data["thoughts_processed"] = len(args) if args else 1
+
+
+async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> None:
     """Broadcast step result to global step result stream."""
     try:
         # Import here to avoid circular dependency
@@ -402,4 +447,4 @@ def get_paused_thoughts() -> Dict[str, str]:
     """
     global _paused_thoughts
 
-    return {thought_id: "paused_awaiting_resume" for thought_id in _paused_thoughts.keys()}
+    return dict.fromkeys(_paused_thoughts.keys(), "paused_awaiting_resume")

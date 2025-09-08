@@ -72,7 +72,7 @@ class RecursiveProcessingPhase:
         return action_result, conscience_result
 
     @streaming_step(StepPoint.RECURSIVE_ASPDMA)
-    @step_point(StepPoint.RECURSIVE_ASPDMA, conditional=True)
+    @step_point(StepPoint.RECURSIVE_ASPDMA)
     async def _recursive_aspdma_step(self, thought_item: ProcessingQueueItem, thought_context, dma_results, override_reason: str):
         """Step 3B: Optional retry action selection after conscience failure."""
         thought = await self._fetch_thought(thought_item.thought_id)
@@ -88,7 +88,7 @@ class RecursiveProcessingPhase:
             return None
 
     @streaming_step(StepPoint.RECURSIVE_CONSCIENCE)
-    @step_point(StepPoint.RECURSIVE_CONSCIENCE, conditional=True)
+    @step_point(StepPoint.RECURSIVE_CONSCIENCE)
     async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result):
         """Step 4B: Optional re-validation if recursive action failed."""
         if not retry_result:

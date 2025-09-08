@@ -193,7 +193,7 @@ class TestStepPointDecorator:
         """Test conditional step point (recursive steps)."""
         enable_single_step_mode()
         
-        @step_point(StepPoint.RECURSIVE_ASPDMA, conditional=True)
+        @step_point(StepPoint.RECURSIVE_ASPDMA)
         async def test_conditional_step(self, thought_item):
             return "conditional_result"
         

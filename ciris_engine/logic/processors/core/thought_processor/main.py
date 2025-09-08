@@ -103,6 +103,26 @@ class ThoughtProcessor(
         start_time = self._time_service.now()
 
         # Initialize correlation for tracking
+        correlation = self._initialize_correlation(thought_item, start_time)
+        
+        # Fetch and validate thought
+        thought = await self._fetch_and_validate_thought(thought_item)
+        if not thought:
+            return None
+
+        # Execute pipeline phases
+        pipeline_result = await self._execute_pipeline_phases(thought_item, thought, context, correlation, start_time)
+        
+        # Record completion and finalize
+        await self._record_processing_completion(thought, pipeline_result)
+        await self._finalize_correlation(correlation, pipeline_result, start_time)
+        
+        # Complete the round
+        final_result = await self._round_complete_step(thought_item, pipeline_result)
+        return final_result
+
+    def _initialize_correlation(self, thought_item: ProcessingQueueItem, start_time):
+        """Initialize correlation tracking for the thought processing."""
         correlation = ServiceCorrelation(
             correlation_id=f"thought_processing_{thought_item.thought_id}_{start_time.timestamp()}",
             correlation_type=CorrelationType.SERVICE_INTERACTION,
@@ -114,8 +134,10 @@ class ThoughtProcessor(
             timestamp=start_time,
         )
         persistence.add_correlation(correlation, self._time_service)
+        return correlation
 
-        # Fetch the actual thought
+    async def _fetch_and_validate_thought(self, thought_item: ProcessingQueueItem):
+        """Fetch and validate thought exists."""
         logger.info(f"ThoughtProcessor.process_thought: About to fetch thought_id={thought_item.thought_id}")
         thought = await self._fetch_thought(thought_item.thought_id)
         logger.info(
@@ -123,186 +145,217 @@ class ThoughtProcessor(
         )
         if not thought:
             logger.warning(f"ThoughtProcessor: Could not fetch thought {thought_item.thought_id}")
-            return None
+        return thought
 
-        # 0. START_ROUND - Initialize processing round
+    async def _execute_pipeline_phases(self, thought_item, thought, context, correlation, start_time):
+        """Execute the main H3ERE pipeline phases."""
+        # Phase 0: Initialize processing round
         await self._start_round_step(thought_item, context)
 
-        # 1. GATHER_CONTEXT - Build processing context
+        # Phase 1: Gather context
         thought_context = await self._gather_context_step(thought_item, context)
 
-        # 2. PERFORM_DMAS - Multi-perspective analysis
+        # Phase 2: DMA analysis
         dma_results = await self._perform_dmas_step(thought_item, thought_context)
-
-        # 2a. If DMA step returned an ActionSelectionDMAResult (due to failure), return it directly
+        
+        # Check for early DMA result return
         if isinstance(dma_results, ActionSelectionDMAResult):
-            logger.info(
-                f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
-            )
+            logger.info(f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}")
             return dma_results
 
-        # 3. Check for failures/escalations
+        # Check for critical failures
         if self._has_critical_failure(dma_results):
-            end_time = self._time_service.now()
-            from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
-
-            update_req = CorrelationUpdateRequest(
-                correlation_id=correlation.correlation_id,
-                response_data={
-                    "success": "false",
-                    "error_message": "Critical DMA failure",
-                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
-                    "response_timestamp": end_time.isoformat(),
-                },
-                status=ServiceCorrelationStatus.FAILED,
-                metric_value=None,
-                tags=None,
-            )
-            persistence.update_correlation(update_req, self._time_service)
+            await self._handle_critical_failure(correlation, start_time)
             return self._create_deferral_result(dma_results, thought)
 
-        # 4. PERFORM_ASPDMA - LLM-powered action selection
+        # Phase 3: Action selection  
+        action_result = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)
+        
+        # Phase 4: Finalize action
+        action_from_conscience = self._handle_special_cases(action_result["conscience_result"])
+        final_result = await self._finalize_action_step(thought_item, action_from_conscience)
+        
+        return final_result
+
+    async def _perform_action_selection_phase(self, thought_item, thought, thought_context, dma_results):
+        """Execute action selection and conscience validation phases."""
+        # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
         action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
-
-        # Get profile name for potential conscience retry
         profile_name = self._get_profile_name(thought)
+        
+        self._log_action_selection_result(action_result, thought)
 
-        # Debug logging for action result
+        # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
+        conscience_result = await self._conscience_execution_step(
+            thought_item, action_result, thought, dma_results, thought_context
+        )
+
+        # Phase 6: Handle conscience overrides (retry logic)
+        if self._should_retry_with_conscience_guidance(conscience_result):
+            action_result, conscience_result = await self._handle_conscience_retry(
+                thought_item, thought, thought_context, dma_results, conscience_result, profile_name
+            )
+
+        self._log_final_action_results(action_result, conscience_result, thought)
+        
+        return {"action_result": action_result, "conscience_result": conscience_result}
+
+    def _log_action_selection_result(self, action_result, thought):
+        """Log action selection results."""
         if action_result:
             selected_action = getattr(action_result, "selected_action", "UNKNOWN")
             logger.info(f"ThoughtProcessor: Action selection result for {thought.thought_id}: {selected_action}")
 
             if selected_action == HandlerActionType.OBSERVE:
-                logger.warning(
-                    f"OBSERVE ACTION DEBUG: ThoughtProcessor received OBSERVE action for thought {thought.thought_id}"
-                )
+                logger.warning(f"OBSERVE ACTION DEBUG: ThoughtProcessor received OBSERVE action for thought {thought.thought_id}")
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
 
-        # 5. CONSCIENCE_EXECUTION - Apply ethical safety validation
-        conscience_result = await self._conscience_execution_step(
-            thought_item, action_result, thought, dma_results, thought_context
-        )
-
-        # 6a. If consciences overrode to PONDER, try action selection once more with guidance
-        if (
+    def _should_retry_with_conscience_guidance(self, conscience_result):
+        """Check if we should retry action selection with conscience guidance."""
+        return (
             conscience_result
             and conscience_result.overridden
             and conscience_result.final_action.selected_action == HandlerActionType.PONDER
-        ):
+        )
 
-            logger.info(
-                f"ThoughtProcessor: conscience override to PONDER for {thought.thought_id}. Attempting re-run with guidance."
+    async def _handle_conscience_retry(self, thought_item, thought, thought_context, dma_results, conscience_result, profile_name):
+        """Handle conscience retry logic when PONDER override occurs."""
+        logger.info(f"ThoughtProcessor: conscience override to PONDER for {thought.thought_id}. Attempting re-run with guidance.")
+
+        # Prepare retry context
+        retry_context = self._prepare_conscience_retry_context(thought_item, thought_context, conscience_result)
+        
+        try:
+            # Attempt retry
+            retry_result = await self.dma_orchestrator.run_action_selection(
+                thought_item=thought_item,
+                actual_thought=thought,
+                processing_context=retry_context,
+                dma_results=dma_results,
+                profile_name=profile_name,
             )
 
-            # Extract the conscience feedback
-            override_reason = conscience_result.override_reason or "Action failed conscience checks"
-            attempted_action = self._describe_action(conscience_result.original_action)
-
-            # Create enhanced context with conscience feedback
-            retry_context = thought_context
-            if hasattr(thought_context, "model_copy"):
-                retry_context = thought_context.model_copy()
-
-            # Set flag indicating this is a conscience retry
-            retry_context.is_conscience_retry = True
-
-            # Add conscience guidance to the thought item
-            setattr(
-                thought_item,
-                "conscience_feedback",
-                {
-                    "failed_action": attempted_action,
-                    "failure_reason": override_reason,
-                    "retry_guidance": (
-                        f"Your previous attempt to {attempted_action} was rejected because: {override_reason}. "
-                        "Please select a DIFFERENT action that better aligns with ethical principles and safety guidelines. "
-                        "Consider: Is there a more cautious approach? Should you gather more information first? "
-                        "Can this task be marked as complete without further action? "
-                        "Remember: DEFER only if the task MUST be done AND requires human approval."
-                    ),
-                },
-            )
-
-            try:
-                # Re-run action selection with guidance
-                retry_result = await self.dma_orchestrator.run_action_selection(
-                    thought_item=thought_item,
-                    actual_thought=thought,
-                    processing_context=retry_context,
-                    dma_results=dma_results,
-                    profile_name=profile_name,
+            if retry_result:
+                return await self._process_conscience_retry_result(
+                    thought_item, thought, dma_results, retry_context, retry_result, conscience_result
                 )
+            else:
+                logger.info("ThoughtProcessor: Retry failed to produce a result, proceeding with PONDER")
+                
+        except Exception as e:
+            logger.error(f"Error during action selection retry: {e}", exc_info=True)
 
-                if retry_result:
-                    # Always re-apply consciences, even if same action type (parameters may differ)
+        return conscience_result.original_action, conscience_result
 
-                    logger.info(
-                        f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}"
-                    )
-                    retry_conscience_result = await self._conscience_execution_step(
-                        thought_item, retry_result, thought, dma_results, retry_context
-                    )
+    def _prepare_conscience_retry_context(self, thought_item, thought_context, conscience_result):
+        """Prepare context for conscience retry."""
+        override_reason = conscience_result.override_reason or "Action failed conscience checks"
+        attempted_action = self._describe_action(conscience_result.original_action)
 
-                    # If the retry passes consciences, use it
-                    if not retry_conscience_result.overridden:
-                        logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} passed consciences")
-                        conscience_result = retry_conscience_result
-                        action_result = retry_result
-                    else:
-                        # Log details about what failed
-                        logger.info(
-                            f"ThoughtProcessor: Retry action {retry_result.selected_action} also failed consciences"
-                        )
-                        if retry_result.selected_action == conscience_result.original_action.selected_action:
-                            logger.info("ThoughtProcessor: Same action type but with different parameters still failed")
-                        logger.info("ThoughtProcessor: Proceeding with PONDER")
-                else:
-                    logger.info("ThoughtProcessor: Retry failed to produce a result, proceeding with PONDER")
+        # Create enhanced context with conscience feedback
+        retry_context = thought_context
+        if hasattr(thought_context, "model_copy"):
+            retry_context = thought_context.model_copy()
 
-            except Exception as e:
-                logger.error(f"Error during action selection retry: {e}", exc_info=True)
-                # Continue with original PONDER if retry fails
+        retry_context.is_conscience_retry = True
 
+        # Add conscience guidance to the thought item
+        setattr(
+            thought_item,
+            "conscience_feedback",
+            {
+                "failed_action": attempted_action,
+                "failure_reason": override_reason,
+                "retry_guidance": (
+                    f"Your previous attempt to {attempted_action} was rejected because: {override_reason}. "
+                    "Please select a DIFFERENT action that better aligns with ethical principles and safety guidelines. "
+                    "Consider: Is there a more cautious approach? Should you gather more information first? "
+                    "Can this task be marked as complete without further action? "
+                    "Remember: DEFER only if the task MUST be done AND requires human approval."
+                ),
+            },
+        )
+        
+        return retry_context
+
+    async def _process_conscience_retry_result(self, thought_item, thought, dma_results, retry_context, retry_result, original_conscience_result):
+        """Process the result of a conscience retry."""
+        logger.info(f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}")
+        
+        retry_conscience_result = await self._conscience_execution_step(
+            thought_item, retry_result, thought, dma_results, retry_context
+        )
+
+        if not retry_conscience_result.overridden:
+            logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} passed consciences")
+            return retry_result, retry_conscience_result
+        else:
+            self._log_retry_failure(retry_result, original_conscience_result)
+            return original_conscience_result.original_action, original_conscience_result
+
+    def _log_retry_failure(self, retry_result, original_conscience_result):
+        """Log details when retry also fails consciences."""
+        logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} also failed consciences")
+        if retry_result.selected_action == original_conscience_result.original_action.selected_action:
+            logger.info("ThoughtProcessor: Same action type but with different parameters still failed")
+        logger.info("ThoughtProcessor: Proceeding with PONDER")
+
+    def _log_final_action_results(self, action_result, conscience_result, thought):
+        """Log final action and conscience results."""
         if action_result.selected_action == HandlerActionType.OBSERVE:
-            logger.debug(
-                "ThoughtProcessor: OBSERVE action after consciences for thought %s",
-                thought.thought_id,
-            )
+            logger.debug("ThoughtProcessor: OBSERVE action after consciences for thought %s", thought.thought_id)
 
-        # DEBUG: Log conscience result details
         if conscience_result:
             if hasattr(conscience_result, "final_action") and conscience_result.final_action:
                 final_action = getattr(conscience_result.final_action, "selected_action", "UNKNOWN")
-                logger.info(
-                    f"ThoughtProcessor: conscience result for {thought.thought_id}: final_action={final_action}"
-                )
+                logger.info(f"ThoughtProcessor: conscience result for {thought.thought_id}: final_action={final_action}")
 
-        # 6. FINALIZE_ACTION - Determine final result
-        action_from_conscience = self._handle_special_cases(conscience_result, thought, thought_context)
-        final_result = await self._finalize_action_step(thought_item, action_from_conscience)
+    async def _handle_critical_failure(self, correlation, start_time):
+        """Handle critical DMA failure."""
+        end_time = self._time_service.now()
+        from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 
-        # Record successful completion
-        if self.telemetry_service:
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "false",
+                "error_message": "Critical DMA failure",
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.FAILED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, self._time_service)
+
+    async def _record_processing_completion(self, thought, final_result):
+        """Record telemetry for successful processing completion."""
+        if not self.telemetry_service:
+            return
+            
+        await self.telemetry_service.record_metric(
+            "thought_processing_completed",
+            value=1.0,
+            tags={"thought_id": thought.thought_id, "path_type": "hot", "source_module": "thought_processor"},
+        )
+        
+        if final_result:
+            action_metric = f"action_selected_{final_result.selected_action.value}"
             await self.telemetry_service.record_metric(
-                "thought_processing_completed",
+                action_metric,
                 value=1.0,
-                tags={"thought_id": thought.thought_id, "path_type": "hot", "source_module": "thought_processor"},
+                tags={
+                    "thought_id": thought.thought_id,
+                    "action": final_result.selected_action.value,
+                    "path_type": "hot",
+                    "source_module": "thought_processor",
+                },
             )
-            if final_result:
-                action_metric = f"action_selected_{final_result.selected_action.value}"
-                await self.telemetry_service.record_metric(
-                    action_metric,
-                    value=1.0,
-                    tags={
-                        "thought_id": thought.thought_id,
-                        "action": final_result.selected_action.value,
-                        "path_type": "hot",
-                        "source_module": "thought_processor",
-                    },
-                )
 
-        # Update correlation with success
+    async def _finalize_correlation(self, correlation, final_result, start_time):
+        """Update correlation with final success status."""
         end_time = self._time_service.now()
         from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 
@@ -319,11 +372,6 @@ class ThoughtProcessor(
             tags=None,
         )
         persistence.update_correlation(update_req, self._time_service)
-
-        # 7. ROUND_COMPLETE - Finalize the processing round
-        final_result = await self._round_complete_step(thought_item, final_result)
-
-        return final_result
 
     # Helper methods that will remain in main.py
     async def _fetch_thought(self, thought_id: str) -> Optional[Thought]:
@@ -421,11 +469,7 @@ class ThoughtProcessor(
         params = action_result.action_parameters
 
         descriptions = {
-            HandlerActionType.SPEAK: lambda p: (
-                f"speak: '{p.content[:50]}...'"
-                if hasattr(p, "content") and len(str(p.content)) > 50
-                else f"speak: '{p.content}'" if hasattr(p, "content") else "speak"
-            ),
+            HandlerActionType.SPEAK: lambda p: self._format_speak_description(p),
             HandlerActionType.TOOL: lambda p: f"use tool '{p.tool_name}'" if hasattr(p, "tool_name") else "use a tool",
             HandlerActionType.OBSERVE: lambda p: (
                 f"observe channel '{p.channel_id}'" if hasattr(p, "channel_id") else "observe"
@@ -452,133 +496,192 @@ class ThoughtProcessor(
         processing_context: Optional[Any] = None,
     ) -> Any:
         """Simple conscience application without orchestrator."""
-        # Import ConscienceApplicationResult here to avoid circular imports
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
-        # Check if this is a conscience retry
-        is_conscience_retry = (
-            processing_context is not None
-            and hasattr(processing_context, "is_conscience_retry")
-            and processing_context.is_conscience_retry
-        )
-
-        # If this is a conscience retry, unset the flag to prevent loops
-        if is_conscience_retry and processing_context is not None:
-            processing_context.is_conscience_retry = False
-
-        # Exempt actions that shouldn't be overridden
-        exempt_actions = {
-            HandlerActionType.TASK_COMPLETE.value,
-            HandlerActionType.DEFER.value,
-            HandlerActionType.REJECT.value,
-        }
-
-        if action_result.selected_action in exempt_actions:
+        is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
+        
+        if self._is_exempt_from_conscience_checks(action_result):
             return ConscienceApplicationResult(
                 original_action=action_result, final_action=action_result, overridden=False, override_reason=None
             )
 
         context = {"thought": thought, "dma_results": dma_results_dict}
+        conscience_result = await self._run_conscience_checks(action_result, context)
+        
+        if is_conscience_retry and not conscience_result["overridden"]:
+            conscience_result = self._handle_conscience_retry_without_override(conscience_result, action_result)
 
+        return self._create_conscience_application_result(action_result, conscience_result)
+
+    def _check_and_clear_conscience_retry_flag(self, processing_context: Optional[Any]) -> bool:
+        """Check if this is a conscience retry and clear the flag to prevent loops."""
+        is_conscience_retry = (
+            processing_context is not None
+            and hasattr(processing_context, "is_conscience_retry")
+            and processing_context.is_conscience_retry
+        )
+        
+        if is_conscience_retry and processing_context is not None:
+            processing_context.is_conscience_retry = False
+            
+        return is_conscience_retry
+
+    def _is_exempt_from_conscience_checks(self, action_result: ActionSelectionDMAResult) -> bool:
+        """Check if action is exempt from conscience override."""
+        exempt_actions = {
+            HandlerActionType.TASK_COMPLETE.value,
+            HandlerActionType.DEFER.value,
+            HandlerActionType.REJECT.value,
+        }
+        return action_result.selected_action in exempt_actions
+
+    async def _run_conscience_checks(self, action_result: ActionSelectionDMAResult, context: dict) -> dict:
+        """Run all conscience checks and return the results."""
         final_action = action_result
         overridden = False
         override_reason = None
         epistemic_data: Dict[str, str] = {}
 
-        # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
-            conscience = entry.conscience
-            cb = entry.circuit_breaker
-
-            try:
-                if cb:
-                    cb.check_and_raise()
-                result = await conscience.check(final_action, context)
-                if cb:
-                    cb.record_success()
-            except CircuitBreakerError as e:
-                logger.warning(f"conscience {entry.name} unavailable: {e}")
+            conscience_result = await self._check_single_conscience(entry, final_action, context)
+            
+            if conscience_result["skip"]:
                 continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
-                if cb:
-                    cb.record_failure()
-                continue
+                
+            if conscience_result["epistemic_data"]:
+                epistemic_data[entry.name] = conscience_result["epistemic_data"]
 
-            # Store epistemic data if available
-            if result.epistemic_data:
-                epistemic_data[entry.name] = result.epistemic_data.model_dump()
-
-            if not result.passed:
+            if not conscience_result["passed"]:
                 overridden = True
-                override_reason = result.reason
-
-                # Check if the conscience provides a replacement action
-                if (
-                    result.epistemic_data
-                    and hasattr(result.epistemic_data, "get")
-                    and "replacement_action" in result.epistemic_data
-                ):
-                    # Use the conscience's suggested replacement action
-                    replacement_data = result.epistemic_data["replacement_action"]
-                    final_action = ActionSelectionDMAResult.model_validate(replacement_data)
-                else:
-                    # Default behavior: create a PONDER action
-                    attempted_action_desc = self._describe_action(action_result)
-                    questions = [
-                        f"I attempted to {attempted_action_desc}",
-                        result.reason or "conscience failed",
-                        "What alternative approach would better align with my principles?",
-                    ]
-
-                    ponder_params = PonderParams(questions=questions)
-
-                    # Create PONDER action with required fields
-                    final_action = ActionSelectionDMAResult(
-                        selected_action=HandlerActionType.PONDER,
-                        action_parameters=ponder_params,
-                        rationale=f"Overridden by {entry.name}: Need to reconsider {attempted_action_desc}",
-                        raw_llm_response=None,
-                        reasoning=None,
-                        evaluation_time_ms=None,
-                        resource_usage=None,
-                    )
+                override_reason = conscience_result["reason"]
+                final_action = conscience_result["replacement_action"]
                 break
 
-        # If this was a conscience retry and we didn't override, force PONDER
-        # unless the override was from thought depth guardrail
-        if is_conscience_retry and not overridden:
-            # Check if any conscience that ran was the depth guardrail
-            has_depth_guardrail = any(
-                "ThoughtDepthGuardrail" in entry.conscience.__class__.__name__
-                for entry in self.conscience_registry.get_consciences()
+        return {
+            "final_action": final_action,
+            "overridden": overridden,
+            "override_reason": override_reason,
+            "epistemic_data": epistemic_data,
+        }
+
+    async def _check_single_conscience(self, entry, action_result, context):
+        """Check a single conscience and handle errors."""
+        conscience = entry.conscience
+        cb = entry.circuit_breaker
+
+        try:
+            if cb:
+                cb.check_and_raise()
+            result = await conscience.check(action_result, context)
+            if cb:
+                cb.record_success()
+        except CircuitBreakerError as e:
+            logger.warning(f"conscience {entry.name} unavailable: {e}")
+            return {"skip": True}
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
+            if cb:
+                cb.record_failure()
+            return {"skip": True}
+
+        epistemic_data = result.epistemic_data.model_dump() if result.epistemic_data else None
+        replacement_action = self._create_replacement_action(result, action_result, entry.name)
+
+        return {
+            "skip": False,
+            "passed": result.passed,
+            "reason": result.reason,
+            "epistemic_data": epistemic_data,
+            "replacement_action": replacement_action,
+        }
+
+    def _create_replacement_action(self, conscience_result, original_action, conscience_name):
+        """Create replacement action based on conscience result."""
+        if not conscience_result.passed:
+            if (
+                conscience_result.epistemic_data
+                and hasattr(conscience_result.epistemic_data, "get")
+                and "replacement_action" in conscience_result.epistemic_data
+            ):
+                replacement_data = conscience_result.epistemic_data["replacement_action"]
+                return ActionSelectionDMAResult.model_validate(replacement_data)
+            else:
+                return self._create_ponder_replacement(original_action, conscience_result, conscience_name)
+        return original_action
+
+    def _create_ponder_replacement(self, action_result, conscience_result, conscience_name):
+        """Create PONDER action as replacement."""
+        attempted_action_desc = self._describe_action(action_result)
+        questions = [
+            f"I attempted to {attempted_action_desc}",
+            conscience_result.reason or "conscience failed",
+            "What alternative approach would better align with my principles?",
+        ]
+
+        ponder_params = PonderParams(questions=questions)
+        
+        return ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=ponder_params,
+            rationale=f"Overridden by {conscience_name}: Need to reconsider {attempted_action_desc}",
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+    def _handle_conscience_retry_without_override(self, conscience_result, action_result):
+        """Handle conscience retry when no override occurred."""
+        has_depth_guardrail = any(
+            "ThoughtDepthGuardrail" in entry.conscience.__class__.__name__
+            for entry in self.conscience_registry.get_consciences()
+        )
+
+        if not has_depth_guardrail:
+            logger.info("ThoughtProcessor: Conscience retry without override - forcing PONDER")
+            final_action = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(questions=["Forced PONDER after conscience retry"]),
+                rationale="Forced PONDER after conscience retry to prevent loops",
+                raw_llm_response=None,
+                reasoning=None,
+                evaluation_time_ms=None,
+                resource_usage=None,
             )
+            conscience_result.update({
+                "final_action": final_action,
+                "overridden": True,
+                "override_reason": "Conscience retry - forcing PONDER to prevent loops",
+            })
 
-            if not has_depth_guardrail:
-                logger.info("ThoughtProcessor: Conscience retry without override - forcing PONDER")
-                final_action = ActionSelectionDMAResult(
-                    selected_action=HandlerActionType.PONDER,
-                    action_parameters=PonderParams(questions=["Forced PONDER after conscience retry"]),
-                    rationale="Forced PONDER after conscience retry to prevent loops",
-                    raw_llm_response=None,
-                    reasoning=None,
-                    evaluation_time_ms=None,
-                    resource_usage=None,
-                )
-                overridden = True
-                override_reason = "Conscience retry - forcing PONDER to prevent loops"
+        return conscience_result
 
+    def _create_conscience_application_result(self, action_result, conscience_result):
+        """Create the final ConscienceApplicationResult."""
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+        
         result = ConscienceApplicationResult(
             original_action=action_result,
-            final_action=final_action,
-            overridden=overridden,
-            override_reason=override_reason,
+            final_action=conscience_result["final_action"],
+            overridden=conscience_result["overridden"],
+            override_reason=conscience_result["override_reason"],
         )
-        if epistemic_data:
-            result.epistemic_data = epistemic_data
+        if conscience_result["epistemic_data"]:
+            result.epistemic_data = conscience_result["epistemic_data"]
         return result
 
-    def _handle_special_cases(self, conscience_result, thought, thought_context):
+    def _format_speak_description(self, params):
+        """Format description for SPEAK action parameters."""
+        if not hasattr(params, "content"):
+            return "speak"
+        
+        content_str = str(params.content)
+        if len(content_str) > 50:
+            return f"speak: '{content_str[:50]}...'"
+        else:
+            return f"speak: '{content_str}'"
+
+    def _handle_special_cases(self, conscience_result):
         """Handle special processing cases (PONDER, DEFER overrides)."""
         # This method handles edge cases and will be kept in main.py
         # Implementation would go here based on current logic

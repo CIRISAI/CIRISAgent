@@ -13,13 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Constants to avoid duplication
-UTC_TIMEZONE_SUFFIX = '+00:00'
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi import Path as FastAPIPath
 from pydantic import BaseModel, Field, field_serializer
 
+from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse

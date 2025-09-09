@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from ciris_engine.logic.adapters.api.api_communication import APICommunicationService
 from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+from ciris_engine.schemas.api.auth import Permission, UserRole
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelation,
@@ -226,3 +227,104 @@ def mock_runtime(app):
     app.state.runtime = mock_runtime
 
     return mock_runtime
+
+
+@pytest.fixture
+def mock_auth_context():
+    """Create mock AuthContext for testing agent routes."""
+    auth = Mock(spec=AuthContext)
+    auth.user_id = "test-user-123"
+    auth.role = UserRole.OBSERVER
+    auth.permissions = {Permission.VIEW_MESSAGES}
+    auth.api_key_id = "test-key-123"
+    auth.authenticated_at = datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc)
+    auth.has_permission = Mock(return_value=False)  # Default to no permission
+    return auth
+
+
+@pytest.fixture
+def mock_auth_context_with_send():
+    """Create mock AuthContext with SEND_MESSAGES permission."""
+    auth = Mock(spec=AuthContext)
+    auth.user_id = "test-admin-123"
+    auth.role = UserRole.ADMIN
+    auth.permissions = {Permission.VIEW_MESSAGES, Permission.SEND_MESSAGES}
+    auth.api_key_id = "test-admin-key-123"
+    auth.authenticated_at = datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc)
+    auth.has_permission = Mock(side_effect=lambda perm: perm in {Permission.VIEW_MESSAGES, Permission.SEND_MESSAGES})
+    return auth
+
+
+@pytest.fixture
+def mock_oauth_user():
+    """Create mock OAuth user for testing permission requests."""
+    user = Mock()
+    user.wa_id = "oauth-user-123"
+    user.auth_type = "oauth"
+    user.permission_requested_at = None
+    return user
+
+
+@pytest.fixture
+def mock_consent_service():
+    """Create mock ConsentService for testing consent flows."""
+    service = AsyncMock()
+    
+    # Mock successful consent check (existing user)
+    mock_consent = Mock()
+    mock_consent.user_id = "test-user-123"
+    mock_consent.stream = "TEMPORARY"
+    service.get_consent.return_value = mock_consent
+    
+    # Mock consent creation for new users
+    service.grant_consent.return_value = mock_consent
+    
+    return service
+
+
+@pytest.fixture
+def mock_agent_processor():
+    """Create mock agent processor for testing pause/resume functionality."""
+    processor = Mock()
+    processor._is_paused = False
+    processor.get_current_state.return_value = "WORK"
+    processor.pause_processing = AsyncMock()
+    processor.resume_processing = AsyncMock()
+    return processor
+
+
+@pytest.fixture
+def mock_api_config():
+    """Create mock API configuration."""
+    config = Mock()
+    config.interaction_timeout = 55.0
+    config.max_message_length = 4000
+    config.rate_limit_per_minute = 60
+    return config
+
+
+@pytest.fixture
+def mock_request_with_full_state(mock_runtime, mock_api_config, mock_agent_processor, mock_consent_service):
+    """Create mock request with fully populated app state."""
+    request = Mock(spec=Request)
+    request.app.state = Mock()
+    
+    # Add all state components
+    request.app.state.runtime = mock_runtime
+    request.app.state.runtime.agent_processor = mock_agent_processor
+    request.app.state.runtime.state_manager = Mock()
+    request.app.state.runtime.state_manager.current_state = "WORK"
+    
+    request.app.state.api_config = mock_api_config
+    request.app.state.consent_manager = mock_consent_service
+    
+    # Mock auth service
+    auth_service = Mock()
+    auth_service.get_user.return_value = None
+    auth_service._users = {}
+    request.app.state.auth_service = auth_service
+    
+    # Mock message handler
+    request.app.state.on_message = AsyncMock()
+    
+    return request

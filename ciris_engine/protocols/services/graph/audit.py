@@ -2,7 +2,10 @@
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import List, Optional, Protocol
+from typing import List, Optional, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
 
 from ciris_engine.schemas.runtime.audit import AuditActionContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -23,13 +26,13 @@ class AuditServiceProtocol(GraphServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def log_event(self, event_type: str, event_data: dict, **kwargs: object) -> None:
+    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> None:
         """Log a general audit event."""
         ...
 
     @abstractmethod
     async def log_conscience_event(
-        self, thought_id: str, decision: str, reasoning: str, metadata: Optional[dict] = None
+        self, thought_id: str, decision: str, reasoning: str, metadata: Optional["EventPayload"] = None
     ) -> None:
         """Log a conscience decision event."""
         ...
@@ -70,11 +73,11 @@ class AuditServiceProtocol(GraphServiceProtocol, Protocol):
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         limit: int = 100,
-    ) -> List[dict]:
+    ) -> List["AuditLogEntry"]:
         """Query audit events."""
         ...
 
     @abstractmethod
-    async def get_event_by_id(self, event_id: str) -> Optional[dict]:
+    async def get_event_by_id(self, event_id: str) -> Optional["AuditLogEntry"]:
         """Get specific audit event."""
         ...

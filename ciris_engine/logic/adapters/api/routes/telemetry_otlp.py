@@ -278,7 +278,7 @@ def convert_to_otlp_json(
 
 
 def _create_gauge_metric(
-    name: str, description: str, unit: str, value: float, time_ns: int, attributes: Optional[List[Dict]] = None
+    name: str, description: str, unit: str, value: float, time_ns: int, attributes: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """Create a gauge metric in OTLP format."""
     data_point = {"asDouble": value, "timeUnixNano": str(time_ns)}
@@ -295,7 +295,7 @@ def _create_counter_metric(
     unit: str,
     value: float,
     time_ns: int,
-    attributes: Optional[List[Dict]] = None,
+    attributes: Optional[List[Dict[str, Any]]] = None,
     start_time_ns: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Create a counter/sum metric in OTLP format."""
@@ -325,7 +325,7 @@ def _create_histogram_metric(
     bucket_counts: List[int],
     explicit_bounds: List[float],
     time_ns: int,
-    attributes: Optional[List[Dict]] = None,
+    attributes: Optional[List[Dict[str, Any]]] = None,
     start_time_ns: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Create a histogram metric in OTLP format."""

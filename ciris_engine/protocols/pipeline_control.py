@@ -6,7 +6,11 @@ the thought processing pipeline.
 """
 
 import asyncio
-from typing import Any, Dict, Optional, Protocol
+from typing import Optional, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.telemetry.collector import SingleStepResult
+    from ciris_engine.schemas.services.runtime_control import ThoughtProcessingResult
 
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResultUnion, ThoughtInPipeline
 
@@ -22,7 +26,7 @@ class PipelineControlProtocol(Protocol):
         ...
 
     async def pause_at_step_point(
-        self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]
+        self, step_point: StepPoint, thought_id: str, step_data: "SingleStepResult"
     ) -> StepResult:
         """
         Pause execution at a step point and wait for release.
@@ -99,7 +103,7 @@ class PipelineController:
         return step_point in [StepPoint.POPULATE_ROUND, StepPoint.FINALIZE_ACTION]
 
     async def pause_at_step_point(
-        self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]
+        self, step_point: StepPoint, thought_id: str, step_data: "SingleStepResult"
     ) -> StepResult:
         """Pause execution at a step point."""
         # Create or update thought in pipeline
@@ -238,7 +242,7 @@ class PipelineController:
         # FAIL FAST AND LOUD - only 9 real H3ERE steps allowed!
         raise ValueError(f"Invalid step point: {step_point}. Only 9 real H3ERE pipeline steps are supported!")
 
-    async def execute_single_step_point(self) -> Dict[str, Any]:
+    async def execute_single_step_point(self) -> "SingleStepResult":
         """
         Execute exactly one step point in the H3ERE pipeline using step decorators.
 
@@ -462,7 +466,7 @@ class PipelineController:
         else:
             return thought.created_at
 
-    async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> Dict[str, Any]:
+    async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> "ThoughtProcessingResult":
         """
         Execute a specific step point for a single thought.
 

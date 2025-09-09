@@ -1,0 +1,5393 @@
+{
+  "metadata": {
+    "timestamp": "2025-09-09T12:37:20.728442",
+    "initial_mypy_errors": 723,
+    "categories_analyzed": [
+      "unused_code_removal"
+    ],
+    "validation_required": true,
+    "mode": "aggressive_pre_beta",
+    "target": "100_percent_cleanliness"
+  },
+  "current_errors": [
+    {
+      "file": "ciris_engine/protocols/adapters/message.py",
+      "line": 52,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/protocols/adapters/message.py",
+      "line": 90,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+      "line": 281,
+      "message": "Missing",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+      "line": 298,
+      "message": "Missing",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+      "line": 328,
+      "message": "Missing",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/logic/registries/circuit_breaker.py",
+      "line": 163,
+      "message": "Incompatible",
+      "code": "unknown"
+    },
+    {
+      "file": "ciris_engine/schemas/adapters/registration.py",
+      "line": 37,
+      "message": "Unused \"type: ignore\"",
+      "code": "unused-ignore"
+    },
+    {
+      "file": "ciris_engine/schemas/telemetry/unified.py",
+      "line": 26,
+      "message": "Function is missing a",
+      "code": "no-untyped-def"
+    },
+    {
+      "file": "ciris_engine/schemas/telemetry/collector.py",
+      "line": 36,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/telemetry/collector.py",
+      "line": 58,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/llm.py",
+      "line": 62,
+      "message": "Missing type parameters for",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/llm.py",
+      "line": 102,
+      "message": "Missing type parameters for",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/telemetry.py",
+      "line": 45,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/telemetry.py",
+      "line": 45,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/node_data.py",
+      "line": 147,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/memory.py",
+      "line": 26,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/memory.py",
+      "line": 26,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/edges.py",
+      "line": 63,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/consolidation.py",
+      "line": 21,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/consolidation.py",
+      "line": 21,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/consolidation.py",
+      "line": 35,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/consolidation.py",
+      "line": 35,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/consolidation.py",
+      "line": 154,
+      "message": "Missing",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/attributes.py",
+      "line": 188,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/graph/attributes.py",
+      "line": 188,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime_config.py",
+      "line": 33,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime_config.py",
+      "line": 33,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime_config.py",
+      "line": 53,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime_config.py",
+      "line": 53,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime.py",
+      "line": 123,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime.py",
+      "line": 132,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime.py",
+      "line": 135,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime.py",
+      "line": 136,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime.py",
+      "line": 146,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/runtime.py",
+      "line": 231,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/__init__.py",
+      "line": 23,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/services/core/__init__.py",
+      "line": 118,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/secrets/core.py",
+      "line": 232,
+      "message": "Missing type parameters for",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/secrets/core.py",
+      "line": 234,
+      "message": "Missing type parameters for",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/secrets/core.py",
+      "line": 244,
+      "message": "Missing type parameters for",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/runtime/models.py",
+      "line": 55,
+      "message": "Missing type parameters",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/resources/crisis.py",
+      "line": 99,
+      "message": "Function is missing a",
+      "code": "no-untyped-def"
+    },
+    {
+      "file": "ciris_engine/schemas/registries/base.py",
+      "line": 18,
+      "message": "Missing type parameters",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/registries/base.py",
+      "line": 29,
+      "message": "Missing type parameters",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/processors/state.py",
+      "line": 86,
+      "message": "Unsupported operand",
+      "code": "operator"
+    },
+    {
+      "file": "ciris_engine/schemas/processors/state.py",
+      "line": 86,
+      "message": "Unsupported operand",
+      "code": "operator"
+    },
+    {
+      "file": "ciris_engine/schemas/processors/main.py",
+      "line": 40,
+      "message": "Missing type parameters",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/processors/main.py",
+      "line": 62,
+      "message": "Missing type parameters",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/infrastructure/wa_cli_wizard.py",
+      "line": 21,
+      "message": "Missing type",
+      "code": "type-arg"
+    },
+    {
+      "file": "ciris_engine/schemas/infrastructure/oauth.py",
+      "line": 22,
+      "message": "Missing type",
+      "code": "type-arg"
+    }
+  ],
+  "error_summary": {
+    "other": [
+      {
+        "file": "ciris_engine/protocols/adapters/message.py",
+        "line": 52,
+        "col": 19,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/message.py",
+        "line": 90,
+        "col": 34,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 281,
+        "col": 99,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 298,
+        "col": 31,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 328,
+        "col": 31,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/registries/circuit_breaker.py",
+        "line": 163,
+        "col": 32,
+        "message": "Incompatible",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/registration.py",
+        "line": 37,
+        "col": 0,
+        "message": "Unused \"type: ignore\"",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/schemas/telemetry/collector.py",
+        "line": 36,
+        "col": 11,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/telemetry/collector.py",
+        "line": 58,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/llm.py",
+        "line": 62,
+        "col": 20,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/llm.py",
+        "line": 102,
+        "col": 20,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/telemetry.py",
+        "line": 45,
+        "col": 53,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/telemetry.py",
+        "line": 45,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/node_data.py",
+        "line": 147,
+        "col": 44,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/memory.py",
+        "line": 26,
+        "col": 50,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/memory.py",
+        "line": 26,
+        "col": 56,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/edges.py",
+        "line": 63,
+        "col": 50,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/consolidation.py",
+        "line": 21,
+        "col": 65,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/consolidation.py",
+        "line": 21,
+        "col": 71,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/consolidation.py",
+        "line": 35,
+        "col": 33,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/consolidation.py",
+        "line": 35,
+        "col": 39,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/consolidation.py",
+        "line": 154,
+        "col": 49,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/attributes.py",
+        "line": 188,
+        "col": 66,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/attributes.py",
+        "line": 188,
+        "col": 72,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime_config.py",
+        "line": 33,
+        "col": 61,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime_config.py",
+        "line": 33,
+        "col": 67,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime_config.py",
+        "line": 53,
+        "col": 61,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime_config.py",
+        "line": 53,
+        "col": 67,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 123,
+        "col": 32,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 132,
+        "col": 36,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 135,
+        "col": 36,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 136,
+        "col": 20,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 146,
+        "col": 14,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 231,
+        "col": 14,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/__init__.py",
+        "line": 23,
+        "col": 24,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/__init__.py",
+        "line": 118,
+        "col": 14,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/secrets/core.py",
+        "line": 232,
+        "col": 22,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/secrets/core.py",
+        "line": 234,
+        "col": 28,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/secrets/core.py",
+        "line": 244,
+        "col": 14,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/models.py",
+        "line": 55,
+        "col": 20,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/registries/base.py",
+        "line": 18,
+        "col": 22,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/registries/base.py",
+        "line": 29,
+        "col": 15,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/state.py",
+        "line": 86,
+        "col": 43,
+        "message": "Unsupported operand",
+        "code": "operator"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/state.py",
+        "line": 86,
+        "col": 43,
+        "message": "Unsupported operand",
+        "code": "operator"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/main.py",
+        "line": 40,
+        "col": 14,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/main.py",
+        "line": 62,
+        "col": 15,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/wa_cli_wizard.py",
+        "line": 21,
+        "col": 22,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 22,
+        "col": 24,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 31,
+        "col": 31,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 41,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 50,
+        "col": 27,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 68,
+        "col": 24,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 107,
+        "col": 20,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 123,
+        "col": 31,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/oauth.py",
+        "line": 139,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/feedback_loop.py",
+        "line": 33,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 25,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 35,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 71,
+        "col": 25,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 108,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 121,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 146,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 183,
+        "col": 20,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 196,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/base.py",
+        "line": 210,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/context.py",
+        "line": 77,
+        "col": 55,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/context.py",
+        "line": 77,
+        "col": 61,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/context.py",
+        "line": 86,
+        "col": 23,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/conscience/results.py",
+        "line": 20,
+        "col": 57,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/audit/verification.py",
+        "line": 42,
+        "col": 29,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/audit/verification.py",
+        "line": 56,
+        "col": 26,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/audit/verification.py",
+        "line": 91,
+        "col": 20,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/audit/verification.py",
+        "line": 92,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/audit/hash_chain.py",
+        "line": 23,
+        "col": 24,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/telemetry.py",
+        "line": 51,
+        "col": 29,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/telemetry.py",
+        "line": 52,
+        "col": 24,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/telemetry.py",
+        "line": 79,
+        "col": 11,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/telemetry.py",
+        "line": 103,
+        "col": 30,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/responses.py",
+        "line": 45,
+        "col": 23,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/audit.py",
+        "line": 25,
+        "col": 24,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/agent.py",
+        "line": 17,
+        "col": 24,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/graphql_core.py",
+        "line": 59,
+        "col": 26,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/graphql_core.py",
+        "line": 67,
+        "col": 20,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/graphql_core.py",
+        "line": 69,
+        "col": 26,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cli_tools.py",
+        "line": 16,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cli.py",
+        "line": 85,
+        "col": 22,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cli.py",
+        "line": 92,
+        "col": 14,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cli.py",
+        "line": 93,
+        "col": 15,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 30,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 50,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 68,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 77,
+        "col": 13,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 86,
+        "col": 22,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 95,
+        "col": 17,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/cirisnode.py",
+        "line": 114,
+        "col": 19,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 128,
+        "col": 9,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 129,
+        "col": 9,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 130,
+        "col": 9,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/system_context.py",
+        "line": 71,
+        "col": 60,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/system_context.py",
+        "line": 71,
+        "col": 66,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 117,
+        "col": 61,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 117,
+        "col": 67,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 118,
+        "col": 49,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 118,
+        "col": 55,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 185,
+        "col": 53,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 185,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 190,
+        "col": 52,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 190,
+        "col": 58,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 191,
+        "col": 45,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 191,
+        "col": 51,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 235,
+        "col": 53,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/api/config_security.py",
+        "line": 235,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 37,
+        "col": 11,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 102,
+        "col": 9,
+        "message": "Returning",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 108,
+        "col": 17,
+        "message": "Returning",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 109,
+        "col": 9,
+        "message": "Returning",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 152,
+        "col": 11,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 178,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 183,
+        "col": 40,
+        "message": "Call to",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 192,
+        "col": 11,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 219,
+        "col": 11,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/filter.py",
+        "line": 30,
+        "col": 44,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/filter.py",
+        "line": 284,
+        "col": 45,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/config/bootstrap.py",
+        "line": 26,
+        "col": 27,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/config/bootstrap.py",
+        "line": 36,
+        "col": 43,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/audit/hash_chain.py",
+        "line": 46,
+        "col": 41,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/audit/hash_chain.py",
+        "line": 65,
+        "col": 36,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/audit/hash_chain.py",
+        "line": 87,
+        "col": 42,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_typed_nodes.py",
+        "line": 184,
+        "col": 39,
+        "message": "\"str\" has no",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/query_results.py",
+        "line": 34,
+        "col": 13,
+        "message": "Dict entry 0",
+        "code": "ServiceInteractionData"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/query_results.py",
+        "line": 35,
+        "col": 13,
+        "message": "Dict entry 1",
+        "code": "MetricCorrelationData"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/query_results.py",
+        "line": 36,
+        "col": 13,
+        "message": "Dict entry 2",
+        "code": "TraceSpanData"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/query_results.py",
+        "line": 37,
+        "col": 13,
+        "message": "Dict entry 3",
+        "code": "TaskCorrelationData"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/query_results.py",
+        "line": 49,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/contexts.py",
+        "line": 49,
+        "col": 30,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/db/migration_runner.py",
+        "line": 26,
+        "col": 32,
+        "message": "Argument 1",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 62,
+        "col": 5,
+        "message": "Function",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 81,
+        "col": 5,
+        "message": "Function",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 89,
+        "col": 14,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 95,
+        "col": 5,
+        "message": "Function",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 103,
+        "col": 20,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 104,
+        "col": 21,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_models.py",
+        "line": 110,
+        "col": 5,
+        "message": "Function",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/services/requests.py",
+        "line": 64,
+        "col": 17,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/requests.py",
+        "line": 75,
+        "col": 16,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/requests.py",
+        "line": 115,
+        "col": 17,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 139,
+        "col": 65,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 139,
+        "col": 71,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 144,
+        "col": 52,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 144,
+        "col": 58,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 270,
+        "col": 17,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/support/processing_queue.py",
+        "line": 20,
+        "col": 15,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/support/processing_queue.py",
+        "line": 36,
+        "col": 37,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/support/processing_queue.py",
+        "line": 56,
+        "col": 31,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/support/processing_queue.py",
+        "line": 57,
+        "col": 65,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 78,
+        "col": 53,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 78,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 83,
+        "col": 72,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 83,
+        "col": 78,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 84,
+        "col": 48,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 84,
+        "col": 54,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 88,
+        "col": 65,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 88,
+        "col": 71,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 92,
+        "col": 69,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 92,
+        "col": 75,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 100,
+        "col": 29,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 146,
+        "col": 67,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 202,
+        "col": 53,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 202,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 211,
+        "col": 34,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 221,
+        "col": 38,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 307,
+        "col": 25,
+        "message": "Argument",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/dma.py",
+        "line": 20,
+        "col": 19,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/dma.py",
+        "line": 21,
+        "col": 15,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/processors/dma.py",
+        "line": 73,
+        "col": 15,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/schemas.py",
+        "line": 80,
+        "col": 59,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/schemas.py",
+        "line": 90,
+        "col": 59,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/schemas.py",
+        "line": 90,
+        "col": 65,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/interface.py",
+        "line": 16,
+        "col": 18,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/visibility.py",
+        "line": 41,
+        "col": 34,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/schemas/services/visibility.py",
+        "line": 71,
+        "col": 17,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/runtime/base.py",
+        "line": 98,
+        "col": 44,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/runtime/base.py",
+        "line": 141,
+        "col": 43,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/runtime/tool.py",
+        "line": 15,
+        "col": 62,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/runtime/tool.py",
+        "line": 64,
+        "col": 69,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/runtime/secrets.py",
+        "line": 48,
+        "col": 48,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/runtime/secrets.py",
+        "line": 49,
+        "col": 10,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/runtime/secrets.py",
+        "line": 59,
+        "col": 42,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/lifecycle/scheduler.py",
+        "line": 39,
+        "col": 95,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/config.py",
+        "line": 21,
+        "col": 78,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/config.py",
+        "line": 21,
+        "col": 84,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/config.py",
+        "line": 26,
+        "col": 106,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/config.py",
+        "line": 26,
+        "col": 112,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/config.py",
+        "line": 31,
+        "col": 68,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/config.py",
+        "line": 36,
+        "col": 70,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/audit.py",
+        "line": 26,
+        "col": 60,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/audit.py",
+        "line": 32,
+        "col": 82,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/audit.py",
+        "line": 73,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/services/graph/audit.py",
+        "line": 78,
+        "col": 64,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/base.py",
+        "line": 32,
+        "col": 35,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/base.py",
+        "line": 37,
+        "col": 42,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/base.py",
+        "line": 100,
+        "col": 50,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/base.py",
+        "line": 114,
+        "col": 41,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 21,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 22,
+        "col": 28,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 26,
+        "col": 32,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 31,
+        "col": 34,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 112,
+        "col": 22,
+        "message": "Call to",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 82,
+        "col": 56,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 82,
+        "col": 95,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 105,
+        "col": 50,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 130,
+        "col": 13,
+        "message": "Returning",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 184,
+        "col": 9,
+        "message": "Need type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 189,
+        "col": 9,
+        "message": "Need type",
+        "code": "<type>"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/emergency.py",
+        "line": 288,
+        "col": 40,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 30,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 51,
+        "col": 9,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 105,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 127,
+        "col": 9,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 175,
+        "col": 87,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 175,
+        "col": 102,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 219,
+        "col": 60,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 244,
+        "col": 82,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 250,
+        "col": 78,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 269,
+        "col": 76,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 269,
+        "col": 91,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 285,
+        "col": 63,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/audit/signature_manager.py",
+        "line": 290,
+        "col": 31,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_adapter.py",
+        "line": 25,
+        "col": 74,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/services/auth_service.py",
+        "line": 889,
+        "col": 15,
+        "message": "Item",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/services/auth_service.py",
+        "line": 918,
+        "col": 17,
+        "message": "Item",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/services/auth_service.py",
+        "line": 918,
+        "col": 17,
+        "message": "Item",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/services/auth_service.py",
+        "line": 943,
+        "col": 15,
+        "message": "Item",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/services/auth_service.py",
+        "line": 943,
+        "col": 15,
+        "message": "Item",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/services/auth_service.py",
+        "line": 958,
+        "col": 29,
+        "message": "Item",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/base_scheduled_service.py",
+        "line": 38,
+        "col": 30,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 175,
+        "col": 48,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 176,
+        "col": 10,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 201,
+        "col": 26,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 201,
+        "col": 32,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 202,
+        "col": 16,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 202,
+        "col": 22,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 207,
+        "col": 21,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/secrets/service.py",
+        "line": 439,
+        "col": 42,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/audit/verifier.py",
+        "line": 186,
+        "col": 43,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/dependencies/auth.py",
+        "line": 124,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/dependencies/auth.py",
+        "line": 124,
+        "col": 47,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/dependencies/auth.py",
+        "line": 205,
+        "col": 45,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/dependencies/auth.py",
+        "line": 239,
+        "col": 50,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/context/secrets_snapshot.py",
+        "line": 9,
+        "col": 70,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/wa.py",
+        "line": 28,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/users.py",
+        "line": 471,
+        "col": 0,
+        "message": "Unused",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_metrics.py",
+        "line": 14,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 32,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 572,
+        "col": 28,
+        "message": "Need",
+        "code": "var-annotated"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 606,
+        "col": 9,
+        "message": "Call",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 42,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 315,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 330,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 342,
+        "col": 66,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 386,
+        "col": 12,
+        "message": "Incompatible",
+        "code": "Any | None, dict[str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 388,
+        "col": 83,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 412,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 429,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 478,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 493,
+        "col": 5,
+        "message": "Need type",
+        "code": "<type>, <type>"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 565,
+        "col": 12,
+        "message": "Incompatible",
+        "code": "return-value"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 751,
+        "col": 55,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 764,
+        "col": 46,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 799,
+        "col": 9,
+        "message": "Need type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 1205,
+        "col": 99,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/config.py",
+        "line": 18,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+        "line": 649,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+        "line": 666,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+        "line": 715,
+        "col": 25,
+        "message": "Argument",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+        "line": 722,
+        "col": 64,
+        "message": "Argument 3 to",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+        "line": 730,
+        "col": 16,
+        "message": "Incompatible",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 30,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 159,
+        "col": 28,
+        "message": "List item 0 has",
+        "code": "list-item"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 159,
+        "col": 35,
+        "message": "List item 1 has",
+        "code": "list-item"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 253,
+        "col": 46,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 266,
+        "col": 47,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 296,
+        "col": 46,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 337,
+        "col": 5,
+        "message": "Need type",
+        "code": "<type>, <type>"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 447,
+        "col": 32,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 472,
+        "col": 72,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/context_utils.py",
+        "line": 22,
+        "col": 29,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/context_utils.py",
+        "line": 41,
+        "col": 19,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/runtime/llm_service/service.py",
+        "line": 123,
+        "col": 9,
+        "message": "Need",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/lifecycle/shutdown/service.py",
+        "line": 38,
+        "col": 41,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/lifecycle/shutdown/service.py",
+        "line": 122,
+        "col": 5,
+        "message": "Return",
+        "code": "str, float"
+      },
+      {
+        "file": "ciris_engine/logic/dma/base_dma.py",
+        "line": 111,
+        "col": 25,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/base_dma.py",
+        "line": 166,
+        "col": 57,
+        "message": "Argument 2 to \"analyze\" of",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/buses/base_bus.py",
+        "line": 26,
+        "col": 15,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/base_bus.py",
+        "line": 50,
+        "col": 22,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/base_bus.py",
+        "line": 54,
+        "col": 38,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/base_bus.py",
+        "line": 140,
+        "col": 28,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 103,
+        "col": 51,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 118,
+        "col": 49,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 133,
+        "col": 50,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 205,
+        "col": 71,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 224,
+        "col": 60,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 248,
+        "col": 15,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 251,
+        "col": 18,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cirisnode_client.py",
+        "line": 276,
+        "col": 23,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_service.py",
+        "line": 53,
+        "col": 5,
+        "message": "Return",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_service.py",
+        "line": 57,
+        "col": 5,
+        "message": "Return",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_tools.py",
+        "line": 54,
+        "col": 62,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_tools.py",
+        "line": 114,
+        "col": 35,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_tools.py",
+        "line": 158,
+        "col": 39,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_tools.py",
+        "line": 163,
+        "col": 40,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_tools.py",
+        "line": 177,
+        "col": 69,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/endpoints/emergency.py",
+        "line": 64,
+        "col": 116,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 83,
+        "col": 13,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 250,
+        "col": 67,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 340,
+        "col": 85,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 356,
+        "col": 61,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 559,
+        "col": 53,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 574,
+        "col": 34,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 575,
+        "col": 10,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 646,
+        "col": 57,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 646,
+        "col": 80,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 51,
+        "col": 43,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 192,
+        "col": 69,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 270,
+        "col": 41,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 298,
+        "col": 57,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 308,
+        "col": 52,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 393,
+        "col": 45,
+        "message": "Argument 1 to \"len\" has",
+        "code": "arg-type"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 413,
+        "col": 41,
+        "message": "Argument 1 to \"len\" has",
+        "code": "arg-type"
+      },
+      {
+        "file": "ciris_engine/logic/buses/runtime_control_bus.py",
+        "line": 60,
+        "col": 44,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/runtime_control_bus.py",
+        "line": 204,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 76,
+        "col": 87,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 112,
+        "col": 97,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 141,
+        "col": 87,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 399,
+        "col": 52,
+        "message": "Function \"builtins.any\"",
+        "code": "valid-type"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 411,
+        "col": 52,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 421,
+        "col": 54,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 421,
+        "col": 91,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 431,
+        "col": 52,
+        "message": "Function \"builtins.any\"",
+        "code": "valid-type"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 473,
+        "col": 9,
+        "message": "Need type annotation for",
+        "code": "<type>"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 76,
+        "col": 22,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 98,
+        "col": 42,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 119,
+        "col": 24,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 212,
+        "col": 24,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 245,
+        "col": 78,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 258,
+        "col": 68,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 482,
+        "col": 36,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/llm_bus.py",
+        "line": 552,
+        "col": 28,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 111,
+        "col": 94,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 123,
+        "col": 24,
+        "message": "Argument",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 134,
+        "col": 94,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 188,
+        "col": 49,
+        "message": "Argument 1 to",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 308,
+        "col": 35,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 324,
+        "col": 30,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/base.py",
+        "line": 62,
+        "col": 5,
+        "message": "Return type \"None\" of",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/base.py",
+        "line": 67,
+        "col": 13,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/base.py",
+        "line": 82,
+        "col": 5,
+        "message": "Return type \"None\" of",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/base.py",
+        "line": 131,
+        "col": 9,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/mixins/example_usage.py",
+        "line": 83,
+        "col": 38,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/mixins/example_usage.py",
+        "line": 139,
+        "col": 30,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/mixins/example_usage.py",
+        "line": 151,
+        "col": 77,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/audit_service/service.py",
+        "line": 303,
+        "col": 0,
+        "message": "Unused",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/models/correlations.py",
+        "line": 14,
+        "col": 5,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/models/correlations.py",
+        "line": 791,
+        "col": 37,
+        "message": "Value of",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/models/graph.py",
+        "line": 106,
+        "col": 44,
+        "message": "\"ConsentService\"",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/__init__.py",
+        "line": 22,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/utils/consent/partnership_utils.py",
+        "line": 151,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/utils/consent/partnership_utils.py",
+        "line": 168,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/utils/consent/partnership_utils.py",
+        "line": 171,
+        "col": 13,
+        "message": "Returning",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 134,
+        "col": 38,
+        "message": "Value",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 135,
+        "col": 57,
+        "message": "Value",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 136,
+        "col": 51,
+        "message": "Value",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 138,
+        "col": 44,
+        "message": "Value",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 138,
+        "col": 78,
+        "message": "Item",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 140,
+        "col": 54,
+        "message": "Value",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 141,
+        "col": 30,
+        "message": "Item",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 142,
+        "col": 35,
+        "message": "Item",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 988,
+        "col": 13,
+        "message": "List",
+        "code": "list-item"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 989,
+        "col": 13,
+        "message": "List",
+        "code": "list-item"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 99,
+        "col": 31,
+        "message": "\"type[StepPoint]\" has",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 191,
+        "col": 13,
+        "message": "\"ThoughtInPipeline\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 293,
+        "col": 13,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 400,
+        "col": 16,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 428,
+        "col": 70,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 474,
+        "col": 27,
+        "message": "\"PipelineController\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 505,
+        "col": 56,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/utils/user_utils.py",
+        "line": 10,
+        "col": 32,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/telemetry/core.py",
+        "line": 45,
+        "col": 36,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/telemetry/core.py",
+        "line": 97,
+        "col": 53,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 33,
+        "col": 50,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 33,
+        "col": 56,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 108,
+        "col": 84,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 252,
+        "col": 89,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 306,
+        "col": 5,
+        "message": "Return type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 325,
+        "col": 5,
+        "message": "Return type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 378,
+        "col": 73,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 379,
+        "col": 10,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 385,
+        "col": 26,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 422,
+        "col": 101,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 428,
+        "col": 26,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 495,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 636,
+        "col": 5,
+        "message": "Return type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 650,
+        "col": 5,
+        "message": "Return type",
+        "code": "GraphEdge"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 832,
+        "col": 5,
+        "message": "Return type",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 832,
+        "col": 5,
+        "message": "Return type",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 841,
+        "col": 5,
+        "message": "Return type",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/memory_service.py",
+        "line": 841,
+        "col": 5,
+        "message": "Return type",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/visibility/service.py",
+        "line": 385,
+        "col": 5,
+        "message": "Name",
+        "code": "no-redef"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/identity_manager.py",
+        "line": 71,
+        "col": 19,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/support/task_manager.py",
+        "line": 39,
+        "col": 27,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/support/task_manager.py",
+        "line": 121,
+        "col": 61,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/context/batch_context.py",
+        "line": 23,
+        "col": 69,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/context/batch_context.py",
+        "line": 23,
+        "col": 75,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/thought_depth_guardrail.py",
+        "line": 47,
+        "col": 18,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 55,
+        "col": 31,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 297,
+        "col": 84,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 310,
+        "col": 0,
+        "message": "Unused \"type: ignore\"",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 314,
+        "col": 59,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 328,
+        "col": 110,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 411,
+        "col": 0,
+        "message": "Unused \"type: ignore\"",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 447,
+        "col": 0,
+        "message": "Unused \"type: ignore\"",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 476,
+        "col": 0,
+        "message": "Unused \"type: ignore\"",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_wa_service.py",
+        "line": 25,
+        "col": 33,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 59,
+        "col": 62,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 131,
+        "col": 41,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 144,
+        "col": 40,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 162,
+        "col": 41,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 183,
+        "col": 44,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 204,
+        "col": 42,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 240,
+        "col": 69,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 78,
+        "col": 52,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 296,
+        "col": 62,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 416,
+        "col": 69,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 579,
+        "col": 46,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 596,
+        "col": 45,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 612,
+        "col": 47,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 843,
+        "col": 28,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 844,
+        "col": 23,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 845,
+        "col": 25,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 853,
+        "col": 28,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 855,
+        "col": 28,
+        "message": "\"ChannelInfo\" has",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 859,
+        "col": 27,
+        "message": "\"ChannelInfo\" has",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 860,
+        "col": 31,
+        "message": "\"ChannelInfo\" has",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_adapter.py",
+        "line": 861,
+        "col": 31,
+        "message": "\"ChannelInfo\" has",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+        "line": 20,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+        "line": 22,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+        "line": 218,
+        "col": 9,
+        "message": "Need type",
+        "code": "<type>, <type>"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 25,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 112,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 112,
+        "col": 95,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 148,
+        "col": 6,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 179,
+        "col": 6,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 326,
+        "col": 36,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 337,
+        "col": 39,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 350,
+        "col": 6,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 384,
+        "col": 6,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 22,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 92,
+        "col": 39,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 235,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 243,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 256,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 266,
+        "col": 93,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 278,
+        "col": 132,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 565,
+        "col": 17,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 566,
+        "col": 31,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 567,
+        "col": 49,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 577,
+        "col": 20,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 578,
+        "col": 22,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 588,
+        "col": 29,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 597,
+        "col": 28,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 598,
+        "col": 32,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 598,
+        "col": 51,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 599,
+        "col": 33,
+        "message": "\"dict[str, Any]\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 617,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 624,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 670,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 670,
+        "col": 60,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 692,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 752,
+        "col": 25,
+        "message": "Incompatible",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 909,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 935,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 948,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 959,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 976,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 985,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 1005,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 1007,
+        "col": 23,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 1008,
+        "col": 23,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/services/memory_service/__init__.py",
+        "line": 1,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/services/memory_service/__init__.py",
+        "line": 1,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/handlers/control/ponder_handler.py",
+        "line": 84,
+        "col": 50,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_observer.py",
+        "line": 10,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_observer.py",
+        "line": 83,
+        "col": 5,
+        "message": "Return",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_observer.py",
+        "line": 87,
+        "col": 5,
+        "message": "Return",
+        "code": "Any, Any, None"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_observer.py",
+        "line": 103,
+        "col": 5,
+        "message": "Return",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_observer.py",
+        "line": 515,
+        "col": 116,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_observer.py",
+        "line": 518,
+        "col": 56,
+        "message": "Argument",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 133,
+        "col": 47,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 392,
+        "col": 25,
+        "message": "Returning",
+        "code": "FetchedMessage"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 469,
+        "col": 5,
+        "message": "Return",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 878,
+        "col": 68,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 878,
+        "col": 74,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 880,
+        "col": 69,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 880,
+        "col": 75,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_adapter.py",
+        "line": 909,
+        "col": 5,
+        "message": "Return",
+        "code": "WAPermission"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_observer.py",
+        "line": 26,
+        "col": 31,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_observer.py",
+        "line": 49,
+        "col": 36,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_observer.py",
+        "line": 50,
+        "col": 45,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_communication.py",
+        "line": 29,
+        "col": 31,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_communication.py",
+        "line": 168,
+        "col": 13,
+        "message": "Returning",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_communication.py",
+        "line": 170,
+        "col": 13,
+        "message": "Returning",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_communication.py",
+        "line": 293,
+        "col": 13,
+        "message": "Returning",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 33,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 107,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 126,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 138,
+        "col": 1,
+        "message": "Name",
+        "code": "no-redef"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 149,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 174,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 190,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 214,
+        "col": 1,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 407,
+        "col": 1,
+        "message": "Missing",
+        "code": "return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 414,
+        "col": 6,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 569,
+        "col": 24,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 570,
+        "col": 28,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 571,
+        "col": 58,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 572,
+        "col": 28,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 573,
+        "col": 52,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 574,
+        "col": 28,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 575,
+        "col": 51,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 576,
+        "col": 36,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 577,
+        "col": 53,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 580,
+        "col": 24,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 581,
+        "col": 48,
+        "message": "\"LogEntry\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+        "line": 1566,
+        "col": 6,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/thought_processor/main.py",
+        "line": 186,
+        "col": 9,
+        "message": "Call",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/thought_processor/main.py",
+        "line": 199,
+        "col": 9,
+        "message": "Call",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 99,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 103,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 113,
+        "col": 23,
+        "message": "Call to untyped",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 115,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 125,
+        "col": 21,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 152,
+        "col": 49,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 178,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 187,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 195,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 201,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 224,
+        "col": 41,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 240,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 246,
+        "col": 13,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 317,
+        "col": 45,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 321,
+        "col": 35,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 442,
+        "col": 51,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 490,
+        "col": 17,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 533,
+        "col": 55,
+        "message": "Call to untyped",
+        "code": "no-untyped-call"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/adapter.py",
+        "line": 711,
+        "col": 51,
+        "message": "Item \"None\" of",
+        "code": "Any"
+      },
+      {
+        "file": "ciris_engine/logic/dma/pdma.py",
+        "line": 7,
+        "col": 1,
+        "message": "Module \"ciris_engine.logic.utils\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/dma/pdma.py",
+        "line": 17,
+        "col": 28,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 14,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 25,
+        "col": 17,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 77,
+        "col": 41,
+        "message": "Unexpected keyword argument",
+        "code": "call-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 77,
+        "col": 41,
+        "message": "Unexpected keyword argument",
+        "code": "call-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 81,
+        "col": 47,
+        "message": "Unexpected keyword argument",
+        "code": "call-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/csdma.py",
+        "line": 14,
+        "col": 1,
+        "message": "Module \"ciris_engine.logic.utils\"",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/dma/csdma.py",
+        "line": 29,
+        "col": 22,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 10,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 33,
+        "col": 36,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 71,
+        "col": 5,
+        "message": "Signature of",
+        "code": "override"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 120,
+        "col": 40,
+        "message": "Argument 1 to",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 122,
+        "col": 37,
+        "message": "Item",
+        "code": "str, Any"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 150,
+        "col": 79,
+        "message": "Argument 1 to",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 155,
+        "col": 96,
+        "message": "Argument 1 to",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 11,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 156,
+        "col": 20,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 254,
+        "col": 19,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 641,
+        "col": 37,
+        "message": "Need type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/core.py",
+        "line": 12,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/core.py",
+        "line": 75,
+        "col": 46,
+        "message": "Missing type parameters for",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/core.py",
+        "line": 171,
+        "col": 70,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/core.py",
+        "line": 265,
+        "col": 70,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/core.py",
+        "line": 379,
+        "col": 70,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/conscience/core.py",
+        "line": 478,
+        "col": 70,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/app.py",
+        "line": 70,
+        "col": 19,
+        "message": "Argument \"root_path\" to",
+        "code": "arg-type"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/app.py",
+        "line": 91,
+        "col": 67,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 33,
+        "col": 19,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 129,
+        "col": 9,
+        "message": "Incompatible",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 132,
+        "col": 73,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 182,
+        "col": 87,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 209,
+        "col": 73,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 214,
+        "col": 72,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/context/builder.py",
+        "line": 7,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/builder.py",
+        "line": 245,
+        "col": 48,
+        "message": "Missing type parameters",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/work_processor.py",
+        "line": 35,
+        "col": 19,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/work_processor.py",
+        "line": 68,
+        "col": 5,
+        "message": "Return type",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/work_processor.py",
+        "line": 77,
+        "col": 24,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/work_processor.py",
+        "line": 274,
+        "col": 29,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/wakeup_processor.py",
+        "line": 94,
+        "col": 5,
+        "message": "Return",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/wakeup_processor.py",
+        "line": 131,
+        "col": 87,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/wakeup_processor.py",
+        "line": 589,
+        "col": 29,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/solitude_processor.py",
+        "line": 61,
+        "col": 5,
+        "message": "Return",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/shutdown_processor.py",
+        "line": 64,
+        "col": 5,
+        "message": "Return",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 89,
+        "col": 19,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 134,
+        "col": 36,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 142,
+        "col": 29,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 466,
+        "col": 57,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 507,
+        "col": 22,
+        "message": "Argument",
+        "code": "Any | None"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 1188,
+        "col": 36,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/dream_processor.py",
+        "line": 1231,
+        "col": 5,
+        "message": "Return",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/play_processor.py",
+        "line": 63,
+        "col": 33,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/states/play_processor.py",
+        "line": 133,
+        "col": 29,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 25,
+        "col": 1,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 61,
+        "col": 19,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 155,
+        "col": 41,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 823,
+        "col": 36,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 973,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1035,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1195,
+        "col": 5,
+        "message": "Function is",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1306,
+        "col": 51,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1334,
+        "col": 29,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1336,
+        "col": 17,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1479,
+        "col": 45,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1484,
+        "col": 13,
+        "message": "Module",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1514,
+        "col": 24,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1580,
+        "col": 35,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/main_processor.py",
+        "line": 1608,
+        "col": 30,
+        "message": "Missing",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/adapter_manager.py",
+        "line": 855,
+        "col": 51,
+        "message": "Argument 2 to",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/ciris_runtime.py",
+        "line": 57,
+        "col": 35,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/ciris_runtime.py",
+        "line": 90,
+        "col": 35,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/ciris_runtime.py",
+        "line": 115,
+        "col": 36,
+        "message": "Missing type",
+        "code": "type-arg"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/ciris_runtime.py",
+        "line": 1253,
+        "col": 55,
+        "message": "Item \"None\" of",
+        "code": "Any"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_runtime_control.py",
+        "line": 244,
+        "col": 0,
+        "message": "Unused",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_runtime_control.py",
+        "line": 245,
+        "col": 0,
+        "message": "Unused",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_runtime_control.py",
+        "line": 246,
+        "col": 0,
+        "message": "Unused",
+        "code": "unused-ignore"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_runtime_control.py",
+        "line": 271,
+        "col": 84,
+        "message": "Argument",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 375,
+        "col": 41,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 381,
+        "col": 28,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 383,
+        "col": 28,
+        "message": "\"ChannelInfo\" has no",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 384,
+        "col": 30,
+        "message": "Value of type",
+        "code": "index"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 387,
+        "col": 27,
+        "message": "\"ChannelInfo\" has no",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 388,
+        "col": 31,
+        "message": "\"ChannelInfo\" has no",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 389,
+        "col": 31,
+        "message": "\"ChannelInfo\" has no",
+        "code": "attr-defined"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/adapter.py",
+        "line": 404,
+        "col": 20,
+        "message": "Item \"None\" of",
+        "code": "Any"
+      }
+    ],
+    "missing_type_annotations": [
+      {
+        "file": "ciris_engine/schemas/telemetry/unified.py",
+        "line": 26,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/resources/crisis.py",
+        "line": 99,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 81,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 91,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 101,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 111,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 121,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 131,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/schemas/config/agent.py",
+        "line": 141,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 132,
+        "col": 5,
+        "message": "Function is missing",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 138,
+        "col": 5,
+        "message": "Function is missing",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 164,
+        "col": 5,
+        "message": "Function is missing",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/config.py",
+        "line": 170,
+        "col": 5,
+        "message": "Function is missing",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/db/retry.py",
+        "line": 97,
+        "col": 1,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/db/retry.py",
+        "line": 150,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 298,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 308,
+        "col": 5,
+        "message": "Function is missing a return",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 411,
+        "col": 5,
+        "message": "Function is missing a type",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/buses/memory_bus.py",
+        "line": 421,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 60,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 390,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 396,
+        "col": 13,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 438,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 455,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 465,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 42,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 25,
+        "col": 1,
+        "message": "Function is missing",
+        "code": "no-untyped-def"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/ciris_runtime.py",
+        "line": 46,
+        "col": 5,
+        "message": "Function is missing a",
+        "code": "no-untyped-def"
+      }
+    ],
+    "return_type_issues": [
+      {
+        "file": "ciris_engine/schemas/dma/prompts.py",
+        "line": 94,
+        "col": 13,
+        "message": "Returning Any from function",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/db/core.py",
+        "line": 113,
+        "col": 9,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/db/core.py",
+        "line": 117,
+        "col": 9,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/db/core.py",
+        "line": 124,
+        "col": 9,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 340,
+        "col": 5,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 464,
+        "col": 9,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 475,
+        "col": 9,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 483,
+        "col": 17,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 485,
+        "col": 17,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 533,
+        "col": 9,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+        "line": 467,
+        "col": 5,
+        "message": "Returning Any from",
+        "code": "str, str"
+      },
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 338,
+        "col": 9,
+        "message": "Returning Any from function",
+        "code": "Any"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 103,
+        "col": 21,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 461,
+        "col": 13,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 463,
+        "col": 13,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 631,
+        "col": 25,
+        "message": "Returning Any from",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 109,
+        "col": 5,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 260,
+        "col": 13,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 620,
+        "col": 9,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 633,
+        "col": 13,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 637,
+        "col": 9,
+        "message": "Returning Any",
+        "code": "no-any-return"
+      }
+    ],
+    "type_mismatches": [
+      {
+        "file": "ciris_engine/logic/buses/wise_bus.py",
+        "line": 323,
+        "col": 24,
+        "message": "Incompatible types in",
+        "code": "Any"
+      },
+      {
+        "file": "ciris_engine/logic/buses/tool_bus.py",
+        "line": 416,
+        "col": 36,
+        "message": "Incompatible types in",
+        "code": "assignment"
+      },
+      {
+        "file": "ciris_engine/logic/buses/communication_bus.py",
+        "line": 257,
+        "col": 35,
+        "message": "Incompatible types",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/protocols/pipeline_control.py",
+        "line": 118,
+        "col": 39,
+        "message": "Incompatible types in",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 112,
+        "col": 44,
+        "message": "Incompatible types",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 198,
+        "col": 31,
+        "message": "Incompatible types in",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 302,
+        "col": 60,
+        "message": "Incompatible types",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 307,
+        "col": 68,
+        "message": "Incompatible types",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 316,
+        "col": 56,
+        "message": "Incompatible types",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 321,
+        "col": 64,
+        "message": "Incompatible types",
+        "code": "unknown"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot.py",
+        "line": 435,
+        "col": 21,
+        "message": "Incompatible types",
+        "code": "unknown"
+      }
+    ],
+    "union_attribute_access": [
+      {
+        "file": "ciris_engine/logic/persistence/models/graph.py",
+        "line": 135,
+        "col": 43,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 119,
+        "col": 20,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 147,
+        "col": 20,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 207,
+        "col": 19,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 250,
+        "col": 15,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 333,
+        "col": 15,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 375,
+        "col": 31,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 427,
+        "col": 24,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 554,
+        "col": 19,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 658,
+        "col": 24,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 680,
+        "col": 35,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/services/governance/consent/service.py",
+        "line": 680,
+        "col": 35,
+        "message": "Item",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/telemetry/core.py",
+        "line": 71,
+        "col": 21,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/telemetry/core.py",
+        "line": 139,
+        "col": 15,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 78,
+        "col": 22,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/cli/cli_tools.py",
+        "line": 106,
+        "col": 30,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+        "line": 162,
+        "col": 27,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+        "line": 162,
+        "col": 9,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 147,
+        "col": 34,
+        "message": "Item \"None\"",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 154,
+        "col": 30,
+        "message": "Item \"None\"",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/base_processor.py",
+        "line": 160,
+        "col": 28,
+        "message": "Item \"None\"",
+        "code": "union-attr"
+      },
+      {
+        "file": "ciris_engine/logic/runtime/ciris_runtime.py",
+        "line": 1576,
+        "col": 13,
+        "message": "Item \"None\" of",
+        "code": "union-attr"
+      }
+    ]
+  },
+  "proposed_changes": {
+    "unused_code_removal": {
+      "total_proposed": 0,
+      "changes": []
+    }
+  }
+}

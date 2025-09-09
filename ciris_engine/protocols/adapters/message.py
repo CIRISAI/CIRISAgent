@@ -2,7 +2,7 @@
 Minimal protocol for messages across different adapters.
 """
 
-from typing import Optional, Protocol, Union, runtime_checkable
+from typing import Any, Dict, Optional, Protocol, Union, runtime_checkable
 
 
 @runtime_checkable
@@ -49,7 +49,7 @@ class MessageProtocol(Protocol):
         ...
 
 
-class MessageDict(dict):
+class MessageDict(dict[str, Any]):
     """
     Simple dict wrapper that implements MessageProtocol.
 
@@ -87,4 +87,4 @@ class MessageDict(dict):
 
 
 # Type alias for messages
-Message = Union[MessageProtocol, dict]
+Message = Union[MessageProtocol, Dict[str, Any]]

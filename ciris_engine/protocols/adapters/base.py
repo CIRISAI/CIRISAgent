@@ -6,7 +6,11 @@ Adapters are the interfaces between CIRIS and external platforms.
 """
 
 from abc import abstractmethod
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.adapters.discord.config import DiscordAdapterConfig
+    from ciris_engine.schemas.infrastructure.base import BusMetrics
 
 from ciris_engine.protocols.runtime.base import BaseAdapterProtocol
 
@@ -29,7 +33,7 @@ class APIAdapterProtocol(BaseAdapterProtocol):
         ...
 
     @abstractmethod
-    def get_openapi_spec(self) -> dict:
+    def get_openapi_spec(self) -> Dict[str, Any]:
         """Get OpenAPI specification."""
         ...
 
@@ -39,7 +43,7 @@ class APIAdapterProtocol(BaseAdapterProtocol):
         ...
 
     @abstractmethod
-    def get_route_metrics(self) -> Dict[str, Dict[str, int]]:
+    def get_route_metrics(self) -> "BusMetrics":
         """Get metrics for each route."""
         ...
 
@@ -97,7 +101,7 @@ class DiscordAdapterProtocol(BaseAdapterProtocol):
         ...
 
     @abstractmethod
-    def get_guild_config(self, guild_id: str) -> dict:
+    def get_guild_config(self, guild_id: str) -> "DiscordAdapterConfig":
         """Get configuration for a specific guild."""
         ...
 
@@ -111,7 +115,7 @@ class SlackAdapterProtocol(BaseAdapterProtocol):
     """Protocol for Slack adapter (future)."""
 
     @abstractmethod
-    async def handle_event(self, event: dict) -> None:
+    async def handle_event(self, event: Dict[str, Any]) -> None:
         """Handle Slack event."""
         ...
 

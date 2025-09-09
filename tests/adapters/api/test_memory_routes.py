@@ -315,29 +315,6 @@ class TestForgetMemory:
         assert "not found" in data["data"]["reason"].lower()
 
 
-class TestCreateEdge:
-    """Test the /memory/edge endpoint."""
-
-    def test_create_edge_success(self, client, app, sample_edge, auth_context):
-        """Test successful edge creation."""
-        app.state.memory_service.create_edge.return_value = MemoryOpResult(
-            status=MemoryOpStatus.OK,
-            reason="Edge created",
-            data={"edge_id": f"{sample_edge.source}->{sample_edge.target}"},
-        )
-
-        app.dependency_overrides[require_admin] = lambda: auth_context
-        # Use model_dump with mode='json' to properly serialize datetime
-        response = client.post(
-            "/memory/edges", json={"edge": sample_edge.model_dump(mode="json")}  # Correct endpoint is /edges not /edge
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "data" in data
-        # The MemoryOpResult is in data["data"]
-        assert data["data"]["status"] == "ok"
-
 
 class TestMemoryStats:
     """Test the /memory/stats endpoint."""

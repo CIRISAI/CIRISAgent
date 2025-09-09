@@ -22,7 +22,7 @@ from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult,
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
 # Import extracted modules
-from .memory_models import CreateEdgeRequest, MemoryStats, QueryRequest, StoreRequest, TimelineResponse
+from .memory_models import MemoryStats, QueryRequest, StoreRequest, TimelineResponse
 from .memory_queries import get_memory_stats, query_timeline_nodes, search_nodes
 from .memory_visualization import generate_svg
 
@@ -475,37 +475,8 @@ async def visualize_graph(
 # ============================================================================
 
 
-@router.post("/edges", response_model=SuccessResponse[MemoryOpResult])
-async def create_edge(
-    request: Request,
-    body: CreateEdgeRequest,
-    auth: AuthContext = Depends(require_admin),
-) -> SuccessResponse[MemoryOpResult]:
-    """
-    Create an edge between two nodes.
-
-    Establishes a relationship in the memory graph.
-    """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
-    try:
-        # Create edge via memory service
-        result = await memory_service.create_edge(edge=body.edge)
-
-        return SuccessResponse(
-            data=result,
-            meta=ResponseMetadata(
-                request_id=str(request.state.request_id) if hasattr(request.state, "request_id") else None,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            ),
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to create edge: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+# Edge creation happens internally through agent processing
+# No direct API endpoint should be exposed for manual memory manipulation
 
 @router.get("/{node_id}/edges", response_model=SuccessResponse[List[GraphEdge]])
 async def get_node_edges(

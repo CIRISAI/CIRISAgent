@@ -12,7 +12,7 @@ The project uses GitHub Actions for automated testing and code quality checks. T
 
 ### Test Matrix
 - Python 3.11 and 3.12
-- Full test suite (609 tests)
+- Full test suite (thousands of tests)
 - Code coverage analysis
 
 ## SonarQube Integration
@@ -75,7 +75,7 @@ open htmlcov/index.html
 
 The CI pipeline includes these quality gates:
 
-1. **All tests must pass** (609 tests)
+1. **All tests must pass** (thousands of tests)
 2. **Code coverage ≥ 80%**
 3. **SonarQube quality gate** (if configured)
 4. **No security vulnerabilities** (Bandit scan)

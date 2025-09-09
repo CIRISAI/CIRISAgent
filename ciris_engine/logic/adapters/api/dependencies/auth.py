@@ -54,7 +54,7 @@ def _audit_failed_service_token(request: Request, service_token: str) -> None:
     from ciris_engine.schemas.services.graph.audit import AuditEventData
 
     # Hash the token for audit logging (don't log the actual token)
-    token_hash = hashlib.sha256(service_token.encode()).hexdigest()[:16]
+    token_hash = hashlib.sha256(service_token.encode()).hexdigest()
     audit_event = AuditEventData(
         entity_id="auth_service",
         actor=f"service_token_hash:{token_hash}",

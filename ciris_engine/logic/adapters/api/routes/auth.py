@@ -665,6 +665,10 @@ def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user, provid
 
 def _build_redirect_response(api_key: str, oauth_user, provider: str) -> RedirectResponse:
     """Build the redirect response for OAuth callback."""
+    VALID_PROVIDERS = {"google", "github", "discord"}
+    if provider not in VALID_PROVIDERS:
+        # Redirect to a safe default if provider is invalid
+        return RedirectResponse(url="/", status_code=302)
     gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
     redirect_params = {
         "access_token": api_key,

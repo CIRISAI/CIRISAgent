@@ -50,14 +50,22 @@ def mock_config():
 
 
 @pytest.fixture
-def mock_services(mock_time_service):
+def mock_telemetry_service():
+    """Create mock telemetry service for testing."""
+    mock_service = Mock()
+    mock_service.record_metric = AsyncMock()
+    return mock_service
+
+
+@pytest.fixture
+def mock_services(mock_time_service, mock_telemetry_service):
     """Create mock services."""
     mock_llm = Mock()
     mock_llm.__class__.__name__ = "MockLLMService"
 
     return {
         "time_service": mock_time_service,
-        "telemetry_service": Mock(memorize_metric=AsyncMock()),
+        "telemetry_service": mock_telemetry_service,
         "memory_service": Mock(
             memorize=AsyncMock(), export_identity_context=AsyncMock(return_value="Test identity context")
         ),
@@ -130,3 +138,39 @@ def main_processor(mock_config, mock_services, mock_processors, mock_time_servic
     processor.pipeline_controller.get_pipeline_state = Mock()
 
     return processor
+
+
+@pytest.fixture
+def sample_processing_queue_item():
+    """Create a sample ProcessingQueueItem for testing."""
+    from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
+    from ciris_engine.schemas.runtime.enums import ThoughtType
+    
+    content = ThoughtContent(text="Test thought content")
+    return ProcessingQueueItem(
+        thought_id="test_thought_123",
+        source_task_id="test_task_123", 
+        thought_type=ThoughtType.STANDARD,
+        content=content
+    )
+
+
+@pytest.fixture
+def sample_final_result():
+    """Create a sample final result with selected action."""
+    result = Mock()
+    result.selected_action = Mock()
+    result.selected_action.value = "SPEAK"
+    return result
+
+
+@pytest.fixture
+def thought_processor_phase_with_telemetry(mock_telemetry_service, mock_time_service):
+    """Create a thought processor phase with telemetry and time service configured."""
+    from ciris_engine.logic.processors.core.thought_processor.round_complete import RoundCompletePhase
+    
+    phase = RoundCompletePhase()
+    phase.telemetry_service = mock_telemetry_service
+    phase._time_service = mock_time_service
+    phase.current_round_number = 1
+    return phase

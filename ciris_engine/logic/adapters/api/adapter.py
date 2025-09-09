@@ -477,9 +477,6 @@ class ApiPlatform(Service):
                 logger.warning("API server stopped unexpectedly")
                 break
 
-                # Wait for a short time before checking again
-                await asyncio.sleep(1)
-
         except asyncio.CancelledError:
             logger.info("API adapter lifecycle cancelled")
             raise

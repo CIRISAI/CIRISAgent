@@ -246,6 +246,22 @@ class QARunner:
                 passed, result = self._run_single_test(test)
                 self.results[f"{test.module.value}::{test.name}"] = result
 
+                # Check if this was a test that invalidated our token
+                token_invalidating_tests = [
+                    ("logout", "/auth/logout"),
+                    ("refresh token", "/auth/refresh")
+                ]
+                
+                for test_name_pattern, endpoint_pattern in token_invalidating_tests:
+                    if test_name_pattern.lower() in test.name.lower() and endpoint_pattern in test.endpoint:
+                        if self.config.verbose:
+                            self.console.print(f"[yellow]🔄 Re-authenticating after {test.name}...[/yellow]")
+                        # Re-authenticate to restore token for subsequent tests
+                        if not self._authenticate():
+                            self.console.print(f"[red]❌ Failed to re-authenticate after {test.name}[/red]")
+                            all_passed = False
+                        break
+
                 # Check incidents log after each test for immediate feedback
                 incidents = self._check_incidents_for_test(test.name)
                 if incidents:

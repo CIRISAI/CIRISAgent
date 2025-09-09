@@ -18,10 +18,7 @@ class StoreRequest(BaseModel):
     node: GraphNode = Field(..., description="Typed graph node to store")
 
 
-class CreateEdgeRequest(BaseModel):
-    """Request to create an edge between nodes."""
-
-    edge: GraphEdge = Field(..., description="Edge to create between nodes")
+# Edge creation handled internally - no API model needed
 
 
 class QueryRequest(BaseModel):

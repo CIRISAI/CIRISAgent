@@ -709,7 +709,7 @@ Deterministic testing with command extraction:
 
 ### Test Suite
 
-- **1,180+ tests** with Docker CI/CD
+- **Thousands of tests** with Docker CI/CD
 - Background test runner for development
 - 100% API endpoint coverage
 - Mock services for isolated testing
@@ -870,7 +870,7 @@ CIRISAgent/
 - ✅ Grace sustainable development
 
 ### Quality Metrics
-- 1,180+ tests passing
+- Thousands of tests passing
 - <1s API response time
 - 4GB RAM footprint
 - Zero attack surface

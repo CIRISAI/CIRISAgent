@@ -433,7 +433,6 @@ def debug_log(
 def measure_performance(
     metric_name: Optional[str] = None,
     path_type: Optional[str] = None,  # hot, cold, critical
-    record_distribution: bool = False,
 ) -> Callable[[F], F]:
     """
     Measure method performance and record metrics.
@@ -441,7 +440,6 @@ def measure_performance(
     Args:
         metric_name: Custom metric name (defaults to method name)
         path_type: Type of code path (hot, cold, critical)
-        record_distribution: Whether to record timing distribution
     """
 
     def decorator(func: F) -> F:

@@ -393,7 +393,7 @@ class TestMeasurePerformanceAdvanced:
             service_name = "TestService"
             _telemetry_service = AsyncMock()
 
-            @measure_performance(metric_name="custom_metric", path_type="critical", record_distribution=True)
+            @measure_performance(metric_name="custom_metric", path_type="critical")
             async def critical_operation(self):
                 await asyncio.sleep(0.01)
                 return "done"

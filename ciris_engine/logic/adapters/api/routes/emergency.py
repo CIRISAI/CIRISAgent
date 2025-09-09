@@ -264,9 +264,9 @@ async def emergency_shutdown(command: WASignedCommand, request: Request) -> Succ
         # Mark shutdown initiated
         status.shutdown_initiated = datetime.now(timezone.utc)
 
-        # Request immediate shutdown
+        # Request immediate emergency shutdown (forced termination)
         reason = f"EMERGENCY: {command.reason} (WA: {command.wa_id})"
-        await shutdown_service.request_shutdown(reason)
+        await shutdown_service.emergency_shutdown(reason)
 
         # Update status
         status.services_stopped = ["shutdown_requested"]

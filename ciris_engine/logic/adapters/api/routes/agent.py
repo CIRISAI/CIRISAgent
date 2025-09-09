@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -145,53 +145,43 @@ async def store_message_response(message_id: str, response: str) -> None:
 # Endpoints
 
 
-@router.post("/interact", response_model=SuccessResponse[InteractResponse])
-async def interact(
-    request: Request, body: InteractRequest, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[InteractResponse]:
-    """
-    Send message and get response.
+def _check_send_messages_permission(auth: AuthContext, request: Request) -> None:
+    """Check if user has SEND_MESSAGES permission and handle OAuth auto-request."""
+    if auth.has_permission(Permission.SEND_MESSAGES):
+        return
 
-    This endpoint combines the old send/ask functionality into a single interaction.
-    It sends the message and waits for the agent's response (with a reasonable timeout).
+    # Get auth service to check permission request status
+    auth_service = request.app.state.auth_service if hasattr(request.app.state, "auth_service") else None
+    user = auth_service.get_user(auth.user_id) if auth_service else None
 
-    Requires: SEND_MESSAGES permission (ADMIN+ by default, or OBSERVER with explicit grant)
-    """
-    # Check if user has permission to send messages
-    if not auth.has_permission(Permission.SEND_MESSAGES):
-        # Get auth service to check permission request status
-        # Note: We can't use dependency injection here, so we'll access it directly
-        auth_service = request.app.state.auth_service if hasattr(request.app.state, "auth_service") else None
-        user = auth_service.get_user(auth.user_id) if auth_service else None
+    # If user is an OAuth user without a permission request, automatically create one
+    if user and user.auth_type == "oauth" and user.permission_requested_at is None:
+        # Set permission request timestamp
+        user.permission_requested_at = datetime.now(timezone.utc)
+        # Store the updated user
+        auth_service._users[user.wa_id] = user
 
-        # If user is an OAuth user without a permission request, automatically create one
-        if user and user.auth_type == "oauth" and user.permission_requested_at is None:
-            # Set permission request timestamp
-            user.permission_requested_at = datetime.now(timezone.utc)
-            # Store the updated user
-            auth_service._users[user.wa_id] = user
+        # Don't log potentially sensitive email addresses
+        logger.info(f"Auto-created permission request for OAuth user ID: {user.wa_id}")
 
-            # Don't log potentially sensitive email addresses
-            logger.info(f"Auto-created permission request for OAuth user ID: {user.wa_id}")
+    # Build detailed error response
+    error_detail = {
+        "error": "insufficient_permissions",
+        "message": "You do not have permission to send messages to this agent.",
+        "discord_invite": "https://discord.gg/A3HVPMWd",
+        "can_request_permissions": user.permission_requested_at is None if user else True,
+        "permission_requested": user.permission_requested_at is not None if user else False,
+        "requested_at": user.permission_requested_at.isoformat() if user and user.permission_requested_at else None,
+    }
 
-        # Build detailed error response
-        error_detail = {
-            "error": "insufficient_permissions",
-            "message": "You do not have permission to send messages to this agent.",
-            "discord_invite": "https://discord.gg/A3HVPMWd",
-            "can_request_permissions": user.permission_requested_at is None if user else True,
-            "permission_requested": user.permission_requested_at is not None if user else False,
-            "requested_at": user.permission_requested_at.isoformat() if user and user.permission_requested_at else None,
-        }
+    raise HTTPException(status_code=403, detail=error_detail)
 
-        raise HTTPException(status_code=403, detail=error_detail)
-    # Create unique IDs
+
+def _create_interaction_message(auth: AuthContext, body: InteractRequest) -> Tuple[str, str, IncomingMessage]:
+    """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
     channel_id = f"api_{auth.user_id}"  # User-specific channel
-    event = asyncio.Event()
-    _response_events[message_id] = event
-
-    # Create message
+    
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
@@ -200,9 +190,12 @@ async def interact(
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
+    
+    return message_id, channel_id, msg
 
-    # Check consent status and add notice for first-time users
-    consent_notice = ""
+
+async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: Request) -> str:
+    """Handle consent checking and creation for user, return consent notice if applicable."""
     try:
         from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
         from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
@@ -220,6 +213,7 @@ async def interact(
         # Check if user has consent
         try:
             consent_status = await consent_manager.get_consent(auth.user_id)
+            return ""  # User already has consent
         except ConsentNotFoundError:
             # First interaction - create default TEMPORARY consent
             consent_req = ConsentRequest(
@@ -230,50 +224,138 @@ async def interact(
             )
             consent_status = await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 
-            # Add notice to response
-            consent_notice = "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
+            # Return notice to add to response
+            return "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
 
     except Exception as e:
         logger.warning(f"Could not check consent for user {auth.user_id}: {e}")
+        return ""
+
+
+def _get_runtime_processor(request: Request):
+    """Get runtime processor if available and valid."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if not (runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor):
+        return None
+    return runtime.agent_processor
+
+
+def _is_processor_paused(processor) -> bool:
+    """Check if processor is in paused state."""
+    return hasattr(processor, "_is_paused") and processor._is_paused
+
+
+async def _handle_paused_message(request: Request, msg: IncomingMessage) -> None:
+    """Route message to queue when processor is paused."""
+    if hasattr(request.app.state, "on_message"):
+        await request.app.state.on_message(msg)
+    else:
+        raise HTTPException(status_code=503, detail="Message handler not configured")
+
+
+def _get_processor_cognitive_state(processor) -> str:
+    """Get current cognitive state from processor with fallback."""
+    try:
+        if hasattr(processor, 'get_current_state'):
+            return processor.get_current_state()
+    except Exception:
+        pass
+    return "WORK"  # Default
+
+
+def _create_paused_response(message_id: str, cognitive_state: str, processing_time: int) -> SuccessResponse:
+    """Create response for paused processor state."""
+    return SuccessResponse(
+        data=InteractResponse(
+            message_id=message_id,
+            response="Processor paused - task added to queue. Resume processing to continue.",
+            state=cognitive_state,
+            processing_time_ms=processing_time,
+        )
+    )
+
+
+async def _check_processor_pause_status(request: Request, msg: IncomingMessage, message_id: str, start_time: datetime) -> Optional[SuccessResponse]:
+    """Check if processor is paused and handle accordingly. Returns response if paused, None if not paused."""
+    try:
+        processor = _get_runtime_processor(request)
+        if not processor or not _is_processor_paused(processor):
+            return None
+        
+        # Processor is paused - route message and prepare response
+        await _handle_paused_message(request, msg)
+        
+        # Clean up response tracking since we're returning immediately
+        _response_events.pop(message_id, None)
+        
+        # Calculate processing time and get state
+        processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+        cognitive_state = _get_processor_cognitive_state(processor)
+        
+        return _create_paused_response(message_id, cognitive_state, processing_time)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 503 for missing message handler)
+        raise
+    except Exception as e:
+        logger.debug(f"Could not check pause state: {e}")
+    
+    return None
+
+
+def _get_interaction_timeout(request: Request) -> float:
+    """Get interaction timeout from config or return default."""
+    timeout = 55.0  # default timeout for longer processing
+    if hasattr(request.app.state, "api_config"):
+        timeout = request.app.state.api_config.interaction_timeout
+    return timeout
+
+
+def _get_current_cognitive_state(request: Request) -> str:
+    """Get current cognitive state from runtime or return default."""
+    cognitive_state = "WORK"
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime and hasattr(runtime, "state_manager"):
+        cognitive_state = runtime.state_manager.current_state
+    return cognitive_state
+
+
+def _cleanup_interaction_tracking(message_id: str) -> None:
+    """Clean up interaction tracking for given message ID."""
+    _response_events.pop(message_id, None)
+    _message_responses.pop(message_id, None)
+
+
+@router.post("/interact", response_model=SuccessResponse[InteractResponse])
+async def interact(
+    request: Request, body: InteractRequest, auth: AuthContext = Depends(require_observer)
+) -> SuccessResponse[InteractResponse]:
+    """
+    Send message and get response.
+
+    This endpoint combines the old send/ask functionality into a single interaction.
+    It sends the message and waits for the agent's response (with a reasonable timeout).
+
+    Requires: SEND_MESSAGES permission (ADMIN+ by default, or OBSERVER with explicit grant)
+    """
+    # Check permissions
+    _check_send_messages_permission(auth, request)
+
+    # Create message and tracking
+    message_id, channel_id, msg = _create_interaction_message(auth, body)
+    event = asyncio.Event()
+    _response_events[message_id] = event
+
+    # Handle consent for user
+    consent_notice = await _handle_consent_for_user(auth, channel_id, request)
 
     # Track timing
     start_time = datetime.now(timezone.utc)
 
-    # Check if processor is paused - if so, add to queue and return immediately
-    try:
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
-            if hasattr(runtime.agent_processor, "_is_paused") and runtime.agent_processor._is_paused:
-                # Processor is paused - still route the message to add it to queue
-                if hasattr(request.app.state, "on_message"):
-                    await request.app.state.on_message(msg)
-                else:
-                    raise HTTPException(status_code=503, detail="Message handler not configured")
-                
-                # Clean up response tracking since we're returning immediately
-                _response_events.pop(message_id, None)
-                
-                # Return immediately with paused status
-                processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
-                
-                # Get the actual cognitive state (should still be WORK, etc.)
-                cognitive_state = "WORK"  # Default
-                try:
-                    if hasattr(runtime.agent_processor, 'get_current_state'):
-                        cognitive_state = runtime.agent_processor.get_current_state()
-                except Exception:
-                    pass
-                
-                return SuccessResponse(
-                    data=InteractResponse(
-                        message_id=message_id,
-                        response="Processor paused - task added to queue. Resume processing to continue.",
-                        state=cognitive_state,
-                        processing_time_ms=processing_time,
-                    )
-                )
-    except Exception as e:
-        logger.debug(f"Could not check pause state: {e}")
+    # Check if processor is paused
+    pause_response = await _check_processor_pause_status(request, msg, message_id, start_time)
+    if pause_response:
+        return pause_response
 
     # Route message through adapter's handler
     if hasattr(request.app.state, "on_message"):
@@ -281,12 +363,9 @@ async def interact(
     else:
         raise HTTPException(status_code=503, detail="Message handler not configured")
 
-    # Get timeout from config or use default
-    timeout = 55.0  # default timeout for longer processing
-    if hasattr(request.app.state, "api_config"):
-        timeout = request.app.state.api_config.interaction_timeout
+    # Get timeout and wait for response
+    timeout = _get_interaction_timeout(request)
 
-    # Wait for response with timeout
     try:
         await asyncio.wait_for(event.wait(), timeout=timeout)
 
@@ -297,24 +376,15 @@ async def interact(
         if consent_notice:
             response_content += consent_notice
 
-        # Clean up
-        _response_events.pop(message_id, None)
-        _message_responses.pop(message_id, None)
+        # Clean up and calculate timing
+        _cleanup_interaction_tracking(message_id)
+        processing_time_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
 
-        # Calculate processing time
-        end_time = datetime.now(timezone.utc)
-        processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-
-        # Get current cognitive state
-        cognitive_state = "WORK"
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "state_manager"):
-            cognitive_state = runtime.state_manager.current_state
-
+        # Build response
         response = InteractResponse(
             message_id=message_id,
             response=response_content,
-            state=cognitive_state,
+            state=_get_current_cognitive_state(request),
             processing_time_ms=processing_time_ms,
         )
 
@@ -322,8 +392,7 @@ async def interact(
 
     except asyncio.TimeoutError:
         # Clean up
-        _response_events.pop(message_id, None)
-        _message_responses.pop(message_id, None)
+        _cleanup_interaction_tracking(message_id)
 
         # Return a timeout response rather than error
         response = InteractResponse(

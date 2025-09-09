@@ -80,24 +80,12 @@ POST /v1/memory/query
 }
 ```
 
-#### Create edge
-```bash
-POST /v1/memory/edges
-{
-  "edge": {
-    "source": "node1_id",
-    "target": "node2_id",
-    "relationship": "related_to",
-    "scope": "local",
-    "weight": 0.8
-  }
-}
-```
-
 #### Get edges for a node
 ```bash
 GET /v1/memory/{node_id}/edges?scope=local
 ```
+
+**Note:** Edge creation happens internally through agent processing. There is no direct API endpoint for creating edges as this would bypass the agent's memory management system.
 
 ## Edge Data Format
 

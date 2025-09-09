@@ -51,7 +51,7 @@ python main.py --adapter api --port 8000
 
 ✅ **22 core services** with message bus architecture  
 ✅ **4GB RAM target** for edge deployment  
-✅ **1,180+ tests** with comprehensive coverage  
+✅ **Thousands of tests** with comprehensive coverage  
 ✅ **SonarCloud quality gates** passing  
 ✅ **Currently powering** Discord moderation at agents.ciris.ai
 

@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # Constants to avoid duplication
 UTC_TIMEZONE_SUFFIX = '+00:00'
@@ -444,6 +444,48 @@ async def query_audit_entries(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _find_audit_entry(entries: List, entry_id: str) -> Tuple[Optional[Any], int]:
+    """Find audit entry by ID with fallback to generated ID pattern."""
+    for i, entry in enumerate(entries):
+        if hasattr(entry, "id") and entry.id == entry_id:
+            return entry, i
+        # Also check if entry_id matches a generated ID pattern
+        elif hasattr(entry, "timestamp") and hasattr(entry, "actor"):
+            generated_id = f"audit_{entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{entry.actor}"
+            if generated_id == entry_id:
+                return entry, i
+    return None, -1
+
+
+def _build_verification_info(target_entry: Any) -> EntryVerification:
+    """Build verification information for audit entry."""
+    return EntryVerification(
+        signature_valid=target_entry.signature is not None,
+        hash_chain_valid=target_entry.hash_chain is not None,
+        verified_at=datetime.now(timezone.utc),
+        verifier="system",
+        algorithm="sha256",
+        previous_hash_match=None,  # Would check in real implementation
+    )
+
+
+def _add_chain_navigation(response: AuditEntryDetailResponse, entries: List, entry_index: int) -> None:
+    """Add chain position and navigation links to response."""
+    response.chain_position = entry_index
+    
+    if entry_index > 0:
+        prev_entry = entries[entry_index - 1]
+        response.previous_entry_id = getattr(
+            prev_entry, "id", f"audit_{prev_entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{prev_entry.actor}"
+        )
+    
+    if entry_index < len(entries) - 1:
+        next_entry = entries[entry_index + 1]
+        response.next_entry_id = getattr(
+            next_entry, "id", f"audit_{next_entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{next_entry.actor}"
+        )
+
+
 @router.get("/entries/{entry_id}", response_model=SuccessResponse[AuditEntryDetailResponse])
 async def get_audit_entry(
     request: Request,
@@ -464,60 +506,23 @@ async def get_audit_entry(
     audit_service = _get_audit_service(request)
 
     try:
-        # Get the specific entry (implementation would use a proper lookup)
-        # For now, search by ID in the query
-        query = AuditQuery(limit=1000, order_by="timestamp", order_desc=True)  # Search recent entries
+        # Get recent entries to search within
+        query = AuditQuery(limit=1000, order_by="timestamp", order_desc=True)
         entries = await audit_service.query_audit_trail(query)
 
-        # Find the entry with matching ID
-        target_entry = None
-        entry_index = -1
-        for i, entry in enumerate(entries):
-            if hasattr(entry, "id") and entry.id == entry_id:
-                target_entry = entry
-                entry_index = i
-                break
-            # Also check if entry_id matches a generated ID pattern
-            elif hasattr(entry, "timestamp") and hasattr(entry, "actor"):
-                generated_id = f"audit_{entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{entry.actor}"
-                if generated_id == entry_id:
-                    target_entry = entry
-                    entry_index = i
-                    break
-
+        # Find the target entry
+        target_entry, entry_index = _find_audit_entry(entries, entry_id)
         if not target_entry:
             raise HTTPException(status_code=404, detail=f"Audit entry '{entry_id}' not found")
 
-        # Build response
+        # Build base response
         response = AuditEntryDetailResponse(entry=_convert_audit_entry(target_entry))
 
         # Add verification info if requested
         if verify:
-            # Get verification report for this entry
             await audit_service.get_verification_report()
-
-            # Extract verification for this specific entry
-            response.verification = EntryVerification(
-                signature_valid=target_entry.signature is not None,
-                hash_chain_valid=target_entry.hash_chain is not None,
-                verified_at=datetime.now(timezone.utc),
-                verifier="system",
-                algorithm="sha256",
-                previous_hash_match=None,  # Would check in real implementation
-            )
-
-            # Add chain position info
-            response.chain_position = entry_index
-            if entry_index > 0:
-                prev_entry = entries[entry_index - 1]
-                response.previous_entry_id = getattr(
-                    prev_entry, "id", f"audit_{prev_entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{prev_entry.actor}"
-                )
-            if entry_index < len(entries) - 1:
-                next_entry = entries[entry_index + 1]
-                response.next_entry_id = getattr(
-                    next_entry, "id", f"audit_{next_entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{next_entry.actor}"
-                )
+            response.verification = _build_verification_info(target_entry)
+            _add_chain_navigation(response, entries, entry_index)
 
         return SuccessResponse(
             data=response,

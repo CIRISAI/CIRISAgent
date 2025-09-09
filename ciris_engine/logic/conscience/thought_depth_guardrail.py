@@ -176,7 +176,7 @@ class ThoughtDepthGuardrail(ConscienceInterface):
             )
 
             # Create the defer action that will replace the original
-            ActionSelectionDMAResult(
+            defer_action = ActionSelectionDMAResult(
                 selected_action=HandlerActionType.DEFER.value,
                 action_parameters=_defer_params,
                 rationale=f"Automatically deferred: Maximum thought depth of {self.max_depth} reached",
@@ -195,17 +195,21 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 status=ServiceCorrelationStatus.FAILED,
             )
             persistence.update_correlation(update_req, self._time_service)
+            # Create dict with replacement action for conscience execution
+            epistemic_data_dict = {
+                "entropy_level": 0.8,  # High uncertainty at max depth
+                "coherence_level": 0.3,  # Low coherence when forced to stop
+                "uncertainty_acknowledged": True,
+                "reasoning_transparency": 0.9,  # Very transparent about why
+                "replacement_action": defer_action.model_dump(),  # Include the DEFER action for conscience execution
+            }
+            
             return ConscienceCheckResult(
                 status=ConscienceStatus.FAILED,
                 passed=False,
                 reason=f"Maximum thought depth ({self.max_depth}) reached - deferring to human",
                 check_timestamp=timestamp,
-                epistemic_data=EpistemicData(
-                    entropy_level=0.8,  # High uncertainty at max depth
-                    coherence_level=0.3,  # Low coherence when forced to stop
-                    uncertainty_acknowledged=True,
-                    reasoning_transparency=0.9,  # Very transparent about why
-                ),
+                epistemic_data=epistemic_data_dict,  # Pass as dict so conscience execution can access replacement_action
             )
 
         # Depth is within limits

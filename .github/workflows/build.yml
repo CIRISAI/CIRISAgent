@@ -170,27 +170,46 @@ jobs:
         with:
           fetch-depth: 1  # Just need the latest commit message
 
-      - name: Notify CIRISManager
+      - name: Extract Release Information
+        id: release_info
         run: |
-          # Extract changelog and assess risk
-          CHANGELOG=$(git log -1 --pretty=format:"%s")
+          # Extract semantic version from constants.py
+          SEMANTIC_VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
+          echo "Semantic version: $SEMANTIC_VERSION"
+          
+          # Extract changelog from CHANGELOG.md using Keep a Changelog format
+          if [ -f "CHANGELOG.md" ]; then
+            echo "Extracting changelog from CHANGELOG.md"
+            CHANGELOG=$(python tools/extract_changelog.py CHANGELOG.md "$SEMANTIC_VERSION")
+            echo "Extracted changelog: $CHANGELOG"
+          else
+            echo "No CHANGELOG.md found, using commit message fallback"
+            CHANGELOG=$(git log -1 --pretty=format:"%s")
+          fi
 
-          # Simple risk assessment based on commit message
-          if echo "$CHANGELOG" | grep -qiE "breaking|major|critical|security"; then
+          # Enhanced risk assessment based on changelog content
+          if echo "$CHANGELOG" | grep -qiE "breaking|major|critical|security|vulnerability|emergency|authentication"; then
             RISK_LEVEL="high"
-          elif echo "$CHANGELOG" | grep -qiE "fix|patch|minor"; then
+          elif echo "$CHANGELOG" | grep -qiE "fix|patch|minor|cleanup|test|refactor"; then
             RISK_LEVEL="low"
           else
             RISK_LEVEL="medium"
           fi
+          
+          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "risk_level=$RISK_LEVEL" >> $GITHUB_OUTPUT
+          echo "version=$SEMANTIC_VERSION" >> $GITHUB_OUTPUT
 
-          # Extract version (use short SHA)
-          # Extract semantic version from constants.py
-          SEMANTIC_VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
-          echo "Semantic version: $SEMANTIC_VERSION"
+      - name: Notify CIRISManager
+        run: |
 
-          # Notify CIRISManager about new images with rich context
+          # Notify CIRISManager about new images with rich context from CHANGELOG.md
           # CIRISManager will orchestrate the deployment
+          echo "Notifying CIRISManager with:"
+          echo "  Version: ${{ steps.release_info.outputs.version }}"
+          echo "  Changelog: ${{ steps.release_info.outputs.changelog }}"
+          echo "  Risk Level: ${{ steps.release_info.outputs.risk_level }}"
+          
           response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST https://agents.ciris.ai/manager/v1/updates/notify \
             -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -199,9 +218,9 @@ jobs:
               \"strategy\": \"canary\",
               \"source\": \"github-actions\",
               \"commit_sha\": \"${{ github.sha }}\",
-              \"changelog\": \"$CHANGELOG\",
-              \"risk_level\": \"$RISK_LEVEL\",
-              \"version\": \"$SEMANTIC_VERSION\"
+              \"changelog\": \"${{ steps.release_info.outputs.changelog }}\",
+              \"risk_level\": \"${{ steps.release_info.outputs.risk_level }}\",
+              \"version\": \"${{ steps.release_info.outputs.version }}\"
             }")
 
           # Extract HTTP status

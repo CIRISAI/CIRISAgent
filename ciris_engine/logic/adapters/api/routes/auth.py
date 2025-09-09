@@ -351,7 +351,7 @@ class OAuthLoginResponse(BaseModel):
 
 
 @router.get("/auth/oauth/{provider}/login")
-async def oauth_login(provider: str, request: Request, redirect_uri: Optional[str] = None) -> RedirectResponse:
+async def oauth_login(provider: str, request: Request) -> RedirectResponse:
     """
     Initiate OAuth login flow.
 
@@ -442,21 +442,11 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to initiate OAuth login")
 
 
-@router.get("/auth/oauth/{provider}/callback")
-async def oauth_callback(
-    provider: str, code: str, state: str, auth_service: APIAuthService = Depends(get_auth_service)
-) -> LoginResponse:
-    """
-    Handle OAuth callback.
-
-    Exchanges authorization code for tokens and creates/updates user.
-    """
+def _load_oauth_config(provider: str) -> Dict[str, str]:
+    """Load OAuth configuration for the specified provider."""
     import json
     from pathlib import Path
 
-    import httpx
-
-    # Load OAuth configuration
     # Check shared volume first (managed mode), then fall back to local (standalone)
     oauth_config_file = OAUTH_CONFIG_PATH
     if not oauth_config_file.exists():
@@ -468,220 +458,283 @@ async def oauth_callback(
     if not oauth_config_file.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"OAuth provider '{provider}' not configured")
 
-    try:
-        config = json.loads(oauth_config_file.read_text())
-        if provider not in config:
+    config = json.loads(oauth_config_file.read_text())
+    if provider not in config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"OAuth provider '{provider}' not configured"
+        )
+
+    return config[provider]
+
+
+async def _handle_google_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
+    """Handle Google OAuth token exchange and user info retrieval."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for token
+        token_response = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": get_oauth_callback_url("google"),
+                "grant_type": "authorization_code",
+            },
+        )
+
+        if token_response.status_code != 200:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"OAuth provider '{provider}' not configured"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to exchange code for token: {token_response.text}",
             )
 
-        provider_config = config[provider]
+        token_data = token_response.json()
+        access_token = token_data["access_token"]
+
+        # Get user info
+        user_response = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
+
+        user_info = user_response.json()
+        return {
+            "external_id": user_info["id"],
+            "email": user_info.get("email"),
+            "name": user_info.get("name", user_info.get("email")),
+            "picture": user_info.get("picture"),
+        }
+
+
+async def _handle_github_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
+    """Handle GitHub OAuth token exchange and user info retrieval."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for token
+        token_response = await client.post(
+            "https://github.com/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": os.getenv("OAUTH_CALLBACK_BASE_URL", DEFAULT_OAUTH_BASE_URL)
+                + OAUTH_CALLBACK_PATH.replace("{provider}", "github"),
+            },
+        )
+
+        if token_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to exchange code for token: {token_response.text}",
+            )
+
+        token_data = token_response.json()
+        access_token = token_data["access_token"]
+
+        # Get user info
+        user_response = await client.get(
+            "https://api.github.com/user", headers={"Authorization": f"token {access_token}"}
+        )
+
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
+
+        user_info = user_response.json()
+        external_id = str(user_info["id"])
+        email = user_info.get("email")
+        name = user_info.get("name", user_info.get("login"))
+        picture = user_info.get("avatar_url")
+
+        # If email is private, fetch from emails endpoint
+        if not email:
+            emails_response = await client.get(
+                "https://api.github.com/user/emails", headers={"Authorization": f"token {access_token}"}
+            )
+            if emails_response.status_code == 200:
+                emails = emails_response.json()
+                for e in emails:
+                    if e.get("primary"):
+                        email = e["email"]
+                        break
+
+        return {
+            "external_id": external_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+        }
+
+
+async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
+    """Handle Discord OAuth token exchange and user info retrieval."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for token
+        token_response = await client.post(
+            "https://discord.com/api/oauth2/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": get_oauth_callback_url("discord"),
+                "grant_type": "authorization_code",
+            },
+        )
+
+        if token_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to exchange code for token: {token_response.text}",
+            )
+
+        token_data = token_response.json()
+        access_token = token_data["access_token"]
+
+        # Get user info
+        user_response = await client.get(
+            "https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
+
+        user_info = user_response.json()
+        external_id = user_info["id"]
+        email = user_info.get("email")
+        name = user_info.get("username", email)
+        
+        # Construct Discord avatar URL if avatar exists
+        avatar_hash = user_info.get("avatar")
+        picture = f"https://cdn.discordapp.com/avatars/{external_id}/{avatar_hash}.png" if avatar_hash else None
+
+        return {
+            "external_id": external_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+        }
+
+
+def _determine_user_role(email: Optional[str]) -> UserRole:
+    """Determine user role based on email domain."""
+    if email and email.endswith("@ciris.ai"):
+        logger.info(f"Granting ADMIN role to @ciris.ai user: {email}")
+        return UserRole.ADMIN
+    return UserRole.OBSERVER
+
+
+def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, picture: Optional[str]) -> None:
+    """Store OAuth profile data if valid."""
+    if not picture:
+        return
+
+    if validate_oauth_picture_url(picture):
+        user = auth_service.get_user(user_id)
+        if user:
+            user.oauth_name = name
+            user.oauth_picture = picture
+            auth_service._users[user_id] = user
+    else:
+        logger.warning(f"Invalid OAuth picture URL rejected for user {user_id}: {picture}")
+
+
+def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user, provider: str) -> str:
+    """Generate API key and store it for the OAuth user."""
+    role_prefix = "ciris_admin" if oauth_user.role == UserRole.ADMIN else "ciris_observer"
+    api_key = f"{role_prefix}_{secrets.token_urlsafe(32)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
+    auth_service.store_api_key(
+        key=api_key,
+        user_id=oauth_user.user_id,
+        role=oauth_user.role,
+        expires_at=expires_at,
+        description=f"OAuth login via {provider}",
+    )
+
+    return api_key
+
+
+def _build_redirect_response(api_key: str, oauth_user, provider: str) -> RedirectResponse:
+    """Build the redirect response for OAuth callback."""
+    VALID_PROVIDERS = {"google", "github", "discord"}
+    if provider not in VALID_PROVIDERS:
+        # Redirect to a safe default if provider is invalid
+        return RedirectResponse(url="/", status_code=302)
+    gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
+    redirect_params = {
+        "access_token": api_key,
+        "token_type": "Bearer",
+        "expires_in": "2592000",
+        "role": oauth_user.role.value,
+        "user_id": oauth_user.user_id,
+    }
+
+    import urllib.parse
+    query_string = urllib.parse.urlencode(redirect_params)
+    redirect_url = f"{gui_callback_url}?{query_string}"
+
+    return RedirectResponse(url=redirect_url, status_code=302)
+
+
+@router.get("/auth/oauth/{provider}/callback")
+async def oauth_callback(
+    provider: str, code: str, state: str, auth_service: APIAuthService = Depends(get_auth_service)
+) -> LoginResponse:
+    """
+    Handle OAuth callback.
+
+    Exchanges authorization code for tokens and creates/updates user.
+    """
+    try:
+        # Load OAuth configuration
+        provider_config = _load_oauth_config(provider)
         client_id = provider_config["client_id"]
         client_secret = provider_config["client_secret"]
 
-        # Initialize profile variables
-        picture = None
-
-        # Exchange authorization code for access token
-        async with httpx.AsyncClient() as client:
-            if provider == "google":
-                # Exchange code for token
-                token_response = await client.post(
-                    "https://oauth2.googleapis.com/token",
-                    data={
-                        "code": code,
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "redirect_uri": get_oauth_callback_url(provider),
-                        "grant_type": "authorization_code",
-                    },
-                )
-
-                if token_response.status_code != 200:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Failed to exchange code for token: {token_response.text}",
-                    )
-
-                token_data = token_response.json()
-                access_token = token_data["access_token"]
-
-                # Get user info
-                user_response = await client.get(
-                    "https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {access_token}"}
-                )
-
-                if user_response.status_code != 200:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
-
-                user_info = user_response.json()
-                external_id = user_info["id"]
-                email = user_info.get("email")
-                name = user_info.get("name", email)
-                picture = user_info.get("picture")  # Google profile picture URL
-
-            elif provider == "github":
-                # Exchange code for token
-                token_response = await client.post(
-                    "https://github.com/login/oauth/access_token",
-                    headers={"Accept": "application/json"},
-                    data={
-                        "code": code,
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "redirect_uri": os.getenv("OAUTH_CALLBACK_BASE_URL", DEFAULT_OAUTH_BASE_URL)
-                        + OAUTH_CALLBACK_PATH.replace("{provider}", provider),
-                    },
-                )
-
-                if token_response.status_code != 200:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Failed to exchange code for token: {token_response.text}",
-                    )
-
-                token_data = token_response.json()
-                access_token = token_data["access_token"]
-
-                # Get user info
-                user_response = await client.get(
-                    "https://api.github.com/user", headers={"Authorization": f"token {access_token}"}
-                )
-
-                if user_response.status_code != 200:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
-
-                user_info = user_response.json()
-                external_id = str(user_info["id"])
-                email = user_info.get("email")
-                name = user_info.get("name", user_info.get("login"))
-                picture = user_info.get("avatar_url")  # GitHub avatar URL
-
-                # If email is private, fetch from emails endpoint
-                if not email:
-                    emails_response = await client.get(
-                        "https://api.github.com/user/emails", headers={"Authorization": f"token {access_token}"}
-                    )
-                    if emails_response.status_code == 200:
-                        emails = emails_response.json()
-                        for e in emails:
-                            if e.get("primary"):
-                                email = e["email"]
-                                break
-
-            elif provider == "discord":
-                # Exchange code for token
-                token_response = await client.post(
-                    "https://discord.com/api/oauth2/token",
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    data={
-                        "code": code,
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "redirect_uri": get_oauth_callback_url(provider),
-                        "grant_type": "authorization_code",
-                    },
-                )
-
-                if token_response.status_code != 200:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Failed to exchange code for token: {token_response.text}",
-                    )
-
-                token_data = token_response.json()
-                access_token = token_data["access_token"]
-
-                # Get user info
-                user_response = await client.get(
-                    "https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {access_token}"}
-                )
-
-                if user_response.status_code != 200:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
-
-                user_info = user_response.json()
-                external_id = user_info["id"]
-                email = user_info.get("email")
-                name = user_info.get("username", email)
-                # Construct Discord avatar URL if avatar exists
-                avatar_hash = user_info.get("avatar")
-                if avatar_hash:
-                    picture = f"https://cdn.discordapp.com/avatars/{external_id}/{avatar_hash}.png"
-                else:
-                    picture = None
-
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported OAuth provider: {provider}"
-                )
-
-        # Determine role based on email domain
-        # Grant admin rights to @ciris.ai email addresses
-        if email and email.endswith("@ciris.ai"):
-            user_role = UserRole.ADMIN
-            logger.info(f"Granting ADMIN role to @ciris.ai user: {email}")
+        # Handle provider-specific OAuth flow
+        if provider == "google":
+            user_data = await _handle_google_oauth(code, client_id, client_secret)
+        elif provider == "github":
+            user_data = await _handle_github_oauth(code, client_id, client_secret)
+        elif provider == "discord":
+            user_data = await _handle_discord_oauth(code, client_id, client_secret)
         else:
-            user_role = UserRole.OBSERVER  # Default role for non-CIRIS users
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported OAuth provider: {provider}"
+            )
 
-        # Create or update OAuth user
+        # Determine user role and create OAuth user
+        user_role = _determine_user_role(user_data["email"])
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
-            external_id=external_id,
-            email=email,
-            name=name,
+            external_id=user_data["external_id"],
+            email=user_data["email"],
+            name=user_data["name"],
             role=user_role,
         )
 
+        # Store OAuth profile data
+        _store_oauth_profile(auth_service, oauth_user.user_id, user_data["name"], user_data["picture"])
 
-        # Store OAuth profile data if we have it
-        if picture:
-            # Validate the picture URL for security
-            if validate_oauth_picture_url(picture):
-                # Store additional OAuth profile data
-                user = auth_service.get_user(oauth_user.user_id)
-                if user:
-                    user.oauth_name = name
-                    user.oauth_picture = picture
-                    # Store the updated user data
-                    auth_service._users[oauth_user.user_id] = user
-            else:
-                logger.warning(f"Invalid OAuth picture URL rejected for user {oauth_user.user_id}: {picture}")
-
-        # Generate API key for the user with appropriate prefix based on role
-        role_prefix = "ciris_admin" if user_role == UserRole.ADMIN else "ciris_observer"
-        api_key = f"{role_prefix}_{secrets.token_urlsafe(32)}"
-        expires_at = datetime.now(timezone.utc) + timedelta(days=30)
-
-        auth_service.store_api_key(
-            key=api_key,
-            user_id=oauth_user.user_id,
-            role=oauth_user.role,
-            expires_at=expires_at,
-            description=f"OAuth login via {provider}",
-        )
+        # Generate API key and store it
+        api_key = _generate_api_key_and_store(auth_service, oauth_user, provider)
 
         logger.info(f"OAuth user {oauth_user.user_id} logged in successfully via {provider}")
 
-        # Redirect to GUI OAuth callback page with token info
-        # The GUI will handle storing the token and redirecting to dashboard
-        gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
-        redirect_params = {
-            "access_token": api_key,
-            "token_type": "Bearer",
-            "expires_in": "2592000",
-            "role": oauth_user.role.value,
-            "user_id": oauth_user.user_id,
-        }
+        # Build and return redirect response
+        return _build_redirect_response(api_key, oauth_user, provider)
 
-        # Build redirect URL with query parameters
-        import urllib.parse
-
-        query_string = urllib.parse.urlencode(redirect_params)
-        redirect_url = f"{gui_callback_url}?{query_string}"
-
-        return RedirectResponse(url=redirect_url, status_code=302)
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"OAuth callback error: {e}")
         raise HTTPException(

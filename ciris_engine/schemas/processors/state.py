@@ -83,7 +83,11 @@ class StateMetrics(BaseModel):
             current = getattr(self, metric, 0)
             setattr(self, metric, current + value)
         else:
-            self.custom_metrics[metric] = self.custom_metrics.get(metric, 0) + value
+            current = self.custom_metrics.get(metric, 0)
+            if isinstance(current, (int, float)) and isinstance(value, (int, float)):
+                self.custom_metrics[metric] = current + value
+            else:
+                self.custom_metrics[metric] = value
 
 
 class StateConfiguration(BaseModel):

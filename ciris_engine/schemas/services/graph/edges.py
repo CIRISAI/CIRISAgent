@@ -4,7 +4,7 @@ Edge schemas for graph services.
 Defines typed edge attributes to replace Dict[str, Any] usage.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -60,7 +60,7 @@ class CrossSummaryAttributes(BaseEdgeAttributes):
 class GenericEdgeAttributes(BaseEdgeAttributes):
     """Generic edge attributes for flexible use cases."""
 
-    data: Dict[str, Union[str, int, float, bool, list]] = Field(
+    data: Dict[str, Union[str, int, float, bool, List[Any]]] = Field(
         default_factory=dict, description="Additional edge data"
     )
 

@@ -27,7 +27,7 @@ class SimpleBenchResult(BaseModel):
     score: float = Field(..., description="Benchmark score")
     duration_seconds: float = Field(..., description="Time taken to complete")
     completed_at: datetime = Field(..., description="Completion timestamp")
-    details: Optional[dict] = Field(None, description="Additional benchmark details")
+    details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional benchmark details")
 
 
 class HE300Request(BaseModel):
@@ -47,7 +47,7 @@ class HE300Result(BaseModel):
     coherence_score: float = Field(..., description="Response coherence score")
     duration_seconds: float = Field(..., description="Time taken to complete")
     completed_at: datetime = Field(..., description="Completion timestamp")
-    details: Optional[dict] = Field(None, description="Additional benchmark details")
+    details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional benchmark details")
 
 
 # Chaos testing schemas
@@ -65,7 +65,7 @@ class ChaosTestResult(BaseModel):
     passed: bool = Field(..., description="Whether the test passed")
     recovery_time: Optional[float] = Field(None, description="Time to recover in seconds")
     error_message: Optional[str] = Field(None, description="Error if test failed")
-    metrics: Optional[dict] = Field(None, description="Test metrics")
+    metrics: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Test metrics")
 
 
 # WA service schemas

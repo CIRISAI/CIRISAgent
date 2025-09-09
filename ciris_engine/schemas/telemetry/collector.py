@@ -33,7 +33,7 @@ class MetricEntry(BaseModel):
 
     timestamp: str = Field(..., description="ISO timestamp")
     value: float = Field(..., description="Metric value")
-    tags: dict = Field(default_factory=dict, description="Metric tags")
+    tags: Dict[str, str] = Field(default_factory=dict, description="Metric tags")
 
 
 class ProcessorStateSnapshot(BaseModel):
@@ -55,7 +55,7 @@ class SingleStepResult(BaseModel):
     after_state: Optional[ProcessorStateSnapshot] = Field(None, description="State after execution")
     processing_result: Any = Field(None, description="Processing result")
     timestamp: str = Field(..., description="Execution timestamp")
-    summary: Optional[dict] = Field(None, description="Execution summary")
+    summary: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Execution summary")
 
 
 class ProcessingQueueStatus(BaseModel):

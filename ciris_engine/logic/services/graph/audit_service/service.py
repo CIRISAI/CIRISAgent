@@ -34,6 +34,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.audit.hash_chain import AuditHashChain
@@ -274,35 +275,23 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             logger.error(f"Failed to log action {action_type}: {e}")
 
     async def log_event(
-        self, event_type: str, event_data: Union[Dict[Any, Any], AuditEventData], **kwargs: object
+        self, event_type: str, event_data: "EventPayload", **kwargs: object
     ) -> None:
         """Log a general event.
 
         Args:
             event_type: Type of event being logged
-            event_data: Event data as AuditEventData object or dict with matching fields
+            event_data: Event data as EventPayload object
         """
-        # Convert dict to AuditEventData if needed
-        if isinstance(event_data, dict):
-            # Extract required fields with defaults
-            audit_data = AuditEventData(
-                entity_id=str(event_data.get("thought_id", event_data.get("entity_id", "unknown"))),
-                actor=str(event_data.get("handler_name", event_data.get("actor", "system"))),
-                outcome=event_data.get("outcome", "success"),
-                severity=event_data.get("severity", "info"),
-                action=event_data.get("action", event_type),
-                resource=event_data.get("resource", event_type),
-                reason=event_data.get("reason", "event_logged"),
-                metadata=event_data.get("metadata", {}) if "metadata" in event_data else {},
-            )
-        elif isinstance(event_data, AuditEventData):
-            # Already an AuditEventData object
-            audit_data = event_data
-        else:
-            # Fallback for unexpected types
-            audit_data = AuditEventData(  # type: ignore[unreachable]
-                entity_id="unknown",
-                actor="system",
+        # Convert EventPayload to AuditEventData
+        audit_data = AuditEventData(
+            entity_id=str(getattr(event_data, 'user_id', 'unknown')),
+            actor=str(getattr(event_data, 'service_name', 'system')),
+            outcome=str(getattr(event_data, 'result', 'success')),
+            severity="info",
+            action=str(getattr(event_data, 'action', event_type)),
+            resource=str(getattr(event_data, 'service_name', event_type)),
+            reason=str(getattr(event_data, 'error', 'event_logged') or 'event_logged'),
                 outcome="success",
                 severity="info",
                 action=event_type,
@@ -1360,7 +1349,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         limit: int = 100,
-    ) -> List[dict]:
+    ) -> List["AuditLogEntry"]:
         """Query audit events."""
         # Call query_audit_trail directly with parameters
         from ciris_engine.schemas.services.graph.audit import AuditQuery
@@ -1370,23 +1359,33 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         )
         entries = await self.query_audit_trail(query)
 
-        # Convert to dict format expected by protocol
+        # Convert to AuditLogEntry format
+        from ciris_engine.schemas.audit.core import AuditLogEntry, EventPayload
         result = []
         for entry in entries:
-            # AuditEntry format (query_audit_trail returns List[AuditEntry])
-            result.append(
-                {
-                    "event_id": entry.id,
-                    "event_type": entry.action,
-                    "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                    "user_id": entry.actor,  # Using actor as user_id
-                    "data": {"context": entry.context.model_dump()},
-                    "metadata": {"signature": entry.signature} if entry.signature else {},
-                }
+            # Create EventPayload from entry context
+            event_payload = EventPayload(
+                action=entry.action,
+                user_id=entry.actor,
+                service_name=entry.resource or "audit_service"
             )
+            
+            # Create AuditLogEntry
+            log_entry = AuditLogEntry(
+                event_id=entry.id,
+                event_timestamp=entry.timestamp,
+                event_type=entry.action,
+                originator_id=entry.actor,
+                target_id=entry.entity_id,
+                event_summary=f"{entry.action} by {entry.actor}",
+                event_payload=event_payload,
+                thought_id=entry.entity_id if entry.entity_id.startswith("thought") else None,
+                entry_hash=entry.signature
+            )
+            result.append(log_entry)
         return result
 
-    async def get_event_by_id(self, event_id: str) -> Optional[dict]:
+    async def get_event_by_id(self, event_id: str) -> Optional["AuditLogEntry"]:
         """Get specific audit event by ID."""
         # Query for the specific event
 

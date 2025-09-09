@@ -14,25 +14,15 @@ class ComprehensiveAPITestModule:
     def get_extended_system_tests() -> List[QATestCase]:
         """Get extended system management tests."""
         return [
-            # Processor state tests
+            # Processor state tests  
             QATestCase(
-                name="Get processor state",
+                name="Get processor states",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/processor/state",
+                endpoint="/v1/system/processors",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting current processor cognitive state",
-            ),
-            QATestCase(
-                name="Set processor state",
-                module=QAModule.SYSTEM,
-                endpoint="/v1/system/processor/state",
-                method="POST",
-                payload={"state": "WORK"},
-                expected_status=200,
-                requires_auth=True,
-                description="Test setting processor cognitive state",
+                description="Test getting available processor cognitive states",
             ),
             # Service management
             QATestCase(
@@ -54,22 +44,13 @@ class ComprehensiveAPITestModule:
                 requires_auth=True,
                 description="Test restarting a specific service",
             ),
-            # Circuit breaker management
-            QATestCase(
-                name="Get circuit breakers",
-                module=QAModule.SYSTEM,
-                endpoint="/v1/system/circuit-breakers",
-                method="GET",
-                expected_status=200,
-                requires_auth=True,
-                description="Test getting circuit breaker states",
-            ),
+            # Circuit breaker management (actual endpoint from system_extensions.py)
             QATestCase(
                 name="Reset circuit breaker",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/circuit-breakers/reset",
+                endpoint="/v1/system/services/circuit-breakers/reset",
                 method="POST",
-                payload={"service_name": "memory"},
+                payload={"provider_name": "memory"},
                 expected_status=200,
                 requires_auth=True,
                 description="Test resetting a circuit breaker",
@@ -78,29 +59,21 @@ class ComprehensiveAPITestModule:
             QATestCase(
                 name="Get queue details",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/queue/details",
+                endpoint="/v1/system/runtime/queue",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting detailed queue information",
-            ),
-            QATestCase(
-                name="Clear queue",
-                module=QAModule.SYSTEM,
-                endpoint="/v1/system/queue/clear",
-                method="POST",
-                expected_status=200,
-                requires_auth=True,
-                description="Test clearing the processing queue",
+                description="Test getting processing queue status",
             ),
             QATestCase(
                 name="Single step processing",
                 module=QAModule.SYSTEM,
-                endpoint="/v1/system/queue/step",
+                endpoint="/v1/system/runtime/step",
                 method="POST",
+                payload={"step_type": "single"},
                 expected_status=200,
                 requires_auth=True,
-                description="Test single-step queue processing",
+                description="Test single step processing execution",
             ),
         ]
 
@@ -109,50 +82,50 @@ class ComprehensiveAPITestModule:
         """Get extended telemetry tests."""
         return [
             QATestCase(
-                name="Get service metrics",
+                name="Get telemetry overview",
                 module=QAModule.TELEMETRY,
-                endpoint="/v1/telemetry/services/{service_name}",
+                endpoint="/v1/telemetry/overview",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting metrics for specific service",
+                description="Test getting telemetry system overview",
             ),
             QATestCase(
-                name="Get resource alerts",
+                name="Get resource telemetry",
                 module=QAModule.TELEMETRY,
-                endpoint="/v1/telemetry/alerts",
+                endpoint="/v1/telemetry/resources",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting resource usage alerts",
+                description="Test getting resource telemetry data",
             ),
             QATestCase(
-                name="Get performance metrics",
+                name="Get metrics",
                 module=QAModule.TELEMETRY,
-                endpoint="/v1/telemetry/performance",
+                endpoint="/v1/telemetry/metrics",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting performance metrics",
+                description="Test getting system metrics",
             ),
             QATestCase(
-                name="Get error rates",
+                name="Get traces",
                 module=QAModule.TELEMETRY,
-                endpoint="/v1/telemetry/errors",
+                endpoint="/v1/telemetry/traces",
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Test getting error rate metrics",
+                description="Test getting trace data",
             ),
             QATestCase(
-                name="Export metrics",
+                name="Query telemetry data",
                 module=QAModule.TELEMETRY,
-                endpoint="/v1/telemetry/export",
+                endpoint="/v1/telemetry/query",
                 method="POST",
-                payload={"format": "prometheus", "services": ["all"]},
+                payload={"metric": "cpu_usage", "time_range": "1h"},
                 expected_status=200,
                 requires_auth=True,
-                description="Test exporting metrics in Prometheus format",
+                description="Test querying telemetry data",
             ),
         ]
 

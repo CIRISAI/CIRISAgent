@@ -400,6 +400,173 @@ async def _get_system_overview(request: Request) -> SystemOverview:
 # Endpoints
 
 
+async def _export_otlp_metrics(telemetry_service):
+    """Export metrics in OTLP format."""
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
+
+    # Get aggregated telemetry
+    aggregated = await telemetry_service.get_aggregated_telemetry()
+
+    # Convert to dict for OTLP conversion
+    telemetry_dict = {
+        "system_healthy": aggregated.system_healthy,
+        "services_online": aggregated.services_online,
+        "services_total": aggregated.services_total,
+        "overall_error_rate": aggregated.overall_error_rate,
+        "overall_uptime_seconds": aggregated.overall_uptime_seconds,
+        "total_errors": aggregated.total_errors,
+        "total_requests": aggregated.total_requests,
+        "services": aggregated.services,
+    }
+
+    # Add covenant metrics if available
+    if hasattr(aggregated, "covenant_metrics"):
+        telemetry_dict["covenant_metrics"] = aggregated.covenant_metrics
+
+    return convert_to_otlp_json(telemetry_dict)
+
+
+def _build_trace_data_from_correlation(correlation):
+    """Build trace data dictionary from correlation object."""
+    trace_data = {
+        "trace_id": (
+            correlation.trace_context.trace_id
+            if correlation.trace_context
+            else correlation.correlation_id
+        ),
+        "span_id": (
+            correlation.trace_context.span_id if correlation.trace_context else str(uuid.uuid4())
+        ),
+        "parent_span_id": (
+            correlation.trace_context.parent_span_id if correlation.trace_context else None
+        ),
+        "timestamp": (
+            correlation.timestamp.isoformat()
+            if correlation.timestamp
+            else datetime.now(timezone.utc).isoformat()
+        ),
+        "operation": correlation.action_type or "unknown",
+        "service": correlation.service_type,
+        "handler": correlation.handler_name,
+        "status": (
+            correlation.status.value
+            if hasattr(correlation.status, "value")
+            else str(correlation.status)
+        ),
+    }
+
+    # Add task/thought linkage
+    if correlation.request_data:
+        if hasattr(correlation.request_data, "task_id") and correlation.request_data.task_id:
+            trace_data["task_id"] = correlation.request_data.task_id
+        if hasattr(correlation.request_data, "thought_id") and correlation.request_data.thought_id:
+            trace_data["thought_id"] = correlation.request_data.thought_id
+
+    # Add performance data
+    if correlation.response_data:
+        if hasattr(correlation.response_data, "execution_time_ms"):
+            trace_data["duration_ms"] = correlation.response_data.execution_time_ms
+        if hasattr(correlation.response_data, "success"):
+            trace_data["success"] = correlation.response_data.success
+        if hasattr(correlation.response_data, "error_message"):
+            trace_data["error"] = correlation.response_data.error_message
+
+    # Add span attributes
+    if correlation.trace_context:
+        trace_data["span_name"] = (
+            correlation.trace_context.span_name
+            if hasattr(correlation.trace_context, "span_name")
+            else correlation.action_type
+        )
+        trace_data["span_kind"] = (
+            correlation.trace_context.span_kind
+            if hasattr(correlation.trace_context, "span_kind")
+            else "internal"
+        )
+
+    return trace_data
+
+
+async def _export_otlp_traces(visibility_service, limit):
+    """Export traces in OTLP format."""
+    if not visibility_service:
+        raise HTTPException(status_code=503, detail="Visibility service not available")
+
+    traces = []
+    try:
+        # Get service correlations (trace spans)
+        correlations = await visibility_service.get_recent_traces(limit=limit)
+
+        for correlation in correlations:
+            trace_data = _build_trace_data_from_correlation(correlation)
+            traces.append(trace_data)
+
+    except Exception as e:
+        print(f"ERROR in get_otlp_telemetry traces: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+
+    return convert_traces_to_otlp_json(traces)
+
+
+def _build_log_data_from_entry(log_entry):
+    """Build log data dictionary from log entry."""
+    log_data = {
+        "timestamp": log_entry.timestamp.isoformat(),
+        "level": log_entry.level,
+        "message": log_entry.message,
+        "service": log_entry.service,
+    }
+
+    # Add context data if available
+    if log_entry.context:
+        if log_entry.context.correlation_id:
+            log_data["correlation_id"] = log_entry.context.correlation_id
+        if log_entry.context.trace_id:
+            log_data["trace_id"] = log_entry.context.trace_id
+        if log_entry.context.user_id:
+            log_data["user_id"] = log_entry.context.user_id
+        if hasattr(log_entry.context, "entity_id") and log_entry.context.entity_id:
+            log_data["entity_id"] = log_entry.context.entity_id
+
+    # Add trace ID at top level if available
+    if log_entry.trace_id:
+        log_data["trace_id"] = log_entry.trace_id
+
+    return log_data
+
+
+async def _export_otlp_logs(limit, start_time, end_time):
+    """Export logs in OTLP format."""
+    logs = []
+    try:
+        from .telemetry_logs_reader import log_reader
+
+        # Read actual log files including incidents
+        file_logs = log_reader.read_logs(
+            level=None,  # Get all levels
+            service=None,  # Get all services
+            limit=limit,
+            start_time=start_time if start_time else None,  # Don't default to 1 hour ago
+            end_time=end_time if end_time else None,  # Don't default to now
+            include_incidents=True,  # Include incident logs (WARNING/ERROR/CRITICAL)
+        )
+
+        # Convert LogEntry objects to dict format for OTLP
+        for log_entry in file_logs:
+            log_data = _build_log_data_from_entry(log_entry)
+            logs.append(log_data)
+
+    except ImportError:
+        # Log reader module not available
+        logger.warning("Log reader not available for OTLP logs export")
+    except Exception as e:
+        logger.warning(f"Failed to read log files for OTLP: {e}")
+
+    return convert_logs_to_otlp_json(logs)
+
+
 @router.get("/otlp/{signal}", response_model=None)
 async def get_otlp_telemetry(
     signal: str,
@@ -429,163 +596,11 @@ async def get_otlp_telemetry(
 
     try:
         if signal == "metrics":
-            # Get metrics from unified telemetry
-            telemetry_service = request.app.state.telemetry_service
-            if not telemetry_service:
-                raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
-
-            # Get aggregated telemetry
-            aggregated = await telemetry_service.get_aggregated_telemetry()
-
-            # Convert to dict for OTLP conversion
-            telemetry_dict = {
-                "system_healthy": aggregated.system_healthy,
-                "services_online": aggregated.services_online,
-                "services_total": aggregated.services_total,
-                "overall_error_rate": aggregated.overall_error_rate,
-                "overall_uptime_seconds": aggregated.overall_uptime_seconds,
-                "total_errors": aggregated.total_errors,
-                "total_requests": aggregated.total_requests,
-                "services": aggregated.services,
-            }
-
-            # Add covenant metrics if available
-            if hasattr(aggregated, "covenant_metrics"):
-                telemetry_dict["covenant_metrics"] = aggregated.covenant_metrics
-
-            return convert_to_otlp_json(telemetry_dict)
-
+            return await _export_otlp_metrics(request.app.state.telemetry_service)
         elif signal == "traces":
-            # Get traces from visibility service
-            visibility_service = request.app.state.visibility_service
-            if not visibility_service:
-                raise HTTPException(status_code=503, detail="Visibility service not available")
-
-            # Get recent trace correlations
-            traces = []
-            try:
-                # Get service correlations (trace spans)
-                correlations = await visibility_service.get_recent_traces(limit=limit)
-
-                for correlation in correlations:
-                    # Build trace data from correlation
-                    trace_data = {
-                        "trace_id": (
-                            correlation.trace_context.trace_id
-                            if correlation.trace_context
-                            else correlation.correlation_id
-                        ),
-                        "span_id": (
-                            correlation.trace_context.span_id if correlation.trace_context else str(uuid.uuid4())
-                        ),
-                        "parent_span_id": (
-                            correlation.trace_context.parent_span_id if correlation.trace_context else None
-                        ),
-                        "timestamp": (
-                            correlation.timestamp.isoformat()
-                            if correlation.timestamp
-                            else datetime.now(timezone.utc).isoformat()
-                        ),
-                        "operation": correlation.action_type or "unknown",
-                        "service": correlation.service_type,
-                        "handler": correlation.handler_name,
-                        "status": (
-                            correlation.status.value
-                            if hasattr(correlation.status, "value")
-                            else str(correlation.status)
-                        ),
-                    }
-
-                    # Add task/thought linkage
-                    if correlation.request_data:
-                        if hasattr(correlation.request_data, "task_id") and correlation.request_data.task_id:
-                            trace_data["task_id"] = correlation.request_data.task_id
-                        if hasattr(correlation.request_data, "thought_id") and correlation.request_data.thought_id:
-                            trace_data["thought_id"] = correlation.request_data.thought_id
-
-                    # Add performance data
-                    if correlation.response_data:
-                        if hasattr(correlation.response_data, "execution_time_ms"):
-                            trace_data["duration_ms"] = correlation.response_data.execution_time_ms
-                        if hasattr(correlation.response_data, "success"):
-                            trace_data["success"] = correlation.response_data.success
-                        if hasattr(correlation.response_data, "error_message"):
-                            trace_data["error"] = correlation.response_data.error_message
-
-                    # Add span attributes
-                    if correlation.trace_context:
-                        trace_data["span_name"] = (
-                            correlation.trace_context.span_name
-                            if hasattr(correlation.trace_context, "span_name")
-                            else correlation.action_type
-                        )
-                        trace_data["span_kind"] = (
-                            correlation.trace_context.span_kind
-                            if hasattr(correlation.trace_context, "span_kind")
-                            else "internal"
-                        )
-
-                    traces.append(trace_data)
-
-            except Exception as e:
-                # logger.warning(f"Failed to get traces: {e}")
-                print(f"ERROR in get_otlp_telemetry traces: {e}", file=sys.stderr)
-                import traceback
-
-                traceback.print_exc()
-
-            return convert_traces_to_otlp_json(traces)
-
+            return await _export_otlp_traces(request.app.state.visibility_service, limit)
         elif signal == "logs":
-            # Get actual log events from log files (not audit entries)
-            # Events are logs, audit entries are not logs
-            logs = []
-            try:
-                from .telemetry_logs_reader import log_reader
-
-                # Read actual log files including incidents
-                file_logs = log_reader.read_logs(
-                    level=None,  # Get all levels
-                    service=None,  # Get all services
-                    limit=limit,
-                    start_time=start_time if start_time else None,  # Don't default to 1 hour ago
-                    end_time=end_time if end_time else None,  # Don't default to now
-                    include_incidents=True,  # Include incident logs (WARNING/ERROR/CRITICAL)
-                )
-
-                # Convert LogEntry objects to dict format for OTLP
-                for log_entry in file_logs:
-                    log_data = {
-                        "timestamp": log_entry.timestamp.isoformat(),
-                        "level": log_entry.level,
-                        "message": log_entry.message,
-                        "service": log_entry.service,
-                    }
-
-                    # Add context data if available
-                    if log_entry.context:
-                        if log_entry.context.correlation_id:
-                            log_data["correlation_id"] = log_entry.context.correlation_id
-                        if log_entry.context.trace_id:
-                            log_data["trace_id"] = log_entry.context.trace_id
-                        if log_entry.context.user_id:
-                            log_data["user_id"] = log_entry.context.user_id
-                        if hasattr(log_entry.context, "entity_id") and log_entry.context.entity_id:
-                            log_data["entity_id"] = log_entry.context.entity_id
-
-                    # Add trace ID at top level if available
-                    if log_entry.trace_id:
-                        log_data["trace_id"] = log_entry.trace_id
-
-                    logs.append(log_data)
-
-            except ImportError:
-                # Log reader module not available
-                logger.warning("Log reader not available for OTLP logs export")
-            except Exception as e:
-                logger.warning(f"Failed to read log files for OTLP: {e}")
-
-            return convert_logs_to_otlp_json(logs)
+            return await _export_otlp_logs(limit, start_time, end_time)
 
     except HTTPException:
         raise
@@ -755,6 +770,142 @@ async def get_resource_telemetry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_metric_unit(metric_name: str) -> Optional[str]:
+    """Determine unit from metric name."""
+    if "tokens" in metric_name:
+        return "tokens"
+    elif "time" in metric_name or "latency" in metric_name or "ms" in metric_name:
+        return "ms"
+    elif "percent" in metric_name or "rate" in metric_name or "cpu" in metric_name:
+        return "%"
+    elif "mb" in metric_name or "memory" in metric_name:
+        return "MB"
+    elif "cents" in metric_name:
+        return "cents"
+    elif "grams" in metric_name:
+        return "g"
+    elif "kwh" in metric_name:
+        return "kWh"
+    return "count"
+
+
+def _calculate_trend(values: List[float]) -> str:
+    """Calculate trend from a list of values."""
+    if len(values) <= 1:
+        return "stable"
+        
+    recent_avg = sum(values[-5:]) / len(values[-5:])
+    older_avg = (
+        sum(values[:-5]) / len(values[:-5])
+        if len(values) > 5
+        else values[0]
+    )
+    
+    if recent_avg > older_avg * 1.1:
+        return "up"
+    elif recent_avg < older_avg * 0.9:
+        return "down"
+    return "stable"
+
+
+async def _process_metric_data(telemetry_service, metric_name: str, now: datetime) -> Optional[DetailedMetric]:
+    """Process metric data for a single metric name."""
+    if not hasattr(telemetry_service, "query_metrics"):
+        return None
+        
+    day_ago = now - timedelta(hours=24)
+    hour_ago = now - timedelta(hours=1)
+
+    # Get hourly data
+    hourly_data = await telemetry_service.query_metrics(
+        metric_name=metric_name, start_time=hour_ago, end_time=now
+    )
+
+    # Get daily data
+    daily_data = await telemetry_service.query_metrics(
+        metric_name=metric_name, start_time=day_ago, end_time=now
+    )
+
+    if not (hourly_data or daily_data):
+        return None
+        
+    # Calculate averages and trends
+    hourly_values = [dp.get("value", 0.0) for dp in hourly_data] if hourly_data else [0.0]
+    daily_values = [dp.get("value", 0.0) for dp in daily_data] if daily_data else [0.0]
+
+    hourly_avg = sum(hourly_values) / len(hourly_values) if hourly_values else 0.0
+    daily_avg = sum(daily_values) / len(daily_values) if daily_values else 0.0
+    current_value = hourly_values[-1] if hourly_values else 0.0
+
+    # Determine trend
+    trend = _calculate_trend(hourly_values)
+    unit = _get_metric_unit(metric_name)
+
+    return DetailedMetric(
+        name=metric_name,
+        current_value=current_value,
+        unit=unit,
+        trend=trend,
+        hourly_average=hourly_avg,
+        daily_average=daily_avg,
+        by_service=[],  # Could aggregate by service if tags available
+        recent_data=[
+            MetricData(
+                timestamp=dp.get("timestamp", now),
+                value=dp.get("value", 0.0),
+                tags=MetricTags(**dp.get("tags", {})),
+            )
+            for dp in (hourly_data[-10:] if hourly_data else [])
+        ],
+    )
+
+
+def _get_legacy_metrics(telemetry_service) -> List[DetailedMetric]:
+    """Get metrics from legacy get_metrics method."""
+    metrics = []
+    if not (hasattr(telemetry_service, "get_metrics") and not hasattr(telemetry_service, "query_metrics")):
+        return metrics
+        
+    legacy_metrics = telemetry_service.get_metrics()
+    if not legacy_metrics:
+        return metrics
+        
+    for metric_name, value in legacy_metrics.items():
+        unit = _get_metric_unit(metric_name)
+        metrics.append(
+            DetailedMetric(
+                name=metric_name,
+                current_value=float(value),
+                unit=unit,
+                trend="stable",  # Default trend when no history
+                hourly_average=float(value),
+                daily_average=float(value),
+                by_service=[],
+                recent_data=[],
+            )
+        )
+    return metrics
+
+
+def _calculate_metrics_summary(metrics: List[DetailedMetric]) -> MetricAggregate:
+    """Calculate summary statistics across all metrics."""
+    all_values = []
+    for metric in metrics:
+        if metric.recent_data:
+            all_values.extend([dp.value for dp in metric.recent_data])
+
+    if all_values:
+        return MetricAggregate(
+            min=min(all_values),
+            max=max(all_values),
+            avg=sum(all_values) / len(all_values),
+            sum=sum(all_values),
+            count=len(all_values),
+        )
+    else:
+        return MetricAggregate(min=0.0, max=0.0, avg=0.0, sum=0.0, count=0)
+
+
 @router.get("/metrics", response_model=SuccessResponse[MetricsResponse])
 async def get_detailed_metrics(
     request: Request, auth: AuthContext = Depends(require_observer)
@@ -791,87 +942,27 @@ async def get_detailed_metrics(
         metrics = []
         now = datetime.now(timezone.utc)
 
+        # Process metrics with query_metrics method
         for metric_name in metric_names:
-            if hasattr(telemetry_service, "query_metrics"):
-                # Get last 24 hours of data
-                day_ago = now - timedelta(hours=24)
-                hour_ago = now - timedelta(hours=1)
+            metric = await _process_metric_data(telemetry_service, metric_name, now)
+            if metric:
+                metrics.append(metric)
 
-                # Get hourly data
-                hourly_data = await telemetry_service.query_metrics(
-                    metric_name=metric_name, start_time=hour_ago, end_time=now
-                )
+        # Fallback to legacy get_metrics if needed
+        if not metrics:
+            metrics = _get_legacy_metrics(telemetry_service)
 
-                # Get daily data
-                daily_data = await telemetry_service.query_metrics(
-                    metric_name=metric_name, start_time=day_ago, end_time=now
-                )
+        # Calculate summary statistics
+        summary = _calculate_metrics_summary(metrics)
 
-                if hourly_data or daily_data:
-                    # Calculate averages and trends
-                    hourly_values = [dp.get("value", 0.0) for dp in hourly_data] if hourly_data else [0.0]
-                    daily_values = [dp.get("value", 0.0) for dp in daily_data] if daily_data else [0.0]
+        response = MetricsResponse(metrics=metrics, summary=summary, period="24h", timestamp=now)
 
-                    hourly_avg = sum(hourly_values) / len(hourly_values) if hourly_values else 0.0
-                    daily_avg = sum(daily_values) / len(daily_values) if daily_values else 0.0
-                    current_value = hourly_values[-1] if hourly_values else 0.0
-
-                    # Determine trend
-                    trend = "stable"
-                    if len(hourly_values) > 1:
-                        recent_avg = sum(hourly_values[-5:]) / len(hourly_values[-5:])
-                        older_avg = (
-                            sum(hourly_values[:-5]) / len(hourly_values[:-5])
-                            if len(hourly_values) > 5
-                            else hourly_values[0]
-                        )
-                        if recent_avg > older_avg * 1.1:
-                            trend = "up"
-                        elif recent_avg < older_avg * 0.9:
-                            trend = "down"
-
-                    # Get unit from metric name
-                    unit = None
-                    if "tokens" in metric_name:
-                        unit = "tokens"
-                    elif "time" in metric_name or "latency" in metric_name:
-                        unit = "ms"
-                    elif "percent" in metric_name or "rate" in metric_name:
-                        unit = "%"
-
-                    metric = DetailedMetric(
-                        name=metric_name,
-                        current_value=current_value,
-                        unit=unit,
-                        trend=trend,
-                        hourly_average=hourly_avg,
-                        daily_average=daily_avg,
-                        by_service=[],  # Could aggregate by service if tags available
-                        recent_data=[
-                            MetricData(
-                                timestamp=dp.get("timestamp", now),
-                                value=dp.get("value", 0.0),
-                                tags=MetricTags(**dp.get("tags", {})),
-                            )
-                            for dp in (hourly_data[-10:] if hourly_data else [])
-                        ],
-                    )
-                    metrics.append(metric)
-
-        # If query_metrics is not available, fall back to get_metrics
-        if not hasattr(telemetry_service, "query_metrics") and hasattr(telemetry_service, "get_metrics"):
-            # Get metrics from the legacy get_metrics method
-            legacy_metrics = telemetry_service.get_metrics()
-            if legacy_metrics:
-                for metric_name, value in legacy_metrics.items():
-                    # Determine unit from metric name
-                    unit = "count"
-                    if "time" in metric_name or "ms" in metric_name:
-                        unit = "ms"
-                    elif "mb" in metric_name or "memory" in metric_name:
-                        unit = "MB"
-                    elif "percent" in metric_name or "cpu" in metric_name:
-                        unit = "%"
+        return SuccessResponse(
+            data=response,
+            metadata=ResponseMetadata(
+                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
+            ),
+        )
                     elif "bytes" in metric_name:
                         unit = "bytes"
                     elif "tokens" in metric_name:
@@ -926,6 +1017,204 @@ async def get_detailed_metrics(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _get_trace_from_task(task, visibility_service):
+    """Extract a reasoning trace from a task via visibility service."""
+    if not hasattr(visibility_service, "get_reasoning_trace"):
+        return None
+        
+    trace = await visibility_service.get_reasoning_trace(task.task_id)
+    if not trace:
+        return None
+        
+    return ReasoningTraceData(
+        trace_id=f"trace_{task.task_id}",
+        task_id=task.task_id,
+        task_description=task.description,
+        start_time=(
+            datetime.fromisoformat(task.created_at)
+            if isinstance(task.created_at, str)
+            else task.created_at
+        ),
+        duration_ms=0,  # TaskOutcome doesn't have completion timestamp
+        thought_count=len(trace.thought_steps),
+        decision_count=len(trace.decisions) if hasattr(trace, "decisions") else 0,
+        reasoning_depth=len(trace.thought_steps) if hasattr(trace, "thought_steps") else 0,
+        thoughts=[
+            APIResponseThoughtStep(
+                step=i,
+                content=thought.content,
+                timestamp=thought.timestamp,
+                depth=thought.depth,
+                action=getattr(thought, "action", None),
+                confidence=getattr(thought, "confidence", None),
+            )
+            for i, thought in enumerate(trace.thought_steps)
+        ],
+        outcome=trace.outcome if hasattr(trace, "outcome") else None,
+    )
+
+
+async def _get_traces_from_task_history(visibility_service, limit):
+    """Get traces from task history via visibility service."""
+    traces = []
+    if not hasattr(visibility_service, "get_task_history"):
+        return traces
+        
+    task_history = await visibility_service.get_task_history(limit=limit)
+    
+    for task in task_history:
+        trace_data = await _get_trace_from_task(task, visibility_service)
+        if trace_data:
+            traces.append(trace_data)
+            
+    return traces
+
+
+async def _get_current_reasoning_trace(visibility_service):
+    """Get current reasoning trace via visibility service."""
+    if not hasattr(visibility_service, "get_current_reasoning"):
+        return None
+        
+    current = await visibility_service.get_current_reasoning()
+    if not current:
+        return None
+        
+    return ReasoningTraceData(
+        trace_id="trace_current",
+        task_id=current.get("task_id"),
+        task_description=current.get("task_description"),
+        start_time=datetime.now(timezone.utc),
+        duration_ms=0,
+        thought_count=len(current.get("thoughts", [])),
+        decision_count=0,
+        reasoning_depth=current.get("depth", 0),
+        thoughts=[
+            _convert_thought_to_api_response(i, t)
+            for i, t in enumerate(current.get("thoughts", []))
+        ],
+        outcome=None,
+    )
+
+
+def _convert_thought_to_api_response(step_index, thought_data):
+    """Convert thought data to APIResponseThoughtStep."""
+    return APIResponseThoughtStep(
+        step=step_index,
+        content=(
+            thought_data.thought.content
+            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "content")
+            else thought_data.get("content", "") if isinstance(thought_data, dict) else str(thought_data)
+        ),
+        timestamp=(
+            thought_data.thought.timestamp
+            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "timestamp")
+            else (
+                datetime.fromisoformat(
+                    thought_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+                )
+                if isinstance(thought_data, dict)
+                else datetime.now(timezone.utc)
+            )
+        ),
+        depth=(
+            thought_data.thought.depth
+            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "depth")
+            else thought_data.get("depth", 0) if isinstance(thought_data, dict) else 0
+        ),
+        action=(
+            thought_data.thought.action
+            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "action")
+            else thought_data.get("action") if isinstance(thought_data, dict) else None
+        ),
+        confidence=(
+            thought_data.thought.confidence
+            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "confidence")
+            else thought_data.get("confidence") if isinstance(thought_data, dict) else None
+        ),
+    )
+
+
+async def _get_traces_from_visibility_service(visibility_service, limit):
+    """Get reasoning traces from visibility service."""
+    traces = await _get_traces_from_task_history(visibility_service, limit)
+    
+    # If no task history, try current reasoning
+    if not traces:
+        current_trace = await _get_current_reasoning_trace(visibility_service)
+        if current_trace:
+            traces.append(current_trace)
+            
+    return traces
+
+
+def _parse_timestamp(timestamp_value):
+    """Parse timestamp from various formats."""
+    if isinstance(timestamp_value, str):
+        return datetime.fromisoformat(timestamp_value)
+    elif isinstance(timestamp_value, datetime):
+        return timestamp_value
+    else:
+        return datetime.now(timezone.utc)
+
+
+async def _get_traces_from_audit_service(audit_service, start_time, end_time, limit):
+    """Get reasoning traces from audit service as fallback."""
+    # Query audit entries related to reasoning
+    entries = await audit_service.query_events(
+        event_type="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
+    )
+
+    # Group by correlation ID or time window
+    trace_groups = defaultdict(list)
+    for entry in entries:
+        context = entry.get("data", {}).get("context", {})
+        timestamp = _parse_timestamp(entry.get("timestamp"))
+        trace_key = context.get("task_id", timestamp.strftime("%Y%m%d%H%M"))
+        trace_groups[trace_key].append(entry)
+
+    traces = []
+    for trace_id, entries in list(trace_groups.items())[:limit]:
+        if entries:
+            trace_data = _build_trace_from_audit_entries(trace_id, entries)
+            traces.append(trace_data)
+            
+    return traces
+
+
+def _build_trace_from_audit_entries(trace_id, entries):
+    """Build a ReasoningTraceData from audit entries."""
+    # Sort entries by timestamp
+    entries.sort(key=lambda e: _parse_timestamp(e.get("timestamp")))
+    
+    start_timestamp = _parse_timestamp(entries[0].get("timestamp"))
+    end_timestamp = _parse_timestamp(entries[-1].get("timestamp"))
+    
+    return ReasoningTraceData(
+        trace_id=f"trace_{trace_id}",
+        task_id=trace_id if trace_id != start_timestamp.strftime("%Y%m%d%H%M") else None,
+        task_description=None,
+        start_time=start_timestamp,
+        duration_ms=(end_timestamp - start_timestamp).total_seconds() * 1000,
+        thought_count=len(entries),
+        decision_count=sum(1 for e in entries if "decision" in e.get("event_type", "").lower()),
+        reasoning_depth=(
+            max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0
+        ),
+        thoughts=[
+            APIResponseThoughtStep(
+                step=i,
+                content=(e.get("data", {}).get("context", {}).get("thought", e.get("event_type", ""))),
+                timestamp=_parse_timestamp(e.get("timestamp")),
+                depth=(e.get("data", {}).get("context", {}).get("depth", 0)),
+                action=(e.get("data", {}).get("context", {}).get("action")),
+                confidence=(e.get("data", {}).get("context", {}).get("confidence")),
+            )
+            for i, e in enumerate(entries)
+        ],
+        outcome=None,
+    )
+
+
 @router.get("/traces", response_model=SuccessResponse[TracesResponse])
 async def get_reasoning_traces(
     request: Request,
@@ -951,176 +1240,17 @@ async def get_reasoning_traces(
     traces = []
 
     # Try to get from visibility service first
-    if visibility_service:
-        try:
-            # Get recent task history
-            if hasattr(visibility_service, "get_task_history"):
-                task_history = await visibility_service.get_task_history(limit=limit)
-
-                for task in task_history:
-                    # Get reasoning trace for each task
-                    if hasattr(visibility_service, "get_reasoning_trace"):
-                        trace = await visibility_service.get_reasoning_trace(task.task_id)
-                        if trace:
-                            trace_data = ReasoningTraceData(
-                                trace_id=f"trace_{task.task_id}",
-                                task_id=task.task_id,
-                                task_description=task.description,
-                                start_time=(
-                                    datetime.fromisoformat(task.created_at)
-                                    if isinstance(task.created_at, str)
-                                    else task.created_at
-                                ),
-                                duration_ms=0,  # TaskOutcome doesn't have completion timestamp
-                                thought_count=len(trace.thought_steps),
-                                decision_count=len(trace.decisions) if hasattr(trace, "decisions") else 0,
-                                reasoning_depth=len(trace.thought_steps) if hasattr(trace, "thought_steps") else 0,
-                                thoughts=[
-                                    APIResponseThoughtStep(
-                                        step=i,
-                                        content=thought.content,
-                                        timestamp=thought.timestamp,
-                                        depth=thought.depth,
-                                        action=getattr(thought, "action", None),
-                                        confidence=getattr(thought, "confidence", None),
-                                    )
-                                    for i, thought in enumerate(trace.thought_steps)
-                                ],
-                                outcome=trace.outcome if hasattr(trace, "outcome") else None,
-                            )
-                            traces.append(trace_data)
-
-            # If no task history, try current reasoning
-            if not traces and hasattr(visibility_service, "get_current_reasoning"):
-                current = await visibility_service.get_current_reasoning()
-                if current:
-                    trace_data = ReasoningTraceData(
-                        trace_id="trace_current",
-                        task_id=current.get("task_id"),
-                        task_description=current.get("task_description"),
-                        start_time=datetime.now(timezone.utc),
-                        duration_ms=0,
-                        thought_count=len(current.get("thoughts", [])),
-                        decision_count=0,
-                        reasoning_depth=current.get("depth", 0),
-                        thoughts=[
-                            APIResponseThoughtStep(
-                                step=i,
-                                content=(
-                                    t.thought.content
-                                    if hasattr(t, "thought") and hasattr(t.thought, "content")
-                                    else t.get("content", "") if isinstance(t, dict) else str(t)
-                                ),
-                                timestamp=(
-                                    t.thought.timestamp
-                                    if hasattr(t, "thought") and hasattr(t.thought, "timestamp")
-                                    else (
-                                        datetime.fromisoformat(
-                                            t.get("timestamp", datetime.now(timezone.utc).isoformat())
-                                        )
-                                        if isinstance(t, dict)
-                                        else datetime.now(timezone.utc)
-                                    )
-                                ),
-                                depth=(
-                                    t.thought.depth
-                                    if hasattr(t, "thought") and hasattr(t.thought, "depth")
-                                    else t.get("depth", 0) if isinstance(t, dict) else 0
-                                ),
-                                action=(
-                                    t.thought.action
-                                    if hasattr(t, "thought") and hasattr(t.thought, "action")
-                                    else t.get("action") if isinstance(t, dict) else None
-                                ),
-                                confidence=(
-                                    t.thought.confidence
-                                    if hasattr(t, "thought") and hasattr(t.thought, "confidence")
-                                    else t.get("confidence") if isinstance(t, dict) else None
-                                ),
-                            )
-                            for i, t in enumerate(current.get("thoughts", []))
-                        ],
-                        outcome=None,
-                    )
-                    traces.append(trace_data)
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for reasoning traces from visibility service: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+    try:
+        traces = await _get_traces_from_visibility_service(visibility_service, limit)
+    except Exception as e:
+        logger.warning(
+            f"Telemetry metric retrieval failed for reasoning traces from visibility service: {type(e).__name__}: {str(e)} - Returning default/empty value"
+        )
 
     # Fallback to audit-based traces
-    if not traces and audit_service:
+    if not traces:
         try:
-            # Query audit entries related to reasoning
-            entries = await audit_service.query_events(
-                event_type="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
-            )
-
-            # Group by correlation ID or time window
-            trace_groups = defaultdict(list)
-            for entry in entries:
-                # entry is a dict from query_events with structure: {event_id, event_type, timestamp, user_id, data: {context}, metadata}
-                context = entry.get("data", {}).get("context", {})
-                timestamp = (
-                    datetime.fromisoformat(entry["timestamp"])
-                    if isinstance(entry.get("timestamp"), str)
-                    else entry.get("timestamp", datetime.now(timezone.utc))
-                )
-                trace_key = context.get("task_id", timestamp.strftime("%Y%m%d%H%M"))
-                trace_groups[trace_key].append(entry)
-
-            # Build traces from groups
-            for trace_id, entries in list(trace_groups.items())[:limit]:
-                if entries:
-                    entries.sort(
-                        key=lambda e: (
-                            datetime.fromisoformat(e["timestamp"])
-                            if isinstance(e["timestamp"], str)
-                            else e["timestamp"]
-                        )
-                    )
-
-                    # Parse timestamps from entries (dicts)
-                    start_timestamp = (
-                        datetime.fromisoformat(entries[0]["timestamp"])
-                        if isinstance(entries[0].get("timestamp"), str)
-                        else entries[0].get("timestamp", datetime.now(timezone.utc))
-                    )
-                    end_timestamp = (
-                        datetime.fromisoformat(entries[-1]["timestamp"])
-                        if isinstance(entries[-1].get("timestamp"), str)
-                        else entries[-1].get("timestamp", datetime.now(timezone.utc))
-                    )
-
-                    trace_data = ReasoningTraceData(
-                        trace_id=f"trace_{trace_id}",
-                        task_id=trace_id if trace_id != start_timestamp.strftime("%Y%m%d%H%M") else None,
-                        task_description=None,
-                        start_time=start_timestamp,
-                        duration_ms=(end_timestamp - start_timestamp).total_seconds() * 1000,
-                        thought_count=len(entries),
-                        decision_count=sum(1 for e in entries if "decision" in e.get("event_type", "").lower()),
-                        reasoning_depth=(
-                            max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0
-                        ),
-                        thoughts=[
-                            APIResponseThoughtStep(
-                                step=i,
-                                content=(e.get("data", {}).get("context", {}).get("thought", e.get("event_type", ""))),
-                                timestamp=(
-                                    datetime.fromisoformat(e["timestamp"])
-                                    if isinstance(e.get("timestamp"), str)
-                                    else e.get("timestamp", datetime.now(timezone.utc))
-                                ),
-                                depth=(e.get("data", {}).get("context", {}).get("depth", 0)),
-                                action=(e.get("data", {}).get("context", {}).get("action")),
-                                confidence=(e.get("data", {}).get("context", {}).get("confidence")),
-                            )
-                            for i, e in enumerate(entries)
-                        ],
-                        outcome=None,
-                    )
-                    traces.append(trace_data)
+            traces = await _get_traces_from_audit_service(audit_service, start_time, end_time, limit)
         except Exception as e:
             logger.warning(
                 f"Telemetry metric retrieval failed for reasoning traces from audit service: {type(e).__name__}: {str(e)} - Returning default/empty value"
@@ -1239,6 +1369,206 @@ async def get_system_logs(
     )
 
 
+async def _query_metrics(telemetry_service, query) -> List[QueryResult]:
+    """Query metrics data."""
+    results = []
+    if not (telemetry_service and hasattr(telemetry_service, "query_metrics")):
+        return results
+        
+    metric_names = query.filters.metric_names or []
+    for metric_name in metric_names:
+        data_points = await telemetry_service.query_metrics(
+            metric_name=metric_name, start_time=query.start_time, end_time=query.end_time
+        )
+        if data_points:
+            results.append(
+                QueryResult(
+                    id=f"metric_{metric_name}",
+                    type="metric",
+                    timestamp=datetime.now(timezone.utc),
+                    data={
+                        "metric_name": metric_name,
+                        "data_points": data_points,
+                        "count": len(data_points),
+                    },
+                )
+            )
+    return results
+
+
+async def _query_traces(visibility_service, query) -> List[QueryResult]:
+    """Query reasoning traces."""
+    results = []
+    if not visibility_service:
+        return results
+        
+    trace_limit = query.filters.limit or query.limit
+    traces = []
+
+    if hasattr(visibility_service, "query_traces"):
+        traces = await visibility_service.query_traces(
+            start_time=query.start_time, end_time=query.end_time, limit=trace_limit
+        )
+
+    for trace in traces:
+        results.append(
+            QueryResult(
+                id=trace.trace_id,
+                type="trace",
+                timestamp=trace.start_time,
+                data={
+                    "trace_id": trace.trace_id,
+                    "task_id": trace.task_id,
+                    "duration_ms": trace.duration_ms,
+                    "thought_count": trace.thought_count,
+                },
+            )
+        )
+    return results
+
+
+def _should_include_log_entry(entry, filters):
+    """Check if log entry should be included based on filters."""
+    if not filters:
+        return True
+        
+    if filters.services and entry.actor not in filters.services:
+        return False
+        
+    if filters.severity:
+        # Infer level from action
+        if "error" in entry.action.lower() and filters.severity.upper() != "ERROR":
+            return False
+            
+    return True
+
+
+async def _query_logs(audit_service, query) -> List[QueryResult]:
+    """Query logs data."""
+    results = []
+    if not audit_service:
+        return results
+        
+    log_entries = await audit_service.query_entries(
+        start_time=query.start_time, end_time=query.end_time, limit=query.limit
+    )
+
+    for entry in log_entries:
+        if not _should_include_log_entry(entry, query.filters):
+            continue
+            
+        results.append(
+            QueryResult(
+                id=f"log_{entry.timestamp.timestamp()}_{entry.actor}",
+                type="log",
+                timestamp=entry.timestamp,
+                data={
+                    "timestamp": entry.timestamp.isoformat(),
+                    "service": entry.actor,
+                    "action": entry.action,
+                    "context": entry.context,
+                },
+            )
+        )
+    return results
+
+
+async def _query_incidents(incident_service, query) -> List[QueryResult]:
+    """Query incidents data."""
+    results = []
+    if not incident_service:
+        return results
+        
+    incidents = await incident_service.query_incidents(
+        start_time=query.start_time,
+        end_time=query.end_time,
+        severity=query.filters.severity,
+        status=getattr(query.filters, "status", None),
+    )
+
+    for incident in incidents:
+        results.append(
+            QueryResult(
+                id=incident.id,
+                type="incident",
+                timestamp=getattr(incident, "created_at", incident.detected_at),
+                data={
+                    "incident_id": incident.id,
+                    "severity": incident.severity,
+                    "status": incident.status,
+                    "description": incident.description,
+                    "created_at": getattr(incident, "created_at", incident.detected_at).isoformat(),
+                },
+            )
+        )
+    return results
+
+
+async def _query_insights(incident_service, query) -> List[QueryResult]:
+    """Query adaptation insights."""
+    results = []
+    if not (incident_service and hasattr(incident_service, "get_insights")):
+        return results
+        
+    insights = await incident_service.get_insights(
+        start_time=query.start_time, end_time=query.end_time, limit=query.limit
+    )
+
+    for insight in insights:
+        results.append(
+            QueryResult(
+                id=insight.id,
+                type="insight",
+                timestamp=getattr(insight, "created_at", insight.analysis_timestamp),
+                data={
+                    "insight_id": insight.id,
+                    "insight_type": insight.insight_type,
+                    "summary": insight.summary,
+                    "details": insight.details,
+                    "created_at": getattr(insight, "created_at", insight.analysis_timestamp).isoformat(),
+                },
+            )
+        )
+    return results
+
+
+def _apply_aggregations(results: List[QueryResult], aggregations: List[str], query_type: str) -> List[QueryResult]:
+    """Apply aggregations to query results."""
+    if not aggregations:
+        return results
+        
+    for agg in aggregations:
+        if agg == "count":
+            # Return count as a QueryResult
+            return [
+                QueryResult(
+                    id="aggregation_count",
+                    type="aggregation",
+                    timestamp=datetime.now(timezone.utc),
+                    data={"aggregation": "count", "value": len(results)},
+                )
+            ]
+        elif agg == "group_by_service" and query_type == "logs":
+            # Group logs by service
+            grouped: Dict[str, int] = defaultdict(int)
+            for r in results:
+                # Access service from the data field
+                service = r.data.get("service", "unknown")
+                grouped[service] += 1
+
+            # Convert grouped results to QueryResult objects
+            return [
+                QueryResult(
+                    id=f"aggregation_service_{k}",
+                    type="aggregation",
+                    timestamp=datetime.now(timezone.utc),
+                    data={"service": k, "count": v},
+                )
+                for k, v in grouped.items()
+            ]
+    return results
+
+
 @router.post("/query", response_model=SuccessResponse[QueryResponse])
 async def query_telemetry(
     request: Request, query: TelemetryQuery, auth: AuthContext = Depends(require_admin)
@@ -1268,166 +1598,20 @@ async def query_telemetry(
         raise HTTPException(status_code=503, detail="Critical system failure: Incident service not initialized")
 
     try:
+        # Route to appropriate query handler based on query type
         if query.query_type == "metrics":
-            # Query metrics
-            if telemetry_service and hasattr(telemetry_service, "query_metrics"):
-                metric_names = query.filters.metric_names or []
-                for metric_name in metric_names:
-                    data_points = await telemetry_service.query_metrics(
-                        metric_name=metric_name, start_time=query.start_time, end_time=query.end_time
-                    )
-                    if data_points:
-                        results.append(
-                            QueryResult(
-                                id=f"metric_{metric_name}",
-                                type="metric",
-                                timestamp=datetime.now(timezone.utc),
-                                data={
-                                    "metric_name": metric_name,
-                                    "data_points": data_points,
-                                    "count": len(data_points),
-                                },
-                            )
-                        )
-
+            results = await _query_metrics(telemetry_service, query)
         elif query.query_type == "traces":
-            # Query reasoning traces
-            if visibility_service:
-                # Get traces based on filters
-                trace_limit = query.filters.limit or query.limit
-                traces = []
-
-                if hasattr(visibility_service, "query_traces"):
-                    traces = await visibility_service.query_traces(
-                        start_time=query.start_time, end_time=query.end_time, limit=trace_limit
-                    )
-
-                for trace in traces:
-                    results.append(
-                        QueryResult(
-                            id=trace.trace_id,
-                            type="trace",
-                            timestamp=trace.start_time,
-                            data={
-                                "trace_id": trace.trace_id,
-                                "task_id": trace.task_id,
-                                "duration_ms": trace.duration_ms,
-                                "thought_count": trace.thought_count,
-                            },
-                        )
-                    )
-
+            results = await _query_traces(visibility_service, query)
         elif query.query_type == "logs":
-            # Query logs
-            if audit_service:
-                log_entries = await audit_service.query_entries(
-                    start_time=query.start_time, end_time=query.end_time, limit=query.limit
-                )
-
-                for entry in log_entries:
-                    # Apply filters
-                    if query.filters:
-                        if query.filters.services and entry.actor not in query.filters.services:
-                            continue
-                        if query.filters.severity:
-                            # Infer level from action
-                            if "error" in entry.action.lower() and query.filters.severity.upper() != "ERROR":
-                                continue
-
-                    results.append(
-                        QueryResult(
-                            id=f"log_{entry.timestamp.timestamp()}_{entry.actor}",
-                            type="log",
-                            timestamp=entry.timestamp,
-                            data={
-                                "timestamp": entry.timestamp.isoformat(),
-                                "service": entry.actor,
-                                "action": entry.action,
-                                "context": entry.context,
-                            },
-                        )
-                    )
-
+            results = await _query_logs(audit_service, query)
         elif query.query_type == "incidents":
-            # Query incidents
-            if incident_service:
-                incidents = await incident_service.query_incidents(
-                    start_time=query.start_time,
-                    end_time=query.end_time,
-                    severity=query.filters.severity,
-                    status=getattr(query.filters, "status", None),
-                )
-
-                for incident in incidents:
-                    results.append(
-                        QueryResult(
-                            id=incident.id,
-                            type="incident",
-                            timestamp=getattr(incident, "created_at", incident.detected_at),
-                            data={
-                                "incident_id": incident.id,
-                                "severity": incident.severity,
-                                "status": incident.status,
-                                "description": incident.description,
-                                "created_at": getattr(incident, "created_at", incident.detected_at).isoformat(),
-                            },
-                        )
-                    )
-
+            results = await _query_incidents(incident_service, query)
         elif query.query_type == "insights":
-            # Query adaptation insights
-            if incident_service and hasattr(incident_service, "get_insights"):
-                insights = await incident_service.get_insights(
-                    start_time=query.start_time, end_time=query.end_time, limit=query.limit
-                )
-
-                for insight in insights:
-                    results.append(
-                        QueryResult(
-                            id=insight.id,
-                            type="insight",
-                            timestamp=getattr(insight, "created_at", insight.analysis_timestamp),
-                            data={
-                                "insight_id": insight.id,
-                                "insight_type": insight.insight_type,
-                                "summary": insight.summary,
-                                "details": insight.details,
-                                "created_at": getattr(insight, "created_at", insight.analysis_timestamp).isoformat(),
-                            },
-                        )
-                    )
+            results = await _query_insights(incident_service, query)
 
         # Apply aggregations if specified
-        if query.aggregations:
-            for agg in query.aggregations:
-                if agg == "count":
-                    # Return count as a QueryResult
-                    results = [
-                        QueryResult(
-                            id="aggregation_count",
-                            type="aggregation",
-                            timestamp=datetime.now(timezone.utc),
-                            data={"aggregation": "count", "value": len(results)},
-                        )
-                    ]
-                elif agg == "group_by_service" and query.query_type == "logs":
-                    # Group logs by service
-                    grouped: Dict[str, int] = defaultdict(int)
-                    for r in results:
-                        # Access service from the data field
-                        service = r.data.get("service", "unknown")
-                        grouped[service] += 1
-
-                    # Convert grouped results to QueryResult objects
-                    results = [
-                        QueryResult(
-                            id=f"aggregation_service_{k}",
-                            type="aggregation",
-                            timestamp=datetime.now(timezone.utc),
-                            data={"service": k, "count": v},
-                        )
-                        for k, v in grouped.items()
-                    ]
+        results = _apply_aggregations(results, query.aggregations, query.query_type)
 
         execution_time = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 

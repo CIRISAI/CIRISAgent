@@ -129,13 +129,17 @@ class TestTokenRefreshFlow:
         mock_auth_context.role = UserRole.SYSTEM_ADMIN
         
         from ciris_engine.logic.adapters.api.routes.auth import refresh_token
+        from ciris_engine.schemas.api.auth import TokenRefreshRequest
         
         # Mock auth service
         mock_auth_service = Mock()
         mock_auth_service.store_api_key = Mock()
         mock_auth_service.revoke_api_key = Mock()
         
-        response = await refresh_token(mock_auth_context, mock_auth_service)
+        # Mock refresh request
+        refresh_request = TokenRefreshRequest(refresh_token="dummy-refresh-token")
+        
+        response = await refresh_token(refresh_request, mock_auth_context, mock_auth_service)
         
         # Verify 24-hour expiration for SYSTEM_ADMIN
         store_call = mock_auth_service.store_api_key.call_args
@@ -153,12 +157,16 @@ class TestTokenRefreshFlow:
         mock_auth_context.role = UserRole.OBSERVER
         
         from ciris_engine.logic.adapters.api.routes.auth import refresh_token
+        from ciris_engine.schemas.api.auth import TokenRefreshRequest
         
         mock_auth_service = Mock()
         mock_auth_service.store_api_key = Mock()
         mock_auth_service.revoke_api_key = Mock()
         
-        response = await refresh_token(mock_auth_context, mock_auth_service)
+        # Mock refresh request
+        refresh_request = TokenRefreshRequest(refresh_token="dummy-refresh-token")
+        
+        response = await refresh_token(refresh_request, mock_auth_context, mock_auth_service)
         
         # Verify 30-day expiration for regular users
         assert response.expires_in == 2592000  # 30 days
@@ -169,51 +177,61 @@ class TestOAuthHelperMethods:
 
     def test_load_oauth_config_success(self):
         """Test successful OAuth config loading."""
-        with patch.dict(os.environ, {
-            'GOOGLE_OAUTH_CLIENT_ID': 'test-google-id',
-            'GOOGLE_OAUTH_CLIENT_SECRET': 'test-google-secret'
-        }):
+        # Mock the JSON config file
+        mock_config = {
+            'google': {
+                'client_id': 'test-google-id',
+                'client_secret': 'test-google-secret'
+            }
+        }
+        
+        with patch('pathlib.Path.exists', return_value=True), \
+             patch('pathlib.Path.read_text', return_value='{"google": {"client_id": "test-google-id", "client_secret": "test-google-secret"}}'):
             config = _load_oauth_config('google')
             
             assert config['client_id'] == 'test-google-id'
             assert config['client_secret'] == 'test-google-secret'
 
     def test_load_oauth_config_missing_vars(self):
-        """Test OAuth config loading with missing environment variables."""
-        # Clear any existing OAuth env vars
-        with patch.dict(os.environ, {}, clear=True):
+        """Test OAuth config loading with missing config file."""
+        # Mock missing config file
+        with patch('pathlib.Path.exists', return_value=False):
             with pytest.raises(HTTPException) as exc_info:
                 _load_oauth_config('google')
             
-            assert exc_info.value.status_code == 500
-            assert "OAuth configuration incomplete" in exc_info.value.detail
+            assert exc_info.value.status_code == 404
+            assert "OAuth provider 'google' not configured" in exc_info.value.detail
 
     def test_load_oauth_config_unsupported_provider(self):
         """Test OAuth config loading with unsupported provider."""
-        with pytest.raises(HTTPException) as exc_info:
-            _load_oauth_config('unsupported')
-        
-        assert exc_info.value.status_code == 400
-        assert "Unsupported OAuth provider" in exc_info.value.detail
+        # Mock config file that exists but doesn't have the requested provider
+        with patch('pathlib.Path.exists', return_value=True), \
+             patch('pathlib.Path.read_text', return_value='{"google": {"client_id": "test-id", "client_secret": "test-secret"}}'):
+            with pytest.raises(HTTPException) as exc_info:
+                _load_oauth_config('unsupported')
+            
+            assert exc_info.value.status_code == 404
+            assert "OAuth provider 'unsupported' not configured" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_handle_google_oauth_success(self):
         """Test successful Google OAuth handling."""
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('httpx.AsyncClient') as mock_client:
             # Mock token response
             mock_token_response = Mock()
-            mock_token_response.json = AsyncMock(return_value={'access_token': 'test-token'})
+            mock_token_response.json.return_value = {'access_token': 'test-token'}
             
             # Mock user info response  
             mock_user_response = Mock()
-            mock_user_response.json = AsyncMock(return_value={
+            mock_user_response.json.return_value = {
                 'email': 'test@example.com',
                 'name': 'Test User',
                 'picture': 'https://example.com/pic.jpg'
-            })
+            }
             
-            mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = mock_token_response
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_user_response
+            # Mock the async context manager and methods
+            mock_client.return_value.__aenter__.return_value.post.return_value = mock_token_response
+            mock_client.return_value.__aenter__.return_value.get.return_value = mock_user_response
             
             result = await _handle_google_oauth('test-code', 'client-id', 'client-secret')
             
@@ -224,38 +242,37 @@ class TestOAuthHelperMethods:
     @pytest.mark.asyncio
     async def test_handle_google_oauth_token_error(self):
         """Test Google OAuth with token exchange error."""
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('httpx.AsyncClient') as mock_client:
             # Mock failed token response
             mock_token_response = Mock()
-            mock_token_response.json = AsyncMock(return_value={'error': 'invalid_grant'})
+            mock_token_response.json.return_value = {'error': 'invalid_grant'}
             
-            mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = mock_token_response
+            mock_client.return_value.__aenter__.return_value.post.return_value = mock_token_response
             
-            result = await _handle_google_oauth('bad-code', 'client-id', 'client-secret')
+            with pytest.raises(HTTPException) as exc_info:
+                await _handle_google_oauth('bad-code', 'client-id', 'client-secret')
             
-            # Should return None values on error
-            assert result['email'] is None
-            assert result['name'] is None
-            assert result['picture'] is None
+            # Should raise HTTPException on token error
+            assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio 
     async def test_handle_github_oauth_success(self):
         """Test successful GitHub OAuth handling."""
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('httpx.AsyncClient') as mock_client:
             # Mock token response
             mock_token_response = Mock()
-            mock_token_response.text = AsyncMock(return_value='access_token=test-token&token_type=bearer')
+            mock_token_response.text = 'access_token=test-token&token_type=bearer'
             
             # Mock user info response
             mock_user_response = Mock()
-            mock_user_response.json = AsyncMock(return_value={
+            mock_user_response.json.return_value = {
                 'email': 'test@github.com',
                 'name': 'GitHub User',
                 'avatar_url': 'https://avatars.githubusercontent.com/u/123'
-            })
+            }
             
-            mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = mock_token_response
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_user_response
+            mock_client.return_value.__aenter__.return_value.post.return_value = mock_token_response
+            mock_client.return_value.__aenter__.return_value.get.return_value = mock_user_response
             
             result = await _handle_github_oauth('test-code', 'client-id', 'client-secret')
             
@@ -266,22 +283,22 @@ class TestOAuthHelperMethods:
     @pytest.mark.asyncio
     async def test_handle_discord_oauth_success(self):
         """Test successful Discord OAuth handling.""" 
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('httpx.AsyncClient') as mock_client:
             # Mock token response
             mock_token_response = Mock()
-            mock_token_response.json = AsyncMock(return_value={'access_token': 'test-token'})
+            mock_token_response.json.return_value = {'access_token': 'test-token'}
             
             # Mock user info response
             mock_user_response = Mock()
-            mock_user_response.json = AsyncMock(return_value={
+            mock_user_response.json.return_value = {
                 'email': 'test@discord.com',
                 'username': 'DiscordUser',
                 'avatar': 'avatar123',
                 'id': '123456789'
-            })
+            }
             
-            mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = mock_token_response
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_user_response
+            mock_client.return_value.__aenter__.return_value.post.return_value = mock_token_response
+            mock_client.return_value.__aenter__.return_value.get.return_value = mock_user_response
             
             result = await _handle_discord_oauth('test-code', 'client-id', 'client-secret')
             

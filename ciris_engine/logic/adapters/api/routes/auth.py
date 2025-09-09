@@ -351,7 +351,7 @@ class OAuthLoginResponse(BaseModel):
 
 
 @router.get("/auth/oauth/{provider}/login")
-async def oauth_login(provider: str, request: Request, redirect_uri: Optional[str] = None) -> RedirectResponse:
+async def oauth_login(provider: str, request: Request) -> RedirectResponse:
     """
     Initiate OAuth login flow.
 

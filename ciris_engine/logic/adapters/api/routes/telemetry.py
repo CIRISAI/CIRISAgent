@@ -38,21 +38,18 @@ ERROR_AUDIT_NOT_INITIALIZED = "Critical system failure: Audit service not initia
 
 # Import extracted modules
 from .telemetry_converters import convert_to_graphite, convert_to_prometheus
-from .telemetry_helpers import get_telemetry_fallback, get_telemetry_from_service
+from .telemetry_helpers import get_telemetry_from_service
 from .telemetry_models import (
     LogEntry,
     MetricData,
-    MetricSeries,
     ResourceDataPoint,
     ResourceHistoryResponse,
     ResourceMetricData,
     ResourceMetricStats,
     ResourceUsage,
     ServiceHealth,
-    ServiceHealthOverview,
     SystemOverview,
     TimePeriod,
-    TraceSpan,
 )
 from .telemetry_otlp import convert_logs_to_otlp_json, convert_to_otlp_json, convert_traces_to_otlp_json
 from .telemetry_resource_helpers import (

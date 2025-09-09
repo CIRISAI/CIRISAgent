@@ -96,7 +96,7 @@ class CrisisResource(BaseModel):
             raise ValueError(f"Search term should contain crisis-related keywords: {v}")
         return v
 
-    def model_post_init(self, __context):
+    def model_post_init(self, _context):
         """Ensure at least one contact method is provided."""
         if not any([self.url, self.phone, self.text_number, self.search_term]):
             raise ValueError("At least one contact method must be provided")

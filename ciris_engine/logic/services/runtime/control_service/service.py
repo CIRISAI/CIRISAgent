@@ -22,7 +22,6 @@ from ciris_engine.schemas.services.core.runtime import (
     ConfigBackup,
     ConfigOperationResponse,
     ConfigReloadResult,
-    ConfigScope,
     ConfigSnapshot,
     ConfigValidationLevel,
     ConfigValidationResponse,

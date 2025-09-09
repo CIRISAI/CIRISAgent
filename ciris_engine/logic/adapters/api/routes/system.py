@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field, ValidationError, field_serializer
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.adapters.tools import ToolInfo as AdapterToolInfo
 from ciris_engine.schemas.adapters.tools import ToolParameterSchema
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.api.telemetry import ServiceMetrics, TimeSyncStatus

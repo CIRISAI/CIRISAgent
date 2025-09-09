@@ -1,5 +1,5 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Stable](https://img.shields.io/badge/Status-STABLE-green.svg)](docs/releases/1.1.0.md)
+[![Stable](https://img.shields.io/badge/Status-STABLE-green.svg)](CHANGELOG.md)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**STABLE RELEASE 1.1.0** | [Release Notes](docs/releases/1.1.0.md) | [Documentation Hub](docs/README.md)
+**STABLE RELEASE 1.1.1** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 

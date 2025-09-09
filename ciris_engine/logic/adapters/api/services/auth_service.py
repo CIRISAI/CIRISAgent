@@ -906,7 +906,6 @@ class APIAuthService:
     async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
         """Create new WA certificate for OAuth user and return the wa_id."""
         wa_permissions = self._get_wa_permissions(user)
-        wa_email = self._create_wa_email(user.name)
         
         # Create WA certificate with proper wa_id format, but link to OAuth user
         from ciris_engine.schemas.services.authority_core import WACertificate

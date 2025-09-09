@@ -296,8 +296,8 @@ class TestCheckProcessorPauseStatus:
     @pytest.mark.asyncio
     async def test_check_processor_paused(self):
         """Test when processor is paused."""
-        mock_request = Mock(spec=Request)
-        mock_msg = Mock(spec=IncomingMessage)
+        mock_request = Mock()
+        mock_msg = Mock()
         message_id = "msg-123"
         start_time = datetime.now(timezone.utc)
         
@@ -305,7 +305,8 @@ class TestCheckProcessorPauseStatus:
         mock_runtime = Mock()
         mock_processor = Mock()
         mock_processor._is_paused = True
-        mock_processor.get_current_state.return_value = "WORK"
+        # Properly mock the get_current_state method
+        mock_processor.get_current_state = Mock(return_value="WORK")
         mock_runtime.agent_processor = mock_processor
         
         # Mock message handler

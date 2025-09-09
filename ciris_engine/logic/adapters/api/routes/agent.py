@@ -232,40 +232,68 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
         return ""
 
 
+def _get_runtime_processor(request: Request):
+    """Get runtime processor if available and valid."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if not (runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor):
+        return None
+    return runtime.agent_processor
+
+
+def _is_processor_paused(processor) -> bool:
+    """Check if processor is in paused state."""
+    return hasattr(processor, "_is_paused") and processor._is_paused
+
+
+async def _handle_paused_message(request: Request, msg: IncomingMessage) -> None:
+    """Route message to queue when processor is paused."""
+    if hasattr(request.app.state, "on_message"):
+        await request.app.state.on_message(msg)
+    else:
+        raise HTTPException(status_code=503, detail="Message handler not configured")
+
+
+def _get_processor_cognitive_state(processor) -> str:
+    """Get current cognitive state from processor with fallback."""
+    try:
+        if hasattr(processor, 'get_current_state'):
+            return processor.get_current_state()
+    except Exception:
+        pass
+    return "WORK"  # Default
+
+
+def _create_paused_response(message_id: str, cognitive_state: str, processing_time: int) -> SuccessResponse:
+    """Create response for paused processor state."""
+    return SuccessResponse(
+        data=InteractResponse(
+            message_id=message_id,
+            response="Processor paused - task added to queue. Resume processing to continue.",
+            state=cognitive_state,
+            processing_time_ms=processing_time,
+        )
+    )
+
+
 async def _check_processor_pause_status(request: Request, msg: IncomingMessage, message_id: str, start_time: datetime) -> Optional[SuccessResponse]:
     """Check if processor is paused and handle accordingly. Returns response if paused, None if not paused."""
     try:
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
-            if hasattr(runtime.agent_processor, "_is_paused") and runtime.agent_processor._is_paused:
-                # Processor is paused - still route the message to add it to queue
-                if hasattr(request.app.state, "on_message"):
-                    await request.app.state.on_message(msg)
-                else:
-                    raise HTTPException(status_code=503, detail="Message handler not configured")
-                
-                # Clean up response tracking since we're returning immediately
-                _response_events.pop(message_id, None)
-                
-                # Return immediately with paused status
-                processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
-                
-                # Get the actual cognitive state (should still be WORK, etc.)
-                cognitive_state = "WORK"  # Default
-                try:
-                    if hasattr(runtime.agent_processor, 'get_current_state'):
-                        cognitive_state = runtime.agent_processor.get_current_state()
-                except Exception:
-                    pass
-                
-                return SuccessResponse(
-                    data=InteractResponse(
-                        message_id=message_id,
-                        response="Processor paused - task added to queue. Resume processing to continue.",
-                        state=cognitive_state,
-                        processing_time_ms=processing_time,
-                    )
-                )
+        processor = _get_runtime_processor(request)
+        if not processor or not _is_processor_paused(processor):
+            return None
+        
+        # Processor is paused - route message and prepare response
+        await _handle_paused_message(request, msg)
+        
+        # Clean up response tracking since we're returning immediately
+        _response_events.pop(message_id, None)
+        
+        # Calculate processing time and get state
+        processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+        cognitive_state = _get_processor_cognitive_state(processor)
+        
+        return _create_paused_response(message_id, cognitive_state, processing_time)
+        
     except HTTPException:
         # Re-raise HTTP exceptions (like 503 for missing message handler)
         raise

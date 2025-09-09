@@ -51,20 +51,22 @@ class TestPasswordLoginFlow:
     @pytest.fixture  
     def mock_user(self):
         """Create mock user for testing."""
-        user = Mock()
+        from ciris_engine.logic.adapters.api.services.auth_service import User
+        from ciris_engine.schemas.runtime.api import APIRole
+        user = Mock(spec=User)
         user.wa_id = "test-user-123"
+        user.username = "testuser"
         user.name = "Test User"
-        user.api_role = Mock()
-        user.api_role.value = "ADMIN"
-        from ciris_engine.schemas.users.core import APIRole
         user.api_role = APIRole.ADMIN
         return user
 
     @pytest.mark.asyncio
     async def test_password_login_success(self, mock_app, mock_user):
         """Test successful password login - covers lines 74-105."""
-        mock_app.state.auth_service.verify_user_password = AsyncMock(return_value=mock_user)
-        mock_app.state.auth_service.store_api_key = Mock()
+        # Mock auth service
+        mock_auth_service = Mock()
+        mock_auth_service.verify_user_password = AsyncMock(return_value=mock_user)
+        mock_auth_service.store_api_key = Mock()
         
         request = LoginRequest(username="testuser", password="testpass")
         
@@ -75,24 +77,25 @@ class TestPasswordLoginFlow:
         mock_request = Mock()
         mock_request.app = mock_app
         
-        response = await login(request, mock_request)
+        response = await login(request, mock_request, mock_auth_service)
         
         # Verify API key generation and storage
-        mock_app.state.auth_service.store_api_key.assert_called_once()
-        store_call = mock_app.state.auth_service.store_api_key.call_args
+        mock_auth_service.store_api_key.assert_called_once()
+        store_call = mock_auth_service.store_api_key.call_args
         
-        assert store_call.kwargs['user_id'] == "test-user-123"
-        assert store_call.kwargs['role'] == UserRole.ADMIN
-        assert store_call.kwargs['description'] == "Login session"
+        assert store_call[1]['user_id'] == "test-user-123"
+        assert store_call[1]['role'] == UserRole.ADMIN
+        assert store_call[1]['description'] == "Login session"
         
         # Verify response structure
         assert response.access_token.startswith("ciris_admin_")
-        assert response.token_type == "bearer"
+        assert response.token_type == "Bearer"
 
     @pytest.mark.asyncio 
     async def test_password_login_invalid_credentials(self, mock_app):
         """Test password login with invalid credentials - covers line 79-80."""
-        mock_app.state.auth_service.verify_user_password = AsyncMock(return_value=None)
+        mock_auth_service = Mock()
+        mock_auth_service.verify_user_password = AsyncMock(return_value=None)
         
         request = LoginRequest(username="baduser", password="badpass")
         
@@ -101,7 +104,7 @@ class TestPasswordLoginFlow:
         mock_request.app = mock_app
         
         with pytest.raises(HTTPException) as exc_info:
-            await login(request, mock_request)
+            await login(request, mock_request, mock_auth_service)
         
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Invalid credentials"
@@ -136,7 +139,7 @@ class TestTokenRefreshFlow:
         
         # Verify 24-hour expiration for SYSTEM_ADMIN
         store_call = mock_auth_service.store_api_key.call_args
-        assert store_call.kwargs['description'] == "Refreshed token"
+        assert store_call[1]['description'] == "Refreshed token"
         
         # Verify old key revocation
         mock_auth_service.revoke_api_key.assert_called_once_with("old-key-123")
@@ -288,9 +291,8 @@ class TestOAuthHelperMethods:
 
     def test_determine_user_role_admin_email(self):
         """Test user role determination for admin email."""
-        with patch.dict(os.environ, {'ADMIN_EMAIL': 'admin@example.com'}):
-            role = _determine_user_role('admin@example.com')
-            assert role == UserRole.ADMIN
+        role = _determine_user_role('admin@ciris.ai')
+        assert role == UserRole.ADMIN
 
     def test_determine_user_role_regular_user(self):
         """Test user role determination for regular user.""" 
@@ -305,19 +307,14 @@ class TestOAuthHelperMethods:
     def test_generate_api_key_and_store(self):
         """Test API key generation and storage."""
         mock_auth_service = Mock()
-        mock_auth_service.get_or_create_user = Mock(return_value=Mock(wa_id="user-123"))
         mock_auth_service.store_api_key = Mock()
         
-        mock_oauth_user = {
-            'email': 'test@example.com',
-            'name': 'Test User',
-            'picture': 'https://example.com/pic.jpg'
-        }
+        # Create mock OAuth user object with the expected attributes
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "user-123"
+        mock_oauth_user.role = UserRole.OBSERVER
         
         api_key = _generate_api_key_and_store(mock_auth_service, mock_oauth_user, 'google')
-        
-        # Verify user creation called
-        mock_auth_service.get_or_create_user.assert_called_once()
         
         # Verify API key storage called
         mock_auth_service.store_api_key.assert_called_once()
@@ -331,20 +328,21 @@ class TestEnvironmentVariableFallbacks:
 
     def test_oauth_callback_url_default(self):
         """Test OAuth callback URL with default base - covers lines 54-56."""
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {'CIRIS_AGENT_ID': 'datum'}, clear=True):
             url = get_oauth_callback_url('google')
-            assert url == 'https://agents.ciris.ai/v1/auth/oauth/google/callback'
+            assert url == 'https://agents.ciris.ai/v1/auth/oauth/datum/google/callback'
 
     def test_oauth_callback_url_custom_base(self):
         """Test OAuth callback URL with custom base."""
-        with patch.dict(os.environ, {'OAUTH_CALLBACK_BASE_URL': 'https://custom.domain'}):
+        with patch.dict(os.environ, {'OAUTH_CALLBACK_BASE_URL': 'https://custom.domain', 'CIRIS_AGENT_ID': 'datum'}):
             url = get_oauth_callback_url('github')
-            assert url == 'https://custom.domain/v1/auth/oauth/github/callback'
+            assert url == 'https://custom.domain/v1/auth/oauth/datum/github/callback'
 
     def test_oauth_callback_url_explicit_base(self):
         """Test OAuth callback URL with explicit base parameter."""
-        url = get_oauth_callback_url('discord', base_url='https://test.local')
-        assert url == 'https://test.local/v1/auth/oauth/discord/callback'
+        with patch.dict(os.environ, {'CIRIS_AGENT_ID': 'datum'}):
+            url = get_oauth_callback_url('discord', base_url='https://test.local')
+            assert url == 'https://test.local/v1/auth/oauth/datum/discord/callback'
 
 
 class TestOAuthErrorPaths:

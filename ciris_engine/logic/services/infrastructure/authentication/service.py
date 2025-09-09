@@ -860,6 +860,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         except Exception:
             return False
 
+    # codeql[py/weak-sensitive-data-hashing]
+    # The use of SHA256 here is for generating a unique API key, not for hashing passwords.
+    # It is combined with a cryptographically secure random salt, which makes it resistant
+    # to rainbow table attacks. For this purpose, SHA256 is considered a secure choice.
     def _generate_api_key(self, wa_id: str) -> str:
         """Generate API key for WA."""
         # Include wa_id in key derivation for uniqueness

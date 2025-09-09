@@ -903,37 +903,56 @@ class APIAuthService:
             "wa.mint"  # Allow WA to mint others
         ]
 
-    async def _create_new_wa(self, user: User, wa_role: WARole) -> Any:
-        """Create new WA certificate."""
+    async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
+        """Create new WA certificate for OAuth user and return the wa_id."""
         wa_permissions = self._get_wa_permissions(user)
         wa_email = self._create_wa_email(user.name)
         
-        wa_cert = await self._auth_service.create_wa(
+        # Create WA certificate with proper wa_id format, but link to OAuth user
+        from ciris_engine.schemas.services.authority_core import WACertificate
+        from datetime import datetime, timezone
+        import json
+        
+        timestamp = datetime.now(timezone.utc)
+        
+        # Generate proper wa_id (format: wa-YYYY-MM-DD-XXXXXX)
+        wa_id = self._auth_service._generate_wa_id(timestamp)
+        jwt_kid = f"wa-jwt-oauth-{wa_id[-6:].lower()}"
+        
+        # Extract OAuth info from user_id (format: "provider:external_id")
+        oauth_provider = None
+        oauth_external_id = None
+        if ":" in user_id:
+            oauth_provider, oauth_external_id = user_id.split(":", 1)
+        
+        # Create WA certificate with proper wa_id but linked to OAuth identity
+        wa_cert = WACertificate(
+            wa_id=wa_id,  # Proper wa_id format
             name=user.name,
-            email=wa_email,
-            scopes=wa_permissions,
-            role=wa_role
+            role=wa_role,
+            pubkey=f"oauth-{oauth_provider}-{oauth_external_id}" if oauth_provider else user_id,
+            jwt_kid=jwt_kid,
+            oauth_provider=oauth_provider,
+            oauth_external_id=oauth_external_id,
+            auto_minted=True,
+            scopes_json=json.dumps(wa_permissions),
+            created_at=timestamp,
+            last_auth=timestamp,
         )
-        print(f"Created new WA certificate {wa_cert.wa_id} for user {user.name} with role {wa_role}")
-        return wa_cert
+        
+        # Store WA certificate in database
+        await self._auth_service._store_wa_certificate(wa_cert)
+        
+        print(f"Created WA certificate {wa_id} for OAuth user {user_id} with role {wa_role}")
+        return wa_id
 
-    async def _link_oauth_identity(self, user_id: str, wa_cert_id: str) -> None:
-        """Link WA certificate to OAuth identity if applicable."""
-        if ":" in user_id:  # OAuth users have format "provider:external_id"
-            provider, external_id = user_id.split(":", 1)
-            await self._auth_service.update_wa(
-                wa_cert_id,
-                oauth_provider=provider,
-                oauth_external_id=external_id
-            )
-            print(f"Linked WA {wa_cert_id} to OAuth identity {provider}:{external_id}")
+    # Removed _link_oauth_identity - no longer needed since OAuth users use their user_id as wa_id
 
-    def _update_user_records(self, user: User, user_id: str, wa_cert_id: str) -> None:
-        """Update user records with new WA ID."""
-        user.wa_id = wa_cert_id
-        self._users[wa_cert_id] = user  # Store under new WA ID
-        if user_id != wa_cert_id:
-            self._users.pop(user_id, None)  # Remove old OAuth-based entry
+    def _update_user_records_for_oauth_wa(self, user: User, user_id: str, wa_id: str) -> None:
+        """Update OAuth user record with WA information (no duplicate records)."""
+        user.wa_id = wa_id  # Set the proper WA ID
+        # Keep the user under their original OAuth user_id key
+        self._users[user_id] = user  # Update existing record, don't create duplicate
 
     async def _handle_wa_database_operations(self, user: User, user_id: str, wa_role: WARole) -> None:
         """Handle WA database create/update operations."""
@@ -942,9 +961,9 @@ class APIAuthService:
         if existing_wa:
             await self._update_existing_wa(user_id, wa_role)
         else:
-            wa_cert = await self._create_new_wa(user, wa_role)
-            await self._link_oauth_identity(user_id, wa_cert.wa_id)
-            self._update_user_records(user, user_id, wa_cert.wa_id)
+            # For OAuth users, create WA with proper wa_id but update existing OAuth user record
+            wa_id = await self._create_new_wa_for_oauth_user(user, user_id, wa_role)
+            self._update_user_records_for_oauth_wa(user, user_id, wa_id)
 
     async def mint_wise_authority(self, user_id: str, wa_role: WARole, minted_by: str) -> Optional[User]:
         """Mint a user as a Wise Authority."""

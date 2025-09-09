@@ -223,24 +223,9 @@ async def _update_visibility_state(overview: SystemOverview, visibility_service)
             )
 
 
-async def _get_system_overview(request: Request) -> SystemOverview:
-    """Build comprehensive system overview from all services."""
-    # Get core services - THESE MUST EXIST
-    telemetry_service = request.app.state.telemetry_service
-    visibility_service = request.app.state.visibility_service
-    time_service = request.app.state.time_service
-    resource_monitor = request.app.state.resource_monitor
-    incident_service = request.app.state.incident_management_service
-    wise_authority = request.app.state.wise_authority_service
-
-    # If any critical service is missing, we have a system failure
-    if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
-    if not time_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Time service not initialized")
-
-    # Initialize overview with all required fields
-    overview = SystemOverview(
+def _create_empty_system_overview() -> SystemOverview:
+    """Create a SystemOverview with default values."""
+    return SystemOverview(
         uptime_seconds=0.0,
         cognitive_state="UNKNOWN",
         messages_processed_24h=0,
@@ -268,60 +253,61 @@ async def _get_system_overview(request: Request) -> SystemOverview:
         active_services=0,
     )
 
-    # Get uptime from time service
-    if time_service:
-        try:
-            uptime = time_service.get_uptime()
-            overview.uptime_seconds = uptime
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for uptime: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
 
-    # Update with telemetry summary
-    await _update_telemetry_summary(overview, telemetry_service)
+def _validate_critical_services(telemetry_service, time_service):
+    """Validate that critical services are available."""
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
+    if not time_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Time service not initialized")
 
-    # Get cognitive state from runtime
+
+def _update_uptime(overview: SystemOverview, time_service):
+    """Update overview with system uptime."""
+    if not time_service:
+        return
+        
+    try:
+        uptime = time_service.get_uptime()
+        overview.uptime_seconds = uptime
+    except Exception as e:
+        logger.warning(
+            f"Telemetry metric retrieval failed for uptime: {type(e).__name__}: {str(e)} - Returning default/empty value"
+        )
+
+
+def _update_cognitive_state(overview: SystemOverview, request: Request):
+    """Update overview with cognitive state from runtime."""
     runtime = getattr(request.app.state, "runtime", None)
     if runtime and hasattr(runtime, "state_manager"):
         overview.cognitive_state = runtime.state_manager.current_state
 
-    # Update with visibility state
-    await _update_visibility_state(overview, visibility_service)
 
-    # Get resource usage
-    if resource_monitor:
-        try:
-            # Access the snapshot directly
-            if hasattr(resource_monitor, "snapshot"):
-                overview.memory_mb = float(resource_monitor.snapshot.memory_mb)
-                overview.cpu_percent = float(resource_monitor.snapshot.cpu_percent)
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for resource usage: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+def _update_resource_usage(overview: SystemOverview, resource_monitor):
+    """Update overview with resource usage metrics."""
+    if not resource_monitor:
+        return
+        
+    try:
+        # Access the snapshot directly
+        if hasattr(resource_monitor, "snapshot"):
+            overview.memory_mb = float(resource_monitor.snapshot.memory_mb)
+            overview.cpu_percent = float(resource_monitor.snapshot.cpu_percent)
+    except Exception as e:
+        logger.warning(
+            f"Telemetry metric retrieval failed for resource usage: {type(e).__name__}: {str(e)} - Returning default/empty value"
+        )
 
-    # Count healthy services
+
+def _get_service_health_counts(request: Request) -> tuple[int, int]:
+    """Count healthy and degraded services."""
     services = [
-        "memory_service",
-        "llm_service",
-        "audit_service",
-        "telemetry_service",
-        "config_service",
-        "visibility_service",
-        "time_service",
-        "secrets_service",
-        "resource_monitor",
-        "authentication_service",
-        "wise_authority",
-        "incident_management_service",
-        "tsdb_consolidation_service",
-        "self_observation_service",
-        "adaptive_filter_service",
-        "task_scheduler",
-        "initialization_service",
-        "shutdown_service",
-        "runtime_control",
+        "memory_service", "llm_service", "audit_service", "telemetry_service",
+        "config_service", "visibility_service", "time_service", "secrets_service",
+        "resource_monitor", "authentication_service", "wise_authority", 
+        "incident_management_service", "tsdb_consolidation_service",
+        "self_observation_service", "adaptive_filter_service", "task_scheduler",
+        "initialization_service", "shutdown_service", "runtime_control",
     ]
 
     healthy = 0
@@ -331,68 +317,119 @@ async def _get_system_overview(request: Request) -> SystemOverview:
             healthy += 1
         else:
             degraded += 1
+            
+    return healthy, degraded
 
+
+async def _update_incident_count(overview: SystemOverview, incident_service):
+    """Update overview with recent incident count."""
+    if not incident_service:
+        return
+        
+    try:
+        # Get count of incidents from the last hour
+        overview.recent_incidents = await incident_service.get_incident_count(hours=1)
+    except Exception as e:
+        logger.warning(
+            f"Telemetry metric retrieval failed for incident count: {type(e).__name__}: {str(e)} - Returning default/empty value"
+        )
+
+
+async def _update_deferral_count(overview: SystemOverview, wise_authority):
+    """Update overview with active deferral count."""
+    if not wise_authority:
+        return
+        
+    try:
+        deferrals = await wise_authority.get_pending_deferrals()
+        overview.active_deferrals = len(deferrals) if deferrals else 0
+    except Exception as e:
+        logger.warning(
+            f"Telemetry metric retrieval failed for deferral count: {type(e).__name__}: {str(e)} - Returning default/empty value"
+        )
+
+
+async def _update_metrics_count(overview: SystemOverview, telemetry_service, healthy_services: int):
+    """Update overview with telemetry metrics count."""
+    if not telemetry_service:
+        return
+        
+    try:
+        # Count total metrics collected
+        if hasattr(telemetry_service, "get_metric_count"):
+            overview.total_metrics = await telemetry_service.get_metric_count()
+        elif hasattr(telemetry_service, "query_metrics"):
+            overview.total_metrics = await _estimate_metrics_count(telemetry_service)
+
+        # Count active services (services that have reported metrics)
+        overview.active_services = healthy_services  # Use healthy services count as proxy
+
+    except Exception as e:
+        logger.warning(
+            f"Telemetry metric retrieval failed for metrics count: {type(e).__name__}: {str(e)} - Returning default/empty value"
+        )
+
+
+async def _estimate_metrics_count(telemetry_service) -> int:
+    """Estimate total metrics count from common metric queries."""
+    metric_names = [
+        "llm.tokens.total",  # Total tokens used
+        "llm_tokens_used",  # Legacy token metric
+        "thought_processing_completed",  # Thoughts completed
+        "action_selected_task_complete",  # Tasks completed
+        "handler_invoked_total",  # Total handler invocations
+        "action_selected_memorize",  # Memory operations
+    ]
+    
+    total = 0
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    
+    for metric in metric_names:
+        try:
+            data = await telemetry_service.query_metrics(
+                metric_name=metric, start_time=day_ago, end_time=now
+            )
+            if data:
+                total += len(data)
+        except (AttributeError, TypeError, ValueError, RuntimeError) as e:
+            logger.debug(f"Failed to query metric '{metric}': {type(e).__name__}: {str(e)}")
+            
+    return total
+
+
+async def _get_system_overview(request: Request) -> SystemOverview:
+    """Build comprehensive system overview from all services."""
+    # Get core services - THESE MUST EXIST
+    telemetry_service = request.app.state.telemetry_service
+    visibility_service = request.app.state.visibility_service
+    time_service = request.app.state.time_service
+    resource_monitor = request.app.state.resource_monitor
+    incident_service = request.app.state.incident_management_service
+    wise_authority = request.app.state.wise_authority_service
+
+    # Validate critical services
+    _validate_critical_services(telemetry_service, time_service)
+
+    # Initialize overview with default values
+    overview = _create_empty_system_overview()
+
+    # Update overview with data from various services
+    _update_uptime(overview, time_service)
+    await _update_telemetry_summary(overview, telemetry_service)
+    _update_cognitive_state(overview, request)
+    await _update_visibility_state(overview, visibility_service)
+    _update_resource_usage(overview, resource_monitor)
+    
+    # Update service health counts
+    healthy, degraded = _get_service_health_counts(request)
     overview.healthy_services = healthy
     overview.degraded_services = degraded
-
-    # Get incident count
-    if incident_service:
-        try:
-            # Get count of incidents from the last hour
-            overview.recent_incidents = await incident_service.get_incident_count(hours=1)
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for incident count: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
-
-    # Get deferral count
-    if wise_authority:
-        try:
-            deferrals = await wise_authority.get_pending_deferrals()
-            overview.active_deferrals = len(deferrals) if deferrals else 0
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for deferral count: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
-
-    # Get telemetry metrics count and active services
-    if telemetry_service:
-        try:
-            # Count total metrics collected
-            if hasattr(telemetry_service, "get_metric_count"):
-                overview.total_metrics = await telemetry_service.get_metric_count()
-            elif hasattr(telemetry_service, "query_metrics"):
-                # Estimate from common metrics
-                metric_names = [
-                    "llm.tokens.total",  # Total tokens used
-                    "llm_tokens_used",  # Legacy token metric
-                    "thought_processing_completed",  # Thoughts completed
-                    "action_selected_task_complete",  # Tasks completed
-                    "handler_invoked_total",  # Total handler invocations
-                    "action_selected_memorize",  # Memory operations
-                ]
-                total = 0
-                for metric in metric_names:
-                    try:
-                        data = await telemetry_service.query_metrics(
-                            metric_name=metric,
-                            start_time=datetime.now(timezone.utc) - timedelta(hours=24),
-                            end_time=datetime.now(timezone.utc),
-                        )
-                        if data:
-                            total += len(data)
-                    except (AttributeError, TypeError, ValueError, RuntimeError) as e:
-                        logger.debug(f"Failed to query metric '{metric}': {type(e).__name__}: {str(e)}")
-                        pass
-                overview.total_metrics = total
-
-            # Count active services (services that have reported metrics)
-            overview.active_services = healthy  # Use healthy services count as proxy
-
-        except Exception as e:
-            logger.warning(
-                f"Telemetry metric retrieval failed for metrics count: {type(e).__name__}: {str(e)} - Returning default/empty value"
-            )
+    
+    # Update incident and deferral counts
+    await _update_incident_count(overview, incident_service)
+    await _update_deferral_count(overview, wise_authority)
+    await _update_metrics_count(overview, telemetry_service, healthy)
 
     return overview
 
@@ -1264,6 +1301,111 @@ async def get_reasoning_traces(
     )
 
 
+def _validate_audit_service(audit_service):
+    """Validate that audit service is available."""
+    if not audit_service:
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
+
+
+def _determine_log_level(action: str) -> str:
+    """Determine log level from audit action."""
+    action_lower = action.lower()
+    if "critical" in action_lower or "fatal" in action_lower:
+        return "CRITICAL"
+    elif "error" in action_lower or "fail" in action_lower:
+        return "ERROR"
+    elif "warning" in action_lower or "warn" in action_lower:
+        return "WARNING"
+    elif "debug" in action_lower:
+        return "DEBUG"
+    return "INFO"
+
+
+def _extract_service_name(actor: str) -> str:
+    """Extract service name from actor string."""
+    return actor.split(".")[0] if "." in actor else actor
+
+
+def _should_include_log(log_level: str, log_service: str, level_filter: Optional[str], service_filter: Optional[str]) -> bool:
+    """Check if log entry should be included based on filters."""
+    if level_filter and log_level != level_filter.upper():
+        return False
+    if service_filter and log_service.lower() != service_filter.lower():
+        return False
+    return True
+
+
+def _build_log_entry(entry, log_level: str, log_service: str) -> LogEntry:
+    """Build LogEntry from audit entry."""
+    return LogEntry(
+        timestamp=entry.timestamp,
+        level=log_level,
+        service=log_service,
+        message=f"{entry.action}: {entry.context.get('description', '')}".strip(": "),
+        context=LogContext(
+            trace_id=entry.context.get("trace_id"),
+            correlation_id=entry.context.get("correlation_id"),
+            user_id=entry.context.get("user_id"),
+            entity_id=entry.context.get("entity_id"),
+            error_details=entry.context.get("error_details", {}) if "error" in log_level.lower() else None,
+            metadata=entry.context,
+        ),
+        trace_id=entry.context.get("trace_id") or entry.context.get("correlation_id"),
+    )
+
+
+async def _get_logs_from_audit_service(
+    audit_service, start_time: Optional[datetime], end_time: Optional[datetime], 
+    level: Optional[str], service: Optional[str], limit: int
+) -> List[LogEntry]:
+    """Get logs from audit service with filtering."""
+    logs = []
+    try:
+        entries = await audit_service.query_events(
+            start_time=start_time, end_time=end_time, limit=limit * 2  # Get extra for filtering
+        )
+
+        for entry in entries:
+            log_level = _determine_log_level(entry.action)
+            log_service = _extract_service_name(entry.actor)
+            
+            if not _should_include_log(log_level, log_service, level, service):
+                continue
+
+            log = _build_log_entry(entry, log_level, log_service)
+            logs.append(log)
+
+            if len(logs) >= limit:
+                break
+    except Exception:
+        pass
+    
+    return logs
+
+
+async def _get_logs_from_file_reader(
+    level: Optional[str], service: Optional[str], limit: int,
+    start_time: Optional[datetime], end_time: Optional[datetime]
+) -> List[LogEntry]:
+    """Get logs from file reader if available."""
+    try:
+        from .telemetry_logs_reader import log_reader
+        return log_reader.read_logs(
+            level=level,
+            service=service,
+            limit=limit,
+            start_time=start_time,
+            end_time=end_time,
+            include_incidents=True,
+        )
+    except ImportError:
+        logger.debug("Log reader not available, using audit entries only")
+        return []
+    except Exception as e:
+        logger.warning(f"Failed to read log files: {e}, using audit entries only")
+        return []
+
+
 @router.get("/logs", response_model=SuccessResponse[LogsResponse])
 async def get_system_logs(
     request: Request,
@@ -1279,87 +1421,18 @@ async def get_system_logs(
 
     Get system logs from all services with filtering capabilities.
     """
-    # Audit service MUST exist
     audit_service = request.app.state.audit_service
+    _validate_audit_service(audit_service)
 
-    if not audit_service:
-        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
-    logs = []
-
-    if audit_service:
-        try:
-            # Query audit entries as logs
-            entries = await audit_service.query_events(
-                start_time=start_time, end_time=end_time, limit=limit * 2  # Get extra for filtering
-            )
-
-            for entry in entries:
-                # Determine log level from action
-                # Check CRITICAL first (before ERROR) since "critical_failure" contains "fail"
-                log_level = "INFO"
-                if "critical" in entry.action.lower() or "fatal" in entry.action.lower():
-                    log_level = "CRITICAL"
-                elif "error" in entry.action.lower() or "fail" in entry.action.lower():
-                    log_level = "ERROR"
-                elif "warning" in entry.action.lower() or "warn" in entry.action.lower():
-                    log_level = "WARNING"
-                elif "debug" in entry.action.lower():
-                    log_level = "DEBUG"
-
-                # Filter by level if specified
-                if level and log_level != level.upper():
-                    continue
-
-                # Extract service from actor
-                log_service = entry.actor.split(".")[0] if "." in entry.actor else entry.actor
-
-                # Filter by service if specified
-                if service and log_service.lower() != service.lower():
-                    continue
-
-                # Build log entry
-                log = LogEntry(
-                    timestamp=entry.timestamp,
-                    level=log_level,
-                    service=log_service,
-                    message=f"{entry.action}: {entry.context.get('description', '')}".strip(": "),
-                    context=LogContext(
-                        trace_id=entry.context.get("trace_id"),
-                        correlation_id=entry.context.get("correlation_id"),
-                        user_id=entry.context.get("user_id"),
-                        entity_id=entry.context.get("entity_id"),
-                        error_details=entry.context.get("error_details", {}) if "error" in log_level.lower() else None,
-                        metadata=entry.context,
-                    ),
-                    trace_id=entry.context.get("trace_id") or entry.context.get("correlation_id"),
-                )
-                logs.append(log)
-
-                if len(logs) >= limit:
-                    break
-        except Exception:
-            pass
-
-    # Add actual system logs from log files
+    # Get logs from audit service
+    logs = await _get_logs_from_audit_service(audit_service, start_time, end_time, level, service, limit)
+    
+    # Add file logs if we haven't reached the limit
     if len(logs) < limit:
-        try:
-            from .telemetry_logs_reader import log_reader
-
-            file_logs = log_reader.read_logs(
-                level=level,
-                service=service,
-                limit=limit - len(logs),
-                start_time=start_time,
-                end_time=end_time,
-                include_incidents=True,
-            )
-            logs.extend(file_logs)
-        except ImportError:
-            # Log reader module not available, use audit entries only
-            logger.debug("Log reader not available, using audit entries only")
-        except Exception as e:
-            # Log reading failed, but don't fail the endpoint
-            logger.warning(f"Failed to read log files: {e}, using audit entries only")
+        file_logs = await _get_logs_from_file_reader(
+            level, service, limit - len(logs), start_time, end_time
+        )
+        logs.extend(file_logs)
 
     response = LogsResponse(logs=logs[:limit], total=len(logs), has_more=len(logs) > limit)
 
@@ -1570,6 +1643,52 @@ def _apply_aggregations(results: List[QueryResult], aggregations: List[str], que
 
 
 @router.post("/query", response_model=SuccessResponse[QueryResponse])
+def _validate_query_services(telemetry_service, visibility_service, audit_service, incident_service):
+    """Validate that all required services are available for queries."""
+    if not telemetry_service:
+        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
+    if not visibility_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
+    if not audit_service:
+        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
+    if not incident_service:
+        raise HTTPException(status_code=503, detail="Critical system failure: Incident service not initialized")
+
+
+async def _route_query_to_handler(
+    query: TelemetryQuery, telemetry_service, visibility_service, audit_service, incident_service
+) -> List[QueryResult]:
+    """Route query to appropriate handler based on query type."""
+    if query.query_type == "metrics":
+        return await _query_metrics(telemetry_service, query)
+    elif query.query_type == "traces":
+        return await _query_traces(visibility_service, query)
+    elif query.query_type == "logs":
+        return await _query_logs(audit_service, query)
+    elif query.query_type == "incidents":
+        return await _query_incidents(incident_service, query)
+    elif query.query_type == "insights":
+        return await _query_insights(incident_service, query)
+    return []
+
+
+def _build_query_response(query: TelemetryQuery, results: List[QueryResult], execution_time_ms: float) -> SuccessResponse[QueryResponse]:
+    """Build the final query response."""
+    response = QueryResponse(
+        query_type=query.query_type,
+        results=results[: query.limit],
+        total=len(results),
+        execution_time_ms=execution_time_ms,
+    )
+
+    return SuccessResponse(
+        data=response,
+        metadata=ResponseMetadata(
+            timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
+        ),
+    )
+
+
 async def query_telemetry(
     request: Request, query: TelemetryQuery, auth: AuthContext = Depends(require_admin)
 ) -> SuccessResponse[QueryResponse]:
@@ -1580,57 +1699,29 @@ async def query_telemetry(
     Requires ADMIN role.
     """
     start_time = datetime.now(timezone.utc)
-    results = []
 
-    # Get services - ALL MUST EXIST
+    # Get and validate services
     telemetry_service = request.app.state.telemetry_service
     visibility_service = request.app.state.visibility_service
     audit_service = request.app.state.audit_service
     incident_service = request.app.state.incident_management_service
-
-    if not telemetry_service:
-        raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
-    if not visibility_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Visibility service not initialized")
-    if not audit_service:
-        raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
-    if not incident_service:
-        raise HTTPException(status_code=503, detail="Critical system failure: Incident service not initialized")
+    
+    _validate_query_services(telemetry_service, visibility_service, audit_service, incident_service)
 
     try:
-        # Route to appropriate query handler based on query type
-        if query.query_type == "metrics":
-            results = await _query_metrics(telemetry_service, query)
-        elif query.query_type == "traces":
-            results = await _query_traces(visibility_service, query)
-        elif query.query_type == "logs":
-            results = await _query_logs(audit_service, query)
-        elif query.query_type == "incidents":
-            results = await _query_incidents(incident_service, query)
-        elif query.query_type == "insights":
-            results = await _query_insights(incident_service, query)
+        # Route query to appropriate handler
+        results = await _route_query_to_handler(
+            query, telemetry_service, visibility_service, audit_service, incident_service
+        )
 
         # Apply aggregations if specified
         results = _apply_aggregations(results, query.aggregations, query.query_type)
 
+        # Calculate execution time and build response
         execution_time = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
-
-        response = QueryResponse(
-            query_type=query.query_type,
-            results=results[: query.limit],
-            total=len(results),
-            execution_time_ms=execution_time,
-        )
-
-        return SuccessResponse(
-            data=response,
-            metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
-            ),
-        )
+        return _build_query_response(query, results, execution_time)
 
     except HTTPException:
-        # Re-raise HTTPException as-is to preserve status code
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

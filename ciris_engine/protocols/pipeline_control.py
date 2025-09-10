@@ -6,7 +6,7 @@ the thought processing pipeline.
 """
 
 import asyncio
-from typing import Optional, Protocol, TYPE_CHECKING
+from typing import Any, Dict, Optional, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.telemetry.collector import SingleStepResult

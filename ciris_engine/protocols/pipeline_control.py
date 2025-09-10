@@ -128,7 +128,7 @@ class PipelineController:
         self.pipeline_state.move_thought(thought_id, thought.current_step, step_point)
 
         # Create step result based on step point
-        step_result = self._create_step_result(step_point, thought_id, step_data)
+        step_result = self._create_step_result(step_point, step_data)
 
         # Create resume event if needed
         if thought_id not in self._resume_events:
@@ -206,7 +206,7 @@ class PipelineController:
             thought.handler_result = step_data.get("handler_result")
             thought.bus_operations = step_data.get("bus_operations")
 
-    def _create_step_result(self, step_point: StepPoint, thought_id: str, step_data: Optional[dict]) -> StepResultUnion:
+    def _create_step_result(self, step_point: StepPoint, step_data: Optional[dict]) -> StepResultUnion:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
         if step_data is None:
             step_data = {}

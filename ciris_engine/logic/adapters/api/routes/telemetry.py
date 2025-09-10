@@ -464,9 +464,9 @@ async def _export_otlp_metrics(telemetry_service):
     return convert_to_otlp_json(telemetry_dict)
 
 
-def _build_trace_data_from_correlation(correlation):
-    """Build trace data dictionary from correlation object."""
-    trace_data = {
+def _extract_basic_trace_fields(correlation):
+    """Extract basic trace fields from correlation object."""
+    return {
         "trace_id": (
             correlation.trace_context.trace_id
             if correlation.trace_context
@@ -493,35 +493,54 @@ def _build_trace_data_from_correlation(correlation):
         ),
     }
 
-    # Add task/thought linkage
-    if correlation.request_data:
-        if hasattr(correlation.request_data, "task_id") and correlation.request_data.task_id:
-            trace_data["task_id"] = correlation.request_data.task_id
-        if hasattr(correlation.request_data, "thought_id") and correlation.request_data.thought_id:
-            trace_data["thought_id"] = correlation.request_data.thought_id
 
-    # Add performance data
-    if correlation.response_data:
-        if hasattr(correlation.response_data, "execution_time_ms"):
-            trace_data["duration_ms"] = correlation.response_data.execution_time_ms
-        if hasattr(correlation.response_data, "success"):
-            trace_data["success"] = correlation.response_data.success
-        if hasattr(correlation.response_data, "error_message"):
-            trace_data["error"] = correlation.response_data.error_message
+def _extract_request_data_fields(correlation, trace_data):
+    """Extract task/thought linkage from request data."""
+    if not correlation.request_data:
+        return
+        
+    if hasattr(correlation.request_data, "task_id") and correlation.request_data.task_id:
+        trace_data["task_id"] = correlation.request_data.task_id
+    if hasattr(correlation.request_data, "thought_id") and correlation.request_data.thought_id:
+        trace_data["thought_id"] = correlation.request_data.thought_id
 
-    # Add span attributes
-    if correlation.trace_context:
-        trace_data["span_name"] = (
-            correlation.trace_context.span_name
-            if hasattr(correlation.trace_context, "span_name")
-            else correlation.action_type
-        )
-        trace_data["span_kind"] = (
-            correlation.trace_context.span_kind
-            if hasattr(correlation.trace_context, "span_kind")
-            else "internal"
-        )
 
+def _extract_response_data_fields(correlation, trace_data):
+    """Extract performance data from response data."""
+    if not correlation.response_data:
+        return
+        
+    if hasattr(correlation.response_data, "execution_time_ms"):
+        trace_data["duration_ms"] = correlation.response_data.execution_time_ms
+    if hasattr(correlation.response_data, "success"):
+        trace_data["success"] = correlation.response_data.success
+    if hasattr(correlation.response_data, "error_message"):
+        trace_data["error"] = correlation.response_data.error_message
+
+
+def _extract_span_attributes(correlation, trace_data):
+    """Extract span attributes from trace context."""
+    if not correlation.trace_context:
+        return
+        
+    trace_data["span_name"] = (
+        correlation.trace_context.span_name
+        if hasattr(correlation.trace_context, "span_name")
+        else correlation.action_type
+    )
+    trace_data["span_kind"] = (
+        correlation.trace_context.span_kind
+        if hasattr(correlation.trace_context, "span_kind")
+        else "internal"
+    )
+
+
+def _build_trace_data_from_correlation(correlation):
+    """Build trace data dictionary from correlation object."""
+    trace_data = _extract_basic_trace_fields(correlation)
+    _extract_request_data_fields(correlation, trace_data)
+    _extract_response_data_fields(correlation, trace_data)
+    _extract_span_attributes(correlation, trace_data)
     return trace_data
 
 

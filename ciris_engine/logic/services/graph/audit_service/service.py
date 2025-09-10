@@ -1243,64 +1243,58 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         return True
 
-    def _tsdb_to_audit_entry(self, data: GraphNode) -> Optional[AuditRequest]:
-        """Convert TSDB node to AuditEntry."""
-        # Check if this is an AuditEntryNode by looking for the marker
-        attrs = data.attributes if isinstance(data.attributes, dict) else {}
+    def _extract_thought_id_from_audit_node(self, audit_node) -> str:
+        """Extract thought_id from audit node context."""
+        if not audit_node.context.additional_data:
+            return ""
+        return audit_node.context.additional_data.get("thought_id", "")
 
-        # If it's an AuditEntryNode stored with to_graph_node(), convert back
-        if attrs.get("node_class") == "AuditEntry":
-            try:
-                audit_node = AuditEntryNode.from_graph_node(data)
-                # Convert from AuditEntryNode to runtime AuditRequest
-                return AuditRequest(
-                    entry_id=audit_node.id.replace("audit_", ""),
-                    timestamp=audit_node.timestamp,
-                    entity_id=audit_node.context.correlation_id or "",
-                    event_type=audit_node.action,
-                    actor=audit_node.actor,
-                    details={
-                        "action_type": audit_node.action,
-                        "thought_id": (
-                            audit_node.context.additional_data.get("thought_id", "")
-                            if audit_node.context.additional_data
-                            else ""
-                        ),
-                        "task_id": (
-                            audit_node.context.additional_data.get("task_id", "")
-                            if audit_node.context.additional_data
-                            else ""
-                        ),
-                        "handler_name": audit_node.context.service_name or "",
-                        "context": audit_node.context.model_dump(),
-                    },
-                    outcome=(
-                        audit_node.context.additional_data.get("outcome")
-                        if audit_node.context.additional_data
-                        else None
-                    ),
-                )
-            except Exception as e:
-                logger.warning(f"Failed to convert AuditEntryNode: {e}, falling back to manual parsing")
+    def _extract_task_id_from_audit_node(self, audit_node) -> str:
+        """Extract task_id from audit node context."""
+        if not audit_node.context.additional_data:
+            return ""
+        return audit_node.context.additional_data.get("task_id", "")
 
-        # Fallback: manual parsing for backwards compatibility
-        # Extract attributes
-        attrs = data.attributes.model_dump() if hasattr(data.attributes, "model_dump") else {}
-        _tags = data.attributes.tags if hasattr(data.attributes, "tags") else []
-
-        # Look for action_type in attributes
-        action_type = attrs.get("action_type")
-        if not action_type and "action_type" in attrs:
-            action_type = attrs["action_type"]
-
-        if not action_type:
+    def _extract_outcome_from_audit_node(self, audit_node) -> Optional[str]:
+        """Extract outcome from audit node context."""
+        if not audit_node.context.additional_data:
             return None
+        return audit_node.context.additional_data.get("outcome")
 
-        # Get timestamp
+    def _convert_audit_entry_node(self, audit_node) -> AuditRequest:
+        """Convert AuditEntryNode to AuditRequest."""
+        return AuditRequest(
+            entry_id=audit_node.id.replace("audit_", ""),
+            timestamp=audit_node.timestamp,
+            entity_id=audit_node.context.correlation_id or "",
+            event_type=audit_node.action,
+            actor=audit_node.actor,
+            details={
+                "action_type": audit_node.action,
+                "thought_id": self._extract_thought_id_from_audit_node(audit_node),
+                "task_id": self._extract_task_id_from_audit_node(audit_node),
+                "handler_name": audit_node.context.service_name or "",
+                "context": audit_node.context.model_dump(),
+            },
+            outcome=self._extract_outcome_from_audit_node(audit_node),
+        )
+
+    def _get_timestamp_from_data(self, data: GraphNode) -> datetime:
+        """Get timestamp from data node with fallback."""
         timestamp = data.attributes.created_at if hasattr(data.attributes, "created_at") else data.updated_at
         if not timestamp:
             timestamp = self._time_service.now() if self._time_service else datetime.now()
+        return timestamp
 
+    def _extract_action_type_from_attrs(self, attrs: dict) -> Optional[str]:
+        """Extract action_type from attributes with fallback."""
+        action_type = attrs.get("action_type")
+        if not action_type and "action_type" in attrs:
+            action_type = attrs["action_type"]
+        return action_type
+
+    def _create_audit_request_from_attrs(self, attrs: dict, timestamp: datetime, action_type: str) -> AuditRequest:
+        """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
             entry_id=attrs.get("event_id", str(uuid4())),
             timestamp=timestamp,
@@ -1316,6 +1310,29 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             },
             outcome=attrs.get("outcome"),
         )
+
+    def _tsdb_to_audit_entry(self, data: GraphNode) -> Optional[AuditRequest]:
+        """Convert TSDB node to AuditEntry."""
+        # Check if this is an AuditEntryNode by looking for the marker
+        attrs = data.attributes if isinstance(data.attributes, dict) else {}
+
+        # If it's an AuditEntryNode stored with to_graph_node(), convert back
+        if attrs.get("node_class") == "AuditEntry":
+            try:
+                audit_node = AuditEntryNode.from_graph_node(data)
+                return self._convert_audit_entry_node(audit_node)
+            except Exception as e:
+                logger.warning(f"Failed to convert AuditEntryNode: {e}, falling back to manual parsing")
+
+        # Fallback: manual parsing for backwards compatibility
+        attrs = data.attributes.model_dump() if hasattr(data.attributes, "model_dump") else {}
+        
+        action_type = self._extract_action_type_from_attrs(attrs)
+        if not action_type:
+            return None
+
+        timestamp = self._get_timestamp_from_data(data)
+        return self._create_audit_request_from_attrs(attrs, timestamp, action_type)
 
     def _convert_timeseries_to_entries(
         self, timeseries_data: List[TimeSeriesDataPoint], entity_id: Optional[str] = None

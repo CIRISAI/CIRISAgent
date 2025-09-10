@@ -6,7 +6,7 @@ the thought processing pipeline.
 """
 
 import asyncio
-from typing import Any, Dict, Optional, Protocol, TYPE_CHECKING
+from typing import Optional, Protocol, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.telemetry.collector import SingleStepResult
@@ -186,9 +186,12 @@ class PipelineController:
         return None
 
     def _update_thought_data(
-        self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Dict[str, Any]
+        self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Optional[dict]
     ) -> None:
         """Update thought with step-specific data."""
+        if step_data is None:
+            return
+        
         if step_point == StepPoint.GATHER_CONTEXT:
             thought.context_built = step_data.get("context")
         elif step_point == StepPoint.PERFORM_DMAS:

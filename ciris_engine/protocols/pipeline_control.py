@@ -206,8 +206,11 @@ class PipelineController:
             thought.handler_result = step_data.get("handler_result")
             thought.bus_operations = step_data.get("bus_operations")
 
-    def _create_step_result(self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]) -> StepResult:
+    def _create_step_result(self, step_point: StepPoint, thought_id: str, step_data: Optional[dict]) -> StepResultUnion:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
+        if step_data is None:
+            step_data = {}
+            
         # Import only the 9 real H3ERE step result schemas
         from ciris_engine.schemas.services.runtime_control import (
             StepResultActionComplete,

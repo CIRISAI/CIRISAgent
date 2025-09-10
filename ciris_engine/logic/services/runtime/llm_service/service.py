@@ -21,7 +21,7 @@ from ciris_engine.schemas.runtime.protocols_core import LLMStatus, LLMUsageStati
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from ciris_engine.schemas.services.core import ServiceCapabilities
-from ciris_engine.schemas.services.llm import JSONExtractionResult
+from ciris_engine.schemas.services.llm import ExtractedJSONData, JSONExtractionResult
 
 
 # Configuration class for OpenAI-compatible LLM services
@@ -279,11 +279,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             json_str = raw.strip()
         try:
             parsed = json.loads(json_str)
-            return JSONExtractionResult(success=True, data=parsed)
+            return JSONExtractionResult(success=True, data=ExtractedJSONData(**parsed))
         except json.JSONDecodeError:
             try:
                 parsed_retry = json.loads(json_str.replace("'", '"'))
-                return JSONExtractionResult(success=True, data=parsed_retry)
+                return JSONExtractionResult(success=True, data=ExtractedJSONData(**parsed_retry))
             except json.JSONDecodeError:
                 return JSONExtractionResult(
                     success=False, error="Failed to parse JSON", raw_content=raw[:200]  # First 200 chars

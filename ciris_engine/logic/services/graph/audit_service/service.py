@@ -292,13 +292,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             action=str(getattr(event_data, 'action', event_type)),
             resource=str(getattr(event_data, 'service_name', event_type)),
             reason=str(getattr(event_data, 'error', 'event_logged') or 'event_logged'),
-                outcome="success",
-                severity="info",
-                action=event_type,
-                resource=event_type,
-                reason="event_logged",
-                metadata={},
-            )
+            metadata={},
+        )
         try:
             # Create audit entry with string-only details
             details_dict = {}

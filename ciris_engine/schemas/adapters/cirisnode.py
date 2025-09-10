@@ -5,7 +5,7 @@ These replace all Dict[str, Any] usage in cirisnode_client.py.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 

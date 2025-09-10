@@ -1596,7 +1596,6 @@ def _apply_aggregations(results: List[QueryResult], aggregations: List[str], que
     return results
 
 
-@router.post("/query", response_model=SuccessResponse[QueryResponse])
 def _validate_query_services(telemetry_service, visibility_service, audit_service, incident_service):
     """Validate that all required services are available for queries."""
     if not telemetry_service:
@@ -1643,6 +1642,7 @@ def _build_query_response(query: TelemetryQuery, results: List[QueryResult], exe
     )
 
 
+@router.post("/query", response_model=SuccessResponse[QueryResponse])
 async def query_telemetry(
     request: Request, query: TelemetryQuery, auth: AuthContext = Depends(require_admin)
 ) -> SuccessResponse[QueryResponse]:

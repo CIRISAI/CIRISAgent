@@ -21,7 +21,7 @@ from ciris_engine.schemas.streaming.reasoning_stream import (
     get_remaining_steps,
     create_stream_update_from_step_results,
 )
-from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.services.runtime_control import StepPoint, StepResultGatherContext
 
 
 class TestThoughtStatus:
@@ -558,3 +558,35 @@ class TestCreateStreamUpdateFromStepResults:
         # All step summaries should have zero thoughts
         for summary in update.step_summaries:
             assert summary.total_thoughts == 0
+
+    def test_create_stream_update_with_typed_step_result(self):
+        """
+        Test that create_stream_update_from_step_results correctly
+        populates the typed step_result field.
+        """
+        step_results = [{
+            "thought_id": "test-thought-typed",
+            "task_id": "test-task-typed",
+            "round_id": 3,
+            "step_point": StepPoint.GATHER_CONTEXT.value,
+            "success": True,
+            "processing_time_ms": 120.0,
+            "step_data": {
+                "thought_content": "Gathering context for analysis",
+                "thought_type": "task_execution",
+                "context_size": 5,
+                "summary": "Context gathered successfully",
+            }
+        }]
+
+        update = create_stream_update_from_step_results(step_results, 10)
+
+        assert len(update.updated_thoughts) == 1
+        thought = update.updated_thoughts[0]
+
+        # This is the key assertion that should fail initially
+        assert thought.step_result is not None, "step_result should be populated, not None"
+
+        assert isinstance(thought.step_result, StepResultGatherContext)
+        assert thought.step_result.context_size == 5
+        assert thought.step_result.summary == "Context gathered successfully"

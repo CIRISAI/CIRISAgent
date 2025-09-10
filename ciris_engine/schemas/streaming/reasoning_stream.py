@@ -43,6 +43,20 @@ StepResult = Union[
     StepResultRoundComplete,
 ]
 
+STEP_RESULT_MAP = {
+    StepPoint.START_ROUND: StepResultStartRound,
+    StepPoint.GATHER_CONTEXT: StepResultGatherContext,
+    StepPoint.PERFORM_DMAS: StepResultPerformDMAs,
+    StepPoint.PERFORM_ASPDMA: StepResultPerformASPDMA,
+    StepPoint.CONSCIENCE_EXECUTION: StepResultConscienceExecution,
+    StepPoint.RECURSIVE_ASPDMA: StepResultRecursiveASPDMA,
+    StepPoint.RECURSIVE_CONSCIENCE: StepResultRecursiveConscience,
+    StepPoint.FINALIZE_ACTION: StepResultFinalizeAction,
+    StepPoint.PERFORM_ACTION: StepResultPerformAction,
+    StepPoint.ACTION_COMPLETE: StepResultActionComplete,
+    StepPoint.ROUND_COMPLETE: StepResultRoundComplete,
+}
+
 
 class ThoughtStatus(str, Enum):
     """Current processing status of a thought."""
@@ -214,27 +228,38 @@ def create_stream_update_from_step_results(
             f"Stream update for step {raw_result.get('step_point')}: task_id={raw_result.get('task_id')}, thought_id={raw_result.get('thought_id')}"
         )
 
+        step_point = StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))
+        step_data = raw_result.get("step_data", {})
+
+        # Convert raw step_data to typed StepResult
+        step_result_model = STEP_RESULT_MAP.get(step_point)
+        typed_step_result = None
+        if step_result_model and step_data:
+            try:
+                typed_step_result = step_result_model(**step_data)
+            except Exception as e:
+                logger.warning(
+                    f"Could not create typed step result for {step_point.value}: {e}. "
+                    f"Raw data: {step_data}"
+                )
+
         thought_data = ThoughtStreamData(
             thought_id=raw_result.get("thought_id", ""),
             task_id=raw_result.get("task_id", ""),
             round_number=raw_result.get("round_id", 1),
-            current_step=StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION)),
-            step_category=get_step_metadata(StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION)))[
-                "category"
-            ],
+            current_step=step_point,
+            step_category=get_step_metadata(step_point)["category"],
             status=ThoughtStatus.PROCESSING if raw_result.get("success", True) else ThoughtStatus.FAILED,
             steps_completed=[],
-            steps_remaining=get_remaining_steps(StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))),
-            progress_percentage=calculate_progress_percentage(
-                [], StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))
-            ),
+            steps_remaining=get_remaining_steps(step_point),
+            progress_percentage=calculate_progress_percentage([], step_point),
             started_at=datetime.now(),
             current_step_started_at=datetime.now(),
             processing_time_ms=raw_result.get("processing_time_ms", 0.0),
             total_processing_time_ms=raw_result.get("processing_time_ms", 0.0),
-            content_preview=str(raw_result.get("step_data", {}).get("thought_content", ""))[:200],
-            thought_type=raw_result.get("step_data", {}).get("thought_type", "task_execution"),
-            step_result=None,  # TODO: Convert raw step_data to typed StepResult
+            content_preview=str(step_data.get("thought_content", ""))[:200],
+            thought_type=step_data.get("thought_type", "task_execution"),
+            step_result=typed_step_result,
             last_error=raw_result.get("error") if not raw_result.get("success", True) else None,
         )
         updated_thoughts.append(thought_data)

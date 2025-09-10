@@ -5,7 +5,7 @@ Provides typed schemas for LLM service operations.
 """
 
 from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -59,7 +59,7 @@ class JSONExtractionResult(BaseModel):
     """Result of JSON extraction from LLM response."""
 
     success: bool = Field(..., description="Whether extraction succeeded")
-    data: Optional[Dict[str, Any]] = Field(None, description="Extracted JSON data")
+    data: Optional[Dict[str, Union[str, int, float, bool, List, dict]]] = Field(None, description="Extracted JSON data")
     error: Optional[str] = Field(None, description="Error message if extraction failed")
     raw_content: Optional[str] = Field(None, description="Raw content that failed to parse")
 
@@ -99,7 +99,7 @@ class CachedLLMResponse(BaseModel):
     """Cached response from LLM service."""
 
     response_model_name: str = Field(..., description="Name of the response model type")
-    response_data: Dict[str, Any] = Field(..., description="Serialized response data")
+    response_data: Dict[str, Union[str, int, float, bool, List, dict]] = Field(..., description="Serialized response data")
     cache_key: str = Field(..., description="Cache key used")
     cached_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: LLMCallMetadata = Field(..., description="Call metadata")

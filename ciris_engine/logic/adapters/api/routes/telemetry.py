@@ -1000,52 +1000,6 @@ async def get_detailed_metrics(
                 timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
             ),
         )
-                    elif "bytes" in metric_name:
-                        unit = "bytes"
-                    elif "tokens" in metric_name:
-                        unit = "tokens"
-                    elif "cents" in metric_name or "cost" in metric_name:
-                        unit = "cents"
-
-                    # Create a simple metric with current value only
-                    metrics.append(
-                        DetailedMetric(
-                            name=metric_name,
-                            current_value=float(value),
-                            unit=unit,
-                            trend="stable",  # Default trend when no history
-                            hourly_average=float(value),
-                            daily_average=float(value),
-                            by_service=[],
-                            recent_data=[],
-                        )
-                    )
-
-        # Calculate summary statistics across all metrics
-        all_values = []
-        for metric in metrics:
-            if metric.recent_data:
-                all_values.extend([dp.value for dp in metric.recent_data])
-
-        if all_values:
-            summary = MetricAggregate(
-                min=min(all_values),
-                max=max(all_values),
-                avg=sum(all_values) / len(all_values),
-                sum=sum(all_values),
-                count=len(all_values),
-            )
-        else:
-            summary = MetricAggregate(min=0.0, max=0.0, avg=0.0, sum=0.0, count=0)
-
-        response = MetricsResponse(metrics=metrics, summary=summary, period="24h", timestamp=now)
-
-        return SuccessResponse(
-            data=response,
-            metadata=ResponseMetadata(
-                timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
-            ),
-        )
 
     except HTTPException:
         # Re-raise HTTPException as-is to preserve status code

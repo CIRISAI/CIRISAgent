@@ -313,6 +313,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> 
         if step == StepPoint.START_ROUND:
             step_result = StepResultStartRound(**step_data)
         elif step == StepPoint.GATHER_CONTEXT:
+            logger.debug(f"Creating StepResultGatherContext with step_data keys: {list(step_data.keys())}, values: {step_data}")
             step_result = StepResultGatherContext(**step_data)
         elif step == StepPoint.PERFORM_DMAS:
             step_result = StepResultPerformDMAs(**step_data)
@@ -334,7 +335,19 @@ async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> 
             step_result = StepResultRoundComplete(**step_data)
 
         if step_result:
-            await step_result_stream.broadcast_step_result(step_result.model_dump())
+            # Convert typed step result to the format expected by stream processing
+            step_result_data = {
+                "step_point": step.value,
+                "success": step_data.get("success", True), 
+                "processing_time_ms": step_data.get("processing_time_ms", 0.0),
+                "thought_id": step_data.get("thought_id", ""),
+                "task_id": step_data.get("task_id", ""),
+                "step_data": step_result.model_dump()  # Put the typed data in step_data field
+            }
+            logger.debug(f"Broadcasting step result for {step.value}: task_id={step_result_data['task_id']}, thought_id={step_result_data['thought_id']}")
+            await step_result_stream.broadcast_step_result(step_result_data)
+        else:
+            logger.warning(f"No step result created for {step.value}, step_data keys: {list(step_data.keys())}")
 
     except Exception as e:
         logger.warning(f"Error broadcasting step result for {step.value}: {e}")

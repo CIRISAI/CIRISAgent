@@ -255,20 +255,20 @@ class TestOpenAICompatibleClient:
         raw = '```json\n{"result": "test", "value": 42}\n```'
         result = llm_service._extract_json(raw)
         assert result.success is True
-        assert result.data["result"] == "test"
-        assert result.data["value"] == 42
+        assert result.data.result == "test"
+        assert result.data.value == 42
 
         # Test with plain JSON
         raw = '{"message": "hello"}'
         result = llm_service._extract_json(raw)
         assert result.success is True
-        assert result.data["message"] == "hello"
+        assert result.data.message == "hello"
 
         # Test with single quotes (should be converted)
         raw = "{'key': 'value'}"
         result = llm_service._extract_json(raw)
         assert result.success is True
-        assert result.data["key"] == "value"
+        assert result.data.key == "value"
 
         # Test with invalid JSON
         raw = "not json at all"
@@ -585,7 +585,7 @@ class TestOpenAICompatibleClient:
         raw = '{"test": "value"}'
         result = llm_service._extract_json_from_response(raw)
         assert result.success is True
-        assert result.data["test"] == "value"
+        assert result.data.test == "value"
 
 
 if __name__ == "__main__":

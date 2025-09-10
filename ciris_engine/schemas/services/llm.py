@@ -55,11 +55,24 @@ class LLMResponse(BaseModel):
     finish_reason: Optional[str] = Field(None, description="Why generation stopped")
 
 
+class ExtractedJSONData(BaseModel):
+    """Structured data extracted from LLM JSON response."""
+    
+    # Common fields that appear in LLM JSON responses
+    message: Optional[str] = Field(None, description="Message content")
+    content: Optional[str] = Field(None, description="Content text")
+    result: Optional[str] = Field(None, description="Result value")
+    status: Optional[str] = Field(None, description="Status indicator")
+    
+    class Config:
+        extra = "allow"  # Allow additional fields
+
+
 class JSONExtractionResult(BaseModel):
     """Result of JSON extraction from LLM response."""
 
     success: bool = Field(..., description="Whether extraction succeeded")
-    data: Optional[dict] = Field(None, description="Extracted JSON data")
+    data: Optional[ExtractedJSONData] = Field(None, description="Extracted JSON data")
     error: Optional[str] = Field(None, description="Error message if extraction failed")
     raw_content: Optional[str] = Field(None, description="Raw content that failed to parse")
 
@@ -95,11 +108,22 @@ class LLMCallParams(BaseModel):
     seed: Optional[int] = Field(None, description="Random seed for deterministic output")
 
 
+class CachedResponseData(BaseModel):
+    """Serialized response data for cached LLM responses."""
+    
+    content: str = Field(..., description="Response content")
+    model: str = Field(..., description="Model used")
+    finish_reason: Optional[str] = Field(None, description="Finish reason")
+    
+    class Config:
+        extra = "allow"  # Allow additional fields for different response types
+
+
 class CachedLLMResponse(BaseModel):
     """Cached response from LLM service."""
 
     response_model_name: str = Field(..., description="Name of the response model type")
-    response_data: dict = Field(..., description="Serialized response data")
+    response_data: CachedResponseData = Field(..., description="Serialized response data")
     cache_key: str = Field(..., description="Cache key used")
     cached_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: LLMCallMetadata = Field(..., description="Call metadata")

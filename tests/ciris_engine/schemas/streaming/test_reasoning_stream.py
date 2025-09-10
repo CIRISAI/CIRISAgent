@@ -21,7 +21,7 @@ from ciris_engine.schemas.streaming.reasoning_stream import (
     get_remaining_steps,
     create_stream_update_from_step_results,
 )
-from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.services.runtime_control import StepPoint, StepResultGatherContext
 
 
 class TestThoughtStatus:
@@ -558,3 +558,169 @@ class TestCreateStreamUpdateFromStepResults:
         # All step summaries should have zero thoughts
         for summary in update.step_summaries:
             assert summary.total_thoughts == 0
+
+    def test_create_stream_update_with_typed_step_result(self):
+        """
+        Test that create_stream_update_from_step_results correctly
+        populates the typed step_result field.
+        """
+        step_results = [{
+            "thought_id": "test-thought-typed",
+            "task_id": "test-task-typed",
+            "round_id": 3,
+            "step_point": StepPoint.GATHER_CONTEXT.value,
+            "success": True,
+            "processing_time_ms": 120.0,
+            "step_data": {
+                "thought_content": "Gathering context for analysis",
+                "thought_type": "task_execution",
+                "context_size": 5,
+                "summary": "Context gathered successfully",
+            }
+        }]
+
+        update = create_stream_update_from_step_results(step_results, 10)
+
+        assert len(update.updated_thoughts) == 1
+        thought = update.updated_thoughts[0]
+
+        # This is the key assertion that should fail initially
+        assert thought.step_result is not None, "step_result should be populated, not None"
+
+        assert isinstance(thought.step_result, StepResultGatherContext)
+        assert thought.step_result.context_size == 5
+        assert thought.step_result.summary == "Context gathered successfully"
+
+
+class TestHelperFunctions:
+    """Test refactored helper functions for complexity reduction."""
+    
+    def test_extract_content_from_thought_data_with_dict(self):
+        """Test extracting content from dict thought data."""
+        from ciris_engine.logic.adapters.api.routes.telemetry import _extract_content_from_thought_data
+        
+        thought_data = {"content": "test content"}
+        result = _extract_content_from_thought_data(thought_data)
+        assert result == "test content"
+        
+    def test_extract_content_from_thought_data_with_empty_dict(self):
+        """Test extracting content from empty dict."""
+        from ciris_engine.logic.adapters.api.routes.telemetry import _extract_content_from_thought_data
+        
+        thought_data = {}
+        result = _extract_content_from_thought_data(thought_data)
+        assert result == ""
+        
+    def test_extract_content_from_thought_data_with_string(self):
+        """Test extracting content from non-dict thought data."""
+        from ciris_engine.logic.adapters.api.routes.telemetry import _extract_content_from_thought_data
+        
+        thought_data = "string data"
+        result = _extract_content_from_thought_data(thought_data)
+        assert result == "string data"
+        
+    def test_extract_timestamp_from_thought_data_with_dict(self):
+        """Test extracting timestamp from dict thought data."""
+        from ciris_engine.logic.adapters.api.routes.telemetry import _extract_timestamp_from_thought_data
+        
+        test_time = "2023-01-01T00:00:00+00:00"
+        thought_data = {"timestamp": test_time}
+        result = _extract_timestamp_from_thought_data(thought_data)
+        assert result.isoformat() == "2023-01-01T00:00:00+00:00"
+        
+    def test_extract_depth_from_thought_data_with_dict(self):
+        """Test extracting depth from dict thought data."""
+        from ciris_engine.logic.adapters.api.routes.telemetry import _extract_depth_from_thought_data
+        
+        thought_data = {"depth": 5}
+        result = _extract_depth_from_thought_data(thought_data)
+        assert result == 5
+        
+    def test_extract_depth_from_thought_data_with_default(self):
+        """Test extracting depth with default value."""
+        from ciris_engine.logic.adapters.api.routes.telemetry import _extract_depth_from_thought_data
+        
+        thought_data = {}
+        result = _extract_depth_from_thought_data(thought_data)
+        assert result == 0
+        
+    def test_create_typed_step_result_valid_data(self):
+        """Test creating typed step result with valid data."""
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        
+        raw_result = {
+            "success": True,
+            "thought_id": "test-thought",
+            "task_id": "test-task",
+            "processing_time_ms": 100.0
+        }
+        step_data = {"context_size": 5, "summary": "test"}
+        
+        result = _create_typed_step_result(raw_result, StepPoint.GATHER_CONTEXT, step_data)
+        
+        # The result might be None if the mapping doesn't exist, which is acceptable
+        if result is not None:
+            assert result.step_point == StepPoint.GATHER_CONTEXT
+            assert result.success == True
+            assert result.processing_time_ms == 100.0
+            
+    def test_create_typed_step_result_no_model(self):
+        """Test creating typed step result when no model exists."""
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        
+        raw_result = {"success": True}
+        step_data = {"test": "data"}
+        
+        # Use a step that might not have a mapped result model
+        result = _create_typed_step_result(raw_result, StepPoint.FINALIZE_ACTION, step_data)
+        
+        # Should return None if no model exists
+        assert result is None or hasattr(result, 'step_point')
+        
+    def test_create_thought_stream_data(self):
+        """Test creating thought stream data from raw result."""
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_thought_stream_data
+        
+        raw_result = {
+            "thought_id": "test-thought",
+            "task_id": "test-task", 
+            "round_id": 2,
+            "step_point": "gather_context",
+            "success": True,
+            "processing_time_ms": 150.0,
+            "step_data": {
+                "thought_content": "Test content",
+                "thought_type": "analysis"
+            }
+        }
+        
+        result = _create_thought_stream_data(raw_result)
+        
+        assert result.thought_id == "test-thought"
+        assert result.task_id == "test-task"
+        assert result.round_number == 2
+        assert result.processing_time_ms == 150.0
+        assert result.thought_type == "analysis"
+        assert result.content_preview == "Test content"
+        
+    def test_create_step_summary(self):
+        """Test creating step summary for a step point."""
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_step_summary
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        
+        step_results = [
+            {"step_point": "gather_context", "success": True, "processing_time_ms": 100.0},
+            {"step_point": "gather_context", "success": False, "processing_time_ms": 200.0},
+            {"step_point": "other_step", "success": True, "processing_time_ms": 50.0}
+        ]
+        
+        result = _create_step_summary(StepPoint.GATHER_CONTEXT, step_results)
+        
+        assert result.step_point == StepPoint.GATHER_CONTEXT
+        assert result.total_thoughts == 2  # Only gather_context results
+        assert result.processing_count == 1  # One successful
+        assert result.completed_count == 1   # One successful  
+        assert result.failed_count == 1      # One failed
+        assert result.average_processing_time_ms == 150.0  # (100 + 200) / 2

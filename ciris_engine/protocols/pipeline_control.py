@@ -6,7 +6,11 @@ the thought processing pipeline.
 """
 
 import asyncio
-from typing import Any, Dict, Optional, Protocol
+from typing import Optional, Protocol, TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.telemetry.collector import SingleStepResult
+    from ciris_engine.schemas.services.runtime_control import ThoughtProcessingResult
 
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResultUnion, ThoughtInPipeline
 
@@ -22,7 +26,7 @@ class PipelineControlProtocol(Protocol):
         ...
 
     async def pause_at_step_point(
-        self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]
+        self, step_point: StepPoint, thought_id: str, step_data: "SingleStepResult"
     ) -> StepResult:
         """
         Pause execution at a step point and wait for release.
@@ -99,7 +103,7 @@ class PipelineController:
         return step_point in [StepPoint.POPULATE_ROUND, StepPoint.FINALIZE_ACTION]
 
     async def pause_at_step_point(
-        self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]
+        self, step_point: StepPoint, thought_id: str, step_data: "SingleStepResult"
     ) -> StepResult:
         """Pause execution at a step point."""
         # Create or update thought in pipeline
@@ -124,7 +128,7 @@ class PipelineController:
         self.pipeline_state.move_thought(thought_id, thought.current_step, step_point)
 
         # Create step result based on step point
-        step_result = self._create_step_result(step_point, thought_id, step_data)
+        step_result = self._create_step_result(step_point, step_data)
 
         # Create resume event if needed
         if thought_id not in self._resume_events:
@@ -182,9 +186,12 @@ class PipelineController:
         return None
 
     def _update_thought_data(
-        self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Dict[str, Any]
+        self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Optional[dict]
     ) -> None:
         """Update thought with step-specific data."""
+        if step_data is None:
+            return
+        
         if step_point == StepPoint.GATHER_CONTEXT:
             thought.context_built = step_data.get("context")
         elif step_point == StepPoint.PERFORM_DMAS:
@@ -199,8 +206,11 @@ class PipelineController:
             thought.handler_result = step_data.get("handler_result")
             thought.bus_operations = step_data.get("bus_operations")
 
-    def _create_step_result(self, step_point: StepPoint, thought_id: str, step_data: Dict[str, Any]) -> StepResult:
+    def _create_step_result(self, step_point: StepPoint, step_data: Optional[dict]) -> StepResultUnion:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
+        if step_data is None:
+            step_data = {}
+            
         # Import only the 9 real H3ERE step result schemas
         from ciris_engine.schemas.services.runtime_control import (
             StepResultActionComplete,
@@ -238,7 +248,96 @@ class PipelineController:
         # FAIL FAST AND LOUD - only 9 real H3ERE steps allowed!
         raise ValueError(f"Invalid step point: {step_point}. Only 9 real H3ERE pipeline steps are supported!")
 
-    async def execute_single_step_point(self) -> Dict[str, Any]:
+    def _get_pipeline_state_dict(self):
+        """Get pipeline state as dictionary with fallback."""
+        pipeline_state = self.get_pipeline_state()
+        return pipeline_state.dict() if hasattr(pipeline_state, "dict") else {}
+
+    def _calculate_processing_time(self, start_time) -> float:
+        """Calculate processing time in milliseconds."""
+        import asyncio
+        return (asyncio.get_event_loop().time() - start_time) * 1000
+
+    async def _handle_paused_thoughts(self, start_time) -> "SingleStepResult":
+        """Handle execution of paused thoughts."""
+        from ciris_engine.logic.processors.core.step_decorators import execute_all_steps
+        
+        result = await execute_all_steps()
+        processing_time_ms = self._calculate_processing_time(start_time)
+
+        return {
+            "success": result["success"],
+            "step_point": "resume_paused_thoughts",
+            "message": result["message"],
+            "thoughts_advanced": result["thoughts_advanced"],
+            "step_results": [{"thoughts_advanced": result["thoughts_advanced"], "message": result["message"]}],
+            "processing_time_ms": processing_time_ms,
+            "pipeline_state": self._get_pipeline_state_dict(),
+        }
+
+    def _handle_no_pending_thoughts(self, start_time) -> "SingleStepResult":
+        """Handle case when no pending thoughts are available."""
+        processing_time_ms = self._calculate_processing_time(start_time)
+        return {
+            "success": True,
+            "step_point": "no_work",
+            "message": "No pending thoughts to process",
+            "thoughts_advanced": 0,
+            "step_results": [],
+            "processing_time_ms": processing_time_ms,
+            "pipeline_state": self._get_pipeline_state_dict(),
+        }
+
+    def _handle_successful_initiation(self, thought, start_time) -> "SingleStepResult":
+        """Handle successful thought processing initiation."""
+        processing_time_ms = self._calculate_processing_time(start_time)
+        return {
+            "success": True,
+            "step_point": "initiate_processing",
+            "message": f"Initiated processing for thought {thought.thought_id} - will pause at first step",
+            "thought_id": thought.thought_id,
+            "step_results": [{"thought_id": thought.thought_id, "initiated": True}],
+            "processing_time_ms": processing_time_ms,
+            "pipeline_state": self._get_pipeline_state_dict(),
+        }
+
+    def _handle_initiation_error(self, error, start_time) -> "SingleStepResult":
+        """Handle error during thought processing initiation."""
+        processing_time_ms = self._calculate_processing_time(start_time)
+        return {
+            "success": False,
+            "step_point": "error",
+            "message": f"Error initiating processing: {error}",
+            "step_results": [],
+            "processing_time_ms": processing_time_ms,
+            "pipeline_state": self._get_pipeline_state_dict(),
+        }
+
+    def _handle_no_processor(self, start_time) -> "SingleStepResult":
+        """Handle case when no thought processor is available."""
+        processing_time_ms = self._calculate_processing_time(start_time)
+        return {
+            "success": False,
+            "step_point": "error",
+            "message": "No thought processor available",
+            "step_results": [],
+            "processing_time_ms": processing_time_ms,
+            "pipeline_state": self._get_pipeline_state_dict(),
+        }
+
+    async def _initiate_thought_processing(self, thought, start_time) -> "SingleStepResult":
+        """Initiate processing for a pending thought."""
+        if not (self.main_processor and self.main_processor.thought_processor):
+            return self._handle_no_processor(start_time)
+            
+        try:
+            # Start processing this thought - it will pause at the first decorated step
+            # For now, we'll simulate this by just indicating that processing was initiated
+            return self._handle_successful_initiation(thought, start_time)
+        except Exception as e:
+            return self._handle_initiation_error(e, start_time)
+
+    async def execute_single_step_point(self) -> "SingleStepResult":
         """
         Execute exactly one step point in the H3ERE pipeline using step decorators.
 
@@ -258,7 +357,6 @@ class PipelineController:
 
         from ciris_engine.logic.processors.core.step_decorators import (
             enable_single_step_mode,
-            execute_all_steps,
             get_paused_thoughts,
         )
 
@@ -271,89 +369,19 @@ class PipelineController:
         paused_thoughts = get_paused_thoughts()
 
         if paused_thoughts:
-            # Advance all currently paused thoughts by one step
-            result = await execute_all_steps()
-            processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+            return await self._handle_paused_thoughts(start_time)
 
-            return {
-                "success": result["success"],
-                "step_point": "resume_paused_thoughts",
-                "message": result["message"],
-                "thoughts_advanced": result["thoughts_advanced"],
-                "step_results": [{"thoughts_advanced": result["thoughts_advanced"], "message": result["message"]}],
-                "processing_time_ms": processing_time_ms,
-                "pipeline_state": (
-                    self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
-                ),
-            }
-        else:
-            # No paused thoughts - need to start new thoughts in the pipeline
-            # Get PENDING thoughts and start them in the processor
-            from ciris_engine.logic import persistence
-            from ciris_engine.schemas.runtime.models import ThoughtStatus
+        # No paused thoughts - need to start new thoughts in the pipeline
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.runtime.models import ThoughtStatus
 
-            pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)
-            if not pending_thoughts:
-                processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                return {
-                    "success": True,
-                    "step_point": "no_work",
-                    "message": "No pending thoughts to process",
-                    "thoughts_advanced": 0,
-                    "step_results": [],
-                    "processing_time_ms": processing_time_ms,
-                    "pipeline_state": (
-                        self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
-                    ),
-                }
+        pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)
+        if not pending_thoughts:
+            return self._handle_no_pending_thoughts(start_time)
 
-            # Start processing the first pending thought
-            # This will trigger the step decorators and pause at the first step point
-            thought = pending_thoughts[0]
-
-            # We need to trigger the normal thought processing flow
-            # The ThoughtProcessor will handle this and pause at step points
-            if self.main_processor and self.main_processor.thought_processor:
-                try:
-                    # Start processing this thought - it will pause at the first decorated step
-                    # For now, we'll simulate this by just indicating that processing was initiated
-                    processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-
-                    return {
-                        "success": True,
-                        "step_point": "initiate_processing",
-                        "message": f"Initiated processing for thought {thought.thought_id} - will pause at first step",
-                        "thought_id": thought.thought_id,
-                        "step_results": [{"thought_id": thought.thought_id, "initiated": True}],
-                        "processing_time_ms": processing_time_ms,
-                        "pipeline_state": (
-                            self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
-                        ),
-                    }
-                except Exception as e:
-                    processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                    return {
-                        "success": False,
-                        "step_point": "error",
-                        "message": f"Error initiating processing: {e}",
-                        "step_results": [],
-                        "processing_time_ms": processing_time_ms,
-                        "pipeline_state": (
-                            self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
-                        ),
-                    }
-            else:
-                processing_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                return {
-                    "success": False,
-                    "step_point": "error",
-                    "message": "No thought processor available",
-                    "step_results": [],
-                    "processing_time_ms": processing_time_ms,
-                    "pipeline_state": (
-                        self.get_pipeline_state().dict() if hasattr(self.get_pipeline_state(), "dict") else {}
-                    ),
-                }
+        # Start processing the first pending thought
+        thought = pending_thoughts[0]
+        return await self._initiate_thought_processing(thought, start_time)
 
     def _get_next_step_point(self) -> Optional[StepPoint]:
         """Get the next step point to execute in order."""
@@ -462,7 +490,7 @@ class PipelineController:
         else:
             return thought.created_at
 
-    async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> Dict[str, Any]:
+    async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> "ThoughtProcessingResult":
         """
         Execute a specific step point for a single thought.
 

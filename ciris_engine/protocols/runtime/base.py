@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
     from ciris_engine.schemas.services.graph_core import GraphNode
     from ciris_engine.schemas.services.operations import MemoryQuery
+    from ciris_engine.schemas.services.visibility import VisibilitySnapshot
 
 
 class ServiceProtocol(Protocol):
@@ -95,7 +96,7 @@ class VisibilityServiceProtocol(ServiceProtocol, Protocol):
     """Base for services that provide transparency and compliance."""
 
     @abstractmethod
-    async def get_visibility_data(self) -> dict:  # Service-specific visibility data
+    async def get_visibility_data(self) -> "VisibilitySnapshot":  # Service-specific visibility data
         """Get visibility/transparency data."""
         ...
 

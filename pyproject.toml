@@ -1,0 +1,22 @@
+[tool.vulture]
+paths = ["ciris_engine/", ".vulture_whitelist.py"]
+min_confidence = 80
+sort_by_size = true
+exclude = [
+    "*/tests/*",
+    "*/__pycache__/*", 
+    "*/build/*",
+    "*/dist/*",
+    "*/.venv/*"
+]
+ignore_decorators = [
+    "@router.*",
+    "@app.*", 
+    "@pytest.*",
+    "@click.*"
+]
+ignore_names = [
+    "_*",
+    "*Test*",
+    "*Config*"
+]

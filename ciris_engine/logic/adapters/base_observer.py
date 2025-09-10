@@ -421,7 +421,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
                 description=description,
-                status=TaskStatus.PENDING,
+                status=TaskStatus.ACTIVE,
                 priority=priority,
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
@@ -487,10 +487,10 @@ class BaseObserver[MessageT: BaseModel](ABC):
             )
 
             thought = Thought(
-                thought_id=generate_thought_id(thought_type=ThoughtType.OBSERVATION, task_id=task.task_id),
+                thought_id=generate_thought_id(thought_type=ThoughtType.STANDARD, task_id=task.task_id),
                 source_task_id=task.task_id,
                 channel_id=getattr(msg, "channel_id", None),
-                thought_type=ThoughtType.OBSERVATION,
+                thought_type=ThoughtType.STANDARD,
                 status=ThoughtStatus.PENDING,
                 created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
                 updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),

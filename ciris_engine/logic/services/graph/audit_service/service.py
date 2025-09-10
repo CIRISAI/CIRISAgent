@@ -34,6 +34,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.audit.hash_chain import AuditHashChain
@@ -274,42 +275,25 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             logger.error(f"Failed to log action {action_type}: {e}")
 
     async def log_event(
-        self, event_type: str, event_data: Union[Dict[Any, Any], AuditEventData], **kwargs: object
+        self, event_type: str, event_data: "EventPayload", **kwargs: object
     ) -> None:
         """Log a general event.
 
         Args:
             event_type: Type of event being logged
-            event_data: Event data as AuditEventData object or dict with matching fields
+            event_data: Event data as EventPayload object
         """
-        # Convert dict to AuditEventData if needed
-        if isinstance(event_data, dict):
-            # Extract required fields with defaults
-            audit_data = AuditEventData(
-                entity_id=str(event_data.get("thought_id", event_data.get("entity_id", "unknown"))),
-                actor=str(event_data.get("handler_name", event_data.get("actor", "system"))),
-                outcome=event_data.get("outcome", "success"),
-                severity=event_data.get("severity", "info"),
-                action=event_data.get("action", event_type),
-                resource=event_data.get("resource", event_type),
-                reason=event_data.get("reason", "event_logged"),
-                metadata=event_data.get("metadata", {}) if "metadata" in event_data else {},
-            )
-        elif isinstance(event_data, AuditEventData):
-            # Already an AuditEventData object
-            audit_data = event_data
-        else:
-            # Fallback for unexpected types
-            audit_data = AuditEventData(  # type: ignore[unreachable]
-                entity_id="unknown",
-                actor="system",
-                outcome="success",
-                severity="info",
-                action=event_type,
-                resource=event_type,
-                reason="event_logged",
-                metadata={},
-            )
+        # Convert EventPayload to AuditEventData
+        audit_data = AuditEventData(
+            entity_id=str(getattr(event_data, 'user_id', 'unknown')),
+            actor=str(getattr(event_data, 'service_name', 'system')),
+            outcome=str(getattr(event_data, 'result', 'success')),
+            severity="info",
+            action=str(getattr(event_data, 'action', event_type)),
+            resource=str(getattr(event_data, 'service_name', event_type)),
+            reason=str(getattr(event_data, 'error', 'event_logged') or 'event_logged'),
+            metadata={},
+        )
         try:
             # Create audit entry with string-only details
             details_dict = {}
@@ -1259,64 +1243,58 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         return True
 
-    def _tsdb_to_audit_entry(self, data: GraphNode) -> Optional[AuditRequest]:
-        """Convert TSDB node to AuditEntry."""
-        # Check if this is an AuditEntryNode by looking for the marker
-        attrs = data.attributes if isinstance(data.attributes, dict) else {}
+    def _extract_thought_id_from_audit_node(self, audit_node) -> str:
+        """Extract thought_id from audit node context."""
+        if not audit_node.context.additional_data:
+            return ""
+        return audit_node.context.additional_data.get("thought_id", "")
 
-        # If it's an AuditEntryNode stored with to_graph_node(), convert back
-        if attrs.get("node_class") == "AuditEntry":
-            try:
-                audit_node = AuditEntryNode.from_graph_node(data)
-                # Convert from AuditEntryNode to runtime AuditRequest
-                return AuditRequest(
-                    entry_id=audit_node.id.replace("audit_", ""),
-                    timestamp=audit_node.timestamp,
-                    entity_id=audit_node.context.correlation_id or "",
-                    event_type=audit_node.action,
-                    actor=audit_node.actor,
-                    details={
-                        "action_type": audit_node.action,
-                        "thought_id": (
-                            audit_node.context.additional_data.get("thought_id", "")
-                            if audit_node.context.additional_data
-                            else ""
-                        ),
-                        "task_id": (
-                            audit_node.context.additional_data.get("task_id", "")
-                            if audit_node.context.additional_data
-                            else ""
-                        ),
-                        "handler_name": audit_node.context.service_name or "",
-                        "context": audit_node.context.model_dump(),
-                    },
-                    outcome=(
-                        audit_node.context.additional_data.get("outcome")
-                        if audit_node.context.additional_data
-                        else None
-                    ),
-                )
-            except Exception as e:
-                logger.warning(f"Failed to convert AuditEntryNode: {e}, falling back to manual parsing")
+    def _extract_task_id_from_audit_node(self, audit_node) -> str:
+        """Extract task_id from audit node context."""
+        if not audit_node.context.additional_data:
+            return ""
+        return audit_node.context.additional_data.get("task_id", "")
 
-        # Fallback: manual parsing for backwards compatibility
-        # Extract attributes
-        attrs = data.attributes.model_dump() if hasattr(data.attributes, "model_dump") else {}
-        _tags = data.attributes.tags if hasattr(data.attributes, "tags") else []
-
-        # Look for action_type in attributes
-        action_type = attrs.get("action_type")
-        if not action_type and "action_type" in attrs:
-            action_type = attrs["action_type"]
-
-        if not action_type:
+    def _extract_outcome_from_audit_node(self, audit_node) -> Optional[str]:
+        """Extract outcome from audit node context."""
+        if not audit_node.context.additional_data:
             return None
+        return audit_node.context.additional_data.get("outcome")
 
-        # Get timestamp
+    def _convert_audit_entry_node(self, audit_node) -> AuditRequest:
+        """Convert AuditEntryNode to AuditRequest."""
+        return AuditRequest(
+            entry_id=audit_node.id.replace("audit_", ""),
+            timestamp=audit_node.timestamp,
+            entity_id=audit_node.context.correlation_id or "",
+            event_type=audit_node.action,
+            actor=audit_node.actor,
+            details={
+                "action_type": audit_node.action,
+                "thought_id": self._extract_thought_id_from_audit_node(audit_node),
+                "task_id": self._extract_task_id_from_audit_node(audit_node),
+                "handler_name": audit_node.context.service_name or "",
+                "context": audit_node.context.model_dump(),
+            },
+            outcome=self._extract_outcome_from_audit_node(audit_node),
+        )
+
+    def _get_timestamp_from_data(self, data: GraphNode) -> datetime:
+        """Get timestamp from data node with fallback."""
         timestamp = data.attributes.created_at if hasattr(data.attributes, "created_at") else data.updated_at
         if not timestamp:
             timestamp = self._time_service.now() if self._time_service else datetime.now()
+        return timestamp
 
+    def _extract_action_type_from_attrs(self, attrs: dict) -> Optional[str]:
+        """Extract action_type from attributes with fallback."""
+        action_type = attrs.get("action_type")
+        if not action_type and "action_type" in attrs:
+            action_type = attrs["action_type"]
+        return action_type
+
+    def _create_audit_request_from_attrs(self, attrs: dict, timestamp: datetime, action_type: str) -> AuditRequest:
+        """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
             entry_id=attrs.get("event_id", str(uuid4())),
             timestamp=timestamp,
@@ -1332,6 +1310,29 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             },
             outcome=attrs.get("outcome"),
         )
+
+    def _tsdb_to_audit_entry(self, data: GraphNode) -> Optional[AuditRequest]:
+        """Convert TSDB node to AuditEntry."""
+        # Check if this is an AuditEntryNode by looking for the marker
+        attrs = data.attributes if isinstance(data.attributes, dict) else {}
+
+        # If it's an AuditEntryNode stored with to_graph_node(), convert back
+        if attrs.get("node_class") == "AuditEntry":
+            try:
+                audit_node = AuditEntryNode.from_graph_node(data)
+                return self._convert_audit_entry_node(audit_node)
+            except Exception as e:
+                logger.warning(f"Failed to convert AuditEntryNode: {e}, falling back to manual parsing")
+
+        # Fallback: manual parsing for backwards compatibility
+        attrs = data.attributes.model_dump() if hasattr(data.attributes, "model_dump") else {}
+        
+        action_type = self._extract_action_type_from_attrs(attrs)
+        if not action_type:
+            return None
+
+        timestamp = self._get_timestamp_from_data(data)
+        return self._create_audit_request_from_attrs(attrs, timestamp, action_type)
 
     def _convert_timeseries_to_entries(
         self, timeseries_data: List[TimeSeriesDataPoint], entity_id: Optional[str] = None
@@ -1360,7 +1361,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         limit: int = 100,
-    ) -> List[dict]:
+    ) -> List["AuditLogEntry"]:
         """Query audit events."""
         # Call query_audit_trail directly with parameters
         from ciris_engine.schemas.services.graph.audit import AuditQuery
@@ -1370,58 +1371,78 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         )
         entries = await self.query_audit_trail(query)
 
-        # Convert to dict format expected by protocol
+        # Convert to AuditLogEntry format
+        from ciris_engine.schemas.audit.core import AuditLogEntry, EventPayload
         result = []
         for entry in entries:
-            # AuditEntry format (query_audit_trail returns List[AuditEntry])
-            result.append(
-                {
-                    "event_id": entry.id,
-                    "event_type": entry.action,
-                    "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                    "user_id": entry.actor,  # Using actor as user_id
-                    "data": {"context": entry.context.model_dump()},
-                    "metadata": {"signature": entry.signature} if entry.signature else {},
-                }
+            # Create EventPayload from entry context
+            event_payload = EventPayload(
+                action=entry.action,
+                user_id=entry.actor,
+                service_name=entry.resource or "audit_service"
             )
+            
+            # Create AuditLogEntry
+            log_entry = AuditLogEntry(
+                event_id=entry.id,
+                event_timestamp=entry.timestamp,
+                event_type=entry.action,
+                originator_id=entry.actor,
+                target_id=entry.entity_id,
+                event_summary=f"{entry.action} by {entry.actor}",
+                event_payload=event_payload,
+                thought_id=entry.entity_id if entry.entity_id.startswith("thought") else None,
+                entry_hash=entry.signature
+            )
+            result.append(log_entry)
         return result
 
-    async def get_event_by_id(self, event_id: str) -> Optional[dict]:
-        """Get specific audit event by ID."""
-        # Query for the specific event
+    def _convert_entry_to_audit_log_dict(self, entry) -> Dict[str, Any]:
+        """Convert audit entry to audit log dictionary format."""
+        return {
+            "event_id": entry.entry_id,
+            "event_type": entry.event_type,
+            "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+            "user_id": entry.actor,
+            "data": entry.details,
+            "metadata": {"outcome": entry.outcome} if entry.outcome else {},
+        }
 
+    async def _search_event_in_memory_bus(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Search for event in memory bus."""
+        if not self._memory_bus:
+            return None
+            
         query = MemoryQuery(
             node_id=event_id, scope=GraphScope.LOCAL, type=NodeType.AUDIT_ENTRY, include_edges=False, depth=1
         )
+        
+        nodes = await self._memory_bus.recall(query)
+        if not nodes or len(nodes) == 0:
+            return None
+            
+        entry = self._tsdb_to_audit_entry(nodes[0])
+        if not entry:
+            return None
+            
+        return self._convert_entry_to_audit_log_dict(entry)
 
-        if self._memory_bus:
-            nodes = await self._memory_bus.recall(query)
-            if nodes and len(nodes) > 0:
-                # Convert node to AuditEntry using proper conversion
-                entry = self._tsdb_to_audit_entry(nodes[0])
-                if entry:
-                    return {
-                        "event_id": entry.entry_id,
-                        "event_type": entry.event_type,
-                        "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                        "user_id": entry.actor,
-                        "data": entry.details,
-                        "metadata": {"outcome": entry.outcome} if entry.outcome else {},
-                    }
-
-        # Also check recent cache
+    def _search_event_in_recent_cache(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Search for event in recent entries cache."""
         for entry in self._recent_entries:
             if entry.entry_id == event_id:
-                return {
-                    "event_id": entry.entry_id,
-                    "event_type": entry.event_type,
-                    "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                    "user_id": entry.actor,
-                    "data": entry.details,
-                    "metadata": {"outcome": entry.outcome} if entry.outcome else {},
-                }
-
+                return self._convert_entry_to_audit_log_dict(entry)
         return None
+
+    async def get_event_by_id(self, event_id: str) -> Optional["AuditLogEntry"]:
+        """Get specific audit event by ID."""
+        # Try memory bus first
+        result = await self._search_event_in_memory_bus(event_id)
+        if result:
+            return result
+            
+        # Fall back to recent cache
+        return self._search_event_in_recent_cache(event_id)
 
     def _audit_request_to_entry(self, req: AuditRequest) -> AuditEntry:
         """Convert AuditRequest to AuditEntry."""

@@ -43,6 +43,20 @@ StepResult = Union[
     StepResultRoundComplete,
 ]
 
+STEP_RESULT_MAP = {
+    StepPoint.START_ROUND: StepResultStartRound,
+    StepPoint.GATHER_CONTEXT: StepResultGatherContext,
+    StepPoint.PERFORM_DMAS: StepResultPerformDMAs,
+    StepPoint.PERFORM_ASPDMA: StepResultPerformASPDMA,
+    StepPoint.CONSCIENCE_EXECUTION: StepResultConscienceExecution,
+    StepPoint.RECURSIVE_ASPDMA: StepResultRecursiveASPDMA,
+    StepPoint.RECURSIVE_CONSCIENCE: StepResultRecursiveConscience,
+    StepPoint.FINALIZE_ACTION: StepResultFinalizeAction,
+    StepPoint.PERFORM_ACTION: StepResultPerformAction,
+    StepPoint.ACTION_COMPLETE: StepResultActionComplete,
+    StepPoint.ROUND_COMPLETE: StepResultRoundComplete,
+}
+
 
 class ThoughtStatus(str, Enum):
     """Current processing status of a thought."""
@@ -187,6 +201,92 @@ class ReasoningStreamUpdate(BaseModel):
     notification_messages: List[str] = Field(default_factory=list, description="User-facing status messages")
 
 
+def _create_typed_step_result(raw_result: Dict[str, Any], step_point: StepPoint, step_data: Dict[str, Any]):
+    """Create typed step result from raw data."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    step_result_model = STEP_RESULT_MAP.get(step_point)
+    if not step_result_model or not (step_data or raw_result):
+        return None
+        
+    try:
+        combined_data = {
+            "step_point": step_point,
+            "success": raw_result.get("success", True),
+            "timestamp": datetime.now().isoformat(),
+            "thought_id": raw_result.get("thought_id", ""),
+            "task_id": raw_result.get("task_id"),
+            "processing_time_ms": raw_result.get("processing_time_ms", 0.0),
+            "error": raw_result.get("error") if not raw_result.get("success", True) else None,
+            **step_data
+        }
+        return step_result_model(**combined_data)
+    except Exception as e:
+        logger.warning(
+            f"Could not create typed step result for {step_point.value}: {e}. "
+            f"Raw data: {step_data}"
+        )
+        return None
+
+
+def _create_thought_stream_data(raw_result: Dict[str, Any]) -> ThoughtStreamData:
+    """Create ThoughtStreamData from raw result."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.debug(
+        f"Stream update for step {raw_result.get('step_point')}: task_id={raw_result.get('task_id')}, thought_id={raw_result.get('thought_id')}"
+    )
+
+    step_point = StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))
+    step_data = raw_result.get("step_data", {})
+    typed_step_result = _create_typed_step_result(raw_result, step_point, step_data)
+
+    return ThoughtStreamData(
+        thought_id=raw_result.get("thought_id", ""),
+        task_id=raw_result.get("task_id", ""),
+        round_number=raw_result.get("round_id", 1),
+        current_step=step_point,
+        step_category=get_step_metadata(step_point)["category"],
+        status=ThoughtStatus.PROCESSING if raw_result.get("success", True) else ThoughtStatus.FAILED,
+        steps_completed=[],
+        steps_remaining=get_remaining_steps(step_point),
+        progress_percentage=calculate_progress_percentage([], step_point),
+        started_at=datetime.now(),
+        current_step_started_at=datetime.now(),
+        processing_time_ms=raw_result.get("processing_time_ms", 0.0),
+        total_processing_time_ms=raw_result.get("processing_time_ms", 0.0),
+        content_preview=str(step_data.get("thought_content", ""))[:200],
+        thought_type=step_data.get("thought_type", "task_execution"),
+        step_result=typed_step_result,
+        last_error=raw_result.get("error") if not raw_result.get("success", True) else None,
+    )
+
+
+def _create_step_summary(step_point: StepPoint, step_results: List[Dict[str, Any]]) -> StepPointSummary:
+    """Create step summary for a specific step point."""
+    metadata = get_step_metadata(step_point)
+    step_results_for_point = [r for r in step_results if r.get("step_point") == step_point.value]
+
+    return StepPointSummary(
+        step_point=step_point,
+        step_category=metadata["category"],
+        step_name=metadata["name"],
+        step_description=metadata["description"],
+        total_thoughts=len(step_results_for_point),
+        queued_count=0,
+        processing_count=len([r for r in step_results_for_point if r.get("success", True)]),
+        completed_count=len([r for r in step_results_for_point if r.get("success", True)]),
+        failed_count=len([r for r in step_results_for_point if not r.get("success", True)]),
+        blocked_count=0,
+        average_processing_time_ms=sum(r.get("processing_time_ms", 0) for r in step_results_for_point)
+        / max(len(step_results_for_point), 1),
+        throughput_per_minute=0.0,
+        svg_position=metadata["svg_position"],
+    )
+
+
 def create_stream_update_from_step_results(
     step_results: List[Dict[str, Any]], stream_sequence: int
 ) -> ReasoningStreamUpdate:
@@ -204,64 +304,10 @@ def create_stream_update_from_step_results(
         Typed stream update for UI consumption
     """
     # Convert raw results to ThoughtStreamData
-    updated_thoughts = []
-    for raw_result in step_results:
-        # Debug: Log what we're receiving
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.debug(
-            f"Stream update for step {raw_result.get('step_point')}: task_id={raw_result.get('task_id')}, thought_id={raw_result.get('thought_id')}"
-        )
-
-        thought_data = ThoughtStreamData(
-            thought_id=raw_result.get("thought_id", ""),
-            task_id=raw_result.get("task_id", ""),
-            round_number=raw_result.get("round_id", 1),
-            current_step=StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION)),
-            step_category=get_step_metadata(StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION)))[
-                "category"
-            ],
-            status=ThoughtStatus.PROCESSING if raw_result.get("success", True) else ThoughtStatus.FAILED,
-            steps_completed=[],
-            steps_remaining=get_remaining_steps(StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))),
-            progress_percentage=calculate_progress_percentage(
-                [], StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))
-            ),
-            started_at=datetime.now(),
-            current_step_started_at=datetime.now(),
-            processing_time_ms=raw_result.get("processing_time_ms", 0.0),
-            total_processing_time_ms=raw_result.get("processing_time_ms", 0.0),
-            content_preview=str(raw_result.get("step_data", {}).get("thought_content", ""))[:200],
-            thought_type=raw_result.get("step_data", {}).get("thought_type", "task_execution"),
-            step_result=None,  # TODO: Convert raw step_data to typed StepResult
-            last_error=raw_result.get("error") if not raw_result.get("success", True) else None,
-        )
-        updated_thoughts.append(thought_data)
+    updated_thoughts = [_create_thought_stream_data(raw_result) for raw_result in step_results]
 
     # Create step summaries for all 15 steps
-    step_summaries = []
-    for step_point in StepPoint:
-        metadata = get_step_metadata(step_point)
-        step_results_for_point = [r for r in step_results if r.get("step_point") == step_point.value]
-
-        summary = StepPointSummary(
-            step_point=step_point,
-            step_category=metadata["category"],
-            step_name=metadata["name"],
-            step_description=metadata["description"],
-            total_thoughts=len(step_results_for_point),
-            queued_count=0,
-            processing_count=len([r for r in step_results_for_point if r.get("success", True)]),
-            completed_count=len([r for r in step_results_for_point if r.get("success", True)]),
-            failed_count=len([r for r in step_results_for_point if not r.get("success", True)]),
-            blocked_count=0,
-            average_processing_time_ms=sum(r.get("processing_time_ms", 0) for r in step_results_for_point)
-            / max(len(step_results_for_point), 1),
-            throughput_per_minute=0.0,
-            svg_position=metadata["svg_position"],
-        )
-        step_summaries.append(summary)
+    step_summaries = [_create_step_summary(step_point, step_results) for step_point in StepPoint]
 
     return ReasoningStreamUpdate(
         stream_sequence=stream_sequence,

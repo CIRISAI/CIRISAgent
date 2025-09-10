@@ -424,6 +424,12 @@ class StepResultGatherContext(BaseModel):
     task_id: Optional[str] = Field(None, description="Task ID from SUT")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
+    # Additional context-specific fields
+    context_size: Optional[int] = Field(None, description="Number of context items gathered")
+    summary: Optional[str] = Field(None, description="Summary of context gathering process")
+    thought_content: Optional[str] = Field(None, description="Content of the thought")
+    thought_type: Optional[str] = Field(None, description="Type of thought being processed")
+
     error: Optional[str] = Field(None)
 
 

@@ -64,9 +64,13 @@ class TelemetryQueryFilters(BaseModel):
     """Telemetry query filters."""
 
     metric_names: Optional[List[str]] = Field(None, description="Metrics to query")
+    metrics: Optional[List[str]] = Field(None, description="Metrics to query (alias)")
     services: Optional[List[str]] = Field(None, description="Services to include")
     tags: Optional[Dict[str, str]] = Field(None, description="Tag filters")
     severity: Optional[str] = Field(None, description="Log severity filter")
+    status: Optional[str] = Field(None, description="Status filter for incidents")
+    category: Optional[str] = Field(None, description="Category filter")
+    aggregation: Optional[str] = Field(None, description="Aggregation method")
     limit: Optional[int] = Field(None, description="Result limit override")
 
 

@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, TypeVar
 from uuid import uuid4
 
 from ciris_engine.schemas.telemetry.core import (

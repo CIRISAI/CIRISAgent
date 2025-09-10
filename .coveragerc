@@ -12,6 +12,7 @@ omit =
     */build/*
     */dist/*
     setup.py
+    vulture_whitelist.py
 
 [report]
 exclude_lines =

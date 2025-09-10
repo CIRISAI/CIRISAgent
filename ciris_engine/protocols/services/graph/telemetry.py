@@ -2,7 +2,10 @@
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.services.graph.telemetry import TelemetryData, AggregatedTelemetryResponse
 
 from ...runtime.base import GraphServiceProtocol
 
@@ -28,12 +31,12 @@ class TelemetryServiceProtocol(GraphServiceProtocol, Protocol):
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         tags: Optional[Dict[str, str]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List["TelemetryData"]:
         """Query metrics."""
         ...
 
     @abstractmethod
-    async def get_metric_summary(self, metric_name: str, window_minutes: int = 60) -> Dict[str, float]:
+    async def get_metric_summary(self, metric_name: str, window_minutes: int = 60) -> "TelemetryData":
         """Get metric summary statistics."""
         ...
 
@@ -43,6 +46,6 @@ class TelemetryServiceProtocol(GraphServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def get_telemetry_summary(self) -> Any:  # Should be TelemetrySummary but avoiding circular import
+    async def get_telemetry_summary(self) -> "AggregatedTelemetryResponse":
         """Get comprehensive telemetry summary."""
         ...

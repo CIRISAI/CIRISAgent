@@ -234,13 +234,24 @@ def create_stream_update_from_step_results(
         # Convert raw step_data to typed StepResult
         step_result_model = STEP_RESULT_MAP.get(step_point)
         typed_step_result = None
-        if step_result_model and step_data:
+        if step_result_model and (step_data or raw_result):
             try:
-                typed_step_result = step_result_model(**step_data)
+                # Combine step_data with required fields from raw_result
+                combined_data = {
+                    "step_point": step_point,
+                    "success": raw_result.get("success", True),
+                    "timestamp": datetime.now().isoformat(),
+                    "thought_id": raw_result.get("thought_id", ""),
+                    "task_id": raw_result.get("task_id"),
+                    "processing_time_ms": raw_result.get("processing_time_ms", 0.0),
+                    "error": raw_result.get("error") if not raw_result.get("success", True) else None,
+                    **step_data  # Add any additional step-specific data
+                }
+                typed_step_result = step_result_model(**combined_data)
             except Exception as e:
                 logger.warning(
                     f"Could not create typed step result for {step_point.value}: {e}. "
-                    f"Raw data: {step_data}"
+                    f"Raw data: {step_data}, combined: {combined_data if 'combined_data' in locals() else 'N/A'}"
                 )
 
         thought_data = ThoughtStreamData(

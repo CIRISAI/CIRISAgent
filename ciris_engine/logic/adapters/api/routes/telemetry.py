@@ -1106,41 +1106,62 @@ async def _get_current_reasoning_trace(visibility_service):
     )
 
 
+def _extract_content_from_thought_data(thought_data):
+    """Extract content from thought data with fallbacks."""
+    if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "content"):
+        return thought_data.thought.content
+    if isinstance(thought_data, dict):
+        return thought_data.get("content", "")
+    return str(thought_data)
+
+
+def _extract_timestamp_from_thought_data(thought_data):
+    """Extract timestamp from thought data with fallbacks."""
+    if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "timestamp"):
+        return thought_data.thought.timestamp
+    if isinstance(thought_data, dict):
+        return datetime.fromisoformat(
+            thought_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+        )
+    return datetime.now(timezone.utc)
+
+
+def _extract_depth_from_thought_data(thought_data):
+    """Extract depth from thought data with fallbacks."""
+    if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "depth"):
+        return thought_data.thought.depth
+    if isinstance(thought_data, dict):
+        return thought_data.get("depth", 0)
+    return 0
+
+
+def _extract_action_from_thought_data(thought_data):
+    """Extract action from thought data with fallbacks."""
+    if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "action"):
+        return thought_data.thought.action
+    if isinstance(thought_data, dict):
+        return thought_data.get("action")
+    return None
+
+
+def _extract_confidence_from_thought_data(thought_data):
+    """Extract confidence from thought data with fallbacks."""
+    if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "confidence"):
+        return thought_data.thought.confidence
+    if isinstance(thought_data, dict):
+        return thought_data.get("confidence")
+    return None
+
+
 def _convert_thought_to_api_response(step_index, thought_data):
     """Convert thought data to APIResponseThoughtStep."""
     return APIResponseThoughtStep(
         step=step_index,
-        content=(
-            thought_data.thought.content
-            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "content")
-            else thought_data.get("content", "") if isinstance(thought_data, dict) else str(thought_data)
-        ),
-        timestamp=(
-            thought_data.thought.timestamp
-            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "timestamp")
-            else (
-                datetime.fromisoformat(
-                    thought_data.get("timestamp", datetime.now(timezone.utc).isoformat())
-                )
-                if isinstance(thought_data, dict)
-                else datetime.now(timezone.utc)
-            )
-        ),
-        depth=(
-            thought_data.thought.depth
-            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "depth")
-            else thought_data.get("depth", 0) if isinstance(thought_data, dict) else 0
-        ),
-        action=(
-            thought_data.thought.action
-            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "action")
-            else thought_data.get("action") if isinstance(thought_data, dict) else None
-        ),
-        confidence=(
-            thought_data.thought.confidence
-            if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "confidence")
-            else thought_data.get("confidence") if isinstance(thought_data, dict) else None
-        ),
+        content=_extract_content_from_thought_data(thought_data),
+        timestamp=_extract_timestamp_from_thought_data(thought_data),
+        depth=_extract_depth_from_thought_data(thought_data),
+        action=_extract_action_from_thought_data(thought_data),
+        confidence=_extract_confidence_from_thought_data(thought_data),
     )
 
 

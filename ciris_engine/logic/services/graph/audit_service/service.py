@@ -1397,42 +1397,52 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             result.append(log_entry)
         return result
 
-    async def get_event_by_id(self, event_id: str) -> Optional["AuditLogEntry"]:
-        """Get specific audit event by ID."""
-        # Query for the specific event
+    def _convert_entry_to_audit_log_dict(self, entry) -> Dict[str, Any]:
+        """Convert audit entry to audit log dictionary format."""
+        return {
+            "event_id": entry.entry_id,
+            "event_type": entry.event_type,
+            "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+            "user_id": entry.actor,
+            "data": entry.details,
+            "metadata": {"outcome": entry.outcome} if entry.outcome else {},
+        }
 
+    async def _search_event_in_memory_bus(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Search for event in memory bus."""
+        if not self._memory_bus:
+            return None
+            
         query = MemoryQuery(
             node_id=event_id, scope=GraphScope.LOCAL, type=NodeType.AUDIT_ENTRY, include_edges=False, depth=1
         )
+        
+        nodes = await self._memory_bus.recall(query)
+        if not nodes or len(nodes) == 0:
+            return None
+            
+        entry = self._tsdb_to_audit_entry(nodes[0])
+        if not entry:
+            return None
+            
+        return self._convert_entry_to_audit_log_dict(entry)
 
-        if self._memory_bus:
-            nodes = await self._memory_bus.recall(query)
-            if nodes and len(nodes) > 0:
-                # Convert node to AuditEntry using proper conversion
-                entry = self._tsdb_to_audit_entry(nodes[0])
-                if entry:
-                    return {
-                        "event_id": entry.entry_id,
-                        "event_type": entry.event_type,
-                        "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                        "user_id": entry.actor,
-                        "data": entry.details,
-                        "metadata": {"outcome": entry.outcome} if entry.outcome else {},
-                    }
-
-        # Also check recent cache
+    def _search_event_in_recent_cache(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Search for event in recent entries cache."""
         for entry in self._recent_entries:
             if entry.entry_id == event_id:
-                return {
-                    "event_id": entry.entry_id,
-                    "event_type": entry.event_type,
-                    "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                    "user_id": entry.actor,
-                    "data": entry.details,
-                    "metadata": {"outcome": entry.outcome} if entry.outcome else {},
-                }
-
+                return self._convert_entry_to_audit_log_dict(entry)
         return None
+
+    async def get_event_by_id(self, event_id: str) -> Optional["AuditLogEntry"]:
+        """Get specific audit event by ID."""
+        # Try memory bus first
+        result = await self._search_event_in_memory_bus(event_id)
+        if result:
+            return result
+            
+        # Fall back to recent cache
+        return self._search_event_in_recent_cache(event_id)
 
     def _audit_request_to_entry(self, req: AuditRequest) -> AuditEntry:
         """Convert AuditRequest to AuditEntry."""

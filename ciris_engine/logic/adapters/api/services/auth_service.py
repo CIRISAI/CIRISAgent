@@ -146,7 +146,23 @@ class APIAuthService:
             was = await self._auth_service.list_was(active_only=False)
 
             for wa in was:
-                # Convert WA certificate to User
+                # Check if this is an OAuth-linked WA certificate
+                is_oauth_wa = wa.oauth_provider and wa.oauth_external_id
+                oauth_user_id = f"{wa.oauth_provider}:{wa.oauth_external_id}" if is_oauth_wa else None
+                
+                # If OAuth WA, check if we already have the OAuth user record
+                if is_oauth_wa and oauth_user_id in self._users:
+                    # Update existing OAuth user record with WA info
+                    existing_user = self._users[oauth_user_id]
+                    existing_user.wa_role = wa.role
+                    existing_user.wa_id = wa.wa_id
+                    existing_user.wa_parent_id = wa.parent_wa_id
+                    existing_user.wa_auto_minted = wa.auto_minted
+                    existing_user.api_role = self._wa_role_to_api_role(wa.role)
+                    # Keep existing record, don't create duplicate
+                    continue
+                
+                # Convert WA certificate to User (for non-OAuth WAs or OAuth WAs without existing records)
                 user = User(
                     wa_id=wa.wa_id,
                     name=wa.name,
@@ -159,9 +175,14 @@ class APIAuthService:
                     wa_parent_id=wa.parent_wa_id,
                     wa_auto_minted=wa.auto_minted,
                     password_hash=wa.password_hash,
+                    oauth_provider=wa.oauth_provider,
+                    oauth_external_id=wa.oauth_external_id,
                     custom_permissions=wa.custom_permissions if hasattr(wa, "custom_permissions") else None,
                 )
-                self._users[user.wa_id] = user
+                
+                # For OAuth WAs, use the OAuth user_id as key; for others use wa_id
+                user_key = oauth_user_id if is_oauth_wa else wa.wa_id
+                self._users[user_key] = user
 
             # If no admin user exists, create the default one
             if not any(u.name == "admin" for u in self._users.values()):
@@ -452,12 +473,12 @@ class APIAuthService:
         api_role: Optional[APIRole] = None,
         wa_role: Optional[WARole] = None,
         is_active: Optional[bool] = None,
-    ) -> List[User]:
-        """List all users with optional filtering."""
+    ) -> List[tuple[str, User]]:
+        """List all users with optional filtering. Returns (user_id, user) tuples."""
         users = []
 
-        # Add all stored users
-        for user in self._users.values():
+        # Add all stored users with their keys
+        for user_id, user in self._users.items():
             # Apply filters
             if search and search.lower() not in user.name.lower():
                 continue
@@ -470,12 +491,13 @@ class APIAuthService:
             if is_active is not None and user.is_active != is_active:
                 continue
 
-            users.append(user)
+            users.append((user_id, user))
 
         # Add OAuth users not in _users
         for oauth_user in self._oauth_users.values():
+            oauth_user_id = oauth_user.user_id
             # Check if already in users
-            if any(u.oauth_external_id == oauth_user.external_id for u in users):
+            if any(uid == oauth_user_id for uid, u in users):
                 continue
 
             # Convert OAuth user to User
@@ -505,9 +527,9 @@ class APIAuthService:
             if is_active is not None and user.is_active != is_active:
                 continue
 
-            users.append(user)
+            users.append((oauth_user_id, user))
 
-        return sorted(users, key=lambda u: u.created_at or datetime.min, reverse=True)
+        return sorted(users, key=lambda tu: tu[1].created_at or datetime.min, reverse=True)
 
     def _user_role_to_api_role(self, role: UserRole) -> APIRole:
         """Convert UserRole to APIRole."""

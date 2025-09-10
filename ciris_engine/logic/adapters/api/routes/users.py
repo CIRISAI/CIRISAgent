@@ -183,10 +183,10 @@ async def list_users(
 
     # Convert to UserSummary objects
     items = []
-    for user in users[start:end]:
+    for user_id, user in users[start:end]:
         items.append(
             UserSummary(
-                user_id=user.wa_id,
+                user_id=user_id,  # Use the actual user_id key, not wa_id
                 username=user.name,
                 auth_type=user.auth_type,
                 api_role=user.api_role,
@@ -361,7 +361,7 @@ async def get_user(
     api_keys = auth_service.list_user_api_keys(user_id)
 
     return UserDetail(
-        user_id=user.wa_id,
+        user_id=user_id,  # Return the actual user_id passed to endpoint, not wa_id
         username=user.name,
         auth_type=user.auth_type,
         api_role=user.api_role,

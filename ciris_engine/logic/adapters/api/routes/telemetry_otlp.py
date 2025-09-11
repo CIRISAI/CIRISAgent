@@ -452,17 +452,44 @@ def convert_traces_to_otlp_json(
         if "error" in trace and trace["error"]:
             span_attrs.append({"key": "error.message", "value": {"stringValue": str(trace["error"])}})
 
+        # Enhanced: Use rich span attributes if available from step streaming
+        if "span_attributes" in trace and isinstance(trace["span_attributes"], list):
+            # Add the rich attributes from step streaming (already in OTLP format)
+            span_attrs.extend(trace["span_attributes"])
+
+        # Enhanced: Use trace context if available from step streaming
+        trace_context = trace.get("trace_context", {})
+        span_name = trace.get("span_name", trace.get("operation", "unknown_operation"))
+        
+        if trace_context and isinstance(trace_context, dict):
+            # Override IDs with those from step streaming for consistency
+            if "trace_id" in trace_context:
+                trace_id = trace_context["trace_id"]
+            if "span_id" in trace_context:
+                span_id = trace_context["span_id"]
+            if "parent_span_id" in trace_context:
+                parent_span_id = trace_context["parent_span_id"]
+            if "span_name" in trace_context:
+                span_name = trace_context["span_name"]
+            if "start_time_ns" in trace_context:
+                time_ns = trace_context["start_time_ns"]
+            if "end_time_ns" in trace_context:
+                end_time_ns = trace_context["end_time_ns"]
+
         # Determine span kind
         span_kind = 2  # SERVER by default
         if "span_kind" in trace:
             kind_map = {"internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5}
             span_kind = kind_map.get(trace["span_kind"], 2)
+        elif trace_context and "span_kind" in trace_context:
+            kind_map = {"internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5}
+            span_kind = kind_map.get(trace_context["span_kind"], 1)  # Default to internal for H3ERE steps
 
         # Build the span
         span = {
             "traceId": trace_id,
             "spanId": span_id,
-            "name": trace.get("span_name", trace.get("operation", "unknown_operation")),
+            "name": span_name,
             "startTimeUnixNano": str(time_ns),
             "endTimeUnixNano": str(end_time_ns),
             "kind": span_kind,

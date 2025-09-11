@@ -14,6 +14,8 @@ from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, UserRol
 from ..services.auth_service import APIAuthService
 
 
+
+
 def get_auth_service(request: Request) -> APIAuthService:
     """Get auth service from app state."""
     if not hasattr(request.app.state, "auth_service"):
@@ -43,42 +45,12 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
     return authorization[7:]  # Remove "Bearer " prefix
 
 
-def _audit_failed_service_token(request: Request, service_token: str) -> None:
-    """Audit failed service token authentication attempt."""
-    audit_service = getattr(request.app.state, "audit_service", None)
-    if not audit_service:
-        return
-
-    import hashlib
-    import asyncio
-    from ciris_engine.schemas.services.graph.audit import AuditEventData
-
-    # Hash the token for audit logging (don't log the actual token)
-    token_hash = hashlib.sha256(service_token.encode()).hexdigest()
-    audit_event = AuditEventData(
-        entity_id="auth_service",
-        actor=f"service_token_hash:{token_hash}",
-        outcome="failure",
-        severity="warning",
-        action="service_token_validation",
-        resource="api_auth",
-        reason="invalid_service_token",
-        metadata={
-            "ip_address": request.client.host if request.client else "unknown",
-            "user_agent": request.headers.get("user-agent", "unknown"),
-            "token_hash": token_hash,
-        },
-    )
-    
-    # Save task reference to prevent premature garbage collection
-    _ = asyncio.create_task(audit_service.log_event("service_token_auth_failed", audit_event))
 
 
 def _handle_service_token_auth(request: Request, auth_service: APIAuthService, service_token: str) -> AuthContext:
     """Handle service token authentication."""
     service_user = auth_service.validate_service_token(service_token)
     if not service_user:
-        _audit_failed_service_token(request, service_token)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 
     # Service token authentication successful

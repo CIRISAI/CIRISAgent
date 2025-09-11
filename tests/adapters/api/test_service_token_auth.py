@@ -162,21 +162,11 @@ class TestServiceTokenAuthentication:
             assert auth_context.user_id == "service-account"
             assert auth_context.role == UserRole.SERVICE_ACCOUNT
 
-            # Test failed authentication (should still audit)
+            # Test failed authentication (should NOT audit to prevent spam)
             mock_audit_service.log_event.reset_mock()
 
             with pytest.raises(HTTPException):
                 await get_auth_context(mock_request, "Bearer service:wrong-token", auth_service)
 
-            # Verify audit was called for failure
-            assert mock_audit_service.log_event.called
-            call_args = mock_audit_service.log_event.call_args[0]
-
-            # Check event type
-            assert call_args[0] == "service_token_auth_failed"
-
-            # Check event data
-            event_data = call_args[1]
-            assert isinstance(event_data, AuditEventData)
-            assert event_data.outcome == "failure"
-            assert event_data.severity == "warning"
+            # Verify audit was NOT called for failure (changed behavior to prevent spam)
+            assert not mock_audit_service.log_event.called

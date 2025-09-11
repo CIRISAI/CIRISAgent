@@ -21,7 +21,6 @@ import pytest
 from fastapi import HTTPException, Request
 
 from ciris_engine.logic.adapters.api.dependencies.auth import (
-    _audit_failed_service_token,
     _build_permissions_set,
     _extract_bearer_token,
     _handle_api_key_auth,

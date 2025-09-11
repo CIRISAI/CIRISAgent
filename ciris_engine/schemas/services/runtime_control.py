@@ -72,6 +72,27 @@ class CircuitBreakerStatus(BaseModel):
     service_name: str = Field(..., description="Name of the service this breaker protects")
 
 
+class TraceContext(BaseModel):
+    """OTLP-compatible trace context for step correlation."""
+    
+    trace_id: str = Field(..., description="Unique trace identifier")
+    span_id: str = Field(..., description="Unique span identifier")
+    parent_span_id: Optional[str] = Field(None, description="Parent span identifier")
+    span_name: str = Field(..., description="Human-readable span name")
+    operation_name: str = Field(..., description="Operation name for tracing")
+    start_time_ns: int = Field(..., description="Start time in nanoseconds")
+    end_time_ns: int = Field(..., description="End time in nanoseconds")
+    duration_ns: int = Field(..., description="Duration in nanoseconds")
+    span_kind: str = Field("internal", description="Span kind (internal, server, client, etc.)")
+
+
+class SpanAttribute(BaseModel):
+    """OTLP-compatible span attribute."""
+    
+    key: str = Field(..., description="Attribute key")
+    value: Dict[str, Any] = Field(..., description="Attribute value in OTLP format")
+
+
 class ConfigValueMap(BaseModel):
     """Typed map for configuration values."""
 
@@ -428,7 +449,7 @@ class StepResultGatherContext(BaseModel):
     context_size: Optional[int] = Field(None, description="Number of context items gathered")
     summary: Optional[str] = Field(None, description="Summary of context gathering process")
     thought_content: Optional[str] = Field(None, description="Content of the thought")
-    thought_type: Optional[str] = Field(None, description="Type of thought being processed")
+    thought_type: str = Field(default="standard", description="Type of thought being processed")
 
     error: Optional[str] = Field(None)
 

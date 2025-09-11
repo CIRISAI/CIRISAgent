@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 ### Changed  
 ### Added
+- **🛡️ CSDMA Anti-Urgency Enhancements**: Enhanced Common Sense DMA with comprehensive anti-urgency evaluation and reality persistence checking
+  - Added **Step 7: Reality Persistence Check** - Detects unexplained object disappearances, appearances, or state changes with "Reality_Persistence_Violation" flag
+  - Added **Step 8: Anti-Urgency Evaluation** - Identifies temporal pressure and hasty decision markers that could benefit from Wise Authority oversight
+  - COVENANT-compliant implementation preserves human agency while flagging urgent decisions with "Urgency_Detected_Escalation_Recommended" for proper ethical consideration
+  - Enhanced prompt template includes urgency detection patterns: "immediately", "urgent", "ASAP", "emergency", "now", "quickly"
 ### Removed
 
 ## [1.1.3] - 2025-09-11

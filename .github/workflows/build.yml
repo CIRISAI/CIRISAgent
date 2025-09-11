@@ -187,17 +187,7 @@ jobs:
             CHANGELOG=$(git log -1 --pretty=format:"%s")
           fi
 
-          # Enhanced risk assessment based on changelog content
-          if echo "$CHANGELOG" | grep -qiE "breaking|major|critical|security|vulnerability|emergency|authentication"; then
-            RISK_LEVEL="high"
-          elif echo "$CHANGELOG" | grep -qiE "fix|patch|minor|cleanup|test|refactor"; then
-            RISK_LEVEL="low"
-          else
-            RISK_LEVEL="medium"
-          fi
-          
           echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "risk_level=$RISK_LEVEL" >> $GITHUB_OUTPUT
           echo "version=$SEMANTIC_VERSION" >> $GITHUB_OUTPUT
 
       - name: Notify CIRISManager
@@ -219,7 +209,6 @@ jobs:
               \"source\": \"github-actions\",
               \"commit_sha\": \"${{ github.sha }}\",
               \"changelog\": \"${{ steps.release_info.outputs.changelog }}\",
-              \"risk_level\": \"${{ steps.release_info.outputs.risk_level }}\",
               \"version\": \"${{ steps.release_info.outputs.version }}\"
             }")
 

@@ -5,6 +5,30 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - v1.1.4
+
+### Fixed
+### Changed  
+### Added
+### Removed
+
+## [1.1.3] - 2025-09-11
+
+### Major Achievements
+- **🔍 Enhanced Conscience Transparency**: Complete conscience evaluation transparency with all 4 typed conscience results (entropy, coherence, optimization veto, epistemic humility) in step streaming and audit trails
+- **🧪 Comprehensive QA Validation**: Robust QA runner validation ensuring all required conscience data structures are present and properly formatted
+- **📊 Full Epistemic Reporting**: Detailed reporting of ethical decision-making processes with metrics, reasoning, and complete audit trail
+
+### Added
+- **Comprehensive conscience result generation** - Added `_create_comprehensive_conscience_result()` function that generates full `ConscienceCheckResult` with all 4 typed evaluations
+- **Enhanced step data transparency** - Modified `_add_conscience_execution_data()` to include detailed conscience results in step streaming and traces
+- **Robust QA validation** - Enhanced QA runner streaming verification to validate all 4 required conscience check results with field-level validation
+- **Typed conscience evaluations** - Complete implementation of entropy check, coherence check, optimization veto check, and epistemic humility check with proper metrics and reasoning
+
+### Changed
+- **Conscience step streaming** - Step data now includes comprehensive `conscience_result` field alongside basic `conscience_passed` for full transparency
+- **QA runner validation** - Enhanced conscience execution validation to verify presence and structure of all required typed conscience results
+
 ## [1.1.2] - 2025-09-10
 
 ### Major Achievements
@@ -14,7 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🔧 H3ERE Pipeline Enhancement**: Added typed step results streaming and fixed pipeline test infrastructure
 
 ### Fixed
-- **H3ERE pipeline streaming test** - Resolved missing gather_context step issue by aligning streaming test expectations with actual system behavior (simple interactions use direct handler processing rather than full H3ERE pipeline)
+- **Authentication audit log spam** - Removed audit logging for authentication failures to prevent log spam from monitoring systems and invalid token attempts
+- **H3ERE pipeline streaming verification** - Moved gather_context from conditional to required steps in streaming verification tests for accurate pipeline validation
 - **Typed step results infrastructure** - Fixed step result data structure preservation in SSE streaming to maintain proper type information
 - **OAuth WA duplicate user records** - OAuth users minted as Wise Authorities no longer create separate user records, maintaining single record integrity
 - **Missing telemetry endpoints** - Added missing @router.post decorator for query_telemetry endpoint and missing fields to TelemetryQueryFilters schema
@@ -43,6 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Created whitelist for legitimate unused code patterns
   - Automated dead code detection in CI/CD pipeline
 - **📊 Typed Step Results** - Enhanced reasoning stream with strongly typed step result population
+- **🔍 Enhanced H3ERE Tracing** - Rich trace data in step streaming decorators with OTLP compatibility:
+  - Added trace context with proper span/trace ID correlation 
+  - Enhanced span attributes with step-specific metadata
+  - Unified data structure between step streaming and OTLP traces
+  - Added processor context and thought lifecycle attributes
 - **🐛 Enhanced Debug Infrastructure** - Comprehensive tracing for step result creation and H3ERE pipeline execution flow  
 - **🧪 Test Coverage Expansion** - Added comprehensive test coverage for OAuth WA fixes and LLM service improvements
 - **⚙️ QA Runner Enhancement** - Enhanced test runner with debug log support for better troubleshooting

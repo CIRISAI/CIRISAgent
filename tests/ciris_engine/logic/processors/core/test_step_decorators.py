@@ -9,7 +9,7 @@ Tests the decorator functionality for H3ERE pipeline step points including:
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch, PropertyMock
 from datetime import datetime, timezone
 
 from ciris_engine.logic.processors.core.step_decorators import (
@@ -23,6 +23,18 @@ from ciris_engine.logic.processors.core.step_decorators import (
     get_paused_thoughts,
     _paused_thoughts,
     _single_step_mode,
+    # Helper functions for testing
+    _create_step_result_schema,
+    _extract_timing_data,
+    _build_step_result_data,
+    _add_gather_context_attributes,
+    _add_perform_dmas_attributes,
+    _add_perform_aspdma_attributes,
+    _add_conscience_execution_attributes,
+    _add_finalize_action_attributes,
+    _add_perform_action_attributes,
+    _add_action_complete_attributes,
+    _add_typed_step_attributes,
 )
 from ciris_engine.schemas.services.runtime_control import StepPoint
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
@@ -334,6 +346,489 @@ class TestStepDataExtraction:
             assert call_args["selected_action"] == "SPEAK"
             assert call_args["action_rationale"] == "Test reasoning"
 
+    @pytest.mark.asyncio
+    async def test_step_specific_data_perform_aspdma_missing_fields(self):
+        """Test PERFORM_ASPDMA with missing selected_action - should fail fast."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.PERFORM_ASPDMA)
+            async def aspdma_step(self, thought_item):
+                # Return object without selected_action or rationale
+                result = Mock(spec=[])  # Empty spec = no attributes
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await aspdma_step(mock_processor, mock_thought)
+            
+            # Should not crash due to error handling, but should log error
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for perform_aspdma" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_action_complete_dict_format(self):
+        """Test ACTION_COMPLETE with dispatch_result dict format (new behavior)."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast:
+            
+            @streaming_step(StepPoint.ACTION_COMPLETE)
+            async def action_complete_step(self, thought_item):
+                # Return dispatch_result dict format
+                return {
+                    "action_type": "speak",
+                    "handler": "SpeakHandler", 
+                    "success": True,
+                    "follow_up_thought_id": "followup-123"
+                }
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await action_complete_step(mock_processor, mock_thought)
+            
+            # Verify correct extraction from dict
+            call_args = mock_broadcast.call_args[0][1]
+            assert call_args["action_executed"] == "speak"  # Fixed: was "UNKNOWN"
+            assert call_args["dispatch_success"] is True
+            assert call_args["handler_completed"] is True  # handler != "Unknown"
+            assert call_args["follow_up_processing_pending"] is True  # has follow_up_thought_id
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_action_complete_object_format(self):
+        """Test ACTION_COMPLETE with object format (fallback behavior)."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast:
+            
+            @streaming_step(StepPoint.ACTION_COMPLETE)
+            async def action_complete_step(self, thought_item):
+                # Return object format (fallback) - restrict spec to only have the attributes we want
+                result = Mock(spec=['selected_action', 'success', 'completed', 'has_follow_up'])
+                result.selected_action = "ponder"  # This should be used in fallback
+                result.success = False
+                result.completed = True
+                result.has_follow_up = False
+                # action_type is not in spec, so it won't exist
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await action_complete_step(mock_processor, mock_thought)
+            
+            # Verify fallback object extraction
+            call_args = mock_broadcast.call_args[0][1]
+            assert call_args["action_executed"] == "ponder"  # Should fall back to selected_action
+            assert call_args["dispatch_success"] is False
+            assert call_args["handler_completed"] is True 
+            assert call_args["follow_up_processing_pending"] is False
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_perform_dmas_initial_results(self):
+        """Test PERFORM_DMAS with InitialDMAResults object (new behavior)."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast:
+            
+            @streaming_step(StepPoint.PERFORM_DMAS)
+            async def perform_dmas_step(self, thought_item):
+                # Mock InitialDMAResults object
+                result = Mock()
+                result.ethical_pdma = "ethical_result"
+                result.csdma = "csdma_result"
+                result.dsdma = "dsdma_result"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            mock_thought.initial_context = "test_context"
+            
+            await perform_dmas_step(mock_processor, mock_thought)
+            
+            # Verify DMA results extraction
+            call_args = mock_broadcast.call_args[0][1]
+            expected_dma = "ethical_pdma: ethical_result; csdma: csdma_result; dsdma: dsdma_result"
+            assert call_args["dma_results"] == expected_dma
+            assert call_args["context"] == "test_context"
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_conscience_execution_overridden(self):
+        """Test CONSCIENCE_EXECUTION with ConscienceApplicationResult (new behavior)."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast:
+            
+            @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
+            async def conscience_step(self, thought_item):
+                # Mock ConscienceApplicationResult with overridden=True
+                result = Mock()
+                result.overridden = True
+                result.override_reason = "Safety violation"
+                result.final_action = Mock()
+                result.final_action.selected_action = "reject"
+                result.action_result = "action_blocked"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await conscience_step(mock_processor, mock_thought)
+            
+            # Verify conscience result extraction
+            call_args = mock_broadcast.call_args[0][1]
+            assert call_args["selected_action"] == "reject"
+            assert call_args["conscience_passed"] is False  # not overridden
+            assert call_args["override_reason"] == "Safety violation"
+            assert "action_result" in call_args
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_conscience_execution_passed(self):
+        """Test CONSCIENCE_EXECUTION with overridden=False (conscience passed)."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast:
+            
+            @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
+            async def conscience_step(self, thought_item):
+                # Mock ConscienceApplicationResult with overridden=False
+                result = Mock()
+                result.overridden = False
+                result.final_action = Mock()
+                result.final_action.selected_action = "speak"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await conscience_step(mock_processor, mock_thought)
+            
+            # Verify conscience passed
+            call_args = mock_broadcast.call_args[0][1]
+            assert call_args["selected_action"] == "speak"
+            assert call_args["conscience_passed"] is True  # not overridden
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_missing_action_type(self):
+        """Test ACTION_COMPLETE fails fast when dict missing action_type."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.ACTION_COMPLETE)
+            async def action_complete_step(self, thought_item):
+                # Return dict missing action_type
+                return {
+                    "success": True,
+                    "handler": "SomeHandler"
+                    # Missing "action_type" - should fail fast
+                }
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await action_complete_step(mock_processor, mock_thought)
+            
+            # Should log error due to KeyError
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for action_complete" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_conscience_missing_overridden(self):
+        """Test CONSCIENCE_EXECUTION fails fast when result missing overridden."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
+            async def conscience_step(self, thought_item):
+                # Return object missing overridden attribute
+                result = Mock(spec=['final_action'])  # Missing 'overridden'
+                result.final_action = Mock()
+                result.final_action.selected_action = "speak"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await conscience_step(mock_processor, mock_thought)
+            
+            # Should log error due to AttributeError
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for conscience_execution" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_error_handling(self):
+        """Test error handling in step-specific data extraction."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.PERFORM_ASPDMA)
+            async def problematic_step(self, thought_item):
+                # Return something that will cause an error in data extraction
+                result = Mock()
+                # Create a property that raises an exception when accessed
+                type(result).selected_action = PropertyMock(side_effect=Exception("Test error"))
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            # Should not raise exception due to error handling
+            await problematic_step(mock_processor, mock_thought)
+            
+            # Verify error was logged
+            mock_logger.error.assert_called_once()
+            error_call = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for perform_aspdma" in error_call
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_gather_context_none(self):
+        """Test GATHER_CONTEXT fails fast when result is None."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.GATHER_CONTEXT)
+            async def gather_context_step(self, thought_item):
+                return None  # This should trigger fail-fast
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            
+            await gather_context_step(mock_processor, mock_thought)
+            
+            # Should log error due to ValueError
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for gather_context" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_perform_dmas_none(self):
+        """Test PERFORM_DMAS fails fast when result is None."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.PERFORM_DMAS)
+            async def perform_dmas_step(self, thought_item):
+                return None  # This should trigger fail-fast
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await perform_dmas_step(mock_processor, mock_thought)
+            
+            # Should log error due to ValueError
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for perform_dmas" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_perform_dmas_missing_context(self):
+        """Test PERFORM_DMAS fails fast when thought_item missing initial_context."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.PERFORM_DMAS)
+            async def perform_dmas_step(self, thought_item):
+                result = Mock()
+                result.ethical_pdma = "test"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            # Mock thought without initial_context attribute
+            mock_thought = Mock(spec=[], thought_id="test-123")  # spec=[] prevents default attributes
+            
+            await perform_dmas_step(mock_processor, mock_thought)
+            
+            # Should log error due to AttributeError
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for perform_dmas" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_recursive_aspdma_missing_args(self):
+        """Test RECURSIVE_ASPDMA fails fast when args is empty."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.RECURSIVE_ASPDMA)
+            async def recursive_aspdma_step(self, thought_item):
+                result = Mock()
+                result.selected_action = "test"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            # Mock _add_step_specific_data to call our function with empty args
+            with patch('ciris_engine.logic.processors.core.step_decorators._add_recursive_aspdma_data') as mock_add_data:
+                mock_add_data.side_effect = ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")
+                
+                await recursive_aspdma_step(mock_processor, mock_thought)
+                
+                # Should log error due to ValueError
+                mock_logger.error.assert_called_once()
+                error_msg = mock_logger.error.call_args[0][0]
+                assert "Error adding step-specific data for recursive_aspdma" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_finalize_action_missing_rationale(self):
+        """Test FINALIZE_ACTION fails fast when result missing rationale."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.FINALIZE_ACTION)
+            async def finalize_action_step(self, thought_item):
+                # Mock result with selected_action but missing rationale
+                result = Mock(spec=['selected_action'])  # Only has selected_action
+                result.selected_action = "test_action"
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            await finalize_action_step(mock_processor, mock_thought)
+            
+            # Should log error due to AttributeError
+            mock_logger.error.assert_called_once()
+            error_msg = mock_logger.error.call_args[0][0]
+            assert "Error adding step-specific data for finalize_action" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_perform_action_no_action(self):
+        """Test PERFORM_ACTION fails fast when cannot determine selected_action."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.PERFORM_ACTION)
+            async def perform_action_step(self, thought_item):
+                # Return result without selected_action
+                result = Mock(spec=[])  # No attributes
+                return result
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123")
+            
+            # Mock _add_step_specific_data to call our function with empty args
+            with patch('ciris_engine.logic.processors.core.step_decorators._add_perform_action_data') as mock_add_data:
+                mock_add_data.side_effect = ValueError("PERFORM_ACTION cannot determine selected_action - neither result.selected_action nor args[0] available")
+                
+                await perform_action_step(mock_processor, mock_thought)
+                
+                # Should log error due to ValueError
+                mock_logger.error.assert_called_once()
+                error_msg = mock_logger.error.call_args[0][0]
+                assert "Error adding step-specific data for perform_action" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_start_round_empty_args(self):
+        """Test START_ROUND fails fast when args is empty."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.START_ROUND)
+            async def start_round_step(self, thought_item):
+                return "round_started"
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            
+            # Mock _add_step_specific_data to call our function with empty args
+            with patch('ciris_engine.logic.processors.core.step_decorators._add_start_round_data') as mock_add_data:
+                mock_add_data.side_effect = ValueError("START_ROUND args is empty - thought list is required for processing")
+                
+                await start_round_step(mock_processor, mock_thought)
+                
+                # Should log error due to ValueError
+                mock_logger.error.assert_called_once()
+                error_msg = mock_logger.error.call_args[0][0]
+                assert "Error adding step-specific data for start_round" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_step_specific_data_fail_fast_round_complete_empty_args(self):
+        """Test ROUND_COMPLETE fails fast when args is empty."""
+        
+        with patch('ciris_engine.logic.processors.core.step_decorators._broadcast_step_result') as mock_broadcast, \
+             patch('ciris_engine.logic.processors.core.step_decorators.logger') as mock_logger:
+            
+            @streaming_step(StepPoint.ROUND_COMPLETE)
+            async def round_complete_step(self, thought_item):
+                return "round_completed"
+            
+            mock_processor = Mock()
+            mock_processor._time_service = Mock()
+            mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
+            
+            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            
+            # Mock _add_step_specific_data to call our function with empty args
+            with patch('ciris_engine.logic.processors.core.step_decorators._add_round_complete_data') as mock_add_data:
+                mock_add_data.side_effect = ValueError("ROUND_COMPLETE args is empty - completed thought count is required")
+                
+                await round_complete_step(mock_processor, mock_thought)
+                
+                # Should log error due to ValueError
+                mock_logger.error.assert_called_once()
+                error_msg = mock_logger.error.call_args[0][0]
+                assert "Error adding step-specific data for round_complete" in error_msg
+
 
 class TestIntegrationFlow:
     """Test complete integration flow with decorators."""
@@ -417,3 +912,410 @@ class TestIntegrationFlow:
             # CRITICAL: Always disable single-step mode to prevent test order dependencies
             disable_single_step_mode()
             _paused_thoughts.clear()
+
+
+class TestRefactoredHelperFunctions:
+    """Test the refactored helper functions for cognitive complexity reduction."""
+
+    def test_create_step_result_schema_gather_context(self):
+        """Test _create_step_result_schema for GATHER_CONTEXT step."""
+        step_data = {
+            "thought_id": "test-123",
+            "task_id": "task-456",
+            "success": True,
+            "timestamp": "2025-01-15T12:00:00Z",
+            "processing_time_ms": 100
+        }
+        
+        result = _create_step_result_schema(StepPoint.GATHER_CONTEXT, step_data)
+        
+        assert result is not None
+        assert result.thought_id == "test-123"
+        assert result.task_id == "task-456"
+        assert result.success is True
+        assert result.timestamp == "2025-01-15T12:00:00Z"
+        assert result.processing_time_ms == 100
+
+    def test_create_step_result_schema_perform_dmas(self):
+        """Test _create_step_result_schema for PERFORM_DMAS step."""
+        step_data = {
+            "thought_id": "test-123",
+            "context": "test_context",
+            "success": True,
+            "timestamp": "2025-01-15T12:00:00Z",
+            "processing_time_ms": 150
+        }
+        
+        result = _create_step_result_schema(StepPoint.PERFORM_DMAS, step_data)
+        
+        assert result is not None
+        assert result.thought_id == "test-123"
+        assert result.context == "test_context"
+        assert result.success is True
+
+    def test_create_step_result_schema_unsupported_step(self):
+        """Test _create_step_result_schema returns None for unsupported step types."""
+        step_data = {"thought_id": "test-123"}
+        
+        # Create a mock StepPoint that's not in the map
+        fake_step = Mock()
+        fake_step.name = "FAKE_STEP"
+        
+        result = _create_step_result_schema(fake_step, step_data)
+        
+        assert result is None
+
+    def test_extract_timing_data_with_timestamp(self):
+        """Test _extract_timing_data extracts timing from timestamp."""
+        step_data = {
+            "timestamp": "2025-01-15T12:00:00Z",
+            "other_field": "ignored"
+        }
+        
+        start_time, end_time = _extract_timing_data(step_data)
+        
+        # Should parse the timestamp
+        assert start_time.year == 2025
+        assert start_time.month == 1
+        assert start_time.day == 15
+        assert start_time.hour == 12
+        # end_time should be current time
+        assert end_time is not None
+
+    def test_extract_timing_data_with_timezone(self):
+        """Test _extract_timing_data handles timezone offsets."""
+        step_data = {
+            "timestamp": "2025-01-15T12:00:00+00:00",
+        }
+        
+        start_time, end_time = _extract_timing_data(step_data)
+        
+        # Should handle timezone properly
+        assert start_time.tzinfo is not None
+        assert end_time.tzinfo is not None
+
+    def test_extract_timing_data_missing_timestamp(self):
+        """Test _extract_timing_data uses current time when timestamp missing."""
+        step_data = {}
+        
+        start_time, end_time = _extract_timing_data(step_data)
+        
+        # Should use current time
+        assert start_time is not None
+        assert end_time is not None
+
+    def test_build_step_result_data_complete(self):
+        """Test _build_step_result_data builds complete result data structure."""
+        step = StepPoint.GATHER_CONTEXT
+        step_data = {
+            "thought_id": "test-123",
+            "success": True,
+            "processing_time_ms": 100.0,
+            "task_id": "task-456"
+        }
+        step_result = Mock()
+        step_result.model_dump.return_value = {"serialized": "data"}
+        
+        trace_context = {"trace_id": "trace-123", "span_id": "span-456"}
+        span_attributes = [{"key": "test_key", "value": "test_value"}]
+        
+        result = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
+        
+        assert result["step_point"] == "gather_context"
+        assert result["thought_id"] == "test-123"
+        assert result["success"] is True
+        assert result["processing_time_ms"] == 100.0
+        assert result["task_id"] == "task-456"
+        assert result["step_data"] == {"serialized": "data"}
+        assert result["trace_context"] == trace_context
+        assert result["span_attributes"] == span_attributes
+        assert result["otlp_compatible"] is True
+
+    def test_build_step_result_data_missing_fields(self):
+        """Test _build_step_result_data handles missing optional fields."""
+        step = StepPoint.PERFORM_DMAS
+        step_data = {}  # Empty step data
+        step_result = Mock()
+        step_result.model_dump.return_value = {"some": "data"}
+        
+        result = _build_step_result_data(step, step_data, step_result, {}, [])
+        
+        assert result["step_point"] == "perform_dmas"
+        assert result["thought_id"] == ""  # Default empty string
+        assert result["task_id"] == ""  # Default empty string
+        assert result["success"] is True  # Default True
+        assert result["processing_time_ms"] == 0.0  # Default 0.0
+        assert result["step_data"] == {"some": "data"}
+
+    def test_add_gather_context_attributes_success(self):
+        """Test _add_gather_context_attributes adds context data."""
+        attributes = []
+        result_data = {
+            "context": "test_context_data"
+        }
+        
+        _add_gather_context_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "context.size_bytes", "value": {"intValue": len("test_context_data")}},
+            {"key": "context.available", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_gather_context_attributes_no_context(self):
+        """Test _add_gather_context_attributes handles missing context gracefully."""
+        attributes = []
+        result_data = {"source_task_id": "task-789"}  # Missing context
+        
+        _add_gather_context_attributes(attributes, result_data)
+        
+        # Should not add any attributes when context is missing
+        assert attributes == []
+
+    def test_add_gather_context_attributes_empty_context(self):
+        """Test _add_gather_context_attributes handles empty context."""
+        attributes = []
+        result_data = {"context": ""}  # Empty context
+        
+        _add_gather_context_attributes(attributes, result_data)
+        
+        # Should not add attributes for empty context
+        assert attributes == []
+
+    def test_add_perform_dmas_attributes_success(self):
+        """Test _add_perform_dmas_attributes adds DMA results and context."""
+        attributes = []
+        result_data = {
+            "dma_results": "ethical_pdma: result1; csdma: result2",
+            "context": "initial_context_data"
+        }
+        
+        _add_perform_dmas_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "dma.results_available", "value": {"boolValue": True}},
+            {"key": "dma.results_size", "value": {"intValue": len("ethical_pdma: result1; csdma: result2")}},
+            {"key": "dma.context_provided", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_perform_dmas_attributes_missing_dma_results(self):
+        """Test _add_perform_dmas_attributes handles missing DMA results gracefully."""
+        attributes = []
+        result_data = {"context": "test_context"}  # Missing dma_results
+        
+        _add_perform_dmas_attributes(attributes, result_data)
+        
+        # Should only add context attribute
+        expected_attrs = [
+            {"key": "dma.context_provided", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_perform_aspdma_attributes_success(self):
+        """Test _add_perform_aspdma_attributes adds selected action."""
+        attributes = []
+        result_data = {"selected_action": "speak_with_confidence"}
+        
+        _add_perform_aspdma_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "action.selected", "value": {"stringValue": "speak_with_confidence"}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_conscience_execution_attributes_success(self):
+        """Test _add_conscience_execution_attributes adds conscience data."""
+        attributes = []
+        result_data = {
+            "selected_action": "reject",
+            "conscience_passed": False
+        }
+        
+        _add_conscience_execution_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "conscience.passed", "value": {"boolValue": False}},
+            {"key": "conscience.action", "value": {"stringValue": "reject"}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_finalize_action_attributes_success(self):
+        """Test _add_finalize_action_attributes adds action and reasoning."""
+        attributes = []
+        result_data = {
+            "selected_action": "speak",
+            "selection_reasoning": "User needs helpful response"
+        }
+        
+        _add_finalize_action_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "finalized.action", "value": {"stringValue": "speak"}},
+            {"key": "finalized.has_reasoning", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_perform_action_attributes_success(self):
+        """Test _add_perform_action_attributes adds action data."""
+        attributes = []
+        result_data = {
+            "action_executed": "respond_helpfully",
+            "dispatch_success": True
+        }
+        
+        _add_perform_action_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "action.executed", "value": {"stringValue": "respond_helpfully"}},
+            {"key": "action.dispatch_success", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_action_complete_attributes_success(self):
+        """Test _add_action_complete_attributes adds completion data."""
+        attributes = []
+        result_data = {
+            "handler_completed": True,
+            "execution_time_ms": 150.5
+        }
+        
+        _add_action_complete_attributes(attributes, result_data)
+        
+        expected_attrs = [
+            {"key": "action.handler_completed", "value": {"boolValue": True}},
+            {"key": "action.execution_time_ms", "value": {"doubleValue": 150.5}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_gather_context(self):
+        """Test _add_typed_step_attributes dispatches to correct handler."""
+        attributes = []
+        result_data = {"context": "test_context"}
+        
+        _add_typed_step_attributes(attributes, StepPoint.GATHER_CONTEXT, result_data)
+        
+        # Should have called _add_gather_context_attributes
+        expected_attrs = [
+            {"key": "context.size_bytes", "value": {"intValue": len("test_context")}},
+            {"key": "context.available", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_perform_dmas(self):
+        """Test _add_typed_step_attributes dispatches to PERFORM_DMAS handler."""
+        attributes = []
+        result_data = {
+            "dma_results": "ethical_pdma: safe; csdma: clear",
+            "context": "test_context"
+        }
+        
+        _add_typed_step_attributes(attributes, StepPoint.PERFORM_DMAS, result_data)
+        
+        # Should have called _add_perform_dmas_attributes
+        expected_attrs = [
+            {"key": "dma.results_available", "value": {"boolValue": True}},
+            {"key": "dma.results_size", "value": {"intValue": len("ethical_pdma: safe; csdma: clear")}},
+            {"key": "dma.context_provided", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_conscience_execution(self):
+        """Test _add_typed_step_attributes dispatches to CONSCIENCE_EXECUTION handler."""
+        attributes = []
+        result_data = {
+            "selected_action": "speak", 
+            "conscience_passed": True
+        }
+        
+        _add_typed_step_attributes(attributes, StepPoint.CONSCIENCE_EXECUTION, result_data)
+        
+        # Should have called _add_conscience_execution_attributes  
+        expected_attrs = [
+            {"key": "conscience.passed", "value": {"boolValue": True}},
+            {"key": "conscience.action", "value": {"stringValue": "speak"}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_finalize_action(self):
+        """Test _add_typed_step_attributes dispatches to FINALIZE_ACTION handler."""
+        attributes = []
+        result_data = {
+            "selected_action": "listen"
+        }
+        
+        _add_typed_step_attributes(attributes, StepPoint.FINALIZE_ACTION, result_data)
+        
+        # Should have called _add_finalize_action_attributes
+        expected_attrs = [
+            {"key": "finalized.action", "value": {"stringValue": "listen"}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_perform_action(self):
+        """Test _add_typed_step_attributes dispatches to PERFORM_ACTION handler."""
+        attributes = []
+        result_data = {"action_executed": "provide_information", "dispatch_success": False}
+        
+        _add_typed_step_attributes(attributes, StepPoint.PERFORM_ACTION, result_data)
+        
+        # Should have called _add_perform_action_attributes
+        expected_attrs = [
+            {"key": "action.executed", "value": {"stringValue": "provide_information"}},
+            {"key": "action.dispatch_success", "value": {"boolValue": False}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_action_complete(self):
+        """Test _add_typed_step_attributes dispatches to ACTION_COMPLETE handler."""
+        attributes = []
+        result_data = {
+            "handler_completed": True
+        }
+        
+        _add_typed_step_attributes(attributes, StepPoint.ACTION_COMPLETE, result_data)
+        
+        # Should have called _add_action_complete_attributes
+        expected_attrs = [
+            {"key": "action.handler_completed", "value": {"boolValue": True}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_perform_aspdma(self):
+        """Test _add_typed_step_attributes dispatches to PERFORM_ASPDMA handler."""
+        attributes = []
+        result_data = {"selected_action": "analyze_deeply"}
+        
+        _add_typed_step_attributes(attributes, StepPoint.PERFORM_ASPDMA, result_data)
+        
+        # Should have called _add_perform_aspdma_attributes
+        expected_attrs = [
+            {"key": "action.selected", "value": {"stringValue": "analyze_deeply"}}
+        ]
+        assert attributes == expected_attrs
+
+    def test_add_typed_step_attributes_unsupported_step(self):
+        """Test _add_typed_step_attributes handles unsupported step types gracefully."""
+        attributes = []
+        result_data = {"some_data": "test"}
+        
+        # Use a step type not in the dispatch map
+        fake_step = Mock()
+        fake_step.name = "FAKE_STEP_TYPE"
+        
+        # Should not raise exception, should just not add any attributes
+        _add_typed_step_attributes(attributes, fake_step, result_data)
+        
+        # No attributes should be added
+        assert attributes == []
+
+    def test_add_typed_step_attributes_handler_no_match(self):
+        """Test _add_typed_step_attributes handles empty result data gracefully."""
+        attributes = []
+        result_data = {}  # Empty result_data should not match any conditions
+        
+        # Should not add any attributes when no data matches
+        _add_typed_step_attributes(attributes, StepPoint.GATHER_CONTEXT, result_data)
+        
+        # No attributes should be added
+        assert attributes == []

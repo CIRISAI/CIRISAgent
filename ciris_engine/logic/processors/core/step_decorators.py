@@ -189,7 +189,7 @@ def _add_step_specific_data(
         elif step == StepPoint.PERFORM_ASPDMA:
             _add_perform_aspdma_data(step_data, result)
         elif step == StepPoint.CONSCIENCE_EXECUTION:
-            _add_conscience_execution_data(step_data, result, args)
+            _add_conscience_execution_data(step_data, result)
         elif step == StepPoint.RECURSIVE_ASPDMA:
             _add_recursive_aspdma_data(step_data, result, args)
         elif step == StepPoint.RECURSIVE_CONSCIENCE:
@@ -279,7 +279,7 @@ def _add_perform_aspdma_data(step_data: Dict[str, Any], result: Any) -> None:
     step_data["action_rationale"] = str(result.rationale)
 
 
-def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any, args: tuple) -> None:
+def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any) -> None:
     """Add CONSCIENCE_EXECUTION specific data with full transparency."""
     if not result:
         raise ValueError("CONSCIENCE_EXECUTION step result is None - this indicates a serious pipeline issue")
@@ -506,64 +506,88 @@ def _add_round_complete_data(step_data: Dict[str, Any], args: tuple) -> None:
     step_data["thoughts_processed"] = len(args)
 
 
+def _create_step_result_schema(step: StepPoint, step_data: Dict[str, Any]):
+    """Create appropriate step result schema based on step type."""
+    # Import here to avoid circular dependency
+    from ciris_engine.schemas.services.runtime_control import (
+        StepResultActionComplete,
+        StepResultConscienceExecution,
+        StepResultFinalizeAction,
+        StepResultGatherContext,
+        StepResultPerformAction,
+        StepResultPerformASPDMA,
+        StepResultPerformDMAs,
+        StepResultRecursiveASPDMA,
+        StepResultRecursiveConscience,
+        StepResultRoundComplete,
+        StepResultStartRound,
+    )
+
+    step_result_map = {
+        StepPoint.START_ROUND: StepResultStartRound,
+        StepPoint.GATHER_CONTEXT: StepResultGatherContext,
+        StepPoint.PERFORM_DMAS: StepResultPerformDMAs,
+        StepPoint.PERFORM_ASPDMA: StepResultPerformASPDMA,
+        StepPoint.CONSCIENCE_EXECUTION: StepResultConscienceExecution,
+        StepPoint.RECURSIVE_ASPDMA: StepResultRecursiveASPDMA,
+        StepPoint.RECURSIVE_CONSCIENCE: StepResultRecursiveConscience,
+        StepPoint.FINALIZE_ACTION: StepResultFinalizeAction,
+        StepPoint.PERFORM_ACTION: StepResultPerformAction,
+        StepPoint.ACTION_COMPLETE: StepResultActionComplete,
+        StepPoint.ROUND_COMPLETE: StepResultRoundComplete,
+    }
+
+    result_class = step_result_map.get(step)
+    if result_class:
+        if step == StepPoint.GATHER_CONTEXT:
+            logger.debug(f"Creating StepResultGatherContext with step_data keys: {list(step_data.keys())}, values: {step_data}")
+        return result_class(**step_data)
+    return None
+
+
+def _extract_timing_data(step_data: Dict[str, Any]) -> tuple:
+    """Extract and normalize timing data from step_data."""
+    from datetime import datetime, timezone
+    
+    timestamp_str = step_data.get("timestamp", datetime.now().isoformat())
+    # Ensure both timestamps have timezone info for consistent calculation
+    if timestamp_str.endswith('+00:00') or timestamp_str.endswith('Z'):
+        start_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+    else:
+        start_time = datetime.fromisoformat(timestamp_str).replace(tzinfo=timezone.utc)
+    end_time = datetime.now(timezone.utc)
+    
+    return start_time, end_time
+
+
+def _build_step_result_data(step: StepPoint, step_data: Dict[str, Any], step_result, trace_context: Dict[str, Any], span_attributes: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the complete step result data structure."""
+    return {
+        "step_point": step.value,
+        "success": step_data.get("success", True), 
+        "processing_time_ms": step_data.get("processing_time_ms", 0.0),
+        "thought_id": step_data.get("thought_id", ""),
+        "task_id": step_data.get("task_id", ""),
+        "step_data": step_result.model_dump(),  # Put the typed data in step_data field
+        # Enhanced trace data for OTLP compatibility
+        "trace_context": trace_context,
+        "span_attributes": span_attributes,
+        "otlp_compatible": True,
+    }
+
+
 async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> None:
     """Broadcast step result to global step result stream."""
     try:
         # Import here to avoid circular dependency
         from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
-        from ciris_engine.schemas.services.runtime_control import (
-            StepResultActionComplete,
-            StepResultConscienceExecution,
-            StepResultFinalizeAction,
-            StepResultGatherContext,
-            StepResultPerformAction,
-            StepResultPerformASPDMA,
-            StepResultPerformDMAs,
-            StepResultRecursiveASPDMA,
-            StepResultRecursiveConscience,
-            StepResultRoundComplete,
-            StepResultStartRound,
-        )
 
         # Create appropriate step result schema
-        step_result = None
-
-        if step == StepPoint.START_ROUND:
-            step_result = StepResultStartRound(**step_data)
-        elif step == StepPoint.GATHER_CONTEXT:
-            logger.debug(f"Creating StepResultGatherContext with step_data keys: {list(step_data.keys())}, values: {step_data}")
-            step_result = StepResultGatherContext(**step_data)
-        elif step == StepPoint.PERFORM_DMAS:
-            step_result = StepResultPerformDMAs(**step_data)
-        elif step == StepPoint.PERFORM_ASPDMA:
-            step_result = StepResultPerformASPDMA(**step_data)
-        elif step == StepPoint.CONSCIENCE_EXECUTION:
-            step_result = StepResultConscienceExecution(**step_data)
-        elif step == StepPoint.RECURSIVE_ASPDMA:
-            step_result = StepResultRecursiveASPDMA(**step_data)
-        elif step == StepPoint.RECURSIVE_CONSCIENCE:
-            step_result = StepResultRecursiveConscience(**step_data)
-        elif step == StepPoint.FINALIZE_ACTION:
-            step_result = StepResultFinalizeAction(**step_data)
-        elif step == StepPoint.PERFORM_ACTION:
-            step_result = StepResultPerformAction(**step_data)
-        elif step == StepPoint.ACTION_COMPLETE:
-            step_result = StepResultActionComplete(**step_data)
-        elif step == StepPoint.ROUND_COMPLETE:
-            step_result = StepResultRoundComplete(**step_data)
+        step_result = _create_step_result_schema(step, step_data)
 
         if step_result:
-            # Build enhanced trace data for the step result
-            from datetime import datetime, timezone
-            
-            # Extract timing data if available in the step_data
-            timestamp_str = step_data.get("timestamp", datetime.now().isoformat())
-            # Ensure both timestamps have timezone info for consistent calculation
-            if timestamp_str.endswith('+00:00') or timestamp_str.endswith('Z'):
-                start_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-            else:
-                start_time = datetime.fromisoformat(timestamp_str).replace(tzinfo=timezone.utc)
-            end_time = datetime.now(timezone.utc)
+            # Extract and normalize timing data
+            start_time, end_time = _extract_timing_data(step_data)
             
             # Build trace context using our helper function
             trace_context = _build_trace_context_dict(step_data.get("thought_id", ""), step_data.get("task_id"), step, start_time, end_time)
@@ -571,19 +595,9 @@ async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> 
             # Build span attributes using our helper function
             span_attributes = _build_span_attributes_dict(step, step_result, step_data)
             
-            # Convert typed step result to the format expected by stream processing
-            step_result_data = {
-                "step_point": step.value,
-                "success": step_data.get("success", True), 
-                "processing_time_ms": step_data.get("processing_time_ms", 0.0),
-                "thought_id": step_data.get("thought_id", ""),
-                "task_id": step_data.get("task_id", ""),
-                "step_data": step_result.model_dump(),  # Put the typed data in step_data field
-                # Enhanced trace data for OTLP compatibility
-                "trace_context": trace_context,
-                "span_attributes": span_attributes,
-                "otlp_compatible": True,
-            }
+            # Build complete step result data
+            step_result_data = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
+            
             logger.debug(f"Broadcasting step result for {step.value}: task_id={step_result_data['task_id']}, thought_id={step_result_data['thought_id']}")
             await step_result_stream.broadcast_step_result(step_result_data)
         else:
@@ -786,54 +800,84 @@ def _build_span_attributes_dict(
     return attributes
 
 
+def _add_gather_context_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to GATHER_CONTEXT step."""
+    if "context" in result_data and result_data["context"]:
+        context_size = len(str(result_data["context"]))
+        attributes.extend([
+            {"key": "context.size_bytes", "value": {"intValue": context_size}},
+            {"key": "context.available", "value": {"boolValue": True}},
+        ])
+
+
+def _add_perform_dmas_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to PERFORM_DMAS step."""
+    if "dma_results" in result_data and result_data["dma_results"]:
+        attributes.extend([
+            {"key": "dma.results_available", "value": {"boolValue": True}},
+            {"key": "dma.results_size", "value": {"intValue": len(str(result_data["dma_results"]))}},
+        ])
+    if "context" in result_data:
+        attributes.append({"key": "dma.context_provided", "value": {"boolValue": bool(result_data["context"])}})
+
+
+def _add_perform_aspdma_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to PERFORM_ASPDMA step."""
+    if "selected_action" in result_data:
+        attributes.append({"key": "action.selected", "value": {"stringValue": str(result_data["selected_action"])}})
+    if "action_rationale" in result_data:
+        attributes.append({"key": "action.has_rationale", "value": {"boolValue": bool(result_data["action_rationale"])}})
+
+
+def _add_conscience_execution_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to CONSCIENCE_EXECUTION step."""
+    if "conscience_passed" in result_data:
+        attributes.append({"key": "conscience.passed", "value": {"boolValue": result_data["conscience_passed"]}})
+    if "selected_action" in result_data:
+        attributes.append({"key": "conscience.action", "value": {"stringValue": str(result_data["selected_action"])}})
+
+
+def _add_finalize_action_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to FINALIZE_ACTION step."""
+    if "selected_action" in result_data:
+        attributes.append({"key": "finalized.action", "value": {"stringValue": str(result_data["selected_action"])}})
+    if "selection_reasoning" in result_data:
+        attributes.append({"key": "finalized.has_reasoning", "value": {"boolValue": bool(result_data["selection_reasoning"])}})
+
+
+def _add_perform_action_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to PERFORM_ACTION step."""
+    if "action_executed" in result_data:
+        attributes.append({"key": "action.executed", "value": {"stringValue": str(result_data["action_executed"])}})
+    if "dispatch_success" in result_data:
+        attributes.append({"key": "action.dispatch_success", "value": {"boolValue": result_data["dispatch_success"]}})
+
+
+def _add_action_complete_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+    """Add attributes specific to ACTION_COMPLETE step."""
+    if "handler_completed" in result_data:
+        attributes.append({"key": "action.handler_completed", "value": {"boolValue": result_data["handler_completed"]}})
+    if "execution_time_ms" in result_data:
+        attributes.append({"key": "action.execution_time_ms", "value": {"doubleValue": result_data["execution_time_ms"]}})
+
+
 def _add_typed_step_attributes(
     attributes: List[Dict[str, Any]], step: StepPoint, result_data: Dict[str, Any]
 ) -> None:
     """Add step-specific attributes based on typed step result data."""
     
-    if step == StepPoint.GATHER_CONTEXT:
-        if "context" in result_data and result_data["context"]:
-            context_size = len(str(result_data["context"]))
-            attributes.extend([
-                {"key": "context.size_bytes", "value": {"intValue": context_size}},
-                {"key": "context.available", "value": {"boolValue": True}},
-            ])
+    # Map step types to their handler functions
+    step_attribute_handlers = {
+        StepPoint.GATHER_CONTEXT: _add_gather_context_attributes,
+        StepPoint.PERFORM_DMAS: _add_perform_dmas_attributes,
+        StepPoint.PERFORM_ASPDMA: _add_perform_aspdma_attributes,
+        StepPoint.CONSCIENCE_EXECUTION: _add_conscience_execution_attributes,
+        StepPoint.FINALIZE_ACTION: _add_finalize_action_attributes,
+        StepPoint.PERFORM_ACTION: _add_perform_action_attributes,
+        StepPoint.ACTION_COMPLETE: _add_action_complete_attributes,
+    }
     
-    elif step == StepPoint.PERFORM_DMAS:
-        if "dma_results" in result_data and result_data["dma_results"]:
-            attributes.extend([
-                {"key": "dma.results_available", "value": {"boolValue": True}},
-                {"key": "dma.results_size", "value": {"intValue": len(str(result_data["dma_results"]))}},
-            ])
-        if "context" in result_data:
-            attributes.append({"key": "dma.context_provided", "value": {"boolValue": bool(result_data["context"])}})
-    
-    elif step == StepPoint.PERFORM_ASPDMA:
-        if "selected_action" in result_data:
-            attributes.append({"key": "action.selected", "value": {"stringValue": str(result_data["selected_action"])}})
-        if "action_rationale" in result_data:
-            attributes.append({"key": "action.has_rationale", "value": {"boolValue": bool(result_data["action_rationale"])}})
-    
-    elif step == StepPoint.CONSCIENCE_EXECUTION:
-        if "conscience_passed" in result_data:
-            attributes.append({"key": "conscience.passed", "value": {"boolValue": result_data["conscience_passed"]}})
-        if "selected_action" in result_data:
-            attributes.append({"key": "conscience.action", "value": {"stringValue": str(result_data["selected_action"])}})
-    
-    elif step == StepPoint.FINALIZE_ACTION:
-        if "selected_action" in result_data:
-            attributes.append({"key": "finalized.action", "value": {"stringValue": str(result_data["selected_action"])}})
-        if "selection_reasoning" in result_data:
-            attributes.append({"key": "finalized.has_reasoning", "value": {"boolValue": bool(result_data["selection_reasoning"])}})
-    
-    elif step == StepPoint.PERFORM_ACTION:
-        if "action_executed" in result_data:
-            attributes.append({"key": "action.executed", "value": {"stringValue": str(result_data["action_executed"])}})
-        if "dispatch_success" in result_data:
-            attributes.append({"key": "action.dispatch_success", "value": {"boolValue": result_data["dispatch_success"]}})
-    
-    elif step == StepPoint.ACTION_COMPLETE:
-        if "handler_completed" in result_data:
-            attributes.append({"key": "action.handler_completed", "value": {"boolValue": result_data["handler_completed"]}})
-        if "execution_time_ms" in result_data:
-            attributes.append({"key": "action.execution_time_ms", "value": {"doubleValue": result_data["execution_time_ms"]}})
+    # Call the appropriate handler function if one exists
+    handler = step_attribute_handlers.get(step)
+    if handler:
+        handler(attributes, result_data)

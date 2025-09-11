@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**STABLE RELEASE 1.1.1** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**STABLE RELEASE 1.1.3** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 

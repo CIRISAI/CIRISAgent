@@ -1052,9 +1052,9 @@ async def _get_trace_from_task(task, visibility_service):
         thoughts=[
             APIResponseThoughtStep(
                 step=i,
-                content=thought.content,
-                timestamp=thought.timestamp,
-                depth=thought.depth,
+                content=getattr(thought, "content", str(thought)),
+                timestamp=getattr(thought, "timestamp", datetime.now(timezone.utc)),
+                depth=getattr(thought, "depth", 0),
                 action=getattr(thought, "action", None),
                 confidence=getattr(thought, "confidence", None),
             )

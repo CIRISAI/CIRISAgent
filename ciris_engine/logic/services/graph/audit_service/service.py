@@ -1379,7 +1379,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             event_payload = EventPayload(
                 action=entry.action,
                 user_id=entry.actor,
-                service_name=entry.resource or "audit_service"
+                service_name=getattr(entry, "resource", "audit_service")
             )
             
             # Create AuditLogEntry

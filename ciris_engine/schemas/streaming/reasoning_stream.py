@@ -258,7 +258,7 @@ def _create_thought_stream_data(raw_result: Dict[str, Any]) -> ThoughtStreamData
         processing_time_ms=raw_result.get("processing_time_ms", 0.0),
         total_processing_time_ms=raw_result.get("processing_time_ms", 0.0),
         content_preview=str(step_data.get("thought_content", ""))[:200],
-        thought_type=step_data.get("thought_type", "task_execution"),
+        thought_type=step_data.get("thought_type") or "task_execution",
         step_result=typed_step_result,
         last_error=raw_result.get("error") if not raw_result.get("success", True) else None,
     )

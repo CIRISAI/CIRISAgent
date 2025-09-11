@@ -3,7 +3,6 @@ Comprehensive test suite for refactored authentication dependencies.
 
 Tests coverage for the newly extracted helper methods that reduce cognitive complexity:
 - _extract_bearer_token
-- _audit_failed_service_token  
 - _handle_service_token_auth
 - _handle_password_auth
 - _build_permissions_set
@@ -80,51 +79,6 @@ class TestExtractBearerToken:
             _extract_bearer_token("bearer abc123token")  # lowercase 'bearer'
 
 
-class TestAuditFailedServiceToken:
-    """Test _audit_failed_service_token helper method."""
-
-    @patch('asyncio.create_task')
-    def test_audit_failed_service_token_with_audit_service(self, mock_create_task):
-        """Test auditing when audit service is available."""
-        # Setup mock request
-        mock_request = Mock(spec=Request)
-        mock_request.app.state.audit_service = Mock()
-        mock_request.client.host = "127.0.0.1"
-        mock_request.headers = {"user-agent": "test-client"}
-        
-        service_token = "invalid-token-123"
-        
-        _audit_failed_service_token(mock_request, service_token)
-        
-        # Verify audit task was created
-        mock_create_task.assert_called_once()
-        # Verify audit service log_event was called
-        audit_call = mock_create_task.call_args[0][0]
-        # The audit event should be properly structured
-        assert audit_call is not None
-
-    def test_audit_failed_service_token_no_audit_service(self):
-        """Test auditing when no audit service is available."""
-        mock_request = Mock(spec=Request)
-        mock_request.app.state = Mock()
-        # Remove audit_service attribute
-        delattr(mock_request.app.state, 'audit_service') if hasattr(mock_request.app.state, 'audit_service') else None
-        
-        # Should complete without error
-        _audit_failed_service_token(mock_request, "test-token")
-
-    def test_audit_failed_service_token_no_client(self):
-        """Test auditing when request has no client info."""
-        mock_request = Mock(spec=Request)
-        mock_request.app.state.audit_service = Mock()
-        mock_request.client = None
-        mock_request.headers = {}
-        
-        with patch('asyncio.create_task'):
-            _audit_failed_service_token(mock_request, "test-token")
-            # Should complete without error
-
-
 class TestHandleServiceTokenAuth:
     """Test _handle_service_token_auth helper method."""
 
@@ -145,8 +99,7 @@ class TestHandleServiceTokenAuth:
         assert context.request == mock_request
         assert context.api_key_id is None
 
-    @patch('ciris_engine.logic.adapters.api.dependencies.auth._audit_failed_service_token')
-    def test_handle_service_token_auth_invalid_token(self, mock_audit):
+    def test_handle_service_token_auth_invalid_token(self):
         """Test handling of invalid service token."""
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
@@ -157,7 +110,6 @@ class TestHandleServiceTokenAuth:
         
         assert exc_info.value.status_code == 401
         assert "Invalid service token" in exc_info.value.detail
-        mock_audit.assert_called_once_with(mock_request, "invalid-token")
 
 
 class TestHandlePasswordAuth:

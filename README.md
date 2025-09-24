@@ -14,6 +14,9 @@
 
 **STABLE RELEASE 1.1.3** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
+Academic paper https://zenodo.org/records/17195221
+Philosophical foundation https://ciris.ai/ciris_covenant.pdf
+
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
 ## What It Actually Does

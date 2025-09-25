@@ -545,4 +545,4 @@ As CIRIS expands to multiple specialized agents:
 
 The OAuth Permission Request System provides a secure, scalable solution for managing access to CIRIS agents while maintaining the platform's security posture and commitment to meaningful interactions. By leveraging OAuth provider data and implementing strict validation, the system prevents common attack vectors while providing a smooth user experience for legitimate researchers and community members.
 
-The design prioritizes simplicity and security over features, aligning with CIRIS's philosophy of "No Dicts, No Strings, No Kings" - using typed, validated data throughout the system with no special cases or bypass mechanisms.
+The design prioritizes simplicity and security over features, aligning with CIRIS's philosophy of "No Untyped Dicts, No Bypass Patterns, No Exceptions" - using typed, validated data throughout the system with no special cases or bypass mechanisms.

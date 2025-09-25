@@ -20,7 +20,7 @@ def get_main_guidance() -> str:
 ║  • Sustainable pace - work with natural rhythms             ║
 ║                                                              ║
 ║  Core Principles:                                           ║
-║  • No Dicts, No Strings, No Kings                          ║
+║  • No Untyped Dicts, No Bypass Patterns, No Exceptions                          ║
 ║  • The schema you need already exists - find it, use it    ║
 ║  • Every error is an insight into system behavior          ║
 ║  • Test failures are opportunities to strengthen           ║

@@ -9,7 +9,7 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 ## Architecture & Design
 - [Architecture Overview](ARCHITECTURE.md) - System components and design (22 services)
 - [Architecture Pattern](ARCHITECTURE_PATTERN.md) - Intent-Driven Hybrid Architecture  
-- [Philosophy](../CLAUDE.md#core-philosophy-type-safety-first) - Core principles: No Dicts, No Strings, No Kings
+- [Philosophy](../CLAUDE.md#core-philosophy-type-safety-first) - Core principles: No Untyped Dicts, No Bypass Patterns, No Exceptions
 
 ## Configuration & Operations
 - [Agent Configuration](AGENT_CONFIGURATION.md) - Creating and configuring agents

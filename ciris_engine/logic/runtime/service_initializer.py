@@ -964,7 +964,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return
 
         # Infrastructure services are single-instance - NO ServiceRegistry needed
-        # Direct references only per "No Kings" principle
+        # Direct references only per "No Exceptions" principle
 
         # Memory service already registered above with full capabilities in initialize_all_services()
         # Don't re-register as it would overwrite the full capability list

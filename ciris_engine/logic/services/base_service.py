@@ -2,7 +2,7 @@
 Base Service Class for CIRIS - Maximum clarity and simplicity.
 
 Design Principles:
-1. No Dicts, No Strings, No Kings - All typed with Pydantic
+1. No Untyped Dicts, No Bypass Patterns, No Exceptions - All typed with Pydantic
 2. Clear separation between required and optional functionality
 3. Dependency injection for all external services
 4. Comprehensive lifecycle management

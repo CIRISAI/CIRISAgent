@@ -28,7 +28,7 @@ CIRIS wraps LLM calls with:
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
 - **Identity system** - Agents have persistent identity across restarts
 
-**Philosophy**: "No Dicts, No Strings, No Kings" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
+**Philosophy**: "No Untyped Dicts, No Bypass Patterns, No Exceptions" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
 
 **Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
 

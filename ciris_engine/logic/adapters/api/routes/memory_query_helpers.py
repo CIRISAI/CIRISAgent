@@ -4,7 +4,7 @@ Memory query helpers - modular functions for database queries.
 Following CIRIS principles:
 - Single Responsibility: Each class handles one aspect
 - Type Safety: All inputs and outputs are typed
-- No Kings: No special cases or bypass patterns
+- No Exceptions: No special cases or bypass patterns
 """
 
 import json

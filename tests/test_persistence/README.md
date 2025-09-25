@@ -57,7 +57,7 @@ This directory contains comprehensive tests for the CIRIS persistence layer, foc
 All tests follow CIRIS core philosophy:
 - **No Dicts**: All data uses Pydantic models/schemas
 - **No Strings**: Use enums and typed constants
-- **No Kings**: No special cases or bypass patterns
+- **No Exceptions**: No special cases or bypass patterns
 - **Type Safety**: Full type validation throughout
 
 ## Running Tests

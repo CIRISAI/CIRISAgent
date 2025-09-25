@@ -42,13 +42,13 @@ CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Grat
 
 ## Core Philosophy
 
-### No Dicts, No Strings, No Kings
+### No Untyped Dicts, No Bypass Patterns, No Exceptions
 
 **ACHIEVED**: Zero `Dict[str, Any]` in production code
 
-1. **No Dicts**: All data uses Pydantic models/schemas
-2. **No Strings**: Use enums, typed constants, and schema fields
-3. **No Kings**: No special cases or bypass patterns
+1. **No Untyped Dicts**: All data uses Pydantic models/schemas instead of `Dict[str, Any]`
+2. **No Bypass Patterns**: Every component follows consistent rules and patterns
+3. **No Exceptions**: No special cases, emergency overrides, or privileged code paths
 4. **No Backwards Compatibility**: Forward-only development
 
 ### Type Safety Best Practices

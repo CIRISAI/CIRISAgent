@@ -76,11 +76,11 @@
 
 ## Core Design Philosophy
 
-CIRIS follows the principle of **"No Dicts, No Strings, No Kings"**:
+CIRIS follows the principle of **"No Untyped Dicts, No Bypass Patterns, No Exceptions"**:
 
-- **No Dicts**: Zero `Dict[str, Any]` in production code. Everything is strongly typed with Pydantic models.
-- **No Strings**: No magic strings. Use enums, typed constants, and schema fields.
-- **No Kings**: No special cases. Every component follows the same patterns.
+- **No Untyped Dicts**: Zero `Dict[str, Any]` in production code. Everything is strongly typed with Pydantic models.
+- **No Bypass Patterns**: Every component follows consistent rules and validation patterns.
+- **No Exceptions**: No special cases, emergency overrides, or privileged code paths.
 - **No Backwards Compatibility**: The codebase moves forward only. Clean breaks over legacy support.
 
 ### Why This Matters

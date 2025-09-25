@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The CIRIS Config Service (`GraphConfigService`) is a graph-based configuration management system that stores all configuration values as versioned memories in the CIRIS graph database. This service replaces traditional key-value configuration systems with a fully typed, auditable, and historically-tracked approach that aligns with CIRIS's "No Dicts, No Strings, No Kings" philosophy.
+The CIRIS Config Service (`GraphConfigService`) is a graph-based configuration management system that stores all configuration values as versioned memories in the CIRIS graph database. This service replaces traditional key-value configuration systems with a fully typed, auditable, and historically-tracked approach that aligns with CIRIS's "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosophy.
 
 **Mission Alignment with Meta-Goal M-1**: The Config Service promotes sustainable adaptive coherence by providing reliable, transparent, and versioned configuration management that enables diverse system components to pursue their operational flourishing while maintaining integrity and accountability.
 
@@ -493,7 +493,7 @@ The CIRIS Config Service represents a mature, type-safe, and ethically-aligned a
 
 The service's integration with the broader CIRIS ecosystem—including graph memory, audit systems, and API infrastructure—demonstrates the coherent, principled approach that characterizes the entire CIRIS platform. Its comprehensive test coverage, performance optimization, and operational monitoring capabilities ensure it meets the demanding requirements of production deployment while remaining accessible for development and experimentation.
 
-By replacing traditional configuration approaches with this graph-based, versioned, and fully-typed system, CIRIS demonstrates its commitment to the "No Dicts, No Strings, No Kings" philosophy while providing the adaptive, sustainable, and coherent configuration management necessary to support Meta-Goal M-1's vision of enabling diverse sentient beings to pursue their flourishing in justice and wonder.
+By replacing traditional configuration approaches with this graph-based, versioned, and fully-typed system, CIRIS demonstrates its commitment to the "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosophy while providing the adaptive, sustainable, and coherent configuration management necessary to support Meta-Goal M-1's vision of enabling diverse sentient beings to pursue their flourishing in justice and wonder.
 
 ---
 

@@ -21,7 +21,7 @@ The Initialization Service orchestrates the complete system startup process thro
 The service embodies CIRIS's "Type Safety First" principles:
 - **No Dicts**: All initialization data uses strongly-typed Pydantic models
 - **No Strings**: Uses enums (`InitializationPhase`, `ServiceType`) for all constants
-- **No Kings**: No bypass patterns - all services follow the same initialization protocol
+- **No Exceptions**: No bypass patterns - all services follow the same initialization protocol
 
 ## Architecture
 

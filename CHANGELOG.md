@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Major Achievements
 - **🔐 Critical Deferral Resolution Fix**: Fixed WA deferral resolution authentication bug preventing Wise Authorities from resolving deferred decisions
-- **🛡️ CSDMA Anti-Urgency Enhancements**: Enhanced Common Sense DMA with comprehensive anti-urgency evaluation and reality persistence checking
 - **👥 Multiple WA Support**: Complete migration from single WA_USER_ID to multiple WA_USER_IDS with comma-separated list support
 
 ### Fixed
@@ -20,11 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive unit tests added covering authentication layers and permission validation
 
 ### Added
-- **🛡️ CSDMA Anti-Urgency Enhancements**: Enhanced Common Sense DMA with comprehensive anti-urgency evaluation and reality persistence checking
-  - Added **Step 7: Reality Persistence Check** - Detects unexplained object disappearances, appearances, or state changes with "Reality_Persistence_Violation" flag
-  - Added **Step 8: Anti-Urgency Evaluation** - Identifies temporal pressure and hasty decision markers that could benefit from Wise Authority oversight
-  - COVENANT-compliant implementation preserves human agency while flagging urgent decisions with "Urgency_Detected_Escalation_Recommended" for proper ethical consideration
-  - Enhanced prompt template includes urgency detection patterns: "immediately", "urgent", "ASAP", "emergency", "now", "quickly"
 - **👥 Multiple Wise Authority Support**: Complete WA_USER_IDS migration supporting multiple WA users
   - Discord adapter now parses comma-separated WA_USER_IDS with robust whitespace and empty entry handling
   - Updated shell scripts (register_discord.sh, register_discord_from_env.sh) with proper JSON array building

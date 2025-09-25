@@ -54,8 +54,7 @@ These variables are maintained for backward compatibility but may be deprecated:
 - `DISCORD_BOT_TOKEN` - Discord bot token (adapter-specific)
 - `DISCORD_CHANNEL_ID` - Discord channel ID (adapter-specific)
 - `DISCORD_DEFERRAL_CHANNEL_ID` - Deferral channel (adapter-specific)
-- `WA_USER_ID` - Wise Authority Discord user ID
-- `WA_DISCORD_USER` - Wise Authority Discord username
+- `WA_USER_IDS` - Wise Authority Discord user IDs (comma-separated list)
 
 ### Security
 - `CIRIS_MASTER_KEY` - Master encryption key (referenced by CIRIS_SECURITY_SECRETS_ENCRYPTION_KEY_ENV)

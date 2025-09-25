@@ -25,7 +25,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - datum_data:/app/data
       - datum_logs:/app/logs
@@ -62,7 +62,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - sage_data:/app/data
       - sage_logs:/app/logs
@@ -99,7 +99,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - scout_data:/app/data
       - scout_logs:/app/logs
@@ -136,7 +136,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - echo_core_data:/app/data
       - echo_core_logs:/app/logs
@@ -173,7 +173,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - echo_speculative_data:/app/data
       - echo_speculative_logs:/app/logs

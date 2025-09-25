@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Major Achievements
 - **🔐 Critical Deferral Resolution Fix**: Fixed WA deferral resolution authentication bug preventing Wise Authorities from resolving deferred decisions
 - **🛡️ CSDMA Anti-Urgency Enhancements**: Enhanced Common Sense DMA with comprehensive anti-urgency evaluation and reality persistence checking
+- **👥 Multiple WA Support**: Complete migration from single WA_USER_ID to multiple WA_USER_IDS with comma-separated list support
 
 ### Fixed
 - **WA Deferral Resolution 403 Error**: Fixed critical authentication bug where users with AUTHORITY role couldn't resolve deferrals
@@ -24,10 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added **Step 8: Anti-Urgency Evaluation** - Identifies temporal pressure and hasty decision markers that could benefit from Wise Authority oversight
   - COVENANT-compliant implementation preserves human agency while flagging urgent decisions with "Urgency_Detected_Escalation_Recommended" for proper ethical consideration
   - Enhanced prompt template includes urgency detection patterns: "immediately", "urgent", "ASAP", "emergency", "now", "quickly"
+- **👥 Multiple Wise Authority Support**: Complete WA_USER_IDS migration supporting multiple WA users
+  - Discord adapter now parses comma-separated WA_USER_IDS with robust whitespace and empty entry handling
+  - Updated shell scripts (register_discord.sh, register_discord_from_env.sh) with proper JSON array building
+  - Enhanced Python registration tools (dev/ops) with comma-separated parsing
+  - Comprehensive test coverage (27/27 tests passing) including edge cases for spaces, duplicates, and empty entries
 - **Comprehensive unit test coverage** for WA permission system including auth service and authentication dependency layers
 
 ### Changed
+- **Environment Variable Format**: WA_USER_IDS now supports comma-separated lists (e.g., "user1,user2,user3")
+- **Documentation Updates**: Environment variables documentation clarifies comma-separated list support
+- **Registration Scripts**: All Discord adapter registration tools updated for multiple WA support
+
 ### Removed
+- **DEFAULT_WA Constant**: Completely removed DEFAULT_WA references across codebase with no backwards compatibility
+  - Removed from constants.py, imports, thought processor, and test cases
+  - WA_DISCORD_USER environment variable removed entirely
+  - Simplified deferral context by removing target_wa_ual field
 
 ## [1.1.3] - 2025-09-11
 

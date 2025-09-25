@@ -412,41 +412,106 @@ class TestDiscordConfigHelperMethods:
         
         assert config.deferral_channel_id == "deferral_123"
 
-    def test_load_user_permissions_new_admin(self):
-        """Test _load_user_permissions with new admin."""
+    def test_load_user_permissions_single_admin(self):
+        """Test _load_user_permissions with single admin."""
         from unittest.mock import Mock
-        
+
         config = DiscordAdapterConfig()
         mock_get_env_var = Mock()
         mock_get_env_var.return_value = "admin_123"
-        
-        config._load_user_permissions(mock_get_env_var)
-        
-        assert "admin_123" in config.admin_user_ids
-        mock_get_env_var.assert_called_once_with("WA_USER_ID")
 
-    def test_load_user_permissions_existing_admin(self):
-        """Test _load_user_permissions with existing admin."""
+        config._load_user_permissions(mock_get_env_var)
+
+        assert "admin_123" in config.admin_user_ids
+        assert len(config.admin_user_ids) == 1
+        mock_get_env_var.assert_called_once_with("WA_USER_IDS")
+
+    def test_load_user_permissions_multiple_admins(self):
+        """Test _load_user_permissions with multiple comma-separated admins."""
         from unittest.mock import Mock
-        
+
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = "admin_123,admin_456,admin_789"
+
+        config._load_user_permissions(mock_get_env_var)
+
+        assert "admin_123" in config.admin_user_ids
+        assert "admin_456" in config.admin_user_ids
+        assert "admin_789" in config.admin_user_ids
+        assert len(config.admin_user_ids) == 3
+        mock_get_env_var.assert_called_once_with("WA_USER_IDS")
+
+    def test_load_user_permissions_existing_admin_no_duplicates(self):
+        """Test _load_user_permissions with existing admin does not duplicate."""
+        from unittest.mock import Mock
+
         config = DiscordAdapterConfig()
         config.admin_user_ids = ["admin_123"]
         mock_get_env_var = Mock()
-        mock_get_env_var.return_value = "admin_123"
-        
+        mock_get_env_var.return_value = "admin_123,admin_456"
+
         config._load_user_permissions(mock_get_env_var)
-        
-        # Should not duplicate
-        assert config.admin_user_ids == ["admin_123"]
+
+        # Should not duplicate admin_123, but should add admin_456
+        assert "admin_123" in config.admin_user_ids
+        assert "admin_456" in config.admin_user_ids
+        assert len(config.admin_user_ids) == 2
+
+    def test_load_user_permissions_with_spaces(self):
+        """Test _load_user_permissions handles spaces around user IDs."""
+        from unittest.mock import Mock
+
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = " admin_123 , admin_456 ,admin_789, "
+
+        config._load_user_permissions(mock_get_env_var)
+
+        assert "admin_123" in config.admin_user_ids
+        assert "admin_456" in config.admin_user_ids
+        assert "admin_789" in config.admin_user_ids
+        assert len(config.admin_user_ids) == 3
+        # Ensure no empty strings were added
+        assert "" not in config.admin_user_ids
+        assert " " not in config.admin_user_ids
+
+    def test_load_user_permissions_empty_entries(self):
+        """Test _load_user_permissions handles empty entries in comma-separated list."""
+        from unittest.mock import Mock
+
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = "admin_123,,admin_456,,"
+
+        config._load_user_permissions(mock_get_env_var)
+
+        assert "admin_123" in config.admin_user_ids
+        assert "admin_456" in config.admin_user_ids
+        assert len(config.admin_user_ids) == 2
+        # Ensure no empty strings were added
+        assert "" not in config.admin_user_ids
 
     def test_load_user_permissions_no_admin(self):
         """Test _load_user_permissions with no admin."""
         from unittest.mock import Mock
-        
+
         config = DiscordAdapterConfig()
         mock_get_env_var = Mock()
         mock_get_env_var.return_value = None
-        
+
         config._load_user_permissions(mock_get_env_var)
-        
+
+        assert config.admin_user_ids == []
+
+    def test_load_user_permissions_empty_string(self):
+        """Test _load_user_permissions with empty string."""
+        from unittest.mock import Mock
+
+        config = DiscordAdapterConfig()
+        mock_get_env_var = Mock()
+        mock_get_env_var.return_value = ""
+
+        config._load_user_permissions(mock_get_env_var)
+
         assert config.admin_user_ids == []

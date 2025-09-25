@@ -64,17 +64,19 @@ def register_discord_adapter(
     bot_token = env_vars["DISCORD_BOT_TOKEN"]
     home_channel_id = env_vars.get("DISCORD_CHANNEL_ID")
     deferral_channel_id = env_vars.get("DISCORD_DEFERRAL_CHANNEL_ID")
-    wa_user_id = env_vars.get("WA_USER_ID")
+    wa_user_id = env_vars.get("WA_USER_IDS")
 
     # Build monitored channels list
     monitored_channels = []
     if home_channel_id:
         monitored_channels.append(home_channel_id)
 
-    # Build admin users list
+    # Build admin users list - parse comma-separated values
     admin_users = []
     if wa_user_id:
-        admin_users.append(wa_user_id)
+        # Parse comma-separated list of WA user IDs
+        user_id_list = [uid.strip() for uid in wa_user_id.split(",") if uid.strip()]
+        admin_users.extend(user_id_list)
 
     print("Discord Configuration:")
     print(f"  Bot Token: {'*' * 10}{bot_token[-10:] if len(bot_token) > 10 else '***'}")

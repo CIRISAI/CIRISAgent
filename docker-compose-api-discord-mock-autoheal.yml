@@ -20,7 +20,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

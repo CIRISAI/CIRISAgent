@@ -741,7 +741,7 @@ is_hot_path  # unused function (ciris_engine/logic/telemetry/hot_cold_config.py:
 is_critical_function  # unused function (ciris_engine/logic/telemetry/hot_cold_config.py:115)
 get_telemetry_requirements  # unused function (ciris_engine/logic/telemetry/hot_cold_config.py:123)
 _.add_logger  # unused method (ciris_engine/logic/telemetry/log_collector.py:171)
-WA_USER_ID  # unused variable (ciris_engine/logic/utils/constants.py:9)
+WA_USER_IDS  # unused variable (ciris_engine/logic/utils/constants.py:9)
 DISCORD_CHANNEL_ID  # unused variable (ciris_engine/logic/utils/constants.py:11)
 DISCORD_DEFERRAL_CHANNEL_ID  # unused variable (ciris_engine/logic/utils/constants.py:12)
 API_CHANNEL_ID  # unused variable (ciris_engine/logic/utils/constants.py:13)

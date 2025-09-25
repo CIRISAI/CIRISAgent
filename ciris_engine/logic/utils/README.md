@@ -30,8 +30,8 @@ DISCORD_CHANNEL_ID: str         # Primary Discord channel
 API_CHANNEL_ID: str             # API communication channel
 
 # User Configuration
-DEFAULT_WA_USER: str            # Default Wise Authority user
-API_USER_ID: str                # API user identification
+WA_USER_IDS: str                # Wise Authority Discord user IDs (comma-separated)
+WA_API_USER: str                # API user identification
 
 # Processing Constants
 NEED_MEMORY_METATHOUGHT: str    # Memory processing flag
@@ -45,8 +45,8 @@ COVENANT_TEXT: str              # Agent behavioral covenant from file
 #### Environment Integration
 ```python
 # Constants loaded from environment with fallbacks
-WA_DISCORD_USER = get_env_var("WA_DISCORD_USER", "somecomputerguy")
-DISCORD_CHANNEL_ID = get_env_var("DISCORD_CHANNEL_ID", "1234567890")
+WA_USER_IDS = get_env_var("WA_USER_IDS", "537080239679864862")  # Comma-separated list
+DISCORD_CHANNEL_ID = get_env_var("DISCORD_CHANNEL_ID")
 ```
 
 ### Context Management (`context_utils.py`)

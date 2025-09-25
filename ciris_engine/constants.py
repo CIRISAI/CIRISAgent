@@ -12,7 +12,6 @@ CIRIS_VERSION_STAGE = "rc"
 CIRIS_CODENAME = "Stable Foundation"  # Codename for this release
 
 # Agent defaults
-DEFAULT_WA = "CIRIS"
 DEFAULT_TEMPLATE = "default"
 DEFAULT_TEMPLATE_PATH = Path("ciris_templates")
 

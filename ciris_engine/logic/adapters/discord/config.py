@@ -163,9 +163,13 @@ class DiscordAdapterConfig(BaseModel):
 
     def _load_user_permissions(self, get_env_var):
         """Load user permissions from environment variables."""
-        env_admin = get_env_var("WA_USER_ID")
-        if env_admin and env_admin not in self.admin_user_ids:
-            self.admin_user_ids.append(env_admin)
+        env_admin = get_env_var("WA_USER_IDS")
+        if env_admin:
+            # Parse comma-separated list of WA user IDs
+            user_id_list = [uid.strip() for uid in env_admin.split(",") if uid.strip()]
+            for user_id in user_id_list:
+                if user_id not in self.admin_user_ids:
+                    self.admin_user_ids.append(user_id)
 
     def _add_channel_to_monitored(self, channel_id: str):
         """Add channel to monitored list if not already present."""

@@ -7,14 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - v1.1.4
 
+### Major Achievements
+- **🔐 Critical Deferral Resolution Fix**: Fixed WA deferral resolution authentication bug preventing Wise Authorities from resolving deferred decisions
+- **🛡️ CSDMA Anti-Urgency Enhancements**: Enhanced Common Sense DMA with comprehensive anti-urgency evaluation and reality persistence checking
+
 ### Fixed
-### Changed  
+- **WA Deferral Resolution 403 Error**: Fixed critical authentication bug where users with AUTHORITY role couldn't resolve deferrals
+  - Root cause: AUTHORITY role missing `"wa.resolve_deferral"` permission despite having WA certificates with correct scopes
+  - Solution: Added `"wa.resolve_deferral"` permission to AUTHORITY role permissions in `auth_service.py:719`
+  - Impact: OAuth users minted as Wise Authorities can now properly resolve deferred decisions via API and UI
+  - Comprehensive unit tests added covering authentication layers and permission validation
+
 ### Added
 - **🛡️ CSDMA Anti-Urgency Enhancements**: Enhanced Common Sense DMA with comprehensive anti-urgency evaluation and reality persistence checking
   - Added **Step 7: Reality Persistence Check** - Detects unexplained object disappearances, appearances, or state changes with "Reality_Persistence_Violation" flag
   - Added **Step 8: Anti-Urgency Evaluation** - Identifies temporal pressure and hasty decision markers that could benefit from Wise Authority oversight
   - COVENANT-compliant implementation preserves human agency while flagging urgent decisions with "Urgency_Detected_Escalation_Recommended" for proper ethical consideration
   - Enhanced prompt template includes urgency detection patterns: "immediately", "urgent", "ASAP", "emergency", "now", "quickly"
+- **Comprehensive unit test coverage** for WA permission system including auth service and authentication dependency layers
+
+### Changed
 ### Removed
 
 ## [1.1.3] - 2025-09-11

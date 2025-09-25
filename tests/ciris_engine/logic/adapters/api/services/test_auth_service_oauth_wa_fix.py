@@ -358,6 +358,31 @@ class TestAuthServiceOAuthWAFix:
         assert result[0][0] == "wa-newer"
         assert result[0][1].name == "Newer User"
         
-        # Second user should be the older one  
+        # Second user should be the older one
         assert result[1][0] == "google:older"
         assert result[1][1].name == "Older User"
+
+    def test_authority_role_includes_wa_resolve_deferral_permission(self, api_auth_service):
+        """Test that AUTHORITY role includes wa.resolve_deferral permission for deferral resolution."""
+        # Test: Get permissions for AUTHORITY role
+        authority_permissions = api_auth_service.get_permissions_for_role(APIRole.AUTHORITY)
+
+        # Verify: wa.resolve_deferral is included
+        assert "wa.resolve_deferral" in authority_permissions
+
+        # Verify: Other expected WA permissions are also included
+        assert "wa.read" in authority_permissions
+        assert "wa.write" in authority_permissions
+
+        # Verify: Basic authority permissions are included
+        assert "system.read" in authority_permissions
+        assert "system.write" in authority_permissions
+        assert "users.read" in authority_permissions
+
+        # Test: Ensure OBSERVER role does not have wa.resolve_deferral
+        observer_permissions = api_auth_service.get_permissions_for_role(APIRole.OBSERVER)
+        assert "wa.resolve_deferral" not in observer_permissions
+
+        # Test: Ensure ADMIN role does not have wa.resolve_deferral (only AUTHORITY+ should)
+        admin_permissions = api_auth_service.get_permissions_for_role(APIRole.ADMIN)
+        assert "wa.resolve_deferral" not in admin_permissions

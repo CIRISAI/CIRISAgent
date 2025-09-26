@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🔐 Critical Deferral Resolution Fix**: Fixed WA deferral resolution authentication bug preventing Wise Authorities from resolving deferred decisions
 - **👥 Multiple WA Support**: Complete migration from single WA_USER_ID to multiple WA_USER_IDS with comma-separated list support
 - **📄 Document Processing**: Added secure document parsing for PDF and DOCX attachments with comprehensive test coverage (91.28%)
+- **💬 Discord Reply Processing**: Implemented Discord reply detection with attachment inheritance and priority rules for enhanced context management
 
 ### Fixed
 - **WA Deferral Resolution 403 Error**: Fixed critical authentication bug where users with AUTHORITY role couldn't resolve deferrals
@@ -33,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Discord attachment processing with error handling and status reporting
   - Dependencies: pypdf (>=4.0.0) and docx2txt (>=0.8) with CVE-aware selection
   - Comprehensive test suite: 51 tests passing with 91.28% code coverage
+- **💬 Discord Reply Processing**: Complete reply detection and attachment inheritance system
+  - Reply detection using Discord's `message.reference` system with automatic referenced message fetching
+  - Attachment inheritance with strict priority rules: "Reply wins" - reply attachments take precedence over original
+  - Smart attachment limits: Maximum 1 image and 3 documents total across both reply and original messages
+  - Context management: Original message text included as reply context for enhanced conversation understanding
+  - Vision and document processing integration: Processes images and documents from both messages efficiently
+  - Enhanced message workflow: Seamless integration with existing message enhancement pipeline
+  - Vision helper enhancements: Added `process_image_attachments_list()` for pre-filtered image processing
+  - Anti-spoofing protection: Maintains security for CIRIS observation markers in reply content
+  - Comprehensive test coverage: 240 tests total (32 reply-specific tests) with 72.55% Discord observer coverage
+  - Error handling: Graceful handling of missing references, fetch failures, and malformed attachment data
 - **Comprehensive unit test coverage** for WA permission system including auth service and authentication dependency layers
 
 ### Changed

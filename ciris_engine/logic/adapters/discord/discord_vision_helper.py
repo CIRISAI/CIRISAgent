@@ -67,6 +67,34 @@ class DiscordVisionHelper:
 
         return None
 
+    async def process_image_attachments_list(self, attachments: List[discord.Attachment]) -> Optional[str]:
+        """Process a list of Discord image attachments.
+
+        Args:
+            attachments: List of Discord attachment objects (already filtered for images)
+
+        Returns:
+            Combined description of all images, or None if no images processed
+        """
+        if not self.api_key or not attachments:
+            return None
+
+        descriptions = []
+
+        for attachment in attachments:
+            try:
+                description = await self._process_single_image(attachment)
+                if description:
+                    descriptions.append(f"Image '{attachment.filename}': {description}")
+            except Exception as e:
+                logger.error(f"Failed to process image {attachment.filename}: {e}")
+                descriptions.append(f"Image '{attachment.filename}': [Failed to process - {str(e)}]")
+
+        if descriptions:
+            return "\n\n".join(descriptions)
+
+        return None
+
     async def _process_single_image(self, attachment: discord.Attachment) -> Optional[str]:
         """Process a single Discord image attachment.
 

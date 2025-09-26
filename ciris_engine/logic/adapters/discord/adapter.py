@@ -729,10 +729,8 @@ class DiscordPlatform(Service):
 
                 # Handle timeout scenario
                 if not done:
-                    if self._handle_timeout_scenario():
-                        continue
-                    else:
-                        continue  # Task recreation will happen on next iteration
+                    self._handle_timeout_scenario()
+                    continue  # Continue monitoring regardless of timeout handler result
 
                 # Handle Discord task failure
                 if self._discord_client_task in done and self._discord_client_task.exception():

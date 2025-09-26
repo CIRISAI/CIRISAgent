@@ -337,7 +337,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self.circuit_breaker.record_success()
 
                 # Extract token counts
-                total_tokens = getattr(usage, "total_tokens", 0)
                 prompt_tokens = getattr(usage, "prompt_tokens", 0)
                 completion_tokens = getattr(usage, "completion_tokens", 0)
 

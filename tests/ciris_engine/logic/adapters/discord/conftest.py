@@ -577,3 +577,112 @@ def discord_config_samples():
             "enable_document_parsing": True
         }
     }
+
+
+@pytest.fixture
+def mock_discord_platform():
+    """Create a Discord platform for testing lifecycle and stop methods."""
+    from unittest.mock import Mock, AsyncMock, patch
+    from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform
+
+    mock_runtime = Mock()
+    mock_config = Mock()
+    mock_config.bot_token = "test_bot_token_123456"
+    mock_config.monitored_channel_ids = ["123456789"]
+
+    # Mock the platform initialization to avoid real Discord setup
+    with patch('ciris_engine.logic.adapters.discord.adapter.DiscordAdapter'):
+        with patch.object(DiscordPlatform, '__init__', return_value=None):
+            platform = DiscordPlatform.__new__(DiscordPlatform)
+
+    # Set up platform attributes for testing
+    platform.client = Mock()
+    platform.client.is_closed = Mock(return_value=False)
+    platform.client.user = "TestBot#1234"
+    platform.client.close = AsyncMock()
+
+    platform.token = "test_token_123"
+    platform.discord_adapter = Mock()
+    platform._reconnect_attempts = 2
+    platform._max_reconnect_attempts = 10
+    platform._initialize_discord_client = AsyncMock()
+    platform._discord_client_task = None
+    platform.runtime = mock_runtime
+
+    return platform
+
+
+@pytest.fixture
+def mock_audit_service():
+    """Create a mock audit service for testing audit edge cases."""
+    service = Mock()
+    service.log_event = AsyncMock()
+    service.log_error = AsyncMock()
+    service.log_warning = AsyncMock()
+    service.log_info = AsyncMock()
+    return service
+
+
+@pytest.fixture
+def sample_audit_events():
+    """Sample audit events for testing different scenarios."""
+    return {
+        "connection_event": {
+            "event_type": "connection",
+            "status": "connected",
+            "details": {"client_id": "bot123"}
+        },
+        "error_event": {
+            "event_type": "error",
+            "error": "Connection failed",
+            "details": {"retry_count": 3}
+        },
+        "security_event": {
+            "event_type": "security",
+            "action": "unauthorized_access",
+            "details": {"user_id": "user123", "channel_id": "channel456"}
+        }
+    }
+
+
+@pytest.fixture
+def mock_task_scenarios():
+    """Mock task scenarios for testing task management edge cases."""
+    import asyncio
+    from unittest.mock import Mock
+
+    # Healthy running task
+    healthy_task = Mock()
+    healthy_task.done.return_value = False
+    healthy_task.cancelled.return_value = False
+    healthy_task.exception.return_value = None
+    healthy_task.get_name.return_value = "HealthyTask"
+    healthy_task.cancel = Mock()
+
+    # Completed task
+    completed_task = Mock()
+    completed_task.done.return_value = True
+    completed_task.cancelled.return_value = False
+    completed_task.exception.return_value = None
+    completed_task.get_name.return_value = "CompletedTask"
+
+    # Cancelled task
+    cancelled_task = Mock()
+    cancelled_task.done.return_value = True
+    cancelled_task.cancelled.return_value = True
+    cancelled_task.exception.return_value = asyncio.CancelledError()
+    cancelled_task.get_name.return_value = "CancelledTask"
+
+    # Failed task
+    failed_task = Mock()
+    failed_task.done.return_value = True
+    failed_task.cancelled.return_value = False
+    failed_task.exception.return_value = Exception("Task failed")
+    failed_task.get_name.return_value = "FailedTask"
+
+    return {
+        "healthy": healthy_task,
+        "completed": completed_task,
+        "cancelled": cancelled_task,
+        "failed": failed_task
+    }

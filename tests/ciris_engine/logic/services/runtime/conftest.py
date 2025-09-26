@@ -152,15 +152,15 @@ def mock_instructor_client():
     # Setup default successful response
     async def default_create(*args, **kwargs):
         response_model = kwargs.get('response_model', TestResponse)
-        return response_model(message="Test response", status="ok"), ResourceUsage(
-            tokens_used=150,
-            tokens_input=100,
-            tokens_output=50,
-            cost_cents=0.15,
-            model_used="gpt-4o-mini",
-            carbon_grams=0.01,
-            energy_kwh=0.001
-        )
+
+        # Create a mock completion object with usage attribute
+        mock_completion = MagicMock()
+        mock_completion.usage = MagicMock()
+        mock_completion.usage.total_tokens = 150
+        mock_completion.usage.prompt_tokens = 100
+        mock_completion.usage.completion_tokens = 50
+
+        return response_model(message="Test response", status="ok"), mock_completion
 
     client.chat.completions.create_with_completion = AsyncMock(side_effect=default_create)
 
@@ -265,14 +265,14 @@ def setup_successful_response(mock_instructor_client, response_data: dict = None
 
     async def successful_create(*args, **kwargs):
         response_model = kwargs.get('response_model', TestResponse)
-        return response_model(**response_data), ResourceUsage(
-            tokens_used=150,
-            tokens_input=100,
-            tokens_output=50,
-            cost_cents=0.15,
-            model_used="gpt-4o-mini",
-            carbon_grams=0.01,
-            energy_kwh=0.001
-        )
+
+        # Create a mock completion object with usage attribute
+        mock_completion = MagicMock()
+        mock_completion.usage = MagicMock()
+        mock_completion.usage.total_tokens = 150
+        mock_completion.usage.prompt_tokens = 100
+        mock_completion.usage.completion_tokens = 50
+
+        return response_model(**response_data), mock_completion
 
     mock_instructor_client.chat.completions.create_with_completion = AsyncMock(side_effect=successful_create)

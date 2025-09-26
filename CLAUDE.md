@@ -2,15 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with the CIRIS codebase.
 
-## 🎯 CURRENT FOCUS: Release Candidate Quality & Stability (September 2025)
+## 🎯 CURRENT FOCUS: Production Quality & Stability
 
-**Status**: Release Candidate 1 (RC1) - Production Ready
-**Branch**: `1.0-RC1-patch*` branches for fixes
-**Goal**: Achieve production-grade quality, stability, and test coverage
+**Goal**: Maintain production-grade quality, stability, and test coverage
 
-### Priority Areas for RC1
+### Priority Areas
 
-1. **Test Coverage** - Target 80% (currently ~68%)
+1. **Test Coverage** - Target 80%
    - Focus on critical path services
    - Integration tests for complex flows
    - Edge case coverage
@@ -157,67 +155,6 @@ https://agents.ciris.ai/v1/auth/oauth/datum/google/callback
 - /v1/ is at the ROOT level
 - This is the DEFAULT route (not /api/{agent}/v1/)
 
-## Current Status (September 2025)
-
-### Major Achievements
-
-1. **Strong Type Safety**
-   - Minimal `Dict[str, Any]` usage remaining, none in critical code paths
-   - All data structures use Pydantic schemas
-   - Full type validation throughout the system
-
-2. **Service Architecture**: 22 Core Services + Adapter Services ✅
-   - Graph Services (6): memory, config, telemetry, audit, incident_management, tsdb_consolidation
-   - Infrastructure Services (4): authentication, resource_monitor, database_maintenance, secrets
-   - Lifecycle Services (4): initialization, shutdown, time, task_scheduler
-   - Governance Services (5): wise_authority, adaptive_filter, visibility, self_observation, consent
-   - Runtime Services (2): llm, runtime_control
-   - Tool Services (1): secrets_tool
-   - **Note**: pattern_analysis_loop and identity_variance_monitor are sub-services within self_observation
-   - **Adapter Services** (added at runtime):
-     - CLI: 1 service (CLIAdapter)
-     - API: 3 services (APICommunicationService, APIRuntimeControlService, APIToolService)
-     - Discord: 3 services (Communication + WiseAuthority via DiscordAdapter, DiscordToolService)
-   - **Total at runtime**: 23 (CLI), 25 (API), 25 (Discord)
-
-3. **API v1.0**: Fully Operational
-   - All 78 endpoints implemented and tested across 12 modules
-   - 100% test pass rate with comprehensive coverage ✅
-   - Role-based access control (OBSERVER/ADMIN/AUTHORITY/SYSTEM_ADMIN)
-   - Emergency shutdown with Ed25519 signatures
-   - Default dev credentials: admin/ciris_admin_password
-   - WebSocket support for real-time streaming
-   - Runtime control service fully integrated
-   - Extended system management endpoints:
-     - Processing queue status and single-step debugging
-     - Service health monitoring and circuit breaker management
-     - Service priority and selection strategy configuration
-     - Processor state information (6 cognitive states)
-   - Complete TypeScript SDK with 78+ methods
-   - No TODO comments or stub implementations
-
-4. **Typed Graph Node System**
-   - 11 active TypedGraphNode classes with full validation
-   - Automatic type registration via node registry
-   - Clean serialization pattern with to_graph_node()/from_graph_node()
-   - All nodes include required metadata fields
-
-5. **Graph-Based Telemetry**
-   - All telemetry flows through memory graph
-   - Real-time metrics via memorize_metric()
-   - 6-hour consolidation for long-term storage
-   - Full resource tracking with model-specific pricing
-
-6. **Clean Architecture**
-   - Protocol-first design with clear interfaces
-   - Services separated by concern
-   - No circular dependencies
-   - All logic under `logic/` directory
-   - SelfConfiguration renamed to SelfObservation (complete refactor)
-
-7. **Test Suite**
-   - Thousands of tests with Docker-based CI/CD
-   - Background test runner for development
 
 ## Architecture Overview
 
@@ -305,7 +242,7 @@ Grace is the primary pre-commit hook. It:
 **YOUR BAD HABITS TO STOP:**
 1. **Creating new Dict[str, Any]** - A schema already exists. Always.
 2. **Creating NewSchemaV2** - The original schema is fine. Use it.
-3. **Checking CI every 30 seconds** - CI takes 12-15 minutes. Check every 10 minutes (600000ms).
+3. **Checking CI too frequently** - CI takes time to complete. Check periodically.
 4. **Making "temporary" helper classes** - They're never temporary. Use existing schemas.
 5. **Creating elaborate abstractions** - Simple existing patterns work better.
 
@@ -326,26 +263,6 @@ grep -r "class.*YourThingHere" --include="*.py"
 - `ThoughtSchema` - Thoughts
 - `GuidanceRequest/Response` - WA guidance
 
-## Current Status (September 2025) - Release Candidate 1
-
-### Completed ✅
-- 82 API endpoints fully operational
-- Strong type safety (minimal Dict[str, Any] usage)
-- 22 core services + adapter services
-- Production deployment at agents.ciris.ai
-- Thousands of tests with Docker CI/CD
-- DSAR compliance and transparency feeds
-- Book VI stewardship implementation
-- Discord mention formatting with usernames
-- Increased chat history context (20 messages)
-
-### RC1 Quality Achievements ✅
-- **QA Test Suite: 100% success rate (99/99 tests passing)**
-- API endpoint testing with comprehensive coverage
-- Smart authentication handling for edge cases
-- Adaptive filtering and security validation
-- Memory, telemetry, and audit system verification
-- Agent interaction and streaming capability testing
 
 ## Service Architecture
 
@@ -407,9 +324,9 @@ python -m tools.quality_analyzer       # Find gaps
 python -m tools.sonar_tool analyze     # SonarCloud metrics
 ```
 
-### QA Runner - API Test Suite ✅ 100% SUCCESS RATE
+### QA Runner - API Test Suite
 
-The CIRIS QA Runner provides comprehensive API testing with **100% success rate (99/99 tests passing)**:
+The CIRIS QA Runner provides comprehensive API testing:
 
 ```bash
 # Quick module testing
@@ -435,9 +352,8 @@ python -m tools.qa_runner <module> --verbose
 ```
 
 **QA Runner Features:**
-- 🎯 **100% Success Rate** - All 99 tests across 14 modules passing
 - 🔑 **Smart Token Management** - Auto re-authentication after logout/refresh tests
-- ⚡ **Fast Execution** - Most modules complete in <10 seconds
+- ⚡ **Fast Execution** - Most modules complete quickly
 - 🧪 **Comprehensive Coverage** - Authentication, API endpoints, streaming, filtering
 - 🔍 **Detailed Reporting** - Success rates, duration, failure analysis
 - 🚀 **Production Ready** - Validates all critical system functionality
@@ -445,8 +361,6 @@ python -m tools.qa_runner <module> --verbose
 **Prerequisites:**
 1. Start API server: `python main.py --adapter api --mock-llm --port 8000`
 2. QA runner handles authentication automatically (admin/ciris_admin_password)
-
-**Achievement:** Transformed from 6.2% to 100% success rate (+1,512% improvement)!
 
 ### Testing API Locally
 
@@ -557,21 +471,14 @@ docker exec container tail -n 100 /app/logs/incidents_latest.log
 | Issue | Solution |
 |-------|----------|
 | Dict[str, Any] error | Schema already exists - search for it |
-| CI failing | Wait 10 minutes, check SonarCloud |
+| CI failing | Wait for CI to complete, check SonarCloud |
 | OAuth not working | Check callback URL format |
 | Service not found | Check ServiceRegistry capabilities |
 | WA deferral failing | Check WiseBus broadcast logic |
 
 ## Command Timeouts
 
-Default: 2 minutes (120000ms)
-Maximum: 10 minutes (600000ms)
-
-```bash
-# Long-running commands need timeout parameter
-gh run watch --repo CIRISAI/CIRISAgent  # timeout: 600000ms
-python -m pytest tests/                 # timeout: 300000ms
-```
+Long-running commands may need timeout parameters for CI operations and comprehensive test runs.
 
 ## Important Reminders
 

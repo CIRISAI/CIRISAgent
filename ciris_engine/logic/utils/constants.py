@@ -15,9 +15,21 @@ API_DEFERRAL_CHANNEL_ID = get_env_var("API_DEFERRAL_CHANNEL_ID")
 WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for WA
 
 _COVENANT_PATH = Path(__file__).resolve().parents[3] / "covenant_1.0b.txt"
+_COMPREHENSIVE_GUIDE_PATH = Path(__file__).resolve().parents[3] / "CIRIS_COMPREHENSIVE_GUIDE.md"
+
 try:
     with open(_COVENANT_PATH, "r", encoding="utf-8") as f:
-        COVENANT_TEXT = f.read()
+        covenant_content = f.read()
+
+    # Append comprehensive guide after covenant
+    try:
+        with open(_COMPREHENSIVE_GUIDE_PATH, "r", encoding="utf-8") as f:
+            guide_content = f.read()
+        COVENANT_TEXT = covenant_content + "\n\n---\n\n" + guide_content
+    except Exception as exc:
+        logger.warning("Could not load comprehensive guide from %s: %s", _COMPREHENSIVE_GUIDE_PATH, exc)
+        COVENANT_TEXT = covenant_content
+
 except Exception as exc:
     logger.warning("Could not load covenant text from %s: %s", _COVENANT_PATH, exc)
     COVENANT_TEXT = ""

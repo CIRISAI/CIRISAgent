@@ -33,6 +33,13 @@ class MockInstructorRetryException(Exception):
     def __str__(self):
         return self.message
 
+    @classmethod
+    def create_as_subclass(cls, base_class):
+        """Create a dynamic subclass that inherits from the provided base class."""
+        class DynamicMockInstructorException(base_class, cls):
+            pass
+        return DynamicMockInstructorException
+
 
 class TestResponse(BaseModel):
     """Standard test response model for LLM testing."""
@@ -286,8 +293,28 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
                         mock_instructor.from_openai.return_value = mock_instructor_client
 
                         # Set up instructor exceptions module for proper detection
-                        mock_instructor.exceptions = MagicMock()
-                        mock_instructor.exceptions.InstructorRetryException = MockInstructorRetryException
+                        # Create a mock base exception class that our mock can inherit from
+                        class MockInstructorRetryExceptionBase(Exception):
+                            """Base mock instructor retry exception."""
+                            pass
+
+                        # Create our actual mock exception that inherits from the base
+                        class ActualMockInstructorRetryException(MockInstructorRetryExceptionBase):
+                            def __init__(self, message: str, *args, **kwargs):
+                                super().__init__(message, *args, **kwargs)
+                                self.message = message
+
+                            def __str__(self):
+                                return self.message
+
+                        # Set up the exceptions module
+                        class MockExceptionsModule:
+                            InstructorRetryException = MockInstructorRetryExceptionBase
+
+                        mock_instructor.exceptions = MockExceptionsModule()
+
+                        # Store the actual exception class for tests to use
+                        mock_instructor._test_exception_class = ActualMockInstructorRetryException
 
                         # Set up modes
                         mock_instructor.Mode = MagicMock()
@@ -374,7 +401,7 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
                         return service
 
 
-def create_instructor_exception(error_type: str = "timeout") -> MockInstructorRetryException:
+def create_instructor_exception(error_type: str = "timeout"):
     """Helper function to create different types of InstructorRetryException."""
     messages = {
         "timeout": "Request timed out after 30 seconds",
@@ -383,7 +410,27 @@ def create_instructor_exception(error_type: str = "timeout") -> MockInstructorRe
         "generic": "LLM API call failed with unknown error"
     }
 
-    return MockInstructorRetryException(messages.get(error_type, messages["generic"]))
+    # Import the actual instructor module mock to get the right exception class
+    import instructor
+    if hasattr(instructor, 'exceptions') and hasattr(instructor.exceptions, 'InstructorRetryException'):
+        # Use the base class from the mock
+        base_class = instructor.exceptions.InstructorRetryException
+
+        class TestInstructorRetryException(base_class):
+            def __init__(self, message: str, *args, **kwargs):
+                # Provide default values for required InstructorRetryException parameters
+                kwargs.setdefault('n_attempts', 3)
+                kwargs.setdefault('total_usage', None)
+                super().__init__(message, *args, **kwargs)
+                self.message = message
+
+            def __str__(self):
+                return self.message
+
+        return TestInstructorRetryException(messages.get(error_type, messages["generic"]))
+    else:
+        # Fallback to the original mock
+        return MockInstructorRetryException(messages.get(error_type, messages["generic"]))
 
 
 # Helper functions for test setup

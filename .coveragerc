@@ -11,6 +11,7 @@ omit =
     */env/*
     */build/*
     */dist/*
+    */protocols/*
     setup.py
     vulture_whitelist.py
 

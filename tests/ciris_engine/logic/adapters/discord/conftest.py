@@ -173,3 +173,142 @@ def ignore_filter_result():
     result.priority.value = "none"
     result.triggered_filters = []
     return result
+
+
+@pytest.fixture
+def mock_discord_client():
+    """Create a comprehensive mock Discord client for testing."""
+    client = AsyncMock()
+
+    # Mock basic client properties
+    client.user = MagicMock()
+    client.user.id = "bot123"
+    client.user.display_name = "CIRIS Bot"
+
+    # Mock guilds and channels
+    mock_guild = AsyncMock()
+    mock_guild.id = "guild123"
+    mock_guild.name = "Test Guild"
+
+    mock_channel = AsyncMock()
+    mock_channel.id = "channel123"
+    mock_channel.name = "test-channel"
+    mock_channel.guild = mock_guild
+
+    client.get_channel.return_value = mock_channel
+    client.fetch_channel.return_value = mock_channel
+    client.get_guild.return_value = mock_guild
+    client.fetch_guild.return_value = mock_guild
+
+    return client
+
+
+@pytest.fixture
+def mock_vision_helper():
+    """Create a comprehensive mock vision helper for testing."""
+    helper = MagicMock()
+    helper.is_available.return_value = True
+    helper.process_image_attachments_list = AsyncMock(return_value="Test image description")
+    helper.process_embeds = AsyncMock(return_value="Test embed description")
+    helper.process_image_attachments = AsyncMock(return_value="Single image description")
+    return helper
+
+
+@pytest.fixture
+def mock_document_parser():
+    """Create a comprehensive mock document parser for testing."""
+    parser = MagicMock()
+    parser.is_available.return_value = True
+    parser.process_attachments = AsyncMock(return_value="Test document content")
+
+    def mock_is_document_attachment(attachment):
+        return (hasattr(attachment, 'content_type') and
+                attachment.content_type in [
+                    "application/pdf",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ])
+    parser._is_document_attachment.side_effect = mock_is_document_attachment
+    return parser
+
+
+@pytest.fixture
+def mock_service_registry():
+    """Create a mock service registry with common services."""
+    registry = MagicMock()
+
+    # Mock communication service
+    comm_service = MagicMock()
+    comm_service.send_message = AsyncMock()
+    comm_service.edit_message = AsyncMock()
+    comm_service.delete_message = AsyncMock()
+    comm_service.add_reaction = AsyncMock()
+
+    # Mock adaptive filter service
+    filter_service = MagicMock()
+    filter_service.filter_message = AsyncMock()
+
+    # Mock memory service
+    memory_service = MagicMock()
+    memory_service.memorize_observation = AsyncMock()
+
+    registry.get_service.side_effect = lambda name: {
+        "communication": comm_service,
+        "adaptive_filter": filter_service,
+        "memory": memory_service
+    }.get(name)
+
+    return registry
+
+
+@pytest.fixture
+def sample_image_attachment(mock_attachment):
+    """Create a sample image attachment for testing."""
+    return mock_attachment(
+        filename="test_image.png",
+        content_type="image/png",
+        size=500000,
+        url="https://example.com/test_image.png"
+    )
+
+
+@pytest.fixture
+def sample_document_attachment(mock_attachment):
+    """Create a sample document attachment for testing."""
+    return mock_attachment(
+        filename="test_document.pdf",
+        content_type="application/pdf",
+        size=1000000,
+        url="https://example.com/test_document.pdf"
+    )
+
+
+@pytest.fixture
+def sample_discord_guild():
+    """Create a sample Discord guild for testing."""
+    guild = MagicMock()
+    guild.id = "guild123"
+    guild.name = "Test Guild"
+
+    # Mock members
+    member = MagicMock()
+    member.id = "user123"
+    member.display_name = "TestUser"
+    member.roles = []
+
+    guild.get_member.return_value = member
+    guild.fetch_member = AsyncMock(return_value=member)
+
+    return guild
+
+
+@pytest.fixture
+def enhanced_discord_observer(discord_observer, mock_service_registry, mock_vision_helper, mock_document_parser):
+    """Enhanced Discord observer with all services mocked."""
+    observer = discord_observer
+
+    # Enhance with comprehensive service mocking
+    observer.service_registry = mock_service_registry
+    observer._vision_helper = mock_vision_helper
+    observer._document_parser = mock_document_parser
+
+    return observer

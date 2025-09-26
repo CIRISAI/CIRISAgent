@@ -594,7 +594,7 @@ class TestInstructorRetryExceptionHandling:
         status = service.get_status()
         assert status.metrics["error_count"] == 1
 
-    async def test_instructor_generic_exception_triggers_circuit_breaker(self, llm_service_with_exceptions):
+    async def test_instructor_generic_exception_triggers_circuit_breaker(self, llm_service_with_exceptions, mock_time_service, mock_telemetry_service):
         """Test that any InstructorRetryException triggers circuit breaker regardless of message."""
         # Use the centralized fixture that has proper instructor exceptions setup
         service = llm_service_with_exceptions
@@ -677,11 +677,7 @@ class TestInstructorRetryExceptionHandling:
         # Use centralized fixtures instead of importing instructor directly
 
         # Create the real exception with 503 message and required parameters
-        service_exception = create_instructor_exception.InstructorRetryException(
-            "Error code: 503 - {'error': {'message': 'Service unavailable', 'type': 'service_unavailable'}}",
-            n_attempts=3,
-            total_usage=None
-        )
+        service_exception = create_instructor_exception("503")
 
         # Create a fresh service for this test
         config = OpenAIConfig(
@@ -783,9 +779,15 @@ class TestInstructorRetryExceptionHandling:
 
         for message, expected_exception, expected_message in test_cases:
             # Create the real exception
-            exception = create_instructor_exception.InstructorRetryException(
-                message, n_attempts=3, total_usage=None
-            )
+            # Determine exception type based on message
+            if "timeout" in message.lower():
+                exception = create_instructor_exception("timeout")
+            elif "503" in message:
+                exception = create_instructor_exception("503")
+            elif "429" in message:
+                exception = create_instructor_exception("rate_limit")
+            else:
+                exception = create_instructor_exception("generic")
 
             # Create a fresh service for this test
             config = OpenAIConfig(api_key="test-key", model_name="gpt-4o-mini")

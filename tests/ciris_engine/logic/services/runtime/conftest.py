@@ -193,6 +193,12 @@ def llm_service(llm_config, mock_time_service, mock_telemetry_service,
                         mock_calc_instance = MagicMock()
 
                         def calculate_realistic_costs(model_name, prompt_tokens, completion_tokens, provider_name=None):
+                            # Ensure all parameters are proper types, not MagicMock objects
+                            model_name = str(model_name) if model_name else "gpt-4o-mini"
+                            prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else 100
+                            completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else 50
+                            provider_name = str(provider_name) if provider_name else None
+
                             total_tokens = prompt_tokens + completion_tokens
 
                             # Legacy cost calculation logic (matching original hardcoded values)
@@ -292,6 +298,12 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
                         mock_calc_instance = MagicMock()
 
                         def calculate_realistic_costs(model_name, prompt_tokens, completion_tokens, provider_name=None):
+                            # Ensure all parameters are proper types, not MagicMock objects
+                            model_name = str(model_name) if model_name else "gpt-4o-mini"
+                            prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else 100
+                            completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else 50
+                            provider_name = str(provider_name) if provider_name else None
+
                             total_tokens = prompt_tokens + completion_tokens
 
                             # Legacy cost calculation logic (matching original hardcoded values)

@@ -11,41 +11,7 @@ from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 
 
-@pytest.fixture
-def llm_service():
-    """Create an LLM service for testing."""
-    from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
-
-    # Mock the OpenAI client to avoid authentication errors
-    with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI") as mock_openai:
-        with patch("ciris_engine.logic.services.runtime.llm_service.instructor") as mock_instructor:
-            # Set up mock clients
-            mock_client = MagicMock()
-            mock_openai.return_value = mock_client
-
-            mock_instruct_client = MagicMock()
-            mock_instruct_client.chat = MagicMock()
-            mock_instruct_client.chat.completions = MagicMock()
-            # Mock create_with_completion to return a tuple (response, completion)
-            mock_instruct_client.chat.completions.create_with_completion = AsyncMock()
-            mock_instructor.from_openai.return_value = mock_instruct_client
-
-            config = OpenAIConfig(api_key="test-key")
-            service = OpenAICompatibleClient(config=config)
-
-            # Ensure the mocked clients are set
-            service.client = mock_client
-            service.instruct_client = mock_instruct_client
-
-            # Mock the async methods
-            service.start = AsyncMock()
-            service.stop = AsyncMock()
-
-            # Fix the exception tuples to use real exceptions
-            service.retryable_exceptions = (ConnectionError, TimeoutError)
-            service.non_retryable_exceptions = (ValueError, TypeError)
-
-            return service
+# Remove the old llm_service fixture - use the centralized one from conftest.py
 
 
 @pytest.mark.asyncio
@@ -105,8 +71,12 @@ async def test_llm_service_retry_logic(llm_service):
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            # Simulate a connection error
-            raise ConnectionError("Simulated connection error for testing")
+            # Simulate an API connection error (which is retryable)
+            from openai import APIConnectionError
+            import httpx
+            # APIConnectionError requires a request parameter
+            mock_request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            raise APIConnectionError(request=mock_request)
 
         # Create a simple dict as response
         from pydantic import BaseModel
@@ -170,7 +140,7 @@ def test_llm_service_capabilities(llm_service):
     """Test LLMService.get_capabilities() returns correct info."""
     caps = llm_service.get_capabilities()
     assert isinstance(caps, ServiceCapabilities)
-    assert caps.service_name == "llm_service"
+    assert caps.service_name == "test_llm_service"
     assert caps.version == "1.0.0"
     assert len(caps.actions) > 0
     assert "call_llm_structured" in caps.actions[0].lower()
@@ -183,7 +153,7 @@ def test_llm_service_status(llm_service):
     """Test LLMService.get_status() returns correct status."""
     status = llm_service.get_status()
     assert isinstance(status, ServiceStatus)
-    assert status.service_name == "llm_service"
+    assert status.service_name == "test_llm_service"
     assert status.service_type == "llm"  # Changed from "core_service" to match ServiceType.LLM
     assert isinstance(status.is_healthy, bool)
     assert isinstance(status.uptime_seconds, (int, float))

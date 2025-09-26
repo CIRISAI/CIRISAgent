@@ -556,7 +556,7 @@ class TestInstructorRetryExceptionHandling:
 
         # Verify circuit breaker recorded failure
         cb_stats = service.circuit_breaker.get_stats()
-        assert cb_stats["total_failures"] >= 1  # At least 1 failure recorded
+        assert cb_stats["failure_count"] >= 1  # At least 1 failure recorded (current count, not total)
 
         # Verify service error tracking
         status = service.get_status()
@@ -594,7 +594,7 @@ class TestInstructorRetryExceptionHandling:
 
         # Verify circuit breaker recorded failure
         cb_stats = service.circuit_breaker.get_stats()
-        assert cb_stats["total_failures"] >= 1  # At least 1 failure recorded
+        assert cb_stats["failure_count"] >= 1  # At least 1 failure recorded (current count, not total)
 
         # Verify service error tracking
         status = service.get_status()

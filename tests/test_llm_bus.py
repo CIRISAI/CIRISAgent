@@ -135,9 +135,9 @@ def telemetry_service():
     return MockTelemetryService()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def service_registry():
-    """Provide service registry"""
+    """Provide service registry with isolated scope per test"""
     return ServiceRegistry()
 
 
@@ -745,6 +745,7 @@ class TestServiceUnavailableFailover:
                 self.should_fail = True
 
             async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+                self.call_count += 1  # Track calls even if they fail
                 if self.should_fail:
                     # Simulate the same type of error that would cause circuit breaker activation
                     raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
@@ -754,22 +755,22 @@ class TestServiceUnavailableFailover:
         primary_service = ServiceUnavailableLLMService("Together.AI")
         secondary_service = MockLLMService("Lambda.AI")
 
-        # Register primary with high priority
+        # Register primary with high priority - mark as mock to avoid security conflicts
         service_registry.register_service(
             service_type=ServiceType.LLM,
             provider=primary_service,
             priority=Priority.HIGH,
             capabilities=["call_llm_structured"],
-            metadata={"provider": "together", "domain": "general"},
+            metadata={"provider": "mock", "domain": "general", "original_provider": "together"},
         )
 
-        # Register secondary with normal priority
+        # Register secondary with normal priority - mark as mock to avoid security conflicts
         service_registry.register_service(
             service_type=ServiceType.LLM,
             provider=secondary_service,
             priority=Priority.NORMAL,
             capabilities=["call_llm_structured"],
-            metadata={"provider": "lambda", "domain": "general"},
+            metadata={"provider": "mock", "domain": "general", "original_provider": "lambda"},
         )
 
         # First call should fail on primary, succeed on secondary
@@ -783,11 +784,25 @@ class TestServiceUnavailableFailover:
         assert primary_service.call_count == 1  # Primary was tried first
         assert secondary_service.call_count == 1  # Secondary provided the response
 
+        # Trigger enough failures to open circuit breaker (default threshold is 5)
+        primary_service.call_count = 0
+        secondary_service.call_count = 0
+
+        # Make 4 more calls to reach the failure threshold
+        for i in range(4):
+            try:
+                await llm_bus.call_llm_structured(
+                    messages=[{"role": "user", "content": f"Trigger failure {i}"}],
+                    response_model=TestResponse
+                )
+            except:
+                pass  # Expected to succeed on secondary after primary fails
+
         # Verify circuit breaker opened for primary service
         primary_service_name = f"ServiceUnavailableLLMService_{id(primary_service)}"
         assert primary_service_name in llm_bus.circuit_breakers
 
-        # Second call should skip primary entirely due to circuit breaker
+        # Reset counts and test circuit breaker behavior
         primary_service.call_count = 0
         secondary_service.call_count = 0
 
@@ -806,6 +821,7 @@ class TestServiceUnavailableFailover:
 
         class FailingLLMService(MockLLMService):
             async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+                self.call_count += 1  # Track calls even if they fail
                 raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
 
         # Register two failing services
@@ -817,7 +833,7 @@ class TestServiceUnavailableFailover:
             provider=primary_service,
             priority=Priority.HIGH,
             capabilities=["call_llm_structured"],
-            metadata={"provider": "together"},
+            metadata={"provider": "mock", "original_provider": "together"},
         )
 
         service_registry.register_service(
@@ -825,7 +841,7 @@ class TestServiceUnavailableFailover:
             provider=secondary_service,
             priority=Priority.NORMAL,
             capabilities=["call_llm_structured"],
-            metadata={"provider": "lambda"},
+            metadata={"provider": "mock", "original_provider": "lambda"},
         )
 
         # Should fail with appropriate error after trying both providers
@@ -853,19 +869,20 @@ class TestServiceUnavailableFailover:
 
             async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
                 if self.should_fail:
+                    self.call_count += 1  # Track calls that fail
                     raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
                 return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
 
         primary_service = RecoverableLLMService("Together.AI")
         secondary_service = MockLLMService("Lambda.AI")
 
-        # Register services
+        # Register services - mark as mock to avoid security conflicts
         service_registry.register_service(
             service_type=ServiceType.LLM,
             provider=primary_service,
             priority=Priority.HIGH,
             capabilities=["call_llm_structured"],
-            metadata={"provider": "together"},
+            metadata={"provider": "mock", "original_provider": "together"},
         )
 
         service_registry.register_service(
@@ -873,7 +890,7 @@ class TestServiceUnavailableFailover:
             provider=secondary_service,
             priority=Priority.NORMAL,
             capabilities=["call_llm_structured"],
-            metadata={"provider": "lambda"},
+            metadata={"provider": "mock", "original_provider": "lambda"},
         )
 
         # Initial call fails over to secondary

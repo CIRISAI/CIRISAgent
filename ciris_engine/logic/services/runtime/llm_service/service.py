@@ -22,6 +22,7 @@ from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.llm import ExtractedJSONData, JSONExtractionResult
+from .pricing_calculator import LLMPricingCalculator
 
 
 # Configuration class for OpenAI-compatible LLM services
@@ -131,6 +132,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self._total_output_tokens = 0
         self._total_cost_cents = 0.0
         self._total_errors = 0
+
+        # Initialize pricing calculator for accurate cost and impact calculation
+        self.pricing_calculator = LLMPricingCalculator()
 
     # Required BaseService abstract methods
 
@@ -337,66 +341,18 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 prompt_tokens = getattr(usage, "prompt_tokens", 0)
                 completion_tokens = getattr(usage, "completion_tokens", 0)
 
-                # Calculate costs based on model
-                input_cost_cents = 0.0
-                output_cost_cents = 0.0
-
-                if self.model_name.startswith("gpt-4o-mini"):
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 15.0  # $0.15 per 1M
-                    output_cost_cents = (completion_tokens / 1_000_000) * 60.0  # $0.60 per 1M
-                elif self.model_name.startswith("gpt-4o"):
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 250.0  # $2.50 per 1M
-                    output_cost_cents = (completion_tokens / 1_000_000) * 1000.0  # $10.00 per 1M
-                elif self.model_name.startswith("gpt-4-turbo"):
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 1000.0  # $10.00 per 1M
-                    output_cost_cents = (completion_tokens / 1_000_000) * 3000.0  # $30.00 per 1M
-                elif self.model_name.startswith("gpt-3.5-turbo"):
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 50.0  # $0.50 per 1M
-                    output_cost_cents = (completion_tokens / 1_000_000) * 150.0  # $1.50 per 1M
-                elif "llama" in self.model_name.lower() or "Llama" in self.model_name:
-                    # Llama models - typically much cheaper or free if self-hosted
-                    # Using conservative estimates for cloud-hosted Llama
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 10.0  # $0.10 per 1M
-                    output_cost_cents = (completion_tokens / 1_000_000) * 10.0  # $0.10 per 1M
-                elif "claude" in self.model_name.lower():
-                    # Claude models
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 300.0  # $3.00 per 1M
-                    output_cost_cents = (completion_tokens / 1_000_000) * 1500.0  # $15.00 per 1M
-                else:
-                    # Default/unknown model - use conservative estimate
-                    input_cost_cents = (prompt_tokens / 1_000_000) * 20.0
-                    output_cost_cents = (completion_tokens / 1_000_000) * 20.0
-
-                total_cost_cents = input_cost_cents + output_cost_cents
+                # Calculate costs and environmental impact using pricing calculator
+                usage_obj = self.pricing_calculator.calculate_cost_and_impact(
+                    model_name=self.model_name,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    provider_name="openai"  # Since this is OpenAI-compatible client
+                )
 
                 # Track metrics for get_metrics() method
                 self._total_input_tokens += prompt_tokens
                 self._total_output_tokens += completion_tokens
-                self._total_cost_cents += total_cost_cents
-
-                # Estimate carbon footprint
-                # Energy usage varies by model size and hosting
-                if "llama" in self.model_name.lower() and "17B" in self.model_name:
-                    # Llama 17B model - more efficient than larger models
-                    energy_kwh = (total_tokens / 1000) * 0.0002  # Lower energy use
-                elif "gpt-4" in self.model_name:
-                    # GPT-4 models use more compute
-                    energy_kwh = (total_tokens / 1000) * 0.0005
-                else:
-                    # Default estimate
-                    energy_kwh = (total_tokens / 1000) * 0.0003
-
-                carbon_grams = energy_kwh * 500.0  # 500g CO2 per kWh global average
-
-                usage_obj = ResourceUsage(
-                    tokens_used=total_tokens,
-                    tokens_input=prompt_tokens,
-                    tokens_output=completion_tokens,
-                    cost_cents=total_cost_cents,
-                    carbon_grams=carbon_grams,
-                    energy_kwh=energy_kwh,
-                    model_used=self.model_name,
-                )
+                self._total_cost_cents += usage_obj.cost_cents
 
                 # Record token usage in telemetry
                 if self.telemetry_service and usage_obj.tokens_used > 0:

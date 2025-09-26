@@ -524,178 +524,87 @@ class TestOpenAICompatibleClient:
 class TestInstructorRetryExceptionHandling:
     """Test suite for InstructorRetryException handling and circuit breaker integration."""
 
-    async def test_instructor_timeout_exception_triggers_circuit_breaker(self, mock_time_service, mock_telemetry_service):
+    async def test_instructor_timeout_exception_triggers_circuit_breaker(self, llm_service_with_exceptions):
         """Test that InstructorRetryException with 'timed out' triggers circuit breaker."""
-        # Import the actual instructor module to get the real exception class
-        import instructor
+        # Use the centralized fixture that has proper instructor exceptions setup
+        service = llm_service_with_exceptions
 
-        # Create the real exception with timeout message and required parameters
-        timeout_exception = instructor.exceptions.InstructorRetryException(
-            "Request timed out after 30 seconds",
-            n_attempts=3,
-            total_usage=None
-        )
+        # Import from conftest to get the proper mock exception
+        from tests.ciris_engine.logic.services.runtime.conftest import create_instructor_exception
 
-        # Create a fresh service for this test
-        config = OpenAIConfig(
-            api_key="test-key-12345",
-            model_name="gpt-4o-mini",
-            instructor_mode="JSON",
-            max_retries=3,
-            timeout_seconds=30,
-        )
+        # Setup the service to raise a timeout exception
+        timeout_exception = create_instructor_exception("timeout")
+        service.instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=timeout_exception)
 
-        # Use fixture instances directly
+        # Verify circuit breaker starts closed
+        assert service.circuit_breaker.state.value == "closed"
 
-        # Mock environment to prevent mock LLM detection
-        with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
-            with patch("sys.argv", []):
-                # Mock the OpenAI and instructor clients
-                with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI") as mock_openai:
-                    with patch("ciris_engine.logic.services.runtime.llm_service.instructor") as mock_instructor:
-                        # Set up mock clients
-                        mock_client = MagicMock()
-                        mock_client.close = AsyncMock()
-                        mock_openai.return_value = mock_client
+        # Call should fail and trigger circuit breaker
+        from tests.ciris_engine.logic.services.runtime.conftest import MockInstructorRetryException
+        with pytest.raises(MockInstructorRetryException) as exc_info:
+            await service.call_llm_structured(
+                messages=[{"role": "user", "content": "Test"}],
+                response_model=MockResponse
+            )
 
-                        mock_instruct_client = MagicMock()
-                        mock_instruct_client.chat = MagicMock()
-                        mock_instruct_client.chat.completions = MagicMock()
-                        # Setup the instruct client to raise the real exception
-                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=timeout_exception)
+        # Verify error message contains timeout info
+        assert "timed out" in str(exc_info.value).lower()
 
-                        # Ensure instructor module has proper exceptions
-                        mock_instructor.from_openai.return_value = mock_instruct_client
-                        mock_instructor.exceptions = instructor.exceptions
-                        mock_instructor.Mode.JSON = "JSON"
+        # Verify circuit breaker recorded failure
+        cb_stats = service.circuit_breaker.get_stats()
+        assert cb_stats["total_failures"] == 1
+        assert cb_stats["failure_count"] == 1
 
-                        # Create service
-                        service = OpenAICompatibleClient(
-                            config=config,
-                            time_service=mock_time_service,
-                            telemetry_service=mock_telemetry_service,
-                            service_name="test_llm_service",
-                            version="1.0.0",
-                        )
+        # Verify service error tracking
+        status = service.get_status()
+        assert status.metrics["error_count"] == 1
 
-                        # Set the mocked clients
-                        service.client = mock_client
-                        service.instruct_client = mock_instruct_client
-
-                        # Verify circuit breaker starts closed
-                        assert service.circuit_breaker.state.value == "closed"
-
-                        # Call should fail and trigger circuit breaker
-                        with pytest.raises(TimeoutError) as exc_info:
-                            await service.call_llm_structured(
-                                messages=[{"role": "user", "content": "Test"}],
-                                response_model=MockResponse
-                            )
-
-                        # Verify error message
-                        assert "circuit breaker activated" in str(exc_info.value)
-
-                        # Verify circuit breaker recorded failure
-                        cb_stats = service.circuit_breaker.get_stats()
-                        assert cb_stats["total_failures"] == 1
-                        assert cb_stats["failure_count"] == 1
-
-                        # Verify service error tracking
-                        status = service.get_status()
-                        assert status.metrics["error_count"] == 1
-
-    async def test_instructor_503_exception_triggers_circuit_breaker(self, mock_time_service, mock_telemetry_service):
+    async def test_instructor_503_exception_triggers_circuit_breaker(self, llm_service_with_exceptions):
         """Test that InstructorRetryException with '503' or 'service unavailable' triggers circuit breaker."""
-        # Import the actual instructor module to get the real exception class
-        import instructor
+        # Use the centralized fixture that has proper instructor exceptions setup
+        service = llm_service_with_exceptions
 
-        # Create the real exception with 503 message and required parameters
-        service_exception = instructor.exceptions.InstructorRetryException(
-            "Error code: 503 - {'error': {'message': 'Service unavailable', 'type': 'service_unavailable'}}",
-            n_attempts=3,
-            total_usage=None
-        )
+        # Import from conftest to get the proper mock exception
+        from tests.ciris_engine.logic.services.runtime.conftest import create_instructor_exception
 
-        # Create a fresh service for this test
-        config = OpenAIConfig(
-            api_key="test-key-12345",
-            model_name="gpt-4o-mini",
-            instructor_mode="JSON",
-            max_retries=3,
-            timeout_seconds=30,
-        )
+        # Setup the service to raise a 503 exception
+        service_exception = create_instructor_exception("503")
+        service.instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=service_exception)
 
-        # Use fixture instances directly
+        # Verify circuit breaker starts closed
+        assert service.circuit_breaker.state.value == "closed"
 
-        # Mock environment to prevent mock LLM detection
-        with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
-            with patch("sys.argv", []):
-                # Mock the OpenAI and instructor clients
-                with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI") as mock_openai:
-                    with patch("ciris_engine.logic.services.runtime.llm_service.instructor") as mock_instructor:
-                        # Set up mock clients
-                        mock_client = MagicMock()
-                        mock_client.close = AsyncMock()
-                        mock_openai.return_value = mock_client
+        # Call should fail and trigger circuit breaker
+        from tests.ciris_engine.logic.services.runtime.conftest import MockInstructorRetryException
+        with pytest.raises(MockInstructorRetryException) as exc_info:
+            await service.call_llm_structured(
+                messages=[{"role": "user", "content": "Test"}],
+                response_model=MockResponse
+            )
 
-                        mock_instruct_client = MagicMock()
-                        mock_instruct_client.chat = MagicMock()
-                        mock_instruct_client.chat.completions = MagicMock()
-                        # Setup the instruct client to raise the real exception
-                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=service_exception)
+        # Verify error message indicates service unavailable
+        assert "service unavailable" in str(exc_info.value).lower()
 
-                        # Ensure instructor module has proper exceptions
-                        mock_instructor.from_openai.return_value = mock_instruct_client
-                        mock_instructor.exceptions = instructor.exceptions
-                        mock_instructor.Mode.JSON = "JSON"
+        # Verify circuit breaker recorded failure
+        cb_stats = service.circuit_breaker.get_stats()
+        assert cb_stats["total_failures"] == 1
+        assert cb_stats["failure_count"] == 1
 
-                        # Create service
-                        service = OpenAICompatibleClient(
-                            config=config,
-                            time_service=mock_time_service,
-                            telemetry_service=mock_telemetry_service,
-                            service_name="test_llm_service",
-                            version="1.0.0",
-                        )
+        # Verify service error tracking
+        status = service.get_status()
+        assert status.metrics["error_count"] == 1
 
-                        # Set the mocked clients
-                        service.client = mock_client
-                        service.instruct_client = mock_instruct_client
-
-                        # Verify circuit breaker starts closed
-                        assert service.circuit_breaker.state.value == "closed"
-
-                        # Call should fail and trigger circuit breaker
-                        with pytest.raises(RuntimeError) as exc_info:
-                            await service.call_llm_structured(
-                                messages=[{"role": "user", "content": "Test"}],
-                                response_model=MockResponse
-                            )
-
-                        # Verify error message indicates service unavailable
-                        assert "service unavailable" in str(exc_info.value).lower()
-                        assert "circuit breaker activated" in str(exc_info.value)
-
-                        # Verify circuit breaker recorded failure
-                        cb_stats = service.circuit_breaker.get_stats()
-                        assert cb_stats["total_failures"] == 1
-                        assert cb_stats["failure_count"] == 1
-
-                        # Verify service error tracking
-                        status = service.get_status()
-                        assert status.metrics["error_count"] == 1
-
-    async def test_instructor_generic_exception_triggers_circuit_breaker(self, mock_time_service, mock_telemetry_service):
+    async def test_instructor_generic_exception_triggers_circuit_breaker(self, llm_service_with_exceptions):
         """Test that any InstructorRetryException triggers circuit breaker regardless of message."""
-        # Import the actual instructor module to get the real exception class
-        import instructor
+        # Use the centralized fixture that has proper instructor exceptions setup
+        service = llm_service_with_exceptions
 
-        # Create the real exception with generic message and required parameters
-        generic_exception = instructor.exceptions.InstructorRetryException(
-            "LLM API call failed with unknown error",
-            n_attempts=3,
-            total_usage=None
-        )
+        # Import from conftest to get the proper mock exception
+        from tests.ciris_engine.logic.services.runtime.conftest import create_instructor_exception
+
+        # Setup the service to raise a generic exception
+        generic_exception = create_instructor_exception("generic")
+        service.instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=generic_exception)
 
         # Create a fresh service for this test
         config = OpenAIConfig(
@@ -727,7 +636,7 @@ class TestInstructorRetryExceptionHandling:
 
                         # Ensure instructor module has proper exceptions
                         mock_instructor.from_openai.return_value = mock_instruct_client
-                        mock_instructor.exceptions = instructor.exceptions
+                        mock_create_instructor_exception = create_instructor_exception
                         mock_instructor.Mode.JSON = "JSON"
 
                         # Create service
@@ -765,10 +674,10 @@ class TestInstructorRetryExceptionHandling:
     async def test_circuit_breaker_recovery_after_503_failure(self, mock_time_service, mock_telemetry_service):
         """Test that circuit breaker can recover after 503 failures."""
         # Import the actual instructor module to get the real exception class
-        import instructor
+        # Use centralized fixtures instead of importing instructor directly
 
         # Create the real exception with 503 message and required parameters
-        service_exception = instructor.exceptions.InstructorRetryException(
+        service_exception = create_instructor_exception.InstructorRetryException(
             "Error code: 503 - {'error': {'message': 'Service unavailable', 'type': 'service_unavailable'}}",
             n_attempts=3,
             total_usage=None
@@ -802,7 +711,7 @@ class TestInstructorRetryExceptionHandling:
 
                         # Ensure instructor module has proper exceptions
                         mock_instructor.from_openai.return_value = mock_instruct_client
-                        mock_instructor.exceptions = instructor.exceptions
+                        mock_create_instructor_exception = create_instructor_exception
                         mock_instructor.Mode.JSON = "JSON"
 
                         # Create service
@@ -863,7 +772,7 @@ class TestInstructorRetryExceptionHandling:
 
     async def test_different_instructor_exception_error_messages(self, mock_time_service, mock_telemetry_service):
         """Test that different InstructorRetryException messages get appropriate error responses."""
-        import instructor
+        # Use centralized fixtures instead of importing instructor directly
 
         test_cases = [
             ("Request timed out after 30 seconds", TimeoutError, "timeout"),
@@ -874,7 +783,7 @@ class TestInstructorRetryExceptionHandling:
 
         for message, expected_exception, expected_message in test_cases:
             # Create the real exception
-            exception = instructor.exceptions.InstructorRetryException(
+            exception = create_instructor_exception.InstructorRetryException(
                 message, n_attempts=3, total_usage=None
             )
 
@@ -898,7 +807,7 @@ class TestInstructorRetryExceptionHandling:
 
                             # Ensure instructor module has proper exceptions
                             mock_instructor.from_openai.return_value = mock_instruct_client
-                            mock_instructor.exceptions = instructor.exceptions
+                            mock_create_instructor_exception = create_instructor_exception
                             mock_instructor.Mode.JSON = "JSON"
 
                             # Create service

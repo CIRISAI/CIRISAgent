@@ -16,6 +16,10 @@ anyio>=4.0.0,<5.0.0
 # Discord Integration
 discord.py>=2.3.0,<3.0.0
 
+# Document Processing (Security-First)
+pypdf>=4.0.0,<5.0.0  # PDF text extraction with CVE fixes
+docx2txt>=0.8,<1.0.0  # Pure Python DOCX text extraction
+
 # Security and Cryptography
 cryptography>=41.0.0,<46.0.0
 PyJWT[crypto]>=2.8.0,<3.0.0

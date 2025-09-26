@@ -155,51 +155,51 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         return modified_content
 
     async def _enhance_message(self, msg: DiscordMessage) -> DiscordMessage:
-        """Enhance Discord messages with vision processing and anti-spoofing protection."""
+        """Enhance Discord messages with vision processing, document parsing, and anti-spoofing protection."""
         # First, detect and replace any spoofed markers
         clean_content = self._detect_and_replace_spoofed_markers(msg.content)
-        
-        # Process any images in the message if vision is available
-        if self._vision_helper.is_available() and hasattr(msg, "raw_message") and msg.raw_message:
+
+        additional_content = ""
+
+        # Process attachments if we have a raw Discord message
+        if hasattr(msg, "raw_message") and msg.raw_message:
             try:
-                # Process attachments
-                image_descriptions = await self._vision_helper.process_message_images(msg.raw_message)
+                # Process images if vision is available
+                if self._vision_helper.is_available():
+                    # Process image attachments
+                    image_descriptions = await self._vision_helper.process_message_images(msg.raw_message)
 
-                # Process embeds if any
-                embed_descriptions = None
-                if hasattr(msg.raw_message, "embeds") and msg.raw_message.embeds:
-                    embed_descriptions = await self._vision_helper.process_embeds(msg.raw_message.embeds)
+                    # Process embeds if any
+                    embed_descriptions = None
+                    if hasattr(msg.raw_message, "embeds") and msg.raw_message.embeds:
+                        embed_descriptions = await self._vision_helper.process_embeds(msg.raw_message.embeds)
 
-                # Append descriptions to the message content
-                if image_descriptions or embed_descriptions:
-                    additional_content = "\n\n[Image Analysis]\n"
-                    if image_descriptions:
-                        additional_content += image_descriptions
-                    if embed_descriptions:
+                    # Add image descriptions to content
+                    if image_descriptions or embed_descriptions:
+                        additional_content += "\n\n[Image Analysis]\n"
                         if image_descriptions:
-                            additional_content += "\n\n"
-                        additional_content += embed_descriptions
+                            additional_content += image_descriptions
+                        if embed_descriptions:
+                            if image_descriptions:
+                                additional_content += "\n\n"
+                            additional_content += embed_descriptions
 
-                    # Create a new message with the augmented content and anti-spoofing protection
-                    return DiscordMessage(
-                        message_id=msg.message_id,
-                        content=clean_content + additional_content,
-                        author_id=msg.author_id,
-                        author_name=msg.author_name,
-                        channel_id=msg.channel_id,
-                        is_bot=msg.is_bot,
-                        is_dm=msg.is_dm,
-                        raw_message=msg.raw_message,
-                    )
+                # Process document attachments if document parser is available
+                if self._document_parser.is_available() and hasattr(msg.raw_message, "attachments"):
+                    document_text = await self._document_parser.process_attachments(msg.raw_message.attachments)
+
+                    if document_text:
+                        additional_content += "\n\n[Document Analysis]\n" + document_text
 
             except Exception as e:
-                logger.error(f"Failed to process images in message {msg.message_id}: {e}")
+                logger.error(f"Failed to process attachments in message {msg.message_id}: {e}")
+                additional_content += f"\n\n[Attachment Processing Error: {str(e)}]"
 
-        # Return message with anti-spoofing protection even if no image processing
-        if clean_content != msg.content:
+        # Create enhanced message if we have additional content or cleaned content
+        if additional_content or clean_content != msg.content:
             return DiscordMessage(
                 message_id=msg.message_id,
-                content=clean_content,
+                content=clean_content + additional_content,
                 author_id=msg.author_id,
                 author_name=msg.author_name,
                 channel_id=msg.channel_id,
@@ -207,7 +207,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 is_dm=msg.is_dm,
                 raw_message=msg.raw_message,
             )
-        
+
         return msg
 
     async def _handle_priority_observation(self, msg: DiscordMessage, filter_result: Any) -> None:

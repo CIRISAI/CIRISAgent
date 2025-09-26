@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Major Achievements
 - **🔐 Critical Deferral Resolution Fix**: Fixed WA deferral resolution authentication bug preventing Wise Authorities from resolving deferred decisions
 - **👥 Multiple WA Support**: Complete migration from single WA_USER_ID to multiple WA_USER_IDS with comma-separated list support
+- **📄 Document Processing**: Added secure document parsing for PDF and DOCX attachments with comprehensive test coverage (91.28%)
 
 ### Fixed
 - **WA Deferral Resolution 403 Error**: Fixed critical authentication bug where users with AUTHORITY role couldn't resolve deferrals
@@ -24,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated shell scripts (register_discord.sh, register_discord_from_env.sh) with proper JSON array building
   - Enhanced Python registration tools (dev/ops) with comma-separated parsing
   - Comprehensive test coverage (27/27 tests passing) including edge cases for spaces, duplicates, and empty entries
+- **📄 Document Parsing Support**: Minimal secure document parser for PDF and DOCX attachments
+  - Security-first design with 1MB file size limit, 3 attachments max, 30-second processing timeout
+  - Whitelist-based filtering (PDF and DOCX only) with content type validation
+  - Text-only extraction with 50k character output limit and length truncation
+  - Universal adapter support through BaseObserver integration
+  - Discord attachment processing with error handling and status reporting
+  - Dependencies: pypdf (>=4.0.0) and docx2txt (>=0.8) with CVE-aware selection
+  - Comprehensive test suite: 51 tests passing with 91.28% code coverage
 - **Comprehensive unit test coverage** for WA permission system including auth service and authentication dependency layers
 
 ### Changed

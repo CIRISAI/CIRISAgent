@@ -204,7 +204,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             logger.warning(f"Failed to fetch referenced message: {e}")
             return None
 
-    def _build_reply_context(self, referenced_message) -> str:
+    def _build_reply_context(self, referenced_message) -> str | None:
         """Build reply context string from referenced message."""
         if not referenced_message or not referenced_message.content:
             return None

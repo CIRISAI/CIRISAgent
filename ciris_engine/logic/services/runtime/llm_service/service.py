@@ -415,15 +415,26 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 logger.warning(f"LLM structured API error recorded by circuit breaker: {e}")
                 raise
             except Exception as e:
-                # Check if this is an instructor timeout exception
+                # Check if this is an instructor retry exception (includes timeouts, 503 errors, rate limits, etc.)
                 if hasattr(instructor, "exceptions") and hasattr(instructor.exceptions, "InstructorRetryException"):
-                    if isinstance(e, instructor.exceptions.InstructorRetryException) and "timed out" in str(e):
-                        logger.error(f"LLM structured timeout detected, circuit breaker recorded failure: {e}")
+                    if isinstance(e, instructor.exceptions.InstructorRetryException):
+                        # Record failure for circuit breaker regardless of specific error type
                         self.circuit_breaker.record_failure()
                         self._track_error(e)
                         # Track LLM-specific error
                         self._total_errors += 1
-                        raise TimeoutError("LLM API timeout in structured call - circuit breaker activated") from e
+
+                        # Provide specific error messages for different failure types
+                        error_str = str(e).lower()
+                        if "timed out" in error_str:
+                            logger.error(f"LLM structured timeout detected, circuit breaker recorded failure: {e}")
+                            raise TimeoutError("LLM API timeout in structured call - circuit breaker activated") from e
+                        elif "service unavailable" in error_str or "503" in error_str:
+                            logger.error(f"LLM service unavailable (503), circuit breaker recorded failure: {e}")
+                            raise RuntimeError("LLM service unavailable - circuit breaker activated for failover") from e
+                        else:
+                            logger.error(f"LLM structured call failed, circuit breaker recorded failure: {e}")
+                            raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from e
                 # Re-raise other exceptions
                 raise
 

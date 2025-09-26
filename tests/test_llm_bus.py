@@ -730,3 +730,178 @@ class TestEdgeCases:
             service_registry.register_service(
                 service_type=ServiceType.LLM, provider=real_service, metadata={"provider": "openai"}
             )
+
+
+class TestServiceUnavailableFailover:
+    """Test failover specifically for 503 Service Unavailable scenarios."""
+
+    @pytest.mark.asyncio
+    async def test_503_error_triggers_failover_to_secondary_provider(self, llm_bus, service_registry):
+        """Test that 503 Service Unavailable from primary triggers immediate failover to secondary."""
+        # Create primary service that fails with 503-like errors
+        class ServiceUnavailableLLMService(MockLLMService):
+            def __init__(self, name):
+                super().__init__(name)
+                self.should_fail = True
+
+            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+                if self.should_fail:
+                    # Simulate the same type of error that would cause circuit breaker activation
+                    raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+
+        # Create secondary service that always succeeds
+        primary_service = ServiceUnavailableLLMService("Together.AI")
+        secondary_service = MockLLMService("Lambda.AI")
+
+        # Register primary with high priority
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=primary_service,
+            priority=Priority.HIGH,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "together", "domain": "general"},
+        )
+
+        # Register secondary with normal priority
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=secondary_service,
+            priority=Priority.NORMAL,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "lambda", "domain": "general"},
+        )
+
+        # First call should fail on primary, succeed on secondary
+        result, usage = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "Test failover"}],
+            response_model=TestResponse
+        )
+
+        # Should get response from secondary service
+        assert result.message == "Response from Lambda.AI"
+        assert primary_service.call_count == 1  # Primary was tried first
+        assert secondary_service.call_count == 1  # Secondary provided the response
+
+        # Verify circuit breaker opened for primary service
+        primary_service_name = f"ServiceUnavailableLLMService_{id(primary_service)}"
+        assert primary_service_name in llm_bus.circuit_breakers
+
+        # Second call should skip primary entirely due to circuit breaker
+        primary_service.call_count = 0
+        secondary_service.call_count = 0
+
+        result2, usage2 = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "Test circuit breaker"}],
+            response_model=TestResponse
+        )
+
+        assert result2.message == "Response from Lambda.AI"
+        assert primary_service.call_count == 0  # Primary was skipped due to circuit breaker
+        assert secondary_service.call_count == 1  # Only secondary was called
+
+    @pytest.mark.asyncio
+    async def test_both_providers_503_error_propagates(self, llm_bus, service_registry):
+        """Test that when both providers fail with 503, the error is properly propagated."""
+
+        class FailingLLMService(MockLLMService):
+            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+                raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
+
+        # Register two failing services
+        primary_service = FailingLLMService("Together.AI")
+        secondary_service = FailingLLMService("Lambda.AI")
+
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=primary_service,
+            priority=Priority.HIGH,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "together"},
+        )
+
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=secondary_service,
+            priority=Priority.NORMAL,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "lambda"},
+        )
+
+        # Should fail with appropriate error after trying both providers
+        with pytest.raises(RuntimeError) as exc_info:
+            await llm_bus.call_llm_structured(
+                messages=[{"role": "user", "content": "Test all failing"}],
+                response_model=TestResponse
+            )
+
+        # Should indicate all services failed
+        assert "All LLM services failed" in str(exc_info.value)
+
+        # Both services should have been tried
+        assert primary_service.call_count == 1
+        assert secondary_service.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_primary_recovery_after_503_failover(self, llm_bus, service_registry, time_service):
+        """Test that primary service can recover after 503 errors and circuit breaker recovery."""
+
+        class RecoverableLLMService(MockLLMService):
+            def __init__(self, name):
+                super().__init__(name)
+                self.should_fail = True
+
+            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+                if self.should_fail:
+                    raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+
+        primary_service = RecoverableLLMService("Together.AI")
+        secondary_service = MockLLMService("Lambda.AI")
+
+        # Register services
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=primary_service,
+            priority=Priority.HIGH,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "together"},
+        )
+
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=secondary_service,
+            priority=Priority.NORMAL,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "lambda"},
+        )
+
+        # Initial call fails over to secondary
+        result1, _ = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "Initial call"}],
+            response_model=TestResponse
+        )
+        assert result1.message == "Response from Lambda.AI"
+
+        # Primary service recovers
+        primary_service.should_fail = False
+
+        # Simulate circuit breaker recovery timeout
+        primary_service_name = f"RecoverableLLMService_{id(primary_service)}"
+        cb = llm_bus.circuit_breakers[primary_service_name]
+
+        # Manually trigger circuit breaker recovery for testing
+        cb.reset()
+
+        # Next call should try primary again and succeed
+        primary_service.call_count = 0
+        secondary_service.call_count = 0
+
+        result2, _ = await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "Recovery test"}],
+            response_model=TestResponse
+        )
+
+        assert result2.message == "Response from Together.AI"
+        assert primary_service.call_count == 1  # Primary was called and succeeded
+        assert secondary_service.call_count == 0  # Secondary wasn't needed

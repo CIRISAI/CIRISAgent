@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **👥 Multiple WA Support**: Complete migration from single WA_USER_ID to multiple WA_USER_IDS with comma-separated list support
 - **📄 Document Processing**: Added secure document parsing for PDF and DOCX attachments with comprehensive test coverage (91.28%)
 - **💬 Discord Reply Processing**: Implemented Discord reply detection with attachment inheritance and priority rules for enhanced context management
+- **📋 AI Assistant Enhancement**: Integrated comprehensive CIRIS guide into system prompts providing complete technical context for all AI interactions
 
 ### Fixed
 - **WA Deferral Resolution 403 Error**: Fixed critical authentication bug where users with AUTHORITY role couldn't resolve deferrals
@@ -45,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Anti-spoofing protection: Maintains security for CIRIS observation markers in reply content
   - Comprehensive test coverage: 240 tests total (32 reply-specific tests) with 72.55% Discord observer coverage
   - Error handling: Graceful handling of missing references, fetch failures, and malformed attachment data
+- **📋 CIRIS Comprehensive Guide Integration**: Complete technical reference integrated into system prompts
+  - Created comprehensive AI assistant guide covering all CIRIS architecture, services, and development practices
+  - Sanitized guide by removing over-detailed development specifics while preserving essential technical information
+  - Integrated guide into system prompts after covenant for universal AI assistant context
+  - All AI interactions now receive complete codebase context including API documentation, debugging procedures, and operational guidelines
+  - Maintains existing covenant usage patterns without requiring code changes across multiple modules
 - **Comprehensive unit test coverage** for WA permission system including auth service and authentication dependency layers
 
 ### Changed

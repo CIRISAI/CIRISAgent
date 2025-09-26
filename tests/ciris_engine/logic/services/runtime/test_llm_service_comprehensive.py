@@ -529,6 +529,9 @@ class TestInstructorRetryExceptionHandling:
         # Use the centralized fixture that has proper instructor exceptions setup
         service = llm_service_with_exceptions
 
+        # Reset circuit breaker state to ensure clean test
+        service.circuit_breaker.reset()
+
         # Import from conftest to get the proper mock exception
         from tests.ciris_engine.logic.services.runtime.conftest import create_instructor_exception
 
@@ -564,6 +567,9 @@ class TestInstructorRetryExceptionHandling:
         # Use the centralized fixture that has proper instructor exceptions setup
         service = llm_service_with_exceptions
 
+        # Reset circuit breaker state to ensure clean test
+        service.circuit_breaker.reset()
+
         # Import from conftest to get the proper mock exception
         from tests.ciris_engine.logic.services.runtime.conftest import create_instructor_exception
 
@@ -598,6 +604,9 @@ class TestInstructorRetryExceptionHandling:
         """Test that any InstructorRetryException triggers circuit breaker regardless of message."""
         # Use the centralized fixture that has proper instructor exceptions setup
         service = llm_service_with_exceptions
+
+        # Reset circuit breaker state to ensure clean test
+        service.circuit_breaker.reset()
 
         # Import from conftest to get the proper mock exception
         from tests.ciris_engine.logic.services.runtime.conftest import create_instructor_exception
@@ -726,6 +735,9 @@ class TestInstructorRetryExceptionHandling:
                         service.client = mock_client
                         service.instruct_client = mock_instruct_client
 
+                        # Reset circuit breaker state to ensure clean test
+                        service.circuit_breaker.reset()
+
                         # First call fails with 503
                         mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=service_exception)
 
@@ -827,6 +839,9 @@ class TestInstructorRetryExceptionHandling:
 
                             service.client = mock_client
                             service.instruct_client = mock_instruct_client
+
+                            # Reset circuit breaker state to ensure clean test
+                            service.circuit_breaker.reset()
 
                             # Test the exception handling
                             with pytest.raises(expected_exception) as exc_info:

@@ -13,12 +13,18 @@ from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform
 def platform():
     """Create a Discord platform with minimal mocking."""
     mock_runtime = Mock()
+
+    # Create a proper mock config with bot_token to avoid validation errors
     mock_config = Mock()
+    mock_config.bot_token = "test_bot_token_123456"
+    mock_config.monitored_channel_ids = ["123456789"]
 
+    # Mock the entire DiscordPlatform initialization to avoid real Discord setup
     with patch('ciris_engine.logic.adapters.discord.adapter.DiscordAdapter'):
-        platform = DiscordPlatform(mock_runtime, adapter_config=mock_config)
+        with patch.object(DiscordPlatform, '__init__', return_value=None):
+            platform = DiscordPlatform.__new__(DiscordPlatform)
 
-    # Mock only what's needed
+    # Manually set up the platform attributes we need for testing
     platform.client = Mock()
     platform.client.is_closed = Mock(return_value=False)
     platform.client.user = "TestBot#1234"
@@ -28,6 +34,7 @@ def platform():
     platform._reconnect_attempts = 2
     platform._max_reconnect_attempts = 10
     platform._initialize_discord_client = AsyncMock()
+    platform._discord_client_task = None
 
     return platform
 

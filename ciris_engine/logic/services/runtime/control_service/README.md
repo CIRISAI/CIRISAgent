@@ -112,7 +112,7 @@ Each pipeline step has a dedicated result schema providing comprehensive insight
 
 ### Type-Safe Configuration Management
 
-Following CIRIS's "No Dicts, No Strings, No Kings" philosophy:
+Following CIRIS's "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosophy:
 
 ```python
 class ConfigValueMap(BaseModel):

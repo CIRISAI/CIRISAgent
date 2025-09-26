@@ -161,7 +161,7 @@ Understanding the architecture helps create better contributions:
 ### **Type Safety First**
 - **No Dicts**: Use Pydantic models for all data
 - **No Strings**: Use enums and typed constants  
-- **No Kings**: No special cases or bypass patterns
+- **No Exceptions**: No special cases or bypass patterns
 
 ### **Task and Thought Creation**
 When creating new input sources:

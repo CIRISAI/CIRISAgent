@@ -154,52 +154,155 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         
         return modified_content
 
-    async def _enhance_message(self, msg: DiscordMessage) -> DiscordMessage:
-        """Enhance Discord messages with vision processing and anti-spoofing protection."""
-        # First, detect and replace any spoofed markers
-        clean_content = self._detect_and_replace_spoofed_markers(msg.content)
-        
-        # Process any images in the message if vision is available
-        if self._vision_helper.is_available() and hasattr(msg, "raw_message") and msg.raw_message:
+    async def _collect_message_attachments_with_reply(self, raw_message) -> dict:
+        """Collect attachments from message and reply with priority rules.
+
+        Priority rules:
+        1. Reply message wins - if reply has image and 3 attachments, replied-to message only contributes text
+        2. Maximum 1 image total across both messages
+        3. Maximum 3 documents total across both messages
+        4. Reply context (text) is always included if this is a reply
+
+        Returns:
+            dict with keys: images, documents, embeds, reply_context
+        """
+        result = {
+            "images": [],
+            "documents": [],
+            "embeds": [],
+            "reply_context": None
+        }
+
+        # Check if this is a reply
+        referenced_message = None
+        if hasattr(raw_message, 'reference') and raw_message.reference:
             try:
-                # Process attachments
-                image_descriptions = await self._vision_helper.process_message_images(msg.raw_message)
+                # Fetch the referenced message
+                if hasattr(raw_message.reference, 'resolved') and raw_message.reference.resolved:
+                    referenced_message = raw_message.reference.resolved
+                else:
+                    # Fallback: fetch manually if not resolved
+                    channel = raw_message.channel
+                    referenced_message = await channel.fetch_message(raw_message.reference.message_id)
 
-                # Process embeds if any
-                embed_descriptions = None
-                if hasattr(msg.raw_message, "embeds") and msg.raw_message.embeds:
-                    embed_descriptions = await self._vision_helper.process_embeds(msg.raw_message.embeds)
-
-                # Append descriptions to the message content
-                if image_descriptions or embed_descriptions:
-                    additional_content = "\n\n[Image Analysis]\n"
-                    if image_descriptions:
-                        additional_content += image_descriptions
-                    if embed_descriptions:
-                        if image_descriptions:
-                            additional_content += "\n\n"
-                        additional_content += embed_descriptions
-
-                    # Create a new message with the augmented content and anti-spoofing protection
-                    return DiscordMessage(
-                        message_id=msg.message_id,
-                        content=clean_content + additional_content,
-                        author_id=msg.author_id,
-                        author_name=msg.author_name,
-                        channel_id=msg.channel_id,
-                        is_bot=msg.is_bot,
-                        is_dm=msg.is_dm,
-                        raw_message=msg.raw_message,
-                    )
+                # Add reply context (always include replied-to message text)
+                if referenced_message and referenced_message.content:
+                    author_name = getattr(referenced_message.author, 'display_name', 'Unknown')
+                    result["reply_context"] = f"@{author_name}: {referenced_message.content}"
 
             except Exception as e:
-                logger.error(f"Failed to process images in message {msg.message_id}: {e}")
+                logger.warning(f"Failed to fetch referenced message: {e}")
 
-        # Return message with anti-spoofing protection even if no image processing
-        if clean_content != msg.content:
+        # Collect attachments with priority (reply wins)
+        messages_to_process = []
+
+        # Reply message gets first priority
+        if raw_message:
+            messages_to_process.append(("reply", raw_message))
+
+        # Original message gets second priority
+        if referenced_message:
+            messages_to_process.append(("original", referenced_message))
+
+        # Process attachments respecting limits
+        image_count = 0
+        document_count = 0
+
+        for message_type, message in messages_to_process:
+            if not message:
+                continue
+
+            # Process image attachments (max 1 total)
+            if hasattr(message, 'attachments') and message.attachments and image_count < 1:
+                for attachment in message.attachments:
+                    if image_count >= 1:
+                        break
+                    if self._is_image_attachment(attachment):
+                        result["images"].append(attachment)
+                        image_count += 1
+
+            # Process document attachments (max 3 total)
+            if hasattr(message, 'attachments') and message.attachments and document_count < 3:
+                for attachment in message.attachments:
+                    if document_count >= 3:
+                        break
+                    # Use document parser's filtering if available
+                    if self._document_parser.is_available():
+                        if self._document_parser._is_document_attachment(attachment):
+                            result["documents"].append(attachment)
+                            document_count += 1
+
+            # Process embeds (only from reply message to avoid duplication)
+            if message_type == "reply" and hasattr(message, 'embeds') and message.embeds:
+                result["embeds"] = message.embeds
+
+        return result
+
+    def _is_image_attachment(self, attachment) -> bool:
+        """Check if attachment is an image."""
+        if not hasattr(attachment, 'content_type') or not attachment.content_type:
+            return False
+
+        image_types = [
+            'image/png', 'image/jpeg', 'image/jpg', 'image/gif',
+            'image/webp', 'image/svg+xml', 'image/bmp'
+        ]
+        return attachment.content_type.lower() in image_types
+
+    async def _enhance_message(self, msg: DiscordMessage) -> DiscordMessage:
+        """Enhance Discord messages with vision processing, document parsing, reply context, and anti-spoofing protection."""
+        # First, detect and replace any spoofed markers
+        clean_content = self._detect_and_replace_spoofed_markers(msg.content)
+
+        additional_content = ""
+
+        # Check if this message is a reply and process both messages with attachment limits
+        if hasattr(msg, "raw_message") and msg.raw_message:
+            try:
+                # Detect reply and collect attachment/image data with priority rules
+                attachments_data = await self._collect_message_attachments_with_reply(msg.raw_message)
+
+                # Process images if vision is available
+                if self._vision_helper.is_available() and attachments_data.get("images"):
+                    image_descriptions = await self._vision_helper.process_image_attachments_list(
+                        attachments_data["images"]
+                    )
+
+                    # Process embeds if any
+                    embed_descriptions = None
+                    if attachments_data.get("embeds"):
+                        embed_descriptions = await self._vision_helper.process_embeds(attachments_data["embeds"])
+
+                    # Add image descriptions to content
+                    if image_descriptions or embed_descriptions:
+                        additional_content += "\n\n[Image Analysis]\n"
+                        if image_descriptions:
+                            additional_content += image_descriptions
+                        if embed_descriptions:
+                            if image_descriptions:
+                                additional_content += "\n\n"
+                            additional_content += embed_descriptions
+
+                # Process document attachments if document parser is available
+                if self._document_parser.is_available() and attachments_data.get("documents"):
+                    document_text = await self._document_parser.process_attachments(attachments_data["documents"])
+
+                    if document_text:
+                        additional_content += "\n\n[Document Analysis]\n" + document_text
+
+                # Add reply context if this is a reply
+                if attachments_data.get("reply_context"):
+                    additional_content += f"\n\n[Reply Context]\n{attachments_data['reply_context']}"
+
+            except Exception as e:
+                logger.error(f"Failed to process attachments in message {msg.message_id}: {e}")
+                additional_content += f"\n\n[Attachment Processing Error: {str(e)}]"
+
+        # Create enhanced message if we have additional content or cleaned content
+        if additional_content or clean_content != msg.content:
             return DiscordMessage(
                 message_id=msg.message_id,
-                content=clean_content,
+                content=clean_content + additional_content,
                 author_id=msg.author_id,
                 author_name=msg.author_name,
                 channel_id=msg.channel_id,
@@ -207,7 +310,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 is_dm=msg.is_dm,
                 raw_message=msg.raw_message,
             )
-        
+
         return msg
 
     async def _handle_priority_observation(self, msg: DiscordMessage, filter_result: Any) -> None:

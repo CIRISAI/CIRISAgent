@@ -43,7 +43,7 @@ We are thrilled to announce the **beta release** of CIRIS Agent - a sophisticate
 ### Complete Type Safety
 - **Zero `Dict[str, Any]`** in production code
 - All data structures use Pydantic models
-- "No Dicts, No Strings, No Kings" philosophy fully realized
+- "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosophy fully realized
 
 ### Robust Architecture
 - **22 Core Services** + dynamic adapter services

@@ -317,7 +317,7 @@ response = await wise_bus.request_guidance(request, agent_tier=4)
 
 ### Ethical Consistency
 
-- **Universal Prohibitions**: "No Kings" policy - no bypass mechanisms for prohibited capabilities
+- **Universal Prohibitions**: "No Exceptions" policy - no bypass mechanisms for prohibited capabilities
 - **Tier Enforcement**: Automatic agent tier detection and capability restriction
 - **Audit Trail**: Complete telemetry tracking for all wisdom operations
 - **Signature Verification**: Cryptographic signatures on all WA decisions
@@ -348,7 +348,7 @@ async def collect_telemetry(self) -> Dict[str, Any]:
 
 ### Override Mechanisms
 
-**Emergency Overrides**: None. The WiseBus implements "No Kings" philosophy - no special bypass mechanisms exist for prohibited capabilities. This ensures consistent ethical boundaries across all CIRIS operations.
+**Emergency Overrides**: None. The WiseBus implements "No Exceptions" philosophy - no special bypass mechanisms exist for prohibited capabilities. This ensures consistent ethical boundaries across all CIRIS operations.
 
 **Legitimate Use Cases**: Require separate licensed repositories with proper liability isolation (see CLAUDE.md).
 

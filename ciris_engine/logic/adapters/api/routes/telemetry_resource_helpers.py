@@ -2,7 +2,7 @@
 Resource history helpers - modular functions for telemetry resource tracking.
 
 Following CIRIS principles:
-- No Kings: Each function has single responsibility
+- No Exceptions: Each function has single responsibility
 - Adaptive Coherence: Functions can evolve independently
 - Type Safety: All inputs and outputs are typed
 """

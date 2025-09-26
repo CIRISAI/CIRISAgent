@@ -25,7 +25,7 @@ CIRIS Agent is **100% ready for beta release**. All core functionality is implem
 - **Zero `Dict[str, Any]`** in production code
 - All data structures use Pydantic models
 - Comprehensive validation throughout
-- "No Dicts, No Strings, No Kings" philosophy fully realized
+- "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosophy fully realized
 
 ### 3. API v1.0 Complete ✅
 - **78 endpoints** across 12 modules (not 56 as previously documented)

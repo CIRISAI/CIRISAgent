@@ -416,8 +416,6 @@ class ThoughtProcessor(
 
     def _create_deferral_result(self, dma_results, thought) -> ActionSelectionDMAResult:
         """Create a deferral result for failed processing."""
-        from ciris_engine.logic.utils.constants import DEFAULT_WA
-
         defer_reason = "Critical DMA failure or conscience override."
         # Convert dma_results to string representation for context
         dma_results_str = str(dma_results) if not isinstance(dma_results, str) else dma_results
@@ -426,7 +424,6 @@ class ThoughtProcessor(
             context={
                 "original_thought_id": thought.thought_id,
                 "dma_results_summary": dma_results_str,
-                "target_wa_ual": str(DEFAULT_WA) if DEFAULT_WA else "",
             },
             defer_until=None,
         )

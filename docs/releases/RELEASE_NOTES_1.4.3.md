@@ -70,7 +70,7 @@ Prevents LLM from setting system-managed attributes to maintain data integrity:
 - **Issue**: telemetry.py contained duplicate class definitions causing Pydantic validation failures
 - **Impact**: Would have caused production API failures for resource monitoring endpoints
 - **Fix**: Renamed local class to `ResourceTimeSeriesData` and properly utilized schema's `ResourceMetricData`
-- **Principle**: Reinforces "No Dicts, No Strings, No Kings" - proper schema usage throughout
+- **Principle**: Reinforces "No Untyped Dicts, No Bypass Patterns, No Exceptions" - proper schema usage throughout
 
 ### 2. TelemetryAggregator Constructor Mismatch
 **Severity**: HIGH
@@ -321,4 +321,4 @@ None - All changes maintain backward compatibility
 
 ---
 
-*"No Dicts, No Strings, No Kings" - Every type has its proper schema*
+*"No Untyped Dicts, No Bypass Patterns, No Exceptions" - Every type has its proper schema*

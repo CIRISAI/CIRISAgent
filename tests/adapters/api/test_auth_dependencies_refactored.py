@@ -214,6 +214,30 @@ class TestBuildPermissionsSet:
         
         assert isinstance(permissions, set)
 
+    def test_authority_role_has_wa_resolve_deferral_permission(self):
+        """Test that AUTHORITY role includes wa.resolve_deferral permission for deferral resolution."""
+        # Simulate key info for AUTHORITY role user
+        mock_key_info = Mock()
+        mock_key_info.role = UserRole.AUTHORITY
+
+        # Build permissions for AUTHORITY role
+        permissions = _build_permissions_set(mock_key_info, None)
+        permission_values = [str(p.value) for p in permissions if hasattr(p, 'value')]
+
+        # Verify AUTHORITY role has resolve_deferrals permission (enum value for wa.resolve_deferral)
+        assert "resolve_deferrals" in permission_values
+
+        # Also test that other roles don't have this permission
+        mock_key_info.role = UserRole.ADMIN
+        admin_permissions = _build_permissions_set(mock_key_info, None)
+        admin_permission_values = [str(p.value) for p in admin_permissions if hasattr(p, 'value')]
+        assert "resolve_deferrals" not in admin_permission_values
+
+        mock_key_info.role = UserRole.OBSERVER
+        observer_permissions = _build_permissions_set(mock_key_info, None)
+        observer_permission_values = [str(p.value) for p in observer_permissions if hasattr(p, 'value')]
+        assert "resolve_deferrals" not in observer_permission_values
+
 
 class TestHandleApiKeyAuth:
     """Test _handle_api_key_auth helper method."""

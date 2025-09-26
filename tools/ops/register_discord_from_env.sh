@@ -44,8 +44,21 @@ MONITORED_CHANNELS="$MONITORED_CHANNELS]"
 
 # Build admin users array
 ADMIN_USERS="[]"
-if [ ! -z "$WA_USER_ID" ]; then
-    ADMIN_USERS="[\"$WA_USER_ID\"]"
+if [ ! -z "$WA_USER_IDS" ]; then
+    # Convert comma-separated list to JSON array
+    ADMIN_USERS="["
+    IFS=',' read -ra USER_ARRAY <<< "$WA_USER_IDS"
+    for i in "${!USER_ARRAY[@]}"; do
+        # Trim whitespace
+        USER_ID=$(echo "${USER_ARRAY[i]}" | xargs)
+        if [ ! -z "$USER_ID" ]; then
+            if [ $i -gt 0 ]; then
+                ADMIN_USERS="$ADMIN_USERS, "
+            fi
+            ADMIN_USERS="$ADMIN_USERS\"$USER_ID\""
+        fi
+    done
+    ADMIN_USERS="$ADMIN_USERS]"
 fi
 
 # Register adapter

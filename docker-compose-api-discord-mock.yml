@@ -23,7 +23,7 @@ services:
       - DISCORD_CHANNEL_IDS=${DISCORD_CHANNEL_IDS}
       - DISCORD_HOME_CHANNEL_ID=${DISCORD_HOME_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

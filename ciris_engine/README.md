@@ -41,11 +41,11 @@ Complete type safety with zero `Dict[str, Any]` in production:
 
 ## Core Design Philosophy
 
-**"No Dicts, No Strings, No Kings"**
+**"No Untyped Dicts, No Bypass Patterns, No Exceptions"**
 
-- **No Dicts**: Zero `Dict[str, Any]` - everything strongly typed
-- **No Strings**: Enums and typed constants instead of magic strings  
-- **No Kings**: No special cases - consistent patterns throughout
+- **No Untyped Dicts**: Zero `Dict[str, Any]` - everything strongly typed with Pydantic models
+- **No Bypass Patterns**: Every component follows consistent rules and validation patterns
+- **No Exceptions**: No special cases, emergency overrides, or privileged code paths
 - **Mission First**: Every component justifies its existence against Meta-Goal M-1
 
 ## Message Bus Architecture (6 Buses)

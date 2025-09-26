@@ -45,7 +45,7 @@ class TestBatchContextData:
         """Verify all fields initialize with correct types per covenant type safety."""
         batch_data = BatchContextData()
 
-        # Type assertions per "No Dicts, No Strings, No Kings" principle
+        # Type assertions per "No Untyped Dicts, No Bypass Patterns, No Exceptions" principle
         assert isinstance(batch_data.agent_identity, dict)
         assert batch_data.identity_purpose is None or isinstance(batch_data.identity_purpose, str)
         assert isinstance(batch_data.identity_capabilities, list)

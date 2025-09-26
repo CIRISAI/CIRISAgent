@@ -1,0 +1,8 @@
+{
+  "name": "claude-local",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.111"
+  }
+}

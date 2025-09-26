@@ -47,7 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) is an ethical AI platform:
 - **Production**: Discord moderation + API at agents.ciris.ai
 - **Architecture**: 22 core services, 6 message buses, strict type safety
-- **Philosophy**: No Dicts, No Strings, No Kings
+- **Philosophy**: No Untyped Dicts, No Bypass Patterns, No Exceptions
 - **Target**: 4GB RAM, offline-capable deployment
 
 ## Core Philosophy: Type Safety First
@@ -56,9 +56,9 @@ CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Grat
 
 ### The Three Rules
 
-1. **No Dicts**: All data uses Pydantic models
-2. **No Strings**: Use enums and typed constants
-3. **No Kings**: No special cases or bypass patterns
+1. **No Untyped Dicts**: All data uses Pydantic models instead of `Dict[str, Any]`
+2. **No Bypass Patterns**: Every component follows consistent rules and patterns
+3. **No Exceptions**: No special cases, emergency overrides, or privileged code paths
 
 ### Before Creating ANY New Type
 
@@ -70,7 +70,7 @@ grep -r "class.*YourThingHere" --include="*.py"
 
 ### Type Safety Best Practices
 
-1. **Replace Dict[str, Any] with Pydantic Models**
+1. **Replace Untyped Dicts with Pydantic Models**
    ```python
    # ❌ Bad
    def process_data(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,7 +109,18 @@ grep -r "class.*YourThingHere" --include="*.py"
        return ProcessResponse(result=data.value * 2)
    ```
 
-4. **Use Enums for Constants**
+4. **Avoid Bypass Patterns - Follow Consistent Rules**
+   ```python
+   # ❌ Bad - Special bypass for "emergency"
+   if emergency_mode:
+       return process_without_validation(data)
+
+   # ✅ Good - Same validation rules apply everywhere
+   validated_data = validate_request(data)
+   return process_validated_data(validated_data)
+   ```
+
+5. **Use Enums for Constants**
    ```python
    # ❌ Bad
    status = "active"  # Magic string
@@ -123,7 +134,7 @@ grep -r "class.*YourThingHere" --include="*.py"
    status = ServiceStatus.ACTIVE
    ```
 
-5. **Enhanced Mypy Configuration**
+6. **Enhanced Mypy Configuration**
    - `strict = True` enabled in mypy.ini with additional strictness flags
    - `disallow_any_explicit = True` temporarily disabled (too many false positives)
    - Minimal Dict[str, Any] usage remaining, none in critical code paths

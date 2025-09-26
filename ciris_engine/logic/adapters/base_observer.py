@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, cast
 from pydantic import BaseModel
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
@@ -74,6 +75,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
         self.auth_service = auth_service
         self.observer_wa_id = observer_wa_id
         self.origin_service = origin_service
+
+        # Initialize document parser for all adapters
+        self._document_parser = DocumentParser()
+        if self._document_parser.is_available():
+            logger.info(f"Document parser initialized for {origin_service} adapter - PDF/DOCX processing enabled")
+        else:
+            logger.warning(f"Document parser not available for {origin_service} adapter - install pypdf and docx2txt to enable")
 
     @abstractmethod
     async def start(self) -> None:  # pragma: no cover - implemented by subclasses

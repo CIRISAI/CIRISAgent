@@ -12,7 +12,7 @@ services:
       - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - DISCORD_DEFERRAL_CHANNEL_ID=${DISCORD_DEFERRAL_CHANNEL_ID}
-      - WA_USER_ID=${WA_USER_ID}
+      - WA_USER_IDS=${WA_USER_IDS}
       # Use OpenAI if available, otherwise mock LLM
       - OPENAI_API_KEY=${OPENAI_API_KEY:-LOCAL}
     volumes:

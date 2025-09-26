@@ -135,7 +135,7 @@ class Service(ABC):
 
     # Note: get_status() is NOT defined in base class
     # Each service protocol defines its own typed status return
-    # This follows "No Dicts, No Strings, No Kings" philosophy
+    # This follows "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosophy
 
     def __repr__(self) -> str:
         return f"<{self.service_name}>"

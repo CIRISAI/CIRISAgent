@@ -716,6 +716,7 @@ class APIAuthService:
                 PERMISSION_USERS_READ,
                 PERMISSION_WA_READ,
                 PERMISSION_WA_WRITE,
+                "wa.resolve_deferral",  # AUTHORITY role can resolve deferrals
             ],
             APIRole.SYSTEM_ADMIN: [
                 PERMISSION_SYSTEM_READ,

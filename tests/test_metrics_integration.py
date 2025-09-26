@@ -17,7 +17,7 @@ This is the master test that ensures the entire telemetry system works correctly
 
 ## Taxonomy & Schema Validation
 - Validates complete metric taxonomy follows expected patterns
-- Ensures no Dict[str, Any] returns (adheres to "No Dicts, No Strings, No Kings")
+- Ensures no Dict[str, Any] returns (adheres to "No Untyped Dicts, No Bypass Patterns, No Exceptions")
 - Checks coverage of known metrics from comprehensive_metrics.json
 - Tests real service integration with TimeService for actual implementation validation
 

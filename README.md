@@ -28,7 +28,7 @@ CIRIS wraps LLM calls with:
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
 - **Identity system** - Agents have persistent identity across restarts
 
-**Philosophy**: "No Dicts, No Strings, No Kings" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
+**Philosophy**: "No Untyped Dicts, No Bypass Patterns, No Exceptions" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
 
 **Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
 
@@ -50,12 +50,12 @@ python main.py --adapter api --port 8000
 
 **First run?** → **[Complete Installation Guide](docs/INSTALLATION.md)**
 
-## Production Ready
+## Deployment Ready
 
-✅ **22 core services** with message bus architecture  
-✅ **4GB RAM target** for edge deployment  
-✅ **Thousands of tests** with comprehensive coverage  
-✅ **SonarCloud quality gates** passing  
+✅ **22 core services** with message bus architecture
+✅ **4GB RAM target** for edge deployment
+✅ **Thousands of tests** with comprehensive coverage
+✅ **SonarCloud quality gates** passing
 ✅ **Currently powering** Discord moderation at agents.ciris.ai
 
 ## Documentation
@@ -82,7 +82,7 @@ python main.py --adapter api --port 8000
 
 ---
 
-**CIRIS: Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**  
-*Ethical AI with human oversight, complete transparency, and production reliability.*
+**CIRIS: Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**
+*Ethical AI with human oversight, complete transparency, and deployment reliability.*
 
 **Ready to build trustworthy AI?** → **[Get started →](docs/README.md)**

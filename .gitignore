@@ -58,3 +58,18 @@ data_backup_*
 logs/.current_log
 logs/.current_incident_log
 qa_reports/
+
+# Backup directories and temporary files
+CLAUDE_LOCAL_BACKUP*/
+*_BACKUP*/
+backup_*/
+*.backup
+audit_export_*.jsonl
+unused_code_analysis.txt
+unused_code_cleanup.json
+vulture_findings.txt
+ciris_audit_report.json
+
+# NPM files in main directory (should be in CIRISGUI)
+package-lock.json
+package.json

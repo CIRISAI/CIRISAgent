@@ -489,18 +489,15 @@ python -m tools.ciris_mypy_toolkit analyze
 python -m tools.audit_dict_any_usage
 ```
 
-### Debug Tools (in container)
+### Debug Tools
 
-```python
-docker exec container0 python debug_tools.py
+CIRIS includes comprehensive debug tools for system analysis:
 
-# Available commands:
-show_correlations(limit=20)
-list_traces(limit=20)
-show_thoughts(status='PENDING')
-show_tasks(limit=10)
-show_handler_metrics()
-```
+- **Correlation tracking**: Service interaction analysis
+- **Trace visualization**: Request flow tracking
+- **Task monitoring**: Processing queue inspection
+- **Handler metrics**: Performance measurement
+- **System state inspection**: Real-time debugging
 
 ---
 
@@ -564,10 +561,10 @@ CIRISManager orchestrates all production agents, providing automatic nginx routi
 
 ## Production Deployment
 
-### Server Access
-- **IP**: 108.61.119.117 (use IP for SSH, not domain)
-- **SSH**: `ssh -i ~/.ssh/ciris_deploy root@108.61.119.117`
-- **Domain**: agents.ciris.ai (Cloudflare proxied)
+### Architecture
+- **Domain**: agents.ciris.ai (public access)
+- **Multi-agent orchestration** via CIRISManager
+- **OAuth authentication** with Google integration
 
 ### Clean CD Model
 
@@ -589,14 +586,11 @@ CIRISManager handles:
 ### Monitoring
 
 ```bash
-# Check production health
+# Check production health (public endpoint)
 curl https://agents.ciris.ai/api/datum/v1/system/health
 
-# Check incidents (ALWAYS check first!)
-docker exec ciris-agent-datum tail -n 100 /app/logs/incidents_latest.log
-
-# CIRISManager status
-curl http://localhost:8888/manager/v1/status
+# Transparency feed (no auth required)
+curl https://agents.ciris.ai/v1/transparency/feed
 ```
 
 ### Container Management
@@ -609,14 +603,14 @@ curl http://localhost:8888/manager/v1/status
 
 ## Debugging Guidelines
 
-### Critical Rule: Check Incidents First
+### Critical Rule: Systematic Investigation
 
-```bash
-# ALWAYS check incidents_latest.log FIRST
-docker exec container tail -n 100 /app/logs/incidents_latest.log
-```
+Always start with systematic investigation of system state before making changes:
 
-**NEVER restart container until incidents are understood** - They reveal system behavior
+1. **Check public health endpoints** first
+2. **Review transparency metrics** for patterns
+3. **Examine logs systematically** to understand behavior
+4. **Preserve evidence** before attempting fixes
 
 ### Root Cause Analysis (RCA) Mode
 
@@ -673,17 +667,15 @@ cd CIRISGUI/apps/agui && npm run dev  # http://localhost:3000
 python main.py --mock-llm --timeout 15 --adapter cli
 ```
 
-### Environment Variables
+### Environment Configuration
 
-```bash
-# Required for API to bind to all interfaces (production)
-CIRIS_API_HOST=0.0.0.0
-CIRIS_API_PORT=8080
+Key environment variables for CIRIS deployment:
 
-# OAuth configuration
-CIRIS_OAUTH_GOOGLE_CLIENT_ID=your-client-id
-CIRIS_OAUTH_GOOGLE_CLIENT_SECRET=your-secret
-```
+- **API Configuration**: Host binding and port settings
+- **OAuth Integration**: Google OAuth client credentials
+- **Security Settings**: JWT secrets and authentication keys
+- **Service Configuration**: Database paths, LLM provider keys
+- **Logging Configuration**: Log levels and output destinations
 
 ### Configuration Files
 
@@ -758,17 +750,17 @@ gh pr merge <PR#> --repo CIRISAI/CIRISAgent --merge --admin
 gh run list --repo CIRISAI/CIRISAgent --limit 5
 ```
 
-### Production Commands
+### Production Monitoring
 
 ```bash
-# SSH to production
-ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+# Check system health (public)
+curl https://agents.ciris.ai/api/datum/v1/system/health
 
-# Check container logs
-docker logs ciris-agent-datum --tail 100
+# Transparency metrics (public)
+curl https://agents.ciris.ai/v1/transparency/feed
 
-# Restart container (last resort)
-docker restart ciris-agent-datum
+# API documentation (public)
+open https://agents.ciris.ai/api/datum/docs
 ```
 
 ---
@@ -912,33 +904,32 @@ Every agent includes:
 ### Most Used Commands
 
 ```bash
-# Check status
-grace
+# Check system status (development)
+python -m tools.grace
 
-# Fix pre-commit
-grace fix
+# Fix code formatting
+python -m tools.grace fix
 
-# Check deployment
-grace deploy
+# Check deployment status
+python -m tools.grace deploy
 
-# Run tests
+# Run comprehensive tests
 python -m tools.test_tool test tests/
 
-# Bump version
+# Version management
 python tools/bump_version.py patch
 
-# Check production
-ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
-docker exec ciris-agent-datum tail -n 100 /app/logs/incidents_latest.log
+# Check production health (public)
+curl https://agents.ciris.ai/api/datum/v1/system/health
 ```
 
 ### Emergency Procedures
 
-1. **Production Down**: Check incidents → Check health → Check containers
-2. **Tests Failing**: Check recent commits → Run locally → Check CI/CD
-3. **Deploy Failed**: Check GitHub Actions → Check CIRISManager → Check agent logs
-4. **OAuth Broken**: Verify callback URL format → Check nginx routing
-5. **Memory Issues**: Check resource monitor → Check TSDB consolidation
+1. **System Health Issues**: Check public health endpoints → Review transparency metrics → Examine logs
+2. **Tests Failing**: Check recent commits → Run locally → Check CI/CD pipeline
+3. **Deploy Failed**: Check GitHub Actions → Review CIRISManager status → Examine deployment logs
+4. **OAuth Issues**: Verify callback URL format → Check nginx routing configuration
+5. **Performance Issues**: Monitor resource usage → Check TSDB consolidation → Review service health
 
 ---
 

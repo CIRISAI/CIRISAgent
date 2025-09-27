@@ -153,6 +153,20 @@ class MockRuntime:
         self._initialized = False
         self._start_time = 0
 
+        # Add missing attributes for runtime tests
+        self._shutdown_complete = False
+        self._shutdown_event = MagicMock()
+        self._shutdown_event.is_set = MagicMock(return_value=False)
+        self._shutdown_event.set = MagicMock()
+        self._shutdown_reason = None
+
+        # Add adapter-related attributes
+        self.adapters = []
+        self._adapter_tasks = []
+        self.startup_channel_id = ""
+        self.adapter_configs = {}
+        self.modules_to_load = ["mock_llm"]
+
         # Add pipeline controller mock with H3ERE step point data
         self.pipeline_controller = self._create_pipeline_controller()
 
@@ -160,7 +174,15 @@ class MockRuntime:
         self.agent_processor = MagicMock()
         self.agent_processor.state_manager = MagicMock()
         self.agent_processor.state_manager.get_state.return_value = "WORK"
+        # Make state transition methods async
+        self.agent_processor.state_manager.can_transition_to = AsyncMock(return_value=True)
+        self.agent_processor.state_manager.transition_to = AsyncMock(return_value=True)
         self.agent_processor._pipeline_controller = self.pipeline_controller
+
+        # Add proper task mocking to avoid AsyncMock issues
+        self.agent_processor._processing_task = None
+        self.agent_processor._stop_event = MagicMock()
+        self.agent_processor.shutdown_processor = None
 
         # Add service initializer mock for logging tests
         self.service_initializer = MagicMock()
@@ -219,6 +241,13 @@ class MockRuntime:
     async def shutdown(self):
         """Mock shutdown method."""
         self._initialized = False
+        self._shutdown_complete = True
+
+    def request_shutdown(self, reason: str):
+        """Mock request shutdown method."""
+        self._shutdown_reason = reason
+        self._shutdown_event.set()
+        self._shutdown_event.is_set.return_value = True
 
     def _create_pipeline_controller(self):
         """Create a mock pipeline controller with consistent H3ERE data."""

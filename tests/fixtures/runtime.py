@@ -417,6 +417,12 @@ def fast_runtime_for_integration_tests():
     runtime.memory_service = Mock()
     runtime.telemetry_service = Mock()
 
+    # Ensure shutdown event exists for timeout tests
+    if not hasattr(runtime, "_shutdown_event"):
+        runtime._shutdown_event = Mock()
+        runtime._shutdown_event.is_set = Mock(return_value=False)
+        runtime._shutdown_event.set = Mock()
+
     return runtime
 
 

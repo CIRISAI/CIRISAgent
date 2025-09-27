@@ -1340,10 +1340,10 @@ class CIRISRuntime:
                     logger.info("Initiating graceful shutdown negotiation...")
 
                     # Check if we can transition to shutdown state
-                    if self.agent_processor.state_manager.can_transition_to(AgentState.SHUTDOWN):
+                    if await self.agent_processor.state_manager.can_transition_to(AgentState.SHUTDOWN):
                         logger.info(f"Transitioning from {current_state} to SHUTDOWN state")
                         # Use the state manager directly to transition
-                        self.agent_processor.state_manager.transition_to(AgentState.SHUTDOWN)
+                        await self.agent_processor.state_manager.transition_to(AgentState.SHUTDOWN)
 
                         # If processing loop is running, just signal it to stop
                         # It will handle the SHUTDOWN state in its next iteration

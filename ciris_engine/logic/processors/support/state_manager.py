@@ -87,7 +87,7 @@ class StateManager:
         )
         self.state_history.append(record)
 
-    def can_transition_to(self, target_state: AgentState) -> bool:
+    async def can_transition_to(self, target_state: AgentState) -> bool:
         """Check if transition to target state is valid."""
         if self.current_state not in self._transition_map:
             return False
@@ -103,7 +103,7 @@ class StateManager:
 
         return True
 
-    def transition_to(self, target_state: AgentState) -> bool:
+    async def transition_to(self, target_state: AgentState) -> bool:
         """
         Attempt to transition to a new state.
         Returns True if successful, False otherwise.
@@ -118,7 +118,7 @@ class StateManager:
                 return False
             # Allow SHUTDOWN -> WAKEUP for startup sequence
 
-        if not self.can_transition_to(target_state):
+        if not await self.can_transition_to(target_state):
             logger.warning(f"Invalid state transition attempted: {self.current_state.value} -> {target_state.value}")
             return False
 

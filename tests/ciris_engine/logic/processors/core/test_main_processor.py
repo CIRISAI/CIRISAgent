@@ -188,18 +188,18 @@ class TestAgentProcessor:
     async def test_state_transition(self, main_processor, mock_processors):
         """Test state transition."""
         # Transition from SHUTDOWN to WAKEUP
-        assert main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        assert await main_processor.state_manager.transition_to(AgentState.WAKEUP)
         assert main_processor.state_manager.get_state() == AgentState.WAKEUP
 
         # Transition from WAKEUP to WORK
-        assert main_processor.state_manager.transition_to(AgentState.WORK)
+        assert await main_processor.state_manager.transition_to(AgentState.WORK)
         assert main_processor.state_manager.get_state() == AgentState.WORK
 
     @pytest.mark.asyncio
     async def test_handle_processor_error(self, main_processor, mock_processors):
         """Test handling processor errors."""
         # Set state to WAKEUP
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
 
         # Mock processor to raise error
         main_processor.wakeup_processor.process.side_effect = Exception("Test error")
@@ -218,8 +218,8 @@ class TestAgentProcessor:
     async def test_max_consecutive_errors(self, main_processor, mock_processors):
         """Test max consecutive errors triggers shutdown."""
         # Set state to WORK
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         # Mock processor to always error
         mock_processors["work"].process.side_effect = Exception("Test error")
@@ -243,7 +243,7 @@ class TestAgentProcessor:
             await asyncio.sleep(0.5)
             return {"state": "wakeup", "round_number": round_num}
 
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
         mock_processors["wakeup"].process = slow_process
 
         # Process with timeout should still complete
@@ -275,8 +275,8 @@ class TestAgentProcessor:
     async def test_emergency_stop(self, main_processor):
         """Test emergency stop transitions to shutdown."""
         # Start in WORK state
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         # Create and set the processing task to simulate running state
         main_processor._processing_task = asyncio.create_task(asyncio.sleep(0.1))
@@ -286,19 +286,19 @@ class TestAgentProcessor:
 
         assert main_processor.state_manager.get_state() == AgentState.SHUTDOWN
 
-    def test_get_current_state(self, main_processor):
+    async def test_get_current_state(self, main_processor):
         """Test getting current state through state manager."""
         # Must transition through WAKEUP from SHUTDOWN
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         assert main_processor.state_manager.get_state() == AgentState.WORK
 
-    def test_get_state_history(self, main_processor):
+    async def test_get_state_history(self, main_processor):
         """Test state transitions are tracked."""
         # Perform some transitions
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         # Check current state
         assert main_processor.state_manager.get_state() == AgentState.WORK
@@ -307,7 +307,7 @@ class TestAgentProcessor:
         duration = main_processor.state_manager.get_state_duration()
         assert duration >= 0
 
-    def test_get_processor_metrics(self, main_processor):
+    async def test_get_processor_metrics(self, main_processor):
         """Test getting processor status."""
         # Set some state
         main_processor.current_round_number = 10
@@ -323,9 +323,9 @@ class TestAgentProcessor:
     async def test_validate_transition(self, main_processor):
         """Test state transition validation."""
         # Valid transitions
-        assert main_processor.state_manager.can_transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        assert main_processor.state_manager.can_transition_to(AgentState.WORK)
+        assert await main_processor.state_manager.can_transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        assert await main_processor.state_manager.can_transition_to(AgentState.WORK)
 
         # Can't transition to same state (depends on StateManager implementation)
         # Most transitions are allowed in the state manager
@@ -334,11 +334,11 @@ class TestAgentProcessor:
     async def test_transition_to_same_state(self, main_processor):
         """Test transitioning to same state."""
         # Set to WAKEUP
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
         current_state = main_processor.state_manager.get_state()
 
         # Transition to same state
-        result = main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        result = await main_processor.state_manager.transition_to(AgentState.WAKEUP)
 
         # Should still be in WAKEUP
         assert main_processor.state_manager.get_state() == AgentState.WAKEUP
@@ -347,8 +347,8 @@ class TestAgentProcessor:
     async def test_processor_not_found(self, main_processor):
         """Test handling missing processor for state."""
         # Transition through WAKEUP to WORK
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         # Remove work processor
         del main_processor.state_processors[AgentState.WORK]
@@ -365,7 +365,7 @@ class TestAgentProcessor:
         """Test state transition timing."""
         # Transition and check it's immediate
         start_time = asyncio.get_event_loop().time()
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
         end_time = asyncio.get_event_loop().time()
 
         # State transitions should be fast
@@ -375,8 +375,8 @@ class TestAgentProcessor:
     async def test_cleanup(self, main_processor, mock_processors):
         """Test cleanup calls processor cleanup."""
         # Transition to WORK state so we're not already in SHUTDOWN
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         # Create a processing task to ensure cleanup is called
         main_processor._processing_task = asyncio.create_task(asyncio.sleep(0.1))
@@ -422,8 +422,8 @@ class TestAgentProcessor:
     async def test_record_state_transition(self, main_processor, mock_services):
         """Test state transitions trigger telemetry."""
         # Make a transition
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
-        main_processor.state_manager.transition_to(AgentState.WORK)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WORK)
 
         # Can't directly test telemetry recording without complex mocking
         # Just verify transition succeeded
@@ -433,7 +433,7 @@ class TestAgentProcessor:
     async def test_processor_initialization_failure(self, main_processor, mock_processors):
         """Test handling processor initialization failure."""
         # First transition to WAKEUP from SHUTDOWN
-        main_processor.state_manager.transition_to(AgentState.WAKEUP)
+        await main_processor.state_manager.transition_to(AgentState.WAKEUP)
 
         # Mock processor init to fail
         mock_processors["work"].initialize.side_effect = Exception("Init failed")

@@ -320,7 +320,7 @@ def _get_current_cognitive_state(request: Request) -> str:
         if hasattr(runtime.state_manager, "current_state"):
             state = runtime.state_manager.current_state
             # Convert AgentState enum to string if necessary
-            return str(state) if hasattr(state, "value") else str(state)
+            return state.value if hasattr(state, "value") else str(state)
         else:
             logger.warning("Runtime state_manager exists but has no current_state attribute")
     else:
@@ -628,7 +628,7 @@ def _get_cognitive_state(runtime) -> str:
         if hasattr(runtime.state_manager, "current_state"):
             state = runtime.state_manager.current_state
             # Convert AgentState enum to string if necessary
-            return str(state) if hasattr(state, "value") else str(state)
+            return state.value if hasattr(state, "value") else str(state)
         else:
             logger.warning("Runtime state_manager exists but has no current_state attribute")
     else:

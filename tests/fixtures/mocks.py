@@ -147,9 +147,11 @@ class MockMemoryService:
 class MockRuntime:
     """Mock runtime with proper attributes and pipeline controller."""
 
-    def __init__(self):
+    def __init__(self, include_logging_mocks=True, include_time_service=True):
         self.agent_id = "test_agent"
         self.current_shutdown_context = create_shutdown_context()
+        self._initialized = False
+        self._start_time = 0
 
         # Add pipeline controller mock with H3ERE step point data
         self.pipeline_controller = self._create_pipeline_controller()
@@ -159,6 +161,64 @@ class MockRuntime:
         self.agent_processor.state_manager = MagicMock()
         self.agent_processor.state_manager.get_state.return_value = "WORK"
         self.agent_processor._pipeline_controller = self.pipeline_controller
+
+        # Add service initializer mock for logging tests
+        self.service_initializer = MagicMock()
+
+        # Add logging-specific mocks if requested
+        if include_logging_mocks:
+            self._setup_logging_mocks()
+
+        # Add time service mock if requested
+        if include_time_service:
+            self._setup_time_service_mock()
+
+    def _setup_logging_mocks(self):
+        """Set up logging-related mocks for efficient testing."""
+        # Mock logging setup success/failure scenarios
+        self._logging_setup_success = True
+        self._logging_setup_error = None
+
+        # Mock file system operations
+        self._log_files_created = []
+        self._symlinks_created = []
+
+    def _setup_time_service_mock(self):
+        """Set up time service mock."""
+        from datetime import datetime
+
+        class MockTimeService:
+            def now(self):
+                return datetime.now()
+
+            def format_timestamp(self, dt=None):
+                if dt is None:
+                    dt = self.now()
+                return dt.strftime("%Y%m%d_%H%M%S")
+
+        self.time_service = MockTimeService()
+
+    def mock_logging_failure(self, error_message="Mock logging setup failed"):
+        """Configure this mock to simulate logging setup failure."""
+        self._logging_setup_success = False
+        self._logging_setup_error = Exception(error_message)
+
+    def mock_logging_success(self, files_created=None, symlinks_created=None):
+        """Configure this mock to simulate successful logging setup."""
+        self._logging_setup_success = True
+        self._logging_setup_error = None
+        self._log_files_created = files_created or ["logs/ciris_agent_20250927_test.log"]
+        self._symlinks_created = symlinks_created or ["logs/latest.log", "logs/.current_log"]
+
+    async def initialize(self):
+        """Mock initialize method that can simulate success/failure."""
+        if not self._logging_setup_success:
+            raise self._logging_setup_error or RuntimeError("Initialization failed")
+        self._initialized = True
+
+    async def shutdown(self):
+        """Mock shutdown method."""
+        self._initialized = False
 
     def _create_pipeline_controller(self):
         """Create a mock pipeline controller with consistent H3ERE data."""

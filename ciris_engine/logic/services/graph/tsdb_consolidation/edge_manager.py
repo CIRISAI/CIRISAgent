@@ -433,13 +433,8 @@ class EdgeManager:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
-                # Handle different summary types
-                if "_daily" in node_type_prefix:
-                    # For daily summaries: "{type}_daily_{YYYYMMDD}"
-                    node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
-                else:
-                    # For regular 6-hour summaries: "{type}_{YYYYMMDD_HH}"
-                    node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
+                # Create node ID pattern (same format for both daily and 6-hour summaries)
+                node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
 
                 cursor.execute(
                     """

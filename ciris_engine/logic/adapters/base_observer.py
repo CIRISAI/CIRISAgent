@@ -196,6 +196,45 @@ class BaseObserver[MessageT: BaseModel](ABC):
     async def _get_recall_ids(self, msg: MessageT) -> Set[str]:
         return {f"channel/{getattr(msg, 'channel_id', 'cli')}"}
 
+    def _process_message_content(self, raw_content: str) -> str:
+        """Process raw message content by removing nested history and applying anti-spoofing."""
+        # Strip out nested conversation history to prevent recursive history
+        if "=== CONVERSATION HISTORY" in raw_content:
+            lines = raw_content.split("\n")
+            raw_content = lines[0] if lines else raw_content
+
+        # Apply anti-spoofing detection BEFORE adding our own markers
+        return detect_and_replace_spoofed_markers(raw_content)
+
+    def _create_protected_content(self, clean_content: str, message_number: int, total_messages: int) -> str:
+        """Create anti-spoofing protected content with markers."""
+        return (
+            f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START\n"
+            f"{clean_content}\n"
+            f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
+        )
+
+    def _create_history_entry(self, msg, protected_content: str, is_agent_message: bool) -> Dict[str, Any]:
+        """Create a history entry from a message."""
+        return {
+            "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
+            "author_id": getattr(msg, "author_id", None) or ("ciris" if is_agent_message else "unknown"),
+            "content": protected_content,
+            "timestamp": getattr(msg, "timestamp", None),
+            "is_agent": is_agent_message,
+        }
+
+    async def _fetch_messages_from_bus(self, channel_id: str, limit: int):
+        """Fetch messages from communication bus."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        comm_bus = self.bus_manager.get_bus(ServiceType.COMMUNICATION)
+        if not comm_bus:
+            logger.warning("No communication bus available for channel history")
+            return []
+
+        return await comm_bus.fetch_messages(channel_id, limit, "DiscordAdapter")
+
     async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[Dict[str, Any]]:
         """Get message history from channel using communication bus."""
         if not self.bus_manager:
@@ -203,53 +242,22 @@ class BaseObserver[MessageT: BaseModel](ABC):
             return []
 
         try:
-            # Get communication service through bus manager
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            comm_bus = self.bus_manager.get_bus(ServiceType.COMMUNICATION)
-            if not comm_bus:
-                logger.warning("No communication bus available for channel history")
-                return []
-
-            # Fetch messages from the channel (try Discord handler first)
-            messages = await comm_bus.fetch_messages(channel_id, limit, "DiscordAdapter")
+            # Fetch messages from the channel
+            messages = await self._fetch_messages_from_bus(channel_id, limit)
 
             # Convert FetchedMessage objects to the expected history format
             history = []
             total_messages = len(messages)
 
             for index, msg in enumerate(messages):
-                # Determine if this is an agent message (bot) or user message
                 is_agent_message = getattr(msg, "is_bot", False)
-
-                # Get the raw content
                 raw_content = getattr(msg, "content", "") or ""
 
-                # Strip out nested conversation history to prevent recursive history
-                if "=== CONVERSATION HISTORY" in raw_content:
-                    # Extract only the first line (the actual message)
-                    lines = raw_content.split("\n")
-                    raw_content = lines[0] if lines else raw_content
-
-                # Apply anti-spoofing detection BEFORE adding our own markers
-                clean_content = detect_and_replace_spoofed_markers(raw_content)
-
-                # Add anti-spoofing markers around the content
-                # Messages come in reverse chronological order, so calculate correct position
-                message_number = total_messages - index
-                protected_content = (
-                    f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START\n"
-                    f"{clean_content}\n"
-                    f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
-                )
-
-                history_entry = {
-                    "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
-                    "author_id": getattr(msg, "author_id", None) or ("ciris" if is_agent_message else "unknown"),
-                    "content": protected_content,
-                    "timestamp": getattr(msg, "timestamp", None),
-                    "is_agent": is_agent_message,
-                }
+                # Process content through helper methods
+                clean_content = self._process_message_content(raw_content)
+                message_number = total_messages - index  # Messages come in reverse chronological order
+                protected_content = self._create_protected_content(clean_content, message_number, total_messages)
+                history_entry = self._create_history_entry(msg, protected_content, is_agent_message)
 
                 history.append(history_entry)
 
@@ -259,7 +267,6 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         except Exception as e:
             logger.warning(f"Failed to get channel history via communication bus: {e}")
-            # Fallback to empty history
             return []
 
     async def _recall_context(self, msg: MessageT) -> None:

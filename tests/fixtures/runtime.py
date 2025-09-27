@@ -248,3 +248,117 @@ def mock_agent_task():
     mock_task.get_name.return_value = "AgentProcessorTask"
     mock_task.done.return_value = False
     return mock_task
+
+
+@pytest.fixture
+def fast_mock_runtime():
+    """Provide a fast, lightweight mock runtime for logging tests.
+
+    This fixture avoids real file system operations and initialization
+    for maximum test speed while providing configurable behavior.
+    """
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=True, include_time_service=True)
+    return runtime
+
+
+@pytest.fixture
+def mock_essential_config(tmp_path):
+    """Provide a minimal EssentialConfig using tmp_path for fast testing."""
+    from ciris_engine.schemas.config.essential import (
+        DatabaseConfig,
+        EssentialConfig,
+        GraphConfig,
+        OperationalLimitsConfig,
+        SecurityConfig,
+        ServiceEndpointsConfig,
+        TelemetryConfig,
+        WorkflowConfig,
+    )
+
+    # Use tmp_path for all database files to avoid filesystem conflicts
+    return EssentialConfig(
+        database=DatabaseConfig(
+            main_db=tmp_path / "test.db",
+            secrets_db=tmp_path / "secrets.db",
+            audit_db=tmp_path / "audit.db",
+        ),
+        services=ServiceEndpointsConfig(
+            llm_endpoint="https://test.api.com",
+            llm_model="test-model",
+            llm_timeout=30,
+            llm_max_retries=3,
+        ),
+        security=SecurityConfig(
+            audit_retention_days=7,
+            secrets_encryption_key_env="TEST_KEY",
+            secrets_key_path=tmp_path / "secrets_keys",
+            audit_key_path=tmp_path / "audit_keys",
+            enable_signed_audit=False,
+            max_thought_depth=5,
+        ),
+        limits=OperationalLimitsConfig(
+            max_active_tasks=5,
+            max_active_thoughts=10,
+            round_delay_seconds=0.01,  # Fast for testing
+            mock_llm_round_delay=0.001,  # Very fast for testing
+            dma_retry_limit=1,  # Reduce retries for speed
+            dma_timeout_seconds=1.0,  # Fast timeout
+            conscience_retry_limit=1,
+        ),
+        telemetry=TelemetryConfig(
+            enabled=False,  # Disable for speed
+            export_interval_seconds=60,
+            retention_hours=1,
+        ),
+        workflow=WorkflowConfig(
+            max_rounds=2,  # Reduce for speed
+            round_timeout_seconds=5.0,  # Fast timeout
+            enable_auto_defer=True,
+        ),
+        graph=GraphConfig(
+            tsdb_profound_target_mb_per_day=1.0,  # Small for testing
+            tsdb_raw_retention_hours=1,
+            consolidation_timezone="UTC",
+        ),
+        log_level="DEBUG",
+        debug_mode=True,
+        template_directory=tmp_path / "templates",
+        default_template="test",
+    )
+
+
+@pytest.fixture
+def mock_logging_components():
+    """Provide mocks for all logging-related components."""
+
+    class LoggingMocks:
+        def __init__(self):
+            self.setup_basic_logging = MagicMock(return_value=None)
+            self.time_service = MagicMock()
+            self.time_service.now.return_value = MagicMock()
+            self.time_service.format_timestamp.return_value = "20250927_143000"
+
+            # Mock ServiceRegistry for TimeService lookup
+            self.service_registry = MagicMock()
+            self.service_registry.get_service.return_value = self.time_service
+
+            # Mock file operations
+            self.log_files_created = []
+            self.symlinks_created = []
+
+        def configure_success(self):
+            """Configure mocks for successful logging setup."""
+            self.setup_basic_logging.return_value = None
+            self.setup_basic_logging.side_effect = None
+
+        def configure_failure(self, error_message="Mock setup failed"):
+            """Configure mocks for failed logging setup."""
+            self.setup_basic_logging.side_effect = Exception(error_message)
+
+        def configure_time_service_failure(self):
+            """Configure TimeService to be unavailable."""
+            self.service_registry.get_service.return_value = None
+
+    return LoggingMocks()

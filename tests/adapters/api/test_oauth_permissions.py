@@ -1,7 +1,7 @@
 """
 OAuth Permission System Tests
 
-Tests the complete OAuth user permission workflow:
+Tests the complete OAuth user permission workflow using fast mocks:
 1. OAuth user creation
 2. Permission requests
 3. Admin permission grants
@@ -10,65 +10,20 @@ Tests the complete OAuth user permission workflow:
 
 import secrets
 import sys
+from unittest.mock import AsyncMock, Mock
 
 import pytest
-import pytest_asyncio
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
 
-from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.services.auth_service import UserRole
-from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-from ciris_engine.logic.runtime.prevent_sideeffects import allow_runtime_creation
-from ciris_engine.schemas.config.essential import EssentialConfig
-
-# Import the existing central mock fixture
-from tests.conftest_config_mock import mock_runtime_db_setup
-
-
-@pytest_asyncio.fixture
-async def test_runtime(random_api_port, mock_runtime_db_setup):
-    """Create a test runtime for OAuth testing."""
-    # Allow runtime creation for this test
-    allow_runtime_creation()
-
-    try:
-        config = EssentialConfig()
-        config.services.llm_endpoint = "mock://localhost"
-        config.services.llm_model = "mock"
-
-        # Use the randomized API port to avoid conflicts
-        import os
-
-        os.environ["CIRIS_API_PORT"] = str(random_api_port)
-
-        runtime = CIRISRuntime(
-            adapter_types=["api"], essential_config=config, startup_channel_id="test_oauth", mock_llm=True
-        )
-
-        await runtime.initialize()
-        yield runtime
-        # Fast shutdown by skipping some cleanup
-        try:
-            await runtime.shutdown()
-        except Exception as e:
-            # Log but don't fail test if shutdown has issues
-            print(f"Warning: Runtime shutdown error: {e}")
-    finally:
-        # Restore original state to avoid affecting other tests
-        import os
-
-        if os.environ.get("CIRIS_IMPORT_MODE") is None:
-            os.environ["CIRIS_IMPORT_MODE"] = "true"
 
 
 @pytest.fixture
-def oauth_test_app(test_runtime):
-    """Create test app with OAuth support."""
-    app = create_app(test_runtime)
+def oauth_test_app(app, mock_runtime):
+    """Create test app with OAuth support and fast mocks."""
 
     # Set up a simple message handler that returns immediately
-    # This prevents 503 errors when testing interaction endpoints
     async def mock_message_handler(msg):
         # Store the message for response correlation
         from ciris_engine.logic.adapters.api.routes.agent import store_message_response
@@ -76,6 +31,20 @@ def oauth_test_app(test_runtime):
         await store_message_response(msg.message_id, f"Mock response to: {msg.content}")
 
     app.state.on_message = mock_message_handler
+
+    # Configure mock runtime to return proper state strings
+    mock_runtime.state_manager = Mock()
+    mock_runtime.state_manager.current_state = "WORK"  # String, not mock
+    app.state.runtime = mock_runtime
+
+    # Add additional state needed for OAuth tests
+    app.state.consent_manager = AsyncMock()
+    mock_consent = Mock()
+    mock_consent.user_id = "test-user-123"
+    mock_consent.stream = "TEMPORARY"
+    app.state.consent_manager.get_consent.return_value = mock_consent
+    app.state.consent_manager.grant_consent.return_value = mock_consent
+
     return app
 
 
@@ -96,7 +65,7 @@ async def admin_token(oauth_client):
 
 
 @pytest.fixture
-async def oauth_user(oauth_test_app):
+def oauth_user(oauth_test_app):
     """Create an OAuth user for testing."""
     # Get the auth service from the app state
     auth_service = oauth_test_app.state.auth_service
@@ -104,7 +73,6 @@ async def oauth_user(oauth_test_app):
     external_id = f"google-user-{secrets.token_hex(8)}"
     email = f"testuser.{secrets.token_hex(4)}@gmail.com"
     name = "Test OAuth User"
-    picture = "https://lh3.googleusercontent.com/a/ACg8ocKt3P4yBmK8sLB2uPCmpvR0N7V_ybpGmQ"
 
     oauth_user = auth_service.create_oauth_user(
         provider="google", external_id=external_id, email=email, name=name, role=UserRole.OBSERVER

@@ -78,16 +78,6 @@ repos:
   # Custom CIRIS checks - Informational only
   - repo: local
     hooks:
-      # Update BUILD_INFO.txt - Always run on commit
-      - id: update-build-info
-        name: Update BUILD_INFO.txt
-        entry: python version.py
-        language: python
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-        verbose: false
-
       # Dict[str, Any] audit - Informational
       - id: dict-any-audit
         name: Dict[str, Any] Audit (Info Only)

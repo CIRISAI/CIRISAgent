@@ -303,8 +303,8 @@ def mock_request_with_full_state(mock_runtime, mock_api_config, mock_agent_proce
     # Add all state components
     request.app.state.runtime = mock_runtime
     request.app.state.runtime.agent_processor = mock_agent_processor
-    request.app.state.runtime.state_manager = Mock()
-    request.app.state.runtime.state_manager.current_state = "WORK"
+    request.app.state.runtime.agent_processor.state_manager = Mock()
+    request.app.state.runtime.agent_processor.state_manager.current_state = "WORK"
 
     request.app.state.api_config = mock_api_config
     request.app.state.consent_manager = mock_consent_service
@@ -318,4 +318,58 @@ def mock_request_with_full_state(mock_runtime, mock_api_config, mock_agent_proce
     # Mock message handler
     request.app.state.on_message = AsyncMock()
 
+    return request
+
+
+# =============================================================================
+# COGNITIVE STATE FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def mock_state_manager_work():
+    """Create a mock state manager in WORK state."""
+    state_manager = Mock()
+    state_manager.current_state = "WORK"
+    return state_manager
+
+
+@pytest.fixture
+def mock_state_manager_dream():
+    """Create a mock state manager in DREAM state."""
+    state_manager = Mock()
+    state_manager.current_state = "DREAM"
+    return state_manager
+
+
+@pytest.fixture
+def mock_agent_processor_with_state(mock_state_manager_work):
+    """Create a mock agent processor with proper state manager structure."""
+    processor = Mock()
+    processor.state_manager = mock_state_manager_work
+    return processor
+
+
+@pytest.fixture
+def mock_runtime_with_cognitive_state(mock_agent_processor_with_state):
+    """Create a mock runtime with proper cognitive state structure."""
+    runtime = Mock()
+    runtime.agent_processor = mock_agent_processor_with_state
+    return runtime
+
+
+@pytest.fixture
+def mock_app_state_with_cognitive_state(mock_runtime_with_cognitive_state):
+    """Create a mock app state with cognitive state properly configured."""
+    app_state = Mock()
+    app_state.runtime = mock_runtime_with_cognitive_state
+    return app_state
+
+
+@pytest.fixture
+def mock_request_with_cognitive_state(mock_app_state_with_cognitive_state):
+    """Create a mock request with proper cognitive state structure."""
+    request = Mock()
+    request.app = Mock()
+    request.app.state = mock_app_state_with_cognitive_state
     return request

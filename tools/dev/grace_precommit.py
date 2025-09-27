@@ -190,14 +190,13 @@ async def main():
     # Check if only BUILD_INFO.txt remains after formatting
     remaining_changes = await check_remaining_changes()
     if len(remaining_changes) == 1 and remaining_changes[0] == "BUILD_INFO.txt":
-        print("  🤖 Only BUILD_INFO.txt modified, auto-committing...")
-        if await auto_commit_build_info():
-            print("  ✅ BUILD_INFO.txt auto-committed successfully")
-            print("\n🎉 All changes committed! Grace Smart Gatekeeper complete.")
-            print("=" * 50)
-            return 0
-        else:
-            print("  ❌ Failed to auto-commit BUILD_INFO.txt")
+        print("  📝 BUILD_INFO.txt updated - include it in your commit manually")
+        # DISABLED: Auto-commit clutters git log
+        # if await auto_commit_build_info():
+        #     print("  ✅ BUILD_INFO.txt auto-committed successfully")
+        #     print("\n🎉 All changes committed! Grace Smart Gatekeeper complete.")
+        #     print("=" * 50)
+        #     return 0
 
     # Run critical and quality checks in parallel
     critical_task = check_critical_issues()

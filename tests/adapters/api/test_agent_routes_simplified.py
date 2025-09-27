@@ -63,8 +63,9 @@ def app():
     app.state.api_host = "127.0.0.1"
     app.state.api_port = "8080"
 
-    # Mock runtime properties
-    app.state.runtime.state_manager = MagicMock(current_state="WORK")
+    # Mock runtime properties - fix cognitive state structure
+    app.state.runtime.agent_processor = MagicMock()
+    app.state.runtime.agent_processor.state_manager = MagicMock(current_state="WORK")
 
     # Create a more complete mock for agent identity
     identity_mock = MagicMock()
@@ -312,7 +313,8 @@ class TestHelperFunctions:
     def test_get_cognitive_state(self):
         """Test cognitive state helper."""
         runtime = MagicMock()
-        runtime.state_manager = MagicMock(current_state="DREAM")
+        runtime.agent_processor = MagicMock()
+        runtime.agent_processor.state_manager = MagicMock(current_state="DREAM")
         assert _get_cognitive_state(runtime) == "DREAM"
 
         runtime = MagicMock(spec=[])

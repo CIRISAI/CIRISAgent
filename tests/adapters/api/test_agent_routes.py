@@ -74,8 +74,9 @@ def app():
     app.state.on_message = AsyncMock()
     app.state.api_config = MagicMock(interaction_timeout=5.0)
 
-    # Mock runtime properties
-    app.state.runtime.state_manager = MagicMock(current_state="WORK")
+    # Mock runtime properties - fix cognitive state structure
+    app.state.runtime.agent_processor = MagicMock()
+    app.state.runtime.agent_processor.state_manager = MagicMock(current_state="WORK")
     identity_mock = MagicMock()
     identity_mock.agent_id = "test_agent"
     identity_mock.name = "Test Agent"  # Explicitly set as string, not MagicMock
@@ -788,7 +789,8 @@ class TestHelperFunctions:
         """Test _get_cognitive_state helper."""
         # With state manager
         runtime = MagicMock()
-        runtime.state_manager = MagicMock(current_state="SOLITUDE")
+        runtime.agent_processor = MagicMock()
+        runtime.agent_processor.state_manager = MagicMock(current_state="SOLITUDE")
         assert agent._get_cognitive_state(runtime) == "SOLITUDE"
 
         # Without state manager
@@ -797,12 +799,14 @@ class TestHelperFunctions:
 
         # With None state manager
         runtime = MagicMock()
-        runtime.state_manager = None
+        runtime.agent_processor = MagicMock()
+        runtime.agent_processor.state_manager = None
         assert agent._get_cognitive_state(runtime) == "UNKNOWN"
 
         # With state manager but no current_state attribute
         runtime = MagicMock()
-        runtime.state_manager = MagicMock(spec=[])  # No current_state attribute
+        runtime.agent_processor = MagicMock()
+        runtime.agent_processor.state_manager = MagicMock(spec=[])  # No current_state attribute
         assert agent._get_cognitive_state(runtime) == "UNKNOWN"
 
         # With enum-like state (has .value attribute)
@@ -810,12 +814,14 @@ class TestHelperFunctions:
         mock_state = MagicMock()
         mock_state.value = "WAKEUP"
         mock_state.__str__ = lambda self: "AgentState.WAKEUP"
-        runtime.state_manager = MagicMock(current_state=mock_state)
+        runtime.agent_processor = MagicMock()
+        runtime.agent_processor.state_manager = MagicMock(current_state=mock_state)
         assert agent._get_cognitive_state(runtime) == "AgentState.WAKEUP"
 
         # With simple string state (no .value attribute)
         runtime = MagicMock()
-        runtime.state_manager = MagicMock(current_state="DREAM")
+        runtime.agent_processor = MagicMock()
+        runtime.agent_processor.state_manager = MagicMock(current_state="DREAM")
         assert agent._get_cognitive_state(runtime) == "DREAM"
 
     def test_calculate_uptime(self):

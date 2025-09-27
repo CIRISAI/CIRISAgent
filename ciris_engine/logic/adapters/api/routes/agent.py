@@ -450,15 +450,19 @@ def _get_cognitive_state(runtime) -> str:
         logger.warning("Runtime is None")
         return "UNKNOWN"
 
-    if hasattr(runtime, "state_manager") and runtime.state_manager:
-        if hasattr(runtime.state_manager, "current_state"):
-            state = runtime.state_manager.current_state
-            # Convert AgentState enum to string if necessary
-            return str(state)
+    # State manager is on the agent processor, not directly on runtime
+    if hasattr(runtime, "agent_processor") and runtime.agent_processor:
+        if hasattr(runtime.agent_processor, "state_manager") and runtime.agent_processor.state_manager:
+            if hasattr(runtime.agent_processor.state_manager, "current_state"):
+                state = runtime.agent_processor.state_manager.current_state
+                # Convert AgentState enum to string if necessary
+                return str(state)
+            else:
+                logger.warning("Agent processor state_manager exists but has no current_state attribute")
         else:
-            logger.warning("Runtime state_manager exists but has no current_state attribute")
+            logger.warning("Agent processor has no state_manager or state_manager is None")
     else:
-        logger.warning("Runtime has no state_manager or state_manager is None")
+        logger.warning("Runtime has no agent_processor or agent_processor is None")
     return "UNKNOWN"  # Don't default to WORK - be explicit about unknown state
 
 

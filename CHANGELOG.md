@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed default return from WORK to UNKNOWN for transparency when state manager is inaccessible
   - Added proper error handling and logging for state manager access failures
   - Improved enum-to-string conversion for AgentState values in API responses
+- **🔄 Async Boundary Consistency**: Enhanced async protocol compatibility for future Rust conversion
+  - Fixed async/await boundary consistency in StateManager methods (`can_transition_to`, `transition_to`)
+  - Updated all state transition callers across runtime and processor modules to use proper async patterns
+  - Enhanced test fixtures with AsyncMock compatibility for state manager operations
+  - Eliminated RuntimeWarnings about unawaited coroutines in state management system
+  - Achieved 100% test pass rate with parallel execution (pytest -n 16) maintaining 4x+ performance improvements
 
 ## [1.1.5] - 2025-09-26
 

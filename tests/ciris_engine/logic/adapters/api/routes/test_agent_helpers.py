@@ -26,6 +26,8 @@ from ciris_engine.logic.adapters.api.routes.agent import (
     _expand_mock_messages,
     _fetch_messages_from_channels,
     _get_admin_channels,
+    _get_cognitive_state,
+    _get_current_cognitive_state,
     _get_current_task_info,
     _get_history_from_communication_service,
     _get_history_from_memory,
@@ -852,3 +854,182 @@ class TestEdgeCases:
         result = _sort_and_filter_messages(messages, None)
 
         assert len(result) == 3
+
+
+class TestCognitiveStateHelpers:
+    """Test helper functions for cognitive state management."""
+
+    def test_get_cognitive_state_with_none_runtime(self, caplog):
+        """Test getting cognitive state with None runtime."""
+        result = _get_cognitive_state(None)
+
+        assert result == "UNKNOWN"
+        assert "Runtime is None" in caplog.text
+
+    def test_get_cognitive_state_with_none_agent_processor(self, caplog):
+        """Test getting cognitive state with None agent processor."""
+        runtime = Mock()
+        runtime.agent_processor = None
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "UNKNOWN"
+        assert "Runtime has no agent_processor or agent_processor is None" in caplog.text
+
+    def test_get_cognitive_state_with_missing_agent_processor(self, caplog):
+        """Test getting cognitive state with missing agent processor attribute."""
+        runtime = Mock(spec=[])  # Empty spec, no attributes
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "UNKNOWN"
+        assert "Runtime has no agent_processor or agent_processor is None" in caplog.text
+
+    def test_get_cognitive_state_with_none_state_manager(self, caplog):
+        """Test getting cognitive state with None state manager."""
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = None
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "UNKNOWN"
+        assert "Agent processor has no state_manager or state_manager is None" in caplog.text
+
+    def test_get_cognitive_state_with_missing_state_manager(self, caplog):
+        """Test getting cognitive state with missing state manager attribute."""
+        runtime = Mock()
+        runtime.agent_processor = Mock(spec=[])  # No state_manager attribute
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "UNKNOWN"
+        assert "Agent processor has no state_manager or state_manager is None" in caplog.text
+
+    def test_get_cognitive_state_with_missing_current_state(self, caplog):
+        """Test getting cognitive state with missing current_state attribute."""
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = Mock(spec=[])  # No current_state attribute
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "UNKNOWN"
+        assert "Agent processor state_manager exists but has no current_state attribute" in caplog.text
+
+    def test_get_cognitive_state_with_valid_state_manager_string(self):
+        """Test getting cognitive state with valid state manager returning string."""
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = Mock()
+        runtime.agent_processor.state_manager.current_state = "WORK"
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "WORK"
+
+    def test_get_cognitive_state_with_valid_state_manager_enum(self):
+        """Test getting cognitive state with valid state manager returning enum."""
+        from enum import Enum
+
+        class MockAgentState(Enum):
+            WORK = "WORK"
+            PLAY = "PLAY"
+
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = Mock()
+        runtime.agent_processor.state_manager.current_state = MockAgentState.WORK
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "MockAgentState.WORK"  # str() conversion of enum
+
+    def test_get_cognitive_state_with_valid_state_manager_none_state(self):
+        """Test getting cognitive state with valid state manager but None current_state."""
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = Mock()
+        runtime.agent_processor.state_manager.current_state = None
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "None"  # str(None) = "None"
+
+    def test_get_current_cognitive_state_with_valid_request(self):
+        """Test getting current cognitive state from valid request."""
+        request = Mock()
+        request.app.state.runtime = Mock()
+        request.app.state.runtime.agent_processor = Mock()
+        request.app.state.runtime.agent_processor.state_manager = Mock()
+        request.app.state.runtime.agent_processor.state_manager.current_state = "PLAY"
+
+        result = _get_current_cognitive_state(request)
+
+        assert result == "PLAY"
+
+    def test_get_current_cognitive_state_with_none_runtime(self, caplog):
+        """Test getting current cognitive state with None runtime."""
+        request = Mock()
+        request.app.state.runtime = None
+
+        result = _get_current_cognitive_state(request)
+
+        assert result == "UNKNOWN"
+        assert "Runtime is None" in caplog.text
+
+    def test_get_current_cognitive_state_with_missing_runtime(self, caplog):
+        """Test getting current cognitive state with missing runtime attribute."""
+        request = Mock()
+        # Create mock app.state without runtime attribute
+        request.app = Mock()
+        request.app.state = Mock(spec=[])  # No runtime attribute
+
+        result = _get_current_cognitive_state(request)
+
+        assert result == "UNKNOWN"
+        assert "Runtime is None" in caplog.text
+
+    def test_get_current_cognitive_state_integration(self):
+        """Test full integration of current cognitive state with all components."""
+        # Create a complete mock request structure
+        request = Mock()
+        request.app = Mock()
+        request.app.state = Mock()
+
+        # Create runtime with full agent processor structure
+        runtime = Mock()
+        agent_processor = Mock()
+        state_manager = Mock()
+
+        # Set up the complete chain
+        state_manager.current_state = "SOLITUDE"
+        agent_processor.state_manager = state_manager
+        runtime.agent_processor = agent_processor
+        request.app.state.runtime = runtime
+
+        result = _get_current_cognitive_state(request)
+
+        assert result == "SOLITUDE"
+
+    def test_get_cognitive_state_edge_case_empty_string_state(self):
+        """Test cognitive state with empty string as current state."""
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = Mock()
+        runtime.agent_processor.state_manager.current_state = ""
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == ""  # Should return empty string as-is
+
+    def test_get_cognitive_state_edge_case_integer_state(self):
+        """Test cognitive state with integer as current state."""
+        runtime = Mock()
+        runtime.agent_processor = Mock()
+        runtime.agent_processor.state_manager = Mock()
+        runtime.agent_processor.state_manager.current_state = 42
+
+        result = _get_cognitive_state(runtime)
+
+        assert result == "42"  # str(42) = "42"

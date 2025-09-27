@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -248,3 +248,265 @@ def mock_agent_task():
     mock_task.get_name.return_value = "AgentProcessorTask"
     mock_task.done.return_value = False
     return mock_task
+
+
+@pytest.fixture
+def fast_mock_runtime():
+    """Provide a fast, lightweight mock runtime for logging tests.
+
+    This fixture avoids real file system operations and initialization
+    for maximum test speed while providing configurable behavior.
+    """
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=True, include_time_service=True)
+    return runtime
+
+
+@pytest.fixture
+def mock_essential_config(tmp_path):
+    """Provide a minimal EssentialConfig using tmp_path for fast testing."""
+    from ciris_engine.schemas.config.essential import (
+        DatabaseConfig,
+        EssentialConfig,
+        GraphConfig,
+        OperationalLimitsConfig,
+        SecurityConfig,
+        ServiceEndpointsConfig,
+        TelemetryConfig,
+        WorkflowConfig,
+    )
+
+    # Use tmp_path for all database files to avoid filesystem conflicts
+    return EssentialConfig(
+        database=DatabaseConfig(
+            main_db=tmp_path / "test.db",
+            secrets_db=tmp_path / "secrets.db",
+            audit_db=tmp_path / "audit.db",
+        ),
+        services=ServiceEndpointsConfig(
+            llm_endpoint="https://test.api.com",
+            llm_model="test-model",
+            llm_timeout=30,
+            llm_max_retries=3,
+        ),
+        security=SecurityConfig(
+            audit_retention_days=7,
+            secrets_encryption_key_env="TEST_KEY",
+            secrets_key_path=tmp_path / "secrets_keys",
+            audit_key_path=tmp_path / "audit_keys",
+            enable_signed_audit=False,
+            max_thought_depth=5,
+        ),
+        limits=OperationalLimitsConfig(
+            max_active_tasks=5,
+            max_active_thoughts=10,
+            round_delay_seconds=0.01,  # Fast for testing
+            mock_llm_round_delay=0.001,  # Very fast for testing
+            dma_retry_limit=1,  # Reduce retries for speed
+            dma_timeout_seconds=1.0,  # Fast timeout
+            conscience_retry_limit=1,
+        ),
+        telemetry=TelemetryConfig(
+            enabled=False,  # Disable for speed
+            export_interval_seconds=60,
+            retention_hours=1,
+        ),
+        workflow=WorkflowConfig(
+            max_rounds=2,  # Reduce for speed
+            round_timeout_seconds=5.0,  # Fast timeout
+            enable_auto_defer=True,
+        ),
+        graph=GraphConfig(
+            tsdb_profound_target_mb_per_day=1.0,  # Small for testing
+            tsdb_raw_retention_hours=1,
+            consolidation_timezone="UTC",
+        ),
+        log_level="DEBUG",
+        debug_mode=True,
+        template_directory=tmp_path / "templates",
+        default_template="test",
+    )
+
+
+@pytest.fixture
+def mock_logging_components():
+    """Provide mocks for all logging-related components."""
+
+    class LoggingMocks:
+        def __init__(self):
+            self.setup_basic_logging = MagicMock(return_value=None)
+            self.time_service = MagicMock()
+            self.time_service.now.return_value = MagicMock()
+            self.time_service.format_timestamp.return_value = "20250927_143000"
+
+            # Mock ServiceRegistry for TimeService lookup
+            self.service_registry = MagicMock()
+            self.service_registry.get_service.return_value = self.time_service
+
+            # Mock file operations
+            self.log_files_created = []
+            self.symlinks_created = []
+
+        def configure_success(self):
+            """Configure mocks for successful logging setup."""
+            self.setup_basic_logging.return_value = None
+            self.setup_basic_logging.side_effect = None
+
+        def configure_failure(self, error_message="Mock setup failed"):
+            """Configure mocks for failed logging setup."""
+            self.setup_basic_logging.side_effect = Exception(error_message)
+
+        def configure_time_service_failure(self):
+            """Configure TimeService to be unavailable."""
+            self.service_registry.get_service.return_value = None
+
+    return LoggingMocks()
+
+
+@pytest.fixture
+def fast_runtime_for_lifecycle_tests():
+    """Ultra-fast runtime mock specifically for lifecycle testing."""
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=True, include_time_service=True)
+
+    # Add lifecycle-specific mocks
+    runtime._shutdown_event = Mock()
+    runtime._shutdown_event.is_set = Mock(return_value=False)
+    runtime._shutdown_event.set = Mock()
+    runtime._shutdown_reason = None
+
+    # Mock the run method to be instant
+    async def mock_run(num_rounds=None):
+        if runtime._shutdown_event.is_set():
+            return
+        # Simulate immediate shutdown check
+        runtime._shutdown_event.set()
+
+    runtime.run = mock_run
+    runtime.request_shutdown = Mock(side_effect=lambda reason: setattr(runtime, "_shutdown_reason", reason))
+
+    return runtime
+
+
+@pytest.fixture
+def fast_runtime_for_integration_tests():
+    """Fast runtime mock for integration testing with realistic state management."""
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=True, include_time_service=True)
+
+    # Add integration-specific mocks
+    runtime.adapters = []
+    runtime._adapter_tasks = []
+    runtime.profile = Mock()
+    runtime.profile.name = "test"
+
+    # Mock state manager with realistic behavior
+    runtime.state_manager = Mock()
+    runtime.state_manager.get_state = Mock(return_value="WORK")
+    runtime.state_manager.can_transition_to = Mock(return_value=True)
+    runtime.state_manager.transition_to = Mock()
+
+    # Mock environment handling
+    runtime._original_env = {}
+
+    # Add service properties that tests expect
+    runtime.service_registry = Mock()
+    runtime.memory_service = Mock()
+    runtime.telemetry_service = Mock()
+
+    # Ensure shutdown event exists for timeout tests
+    if not hasattr(runtime, "_shutdown_event"):
+        runtime._shutdown_event = Mock()
+        runtime._shutdown_event.is_set = Mock(return_value=False)
+        runtime._shutdown_event.set = Mock()
+
+    return runtime
+
+
+@pytest.fixture
+def fast_runtime_for_adapter_tests():
+    """Fast runtime mock for adapter testing."""
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=True, include_time_service=True)
+
+    # Add adapter-specific mocks
+    runtime.adapters = []
+    runtime._adapter_tasks = []
+
+    # Mock adapter loading
+    runtime._load_adapters = Mock()
+
+    # Mock service registration
+    runtime._register_adapter_services = Mock()
+
+    return runtime
+
+
+@pytest.fixture
+def centralized_essential_config():
+    """Centralized EssentialConfig optimized for maximum speed."""
+    from ciris_engine.schemas.config.essential import (
+        DatabaseConfig,
+        EssentialConfig,
+        GraphConfig,
+        OperationalLimitsConfig,
+        SecurityConfig,
+        ServiceEndpointsConfig,
+        TelemetryConfig,
+        WorkflowConfig,
+    )
+
+    # Use in-memory databases for speed
+    return EssentialConfig(
+        database=DatabaseConfig(
+            main_db=":memory:",
+            secrets_db=":memory:",
+            audit_db=":memory:",
+        ),
+        services=ServiceEndpointsConfig(
+            llm_endpoint="mock://localhost",
+            llm_model="mock",
+            llm_timeout=1,  # Very fast
+            llm_max_retries=1,  # Minimal retries
+        ),
+        security=SecurityConfig(
+            audit_retention_days=1,
+            secrets_encryption_key_env="TEST_KEY",
+            secrets_key_path="/tmp/test_secrets",
+            audit_key_path="/tmp/test_audit",
+            enable_signed_audit=False,
+            max_thought_depth=2,  # Minimal depth
+        ),
+        limits=OperationalLimitsConfig(
+            max_active_tasks=2,  # Minimal tasks
+            max_active_thoughts=2,  # Minimal thoughts
+            round_delay_seconds=0.001,  # Ultra fast
+            mock_llm_round_delay=0.001,  # Ultra fast
+            dma_retry_limit=1,
+            dma_timeout_seconds=0.5,  # Very fast timeout
+            conscience_retry_limit=1,
+        ),
+        telemetry=TelemetryConfig(
+            enabled=False,  # Disable for speed
+            export_interval_seconds=3600,
+            retention_hours=1,
+        ),
+        workflow=WorkflowConfig(
+            max_rounds=1,  # Minimal rounds
+            round_timeout_seconds=1.0,  # Fast timeout
+            enable_auto_defer=False,  # Disable for speed
+        ),
+        graph=GraphConfig(
+            tsdb_profound_target_mb_per_day=0.1,  # Minimal
+            tsdb_raw_retention_hours=1,
+            consolidation_timezone="UTC",
+        ),
+        log_level="CRITICAL",  # Minimal logging
+        debug_mode=False,  # Disable for speed
+        template_directory="/tmp",
+        default_template="test",
+    )

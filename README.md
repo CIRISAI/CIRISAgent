@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**STABLE RELEASE 1.1.5** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**STABLE RELEASE 1.1.6** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 Academic paper https://zenodo.org/records/17195221
 Philosophical foundation https://ciris.ai/ciris_covenant.pdf
@@ -23,7 +23,7 @@ CIRIS lets you run AI agents that explain their decisions, defer to humans when 
 
 CIRIS wraps LLM calls with:
 - **Multiple evaluation passes** - Every decision gets ethical, common-sense, and domain checks
-- **Human escalation** - Uncertain decisions defer to designated "Wise Authorities" 
+- **Human escalation** - Uncertain decisions defer to designated "Wise Authorities"
 - **Complete audit trails** - Every decision is logged with reasoning
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
 - **Identity system** - Agents have persistent identity across restarts
@@ -44,7 +44,7 @@ pip install -r requirements.txt
 # 2. Start with Discord adapter (easiest)
 python main.py --adapter discord --guild-id YOUR_GUILD_ID
 
-# 3. Or start API mode for development  
+# 3. Or start API mode for development
 python main.py --adapter api --port 8000
 ```
 
@@ -64,7 +64,7 @@ python main.py --adapter api --port 8000
 
 **Quick Links:**
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design (22 services)  
+- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design (22 services)
 - **[API Reference](docs/single_step_api_audit.md)** - REST API documentation
 - **[Developer Guide](docs/FOR_NERDS.md)** - Contributing and extending
 

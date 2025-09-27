@@ -127,24 +127,49 @@ class TestDiscordHelpers:
         assert result is False
 
     def test_handle_timeout_healthy(self, platform):
-        """Test timeout handling with healthy client."""
-        result = platform._handle_timeout_scenario()
+        """Test timeout handling with healthy client logs at debug level."""
+        with patch("ciris_engine.logic.adapters.discord.adapter.logger") as mock_logger:
+            result = platform._handle_timeout_scenario()
 
-        assert result is True
+            assert result is True
+            # Should log at debug level when client is healthy
+            mock_logger.debug.assert_called_once_with(
+                "No tasks completed within 30s timeout - Discord client appears healthy, continuing..."
+            )
+            # Should not log any warnings when healthy
+            mock_logger.warning.assert_not_called()
 
     def test_handle_timeout_unresponsive(self, platform):
-        """Test timeout handling with unresponsive client."""
+        """Test timeout handling with unresponsive client logs warning."""
         platform.client.is_closed.return_value = True
 
         discord_task = Mock()
         discord_task.done.return_value = False
         platform._discord_client_task = discord_task
 
-        result = platform._handle_timeout_scenario()
+        with patch("ciris_engine.logic.adapters.discord.adapter.logger") as mock_logger:
+            result = platform._handle_timeout_scenario()
 
-        assert result is False
-        discord_task.cancel.assert_called_once()
-        assert platform._discord_client_task is None
+            assert result is False
+            discord_task.cancel.assert_called_once()
+            assert platform._discord_client_task is None
+            # Should log warning when client is unresponsive
+            mock_logger.warning.assert_called_once_with(
+                "No tasks completed within 30s timeout - Discord client appears closed/unresponsive, will recreate task on next iteration"
+            )
+
+    def test_handle_timeout_no_client(self, platform):
+        """Test timeout handling when client is None."""
+        platform.client = None
+
+        with patch("ciris_engine.logic.adapters.discord.adapter.logger") as mock_logger:
+            result = platform._handle_timeout_scenario()
+
+            assert result is False
+            # Should log warning when no client exists
+            mock_logger.warning.assert_called_once_with(
+                "No tasks completed within 30s timeout - Discord client appears closed/unresponsive, will recreate task on next iteration"
+            )
 
     @pytest.mark.asyncio
     async def test_handle_discord_task_failure_non_retryable(self, platform):

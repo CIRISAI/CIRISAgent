@@ -423,8 +423,8 @@ class EdgeManager:
         Get the ID of a summary node from the previous period.
 
         Args:
-            node_type_prefix: Prefix like "tsdb_summary", "conversation_summary"
-            previous_period_id: Period ID like "20250702_00"
+            node_type_prefix: Prefix like "tsdb_summary", "conversation_summary", or "tsdb_summary_daily"
+            previous_period_id: Period ID like "20250702_00" or "20250714" for daily summaries
 
         Returns:
             Node ID if found, None otherwise
@@ -433,7 +433,7 @@ class EdgeManager:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
-                # Look for summary node with matching ID pattern
+                # Create node ID pattern (same format for both daily and 6-hour summaries)
                 node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
 
                 cursor.execute(
@@ -447,7 +447,12 @@ class EdgeManager:
                 )
 
                 row = cursor.fetchone()
-                return row["node_id"] if row else None
+                if row:
+                    logger.debug(f"Found previous summary: {row['node_id']}")
+                    return row["node_id"]
+                else:
+                    logger.debug(f"No previous summary found for pattern: {node_id_pattern}")
+                    return None
 
         except Exception as e:
             logger.error(f"Failed to find previous summary: {e}")

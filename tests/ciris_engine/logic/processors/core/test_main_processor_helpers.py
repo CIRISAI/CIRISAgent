@@ -165,7 +165,7 @@ class TestAgentProcessorHelpers:
             "ciris_engine.logic.processors.core.main_processor.get_global_shutdown_reason", return_value="Test reason"
         ):
 
-            main_processor.state_manager.can_transition_to = Mock(return_value=True)
+            main_processor.state_manager.can_transition_to = AsyncMock(return_value=True)
             main_processor._handle_state_transition = AsyncMock()
 
             result = await main_processor._handle_shutdown_transitions(AgentState.WORK)
@@ -182,7 +182,7 @@ class TestAgentProcessorHelpers:
             "ciris_engine.logic.processors.core.main_processor.get_global_shutdown_reason", return_value="Test reason"
         ):
 
-            main_processor.state_manager.can_transition_to = Mock(return_value=False)
+            main_processor.state_manager.can_transition_to = AsyncMock(return_value=False)
 
             result = await main_processor._handle_shutdown_transitions(AgentState.WORK)
 

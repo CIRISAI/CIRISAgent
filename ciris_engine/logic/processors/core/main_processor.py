@@ -251,12 +251,12 @@ class AgentProcessor:
 
         # Transition from SHUTDOWN to WAKEUP state when starting processing
         if self.state_manager.get_state() == AgentState.SHUTDOWN:
-            if not self.state_manager.transition_to(AgentState.WAKEUP):
+            if not await self.state_manager.transition_to(AgentState.WAKEUP):
                 logger.error("Failed to transition from SHUTDOWN to WAKEUP state")
                 return
         elif self.state_manager.get_state() != AgentState.WAKEUP:
             logger.warning(f"Unexpected state {self.state_manager.get_state()} when starting processing")
-            if not self.state_manager.transition_to(AgentState.WAKEUP):
+            if not await self.state_manager.transition_to(AgentState.WAKEUP):
                 logger.error(f"Failed to transition from {self.state_manager.get_state()} to WAKEUP state")
                 return
 
@@ -278,7 +278,7 @@ class AgentProcessor:
             # Check if wakeup failed (any task failed)
             if hasattr(wakeup_result, "errors") and wakeup_result.errors > 0:
                 logger.error(f"Wakeup failed with {wakeup_result.errors} errors - transitioning to SHUTDOWN")
-                if not self.state_manager.transition_to(AgentState.SHUTDOWN):
+                if not await self.state_manager.transition_to(AgentState.SHUTDOWN):
                     logger.error("Failed to transition to SHUTDOWN state after wakeup failure")
                 await self.stop_processing()
                 return
@@ -304,13 +304,13 @@ class AgentProcessor:
                 f"Wakeup did not complete within {num_rounds or 'infinite'} rounds - transitioning to SHUTDOWN"
             )
             # Transition to SHUTDOWN state since wakeup failed
-            if not self.state_manager.transition_to(AgentState.SHUTDOWN):
+            if not await self.state_manager.transition_to(AgentState.SHUTDOWN):
                 logger.error("Failed to transition to SHUTDOWN state after wakeup failure")
             await self.stop_processing()
             return
 
         logger.info("Attempting to transition from WAKEUP to WORK state...")
-        if not self.state_manager.transition_to(AgentState.WORK):
+        if not await self.state_manager.transition_to(AgentState.WORK):
             logger.error("Failed to transition to WORK state after wakeup")
             await self.stop_processing()
             return
@@ -902,7 +902,7 @@ class AgentProcessor:
             except Exception as e:
                 logger.error(f"Error cleaning up {processor}: {e}")
 
-        self.state_manager.transition_to(AgentState.SHUTDOWN)
+        await self.state_manager.transition_to(AgentState.SHUTDOWN)
 
         try:
             await asyncio.wait_for(self._processing_task, timeout=10.0)
@@ -959,7 +959,7 @@ class AgentProcessor:
             shutdown_reason = get_global_shutdown_reason() or "Unknown reason"
             logger.info(f"Global shutdown requested: {shutdown_reason}")
             # Transition to shutdown state if not already there
-            if self.state_manager.can_transition_to(AgentState.SHUTDOWN):
+            if await self.state_manager.can_transition_to(AgentState.SHUTDOWN):
                 await self._handle_state_transition(AgentState.SHUTDOWN)
             else:
                 logger.error(f"Cannot transition from {current_state} to SHUTDOWN")
@@ -1295,7 +1295,7 @@ class AgentProcessor:
         """Handle transitioning to a new state."""
         current_state = self.state_manager.get_state()
 
-        if not self.state_manager.transition_to(target_state):
+        if not await self.state_manager.transition_to(target_state):
             logger.error(f"Failed to transition from {current_state} to {target_state}")
             return
 

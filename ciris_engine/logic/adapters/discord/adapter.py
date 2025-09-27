@@ -445,12 +445,16 @@ class DiscordPlatform(Service):
             "task_exists": self._discord_client_task is not None,
             "task_done": self._discord_client_task.done() if self._discord_client_task else None,
             "task_cancelled": self._discord_client_task.cancelled() if self._discord_client_task else None,
-            "task_exception": str(self._discord_client_task.exception()) if self._discord_client_task and self._discord_client_task.done() else None,
+            "task_exception": (
+                str(self._discord_client_task.exception())
+                if self._discord_client_task and self._discord_client_task.done()
+                else None
+            ),
             "client_closed": self.client.is_closed() if self.client else None,
-            "client_user": str(self.client.user) if self.client and hasattr(self.client, 'user') else None,
+            "client_user": str(self.client.user) if self.client and hasattr(self.client, "user") else None,
             "reconnect_attempts": self._reconnect_attempts,
             "agent_task_name": current_agent_task.get_name(),
-            "agent_task_done": current_agent_task.done()
+            "agent_task_done": current_agent_task.done(),
         }
 
     async def _recreate_discord_task(self, context: dict) -> bool:
@@ -472,8 +476,7 @@ class DiscordPlatform(Service):
                     # Continue with existing client anyway
 
             self._discord_client_task = asyncio.create_task(
-                self.client.start(self.token, reconnect=True),
-                name="DiscordClientTask"
+                self.client.start(self.token, reconnect=True), name="DiscordClientTask"
             )
             logger.info(f"Discord client task recreated successfully. Context: {context}")
             return True
@@ -544,7 +547,7 @@ class DiscordPlatform(Service):
             "exception_type": type(exc).__name__,
             "exception_message": str(exc),
             "client_closed": self.client.is_closed() if self.client else None,
-            "client_user": str(self.client.user) if self.client and hasattr(self.client, 'user') else None,
+            "client_user": str(self.client.user) if self.client and hasattr(self.client, "user") else None,
             "reconnect_attempts": self._reconnect_attempts,
             "token_suffix": self.token[-10:] if self.token else None,
             "agent_task_name": current_agent_task.get_name(),
@@ -556,6 +559,7 @@ class DiscordPlatform(Service):
 
         # Use DiscordErrorClassifier to determine retry strategy
         from .discord_error_classifier import DiscordErrorClassifier
+
         classification = DiscordErrorClassifier.classify_error(exc, self._reconnect_attempts)
         DiscordErrorClassifier.log_error_classification(classification, self._reconnect_attempts + 1)
 
@@ -587,9 +591,7 @@ class DiscordPlatform(Service):
 
         # Discord.py with reconnect=True will handle reconnection internally
         # We just need to create a new task to wait for it
-        self._discord_client_task = asyncio.create_task(
-            self._wait_for_discord_reconnect(), name="DiscordReconnectWait"
-        )
+        self._discord_client_task = asyncio.create_task(self._wait_for_discord_reconnect(), name="DiscordReconnectWait")
 
         return True
 
@@ -712,9 +714,7 @@ class DiscordPlatform(Service):
 
                 # Wait for either agent task or Discord task to complete with timeout
                 done, pending = await asyncio.wait(
-                    [current_agent_task, self._discord_client_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                    timeout=30.0
+                    [current_agent_task, self._discord_client_task], return_when=asyncio.FIRST_COMPLETED, timeout=30.0
                 )
 
                 # Agent task completed - normal shutdown

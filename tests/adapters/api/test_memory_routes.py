@@ -315,7 +315,6 @@ class TestForgetMemory:
         assert "not found" in data["data"]["reason"].lower()
 
 
-
 class TestMemoryStats:
     """Test the /memory/stats endpoint."""
 

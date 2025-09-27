@@ -1,11 +1,11 @@
 """Comprehensive tests for Discord Vision Helper module."""
 
 import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import discord
+import pytest
 
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
 
@@ -56,20 +56,12 @@ class TestProcessMessageImages:
     @pytest.fixture
     def mock_image_attachment(self, mock_attachment):
         """Create mock image attachment."""
-        return mock_attachment(
-            filename="test.png",
-            content_type="image/png",
-            size=1000000
-        )
+        return mock_attachment(filename="test.png", content_type="image/png", size=1000000)
 
     @pytest.fixture
     def mock_non_image_attachment(self, mock_attachment):
         """Create mock non-image attachment."""
-        return mock_attachment(
-            filename="test.txt",
-            content_type="text/plain",
-            size=1000
-        )
+        return mock_attachment(filename="test.txt", content_type="text/plain", size=1000)
 
     @pytest.mark.asyncio
     async def test_process_message_images_no_api_key(self, sample_discord_message):
@@ -86,7 +78,9 @@ class TestProcessMessageImages:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_process_message_images_no_image_attachments(self, vision_helper, sample_discord_message, mock_non_image_attachment):
+    async def test_process_message_images_no_image_attachments(
+        self, vision_helper, sample_discord_message, mock_non_image_attachment
+    ):
         """Test processing message with non-image attachments."""
         sample_discord_message.attachments = [mock_non_image_attachment]
         result = await vision_helper.process_message_images(sample_discord_message)
@@ -97,7 +91,7 @@ class TestProcessMessageImages:
         """Test successful image processing."""
         sample_discord_message.attachments = [mock_image_attachment]
 
-        with patch.object(vision_helper, '_process_single_image', return_value="A test image"):
+        with patch.object(vision_helper, "_process_single_image", return_value="A test image"):
             result = await vision_helper.process_message_images(sample_discord_message)
             assert result == "Image 'test.png': A test image"
 
@@ -108,17 +102,19 @@ class TestProcessMessageImages:
         img2 = mock_attachment("img2.jpg", "image/jpeg")
         sample_discord_message.attachments = [img1, img2]
 
-        with patch.object(vision_helper, '_process_single_image', side_effect=["Description 1", "Description 2"]):
+        with patch.object(vision_helper, "_process_single_image", side_effect=["Description 1", "Description 2"]):
             result = await vision_helper.process_message_images(sample_discord_message)
             expected = "Image 'img1.png': Description 1\n\nImage 'img2.jpg': Description 2"
             assert result == expected
 
     @pytest.mark.asyncio
-    async def test_process_message_images_with_error(self, vision_helper, sample_discord_message, mock_image_attachment):
+    async def test_process_message_images_with_error(
+        self, vision_helper, sample_discord_message, mock_image_attachment
+    ):
         """Test processing with error handling."""
         sample_discord_message.attachments = [mock_image_attachment]
 
-        with patch.object(vision_helper, '_process_single_image', side_effect=Exception("API Error")):
+        with patch.object(vision_helper, "_process_single_image", side_effect=Exception("API Error")):
             result = await vision_helper.process_message_images(sample_discord_message)
             assert "Failed to process - API Error" in result
 
@@ -147,7 +143,7 @@ class TestProcessImageAttachmentsList:
     @pytest.mark.asyncio
     async def test_process_image_attachments_list_success(self, vision_helper, sample_image_attachment):
         """Test successful processing of attachment list."""
-        with patch.object(vision_helper, '_process_single_image', return_value="Test description"):
+        with patch.object(vision_helper, "_process_single_image", return_value="Test description"):
             result = await vision_helper.process_image_attachments_list([sample_image_attachment])
             assert result == "Image 'test_image.png': Test description"
 
@@ -199,7 +195,7 @@ class TestProcessEmbeds:
     @pytest.mark.asyncio
     async def test_process_embeds_with_images(self, vision_helper, mock_embed_with_image):
         """Test processing embeds with images."""
-        with patch.object(vision_helper, '_process_image_url', return_value="Embed image description"):
+        with patch.object(vision_helper, "_process_image_url", return_value="Embed image description"):
             result = await vision_helper.process_embeds([mock_embed_with_image])
             assert "Embed image description" in result
 
@@ -215,7 +211,7 @@ class TestPrivateMethods:
     @pytest.mark.asyncio
     async def test_process_single_image_size_limit(self, vision_helper, mock_attachment):
         """Test single image processing with size limit."""
-        large_attachment = mock_attachment("large.png", "image/png", size=25*1024*1024)
+        large_attachment = mock_attachment("large.png", "image/png", size=25 * 1024 * 1024)
 
         result = await vision_helper._process_single_image(large_attachment)
         assert "Image too large" in result

@@ -7,20 +7,26 @@ reducing duplication and ensuring consistent test setups.
 
 import os
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any, Dict, List
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
+from ciris_engine.config.pricing_models import (
+    CarbonIntensity,
+    EnergyEstimates,
+    EnvironmentalFactors,
+    FallbackPricing,
+    ModelConfig,
+    PricingConfig,
+    PricingMetadata,
+    ProviderConfig,
+)
 from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClient, OpenAIConfig
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.resources import ResourceUsage
-from ciris_engine.config.pricing_models import (
-    PricingConfig, ProviderConfig, ModelConfig, PricingMetadata,
-    EnvironmentalFactors, EnergyEstimates, CarbonIntensity, FallbackPricing
-)
 
 
 class MockInstructorRetryException(Exception):
@@ -36,8 +42,10 @@ class MockInstructorRetryException(Exception):
     @classmethod
     def create_as_subclass(cls, base_class):
         """Create a dynamic subclass that inherits from the provided base class."""
+
         class DynamicMockInstructorException(base_class, cls):
             pass
+
         return DynamicMockInstructorException
 
 
@@ -77,21 +85,19 @@ class MockTelemetryService:
 
     async def record_metric(self, metric_name: str, value: float = 1.0, handler_name: str = None, tags: dict = None):
         """Record a metric with full context."""
-        self.metrics.append({
-            "name": metric_name,
-            "value": value,
-            "handler": handler_name,
-            "tags": tags or {},
-            "timestamp": datetime.now().isoformat()
-        })
+        self.metrics.append(
+            {
+                "name": metric_name,
+                "value": value,
+                "handler": handler_name,
+                "tags": tags or {},
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
     async def log_event(self, event_name: str, data: dict = None):
         """Log an event with context."""
-        self.events.append({
-            "event": event_name,
-            "data": data or {},
-            "timestamp": datetime.now().isoformat()
-        })
+        self.events.append({"event": event_name, "data": data or {}, "timestamp": datetime.now().isoformat()})
 
     def get_metrics_by_name(self, name: str) -> List[Dict[str, Any]]:
         """Get all metrics with a specific name."""
@@ -162,7 +168,7 @@ def mock_instructor_client():
 
     # Setup default successful response
     async def default_create(*args, **kwargs):
-        response_model = kwargs.get('response_model', TestResponse)
+        response_model = kwargs.get("response_model", TestResponse)
 
         # Create a mock completion object with usage attribute
         mock_completion = MagicMock()
@@ -179,8 +185,14 @@ def mock_instructor_client():
 
 
 @pytest.fixture
-def llm_service(llm_config, mock_time_service, mock_telemetry_service,
-               mock_openai_client, mock_instructor_client, mock_pricing_config):
+def llm_service(
+    llm_config,
+    mock_time_service,
+    mock_telemetry_service,
+    mock_openai_client,
+    mock_instructor_client,
+    mock_pricing_config,
+):
     """Create a fully mocked LLM service for testing."""
     # Mock environment to prevent mock LLM detection
     with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
@@ -189,7 +201,9 @@ def llm_service(llm_config, mock_time_service, mock_telemetry_service,
             with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI") as mock_openai:
                 with patch("ciris_engine.logic.services.runtime.llm_service.instructor") as mock_instructor:
                     # Mock the pricing calculator
-                    with patch("ciris_engine.logic.services.runtime.llm_service.service.LLMPricingCalculator") as mock_calc_class:
+                    with patch(
+                        "ciris_engine.logic.services.runtime.llm_service.service.LLMPricingCalculator"
+                    ) as mock_calc_class:
                         # Set up mocks
                         mock_openai.return_value = mock_openai_client
                         mock_instructor.from_openai.return_value = mock_instructor_client
@@ -203,7 +217,9 @@ def llm_service(llm_config, mock_time_service, mock_telemetry_service,
                             # Ensure all parameters are proper types, not MagicMock objects
                             model_name = str(model_name) if model_name else "gpt-4o-mini"
                             prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else 100
-                            completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else 50
+                            completion_tokens = (
+                                int(completion_tokens) if isinstance(completion_tokens, (int, float)) else 50
+                            )
                             provider_name = str(provider_name) if provider_name else None
 
                             total_tokens = prompt_tokens + completion_tokens
@@ -253,7 +269,7 @@ def llm_service(llm_config, mock_time_service, mock_telemetry_service,
                                 cost_cents=total_cost_cents,
                                 carbon_grams=carbon_grams,
                                 energy_kwh=energy_kwh,
-                                model_used=model_name
+                                model_used=model_name,
                             )
 
                         mock_calc_instance.calculate_cost_and_impact.side_effect = calculate_realistic_costs
@@ -277,8 +293,14 @@ def llm_service(llm_config, mock_time_service, mock_telemetry_service,
 
 
 @pytest.fixture
-def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_service,
-                               mock_openai_client, mock_instructor_client, mock_pricing_config):
+def llm_service_with_exceptions(
+    llm_config,
+    mock_time_service,
+    mock_telemetry_service,
+    mock_openai_client,
+    mock_instructor_client,
+    mock_pricing_config,
+):
     """Create an LLM service configured for exception testing."""
     # Mock environment to prevent mock LLM detection
     with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
@@ -287,7 +309,9 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
             with patch("ciris_engine.logic.services.runtime.llm_service.AsyncOpenAI") as mock_openai:
                 with patch("ciris_engine.logic.services.runtime.llm_service.instructor") as mock_instructor:
                     # Mock the pricing calculator
-                    with patch("ciris_engine.logic.services.runtime.llm_service.service.LLMPricingCalculator") as mock_calc_class:
+                    with patch(
+                        "ciris_engine.logic.services.runtime.llm_service.service.LLMPricingCalculator"
+                    ) as mock_calc_class:
                         # Set up mocks
                         mock_openai.return_value = mock_openai_client
                         mock_instructor.from_openai.return_value = mock_instructor_client
@@ -296,6 +320,7 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
                         # Create a mock base exception class that our mock can inherit from
                         class MockInstructorRetryExceptionBase(Exception):
                             """Base mock instructor retry exception."""
+
                             pass
 
                         # Create our actual mock exception that inherits from the base
@@ -328,7 +353,9 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
                             # Ensure all parameters are proper types, not MagicMock objects
                             model_name = str(model_name) if model_name else "gpt-4o-mini"
                             prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else 100
-                            completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else 50
+                            completion_tokens = (
+                                int(completion_tokens) if isinstance(completion_tokens, (int, float)) else 50
+                            )
                             provider_name = str(provider_name) if provider_name else None
 
                             total_tokens = prompt_tokens + completion_tokens
@@ -378,7 +405,7 @@ def llm_service_with_exceptions(llm_config, mock_time_service, mock_telemetry_se
                                 cost_cents=total_cost_cents,
                                 carbon_grams=carbon_grams,
                                 energy_kwh=energy_kwh,
-                                model_used=model_name
+                                model_used=model_name,
                             )
 
                         mock_calc_instance.calculate_cost_and_impact.side_effect = calculate_realistic_costs
@@ -407,20 +434,21 @@ def create_instructor_exception(error_type: str = "timeout"):
         "timeout": "Request timed out after 30 seconds",
         "503": "Error code: 503 - {'error': {'message': 'Service unavailable', 'type': 'service_unavailable'}}",
         "rate_limit": "Error code: 429 - {'error': {'message': 'Rate limit exceeded', 'type': 'rate_limit'}}",
-        "generic": "LLM API call failed with unknown error"
+        "generic": "LLM API call failed with unknown error",
     }
 
     # Import the actual instructor module mock to get the right exception class
     import instructor
-    if hasattr(instructor, 'exceptions') and hasattr(instructor.exceptions, 'InstructorRetryException'):
+
+    if hasattr(instructor, "exceptions") and hasattr(instructor.exceptions, "InstructorRetryException"):
         # Use the base class from the mock
         base_class = instructor.exceptions.InstructorRetryException
 
         class TestInstructorRetryException(base_class):
             def __init__(self, message: str, *args, **kwargs):
                 # Provide default values for required InstructorRetryException parameters
-                kwargs.setdefault('n_attempts', 3)
-                kwargs.setdefault('total_usage', None)
+                kwargs.setdefault("n_attempts", 3)
+                kwargs.setdefault("total_usage", None)
                 super().__init__(message, *args, **kwargs)
                 self.message = message
 
@@ -445,7 +473,7 @@ def setup_successful_response(mock_instructor_client, response_data: dict = None
     response_data = response_data or {"message": "Test response", "status": "ok"}
 
     async def successful_create(*args, **kwargs):
-        response_model = kwargs.get('response_model', TestResponse)
+        response_model = kwargs.get("response_model", TestResponse)
 
         # Create a mock completion object with usage attribute
         mock_completion = MagicMock()
@@ -461,6 +489,7 @@ def setup_successful_response(mock_instructor_client, response_data: dict = None
 
 # Pricing Configuration Fixtures
 
+
 @pytest.fixture
 def mock_pricing_config():
     """Create a comprehensive mock pricing configuration for testing."""
@@ -472,7 +501,7 @@ def mock_pricing_config():
             currency="USD",
             units="per_million_tokens",
             sources=["Test OpenAI API", "Test Anthropic API"],
-            schema_version="1.0.0"
+            schema_version="1.0.0",
         ),
         providers={
             "openai": ProviderConfig(
@@ -485,7 +514,7 @@ def mock_pricing_config():
                         active=True,
                         deprecated=False,
                         effective_date="2024-07-18",
-                        description="GPT-4o mini - fast and affordable model"
+                        description="GPT-4o mini - fast and affordable model",
                     ),
                     "gpt-4o": ModelConfig(
                         input_cost=250.0,
@@ -494,7 +523,7 @@ def mock_pricing_config():
                         active=True,
                         deprecated=False,
                         effective_date="2024-05-13",
-                        description="GPT-4o - high-intelligence flagship model"
+                        description="GPT-4o - high-intelligence flagship model",
                     ),
                     "gpt-3.5-turbo": ModelConfig(
                         input_cost=50.0,
@@ -503,10 +532,10 @@ def mock_pricing_config():
                         active=True,
                         deprecated=False,
                         effective_date="2023-03-01",
-                        description="GPT-3.5 Turbo - fast and efficient model"
-                    )
+                        description="GPT-3.5 Turbo - fast and efficient model",
+                    ),
                 },
-                base_url="https://api.openai.com/v1"
+                base_url="https://api.openai.com/v1",
             ),
             "anthropic": ProviderConfig(
                 display_name="Anthropic",
@@ -518,7 +547,7 @@ def mock_pricing_config():
                         active=True,
                         deprecated=False,
                         effective_date="2024-02-29",
-                        description="Claude 3 Opus - most powerful model"
+                        description="Claude 3 Opus - most powerful model",
                     ),
                     "claude-3-sonnet": ModelConfig(
                         input_cost=300.0,
@@ -527,10 +556,10 @@ def mock_pricing_config():
                         active=True,
                         deprecated=False,
                         effective_date="2024-02-29",
-                        description="Claude 3 Sonnet - balanced model"
-                    )
+                        description="Claude 3 Sonnet - balanced model",
+                    ),
                 },
-                base_url="https://api.anthropic.com/v1"
+                base_url="https://api.anthropic.com/v1",
             ),
             "lambda_labs": ProviderConfig(
                 display_name="Lambda Labs",
@@ -543,14 +572,11 @@ def mock_pricing_config():
                         deprecated=False,
                         effective_date="2024-09-01",
                         description="Llama 4 Maverick 17B - optimized for inference",
-                        provider_specific={
-                            "precision": "fp8",
-                            "optimization": "inference"
-                        }
+                        provider_specific={"precision": "fp8", "optimization": "inference"},
                     )
                 },
-                base_url="https://api.lambda.ai/v1"
-            )
+                base_url="https://api.lambda.ai/v1",
+            ),
         },
         environmental_factors=EnvironmentalFactors(
             energy_estimates=EnergyEstimates(
@@ -559,17 +585,13 @@ def mock_pricing_config():
                     "gpt-3.5": {"kwh_per_1k_tokens": 0.0003},
                     "claude-3": {"kwh_per_1k_tokens": 0.0004},
                     "llama-17b": {"kwh_per_1k_tokens": 0.0002},
-                    "default": {"kwh_per_1k_tokens": 0.0003}
+                    "default": {"kwh_per_1k_tokens": 0.0003},
                 }
             ),
             carbon_intensity=CarbonIntensity(
                 global_average_g_co2_per_kwh=500.0,
-                regions={
-                    "us_west": 350.0,
-                    "eu_central": 300.0,
-                    "asia_pacific": 600.0
-                }
-            )
+                regions={"us_west": 350.0, "eu_central": 300.0, "asia_pacific": 600.0},
+            ),
         ),
         fallback_pricing=FallbackPricing(
             unknown_model=ModelConfig(
@@ -579,9 +601,9 @@ def mock_pricing_config():
                 active=True,
                 deprecated=False,
                 effective_date="2024-01-01",
-                description="Default pricing for unknown models"
+                description="Default pricing for unknown models",
             )
-        )
+        ),
     )
 
 
@@ -624,7 +646,7 @@ def mock_deprecated_model_config():
             currency="USD",
             units="per_million_tokens",
             sources=["Test API"],
-            schema_version="1.0.0"
+            schema_version="1.0.0",
         ),
         providers={
             "openai": ProviderConfig(
@@ -637,19 +659,14 @@ def mock_deprecated_model_config():
                         active=False,
                         deprecated=True,
                         effective_date="2023-03-01",
-                        description="GPT-3.5 Turbo (deprecated version)"
+                        description="GPT-3.5 Turbo (deprecated version)",
                     )
-                }
+                },
             )
         },
         environmental_factors=EnvironmentalFactors(
-            energy_estimates=EnergyEstimates(
-                model_patterns={"default": {"kwh_per_1k_tokens": 0.0003}}
-            ),
-            carbon_intensity=CarbonIntensity(
-                global_average_g_co2_per_kwh=500.0,
-                regions={}
-            )
+            energy_estimates=EnergyEstimates(model_patterns={"default": {"kwh_per_1k_tokens": 0.0003}}),
+            carbon_intensity=CarbonIntensity(global_average_g_co2_per_kwh=500.0, regions={}),
         ),
         fallback_pricing=FallbackPricing(
             unknown_model=ModelConfig(
@@ -659,9 +676,9 @@ def mock_deprecated_model_config():
                 active=True,
                 deprecated=False,
                 effective_date="2024-01-01",
-                description="Default pricing"
+                description="Default pricing",
             )
-        )
+        ),
     )
     return base_config
 
@@ -684,7 +701,7 @@ def create_test_pricing_config(**overrides):
             "currency": "USD",
             "units": "per_million_tokens",
             "sources": ["Test API"],
-            "schema_version": "1.0.0"
+            "schema_version": "1.0.0",
         },
         "providers": {
             "test_provider": {
@@ -697,19 +714,14 @@ def create_test_pricing_config(**overrides):
                         "active": True,
                         "deprecated": False,
                         "effective_date": "2024-01-01",
-                        "description": "Test model"
+                        "description": "Test model",
                     }
-                }
+                },
             }
         },
         "environmental_factors": {
-            "energy_estimates": {
-                "model_patterns": {"default": {"kwh_per_1k_tokens": 0.0003}}
-            },
-            "carbon_intensity": {
-                "global_average_g_co2_per_kwh": 500.0,
-                "regions": {}
-            }
+            "energy_estimates": {"model_patterns": {"default": {"kwh_per_1k_tokens": 0.0003}}},
+            "carbon_intensity": {"global_average_g_co2_per_kwh": 500.0, "regions": {}},
         },
         "fallback_pricing": {
             "unknown_model": {
@@ -719,9 +731,9 @@ def create_test_pricing_config(**overrides):
                 "active": True,
                 "deprecated": False,
                 "effective_date": "2024-01-01",
-                "description": "Default pricing"
+                "description": "Default pricing",
             }
-        }
+        },
     }
 
     # Deep merge overrides into defaults
@@ -757,9 +769,9 @@ def pricing_config_with_high_costs():
                         "active": True,
                         "deprecated": False,
                         "effective_date": "2024-01-01",
-                        "description": "Expensive test model"
+                        "description": "Expensive test model",
                     }
-                }
+                },
             }
         }
     )

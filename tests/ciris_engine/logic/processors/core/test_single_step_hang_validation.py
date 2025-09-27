@@ -8,17 +8,19 @@ PRINCIPLE: FAIL FAST AND LOUD NO FALLBACKS NO FALSE DATA EVER!
 """
 
 import asyncio
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
+from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.main_processor import AgentProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.services.runtime_control import StepPoint
-from ciris_engine.logic.config import ConfigAccessor
+
 # ServiceRegistry not needed - using Mock objects
 
 
@@ -41,31 +43,30 @@ class TestSingleStepHangValidation:
             "time_service": mock_time_service,
             "telemetry_service": Mock(memorize_metric=AsyncMock()),
             "memory_service": Mock(
-                memorize=AsyncMock(),
-                export_identity_context=AsyncMock(return_value="Test identity context")
+                memorize=AsyncMock(), export_identity_context=AsyncMock(return_value="Test identity context")
             ),
             "identity_manager": Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
             "resource_monitor": Mock(
-                get_current_metrics=Mock(return_value={
-                    "cpu_percent": 10.0,
-                    "memory_percent": 20.0,
-                    "disk_usage_percent": 30.0
-                })
+                get_current_metrics=Mock(
+                    return_value={"cpu_percent": 10.0, "memory_percent": 20.0, "disk_usage_percent": 30.0}
+                )
             ),
             "llm_service": Mock(),
             "audit_service": Mock(log_event=AsyncMock()),
         }
 
-    @pytest.fixture 
+    @pytest.fixture
     def mock_config(self):
         """Mock configuration."""
         config = Mock(spec=ConfigAccessor)
-        config.get = Mock(side_effect=lambda key, default=None: {
-            "agent.startup_state": "WORK",
-            "agent.max_rounds": 100,
-            "agent.round_timeout": 300,
-            "agent.state_transition_delay": 0.1,  # Faster for tests
-        }.get(key, default))
+        config.get = Mock(
+            side_effect=lambda key, default=None: {
+                "agent.startup_state": "WORK",
+                "agent.max_rounds": 100,
+                "agent.round_timeout": 300,
+                "agent.state_transition_delay": 0.1,  # Faster for tests
+            }.get(key, default)
+        )
         return config
 
     @pytest.fixture
@@ -76,14 +77,14 @@ class TestSingleStepHangValidation:
         processor.can_process = Mock(return_value=True)
         processor.initialize = Mock(return_value=True)
         processor.cleanup = Mock(return_value=True)
-        
+
         # This is the hanging method - simulate deadlock
         async def hanging_process_thought_item(*args, **kwargs):
             """Simulate the hanging behavior that causes deadlock."""
             # This would hang indefinitely in real scenario
             await asyncio.sleep(10)  # Long enough to timeout test
             return {"success": False, "error": "Should not reach here"}
-        
+
         processor.process_thought_item = AsyncMock(side_effect=hanging_process_thought_item)
         return processor
 
@@ -112,7 +113,7 @@ class TestSingleStepHangValidation:
 
         # Create mock agent identity
         mock_identity = Mock(agent_id="test_agent", name="TestAgent", purpose="Testing")
-        
+
         # Create the processor
         processor = AgentProcessor(
             app_config=mock_config,
@@ -136,27 +137,27 @@ class TestSingleStepHangValidation:
         """Test that single_step fails fast when processor not paused."""
         # ARRANGE: Processor is not paused
         assert not agent_processor.is_paused()
-        
+
         # ACT & ASSERT: Call single_step should raise RuntimeError (FAIL FAST)
         with pytest.raises(RuntimeError, match="Cannot single-step unless processor is paused"):
             await agent_processor.single_step()
         # Should fail immediately, not hang
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_single_step_works_with_always_present_pipeline_controller(self, agent_processor):
         """Test that single_step works now that pipeline controller is always present."""
         # ARRANGE: Pause processor (pipeline controller is always initialized now)
         agent_processor._is_paused = True
         # Pipeline controller is always present, no need to check for None
         assert agent_processor._pipeline_controller is not None
-        
+
         # Mock the thought processing to avoid full execution
-        with patch.object(agent_processor, '_process_single_thought') as mock_process:
+        with patch.object(agent_processor, "_process_single_thought") as mock_process:
             mock_process.return_value = {"success": True, "thought_id": "test_thought"}
-            
+
             # ACT: Call single_step
             result = await agent_processor.single_step()
-            
+
             # ASSERT: Works correctly with initialized pipeline controller
             assert result["success"] is True
 
@@ -164,10 +165,10 @@ class TestSingleStepHangValidation:
     async def test_single_step_deadlock_with_paused_processor(self, agent_processor, sample_thought):
         """
         CRITICAL TEST: Demonstrates the deadlock bug in single_step().
-        
+
         This test validates that the current implementation hangs when:
         1. Processor is paused
-        2. Pipeline controller exists  
+        2. Pipeline controller exists
         3. There are pending thoughts
         4. single_step() calls _process_single_thought()
         5. _process_single_thought() calls processor.process_thought_item()
@@ -177,20 +178,20 @@ class TestSingleStepHangValidation:
         await agent_processor.pause_processing()
         assert agent_processor.is_paused()
         assert agent_processor._pipeline_controller is not None
-        
+
         # Mock persistence to return pending thought
-        with patch('ciris_engine.logic.persistence.get_thoughts_by_status') as mock_get_thoughts:
+        with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get_thoughts:
             mock_get_thoughts.return_value = [sample_thought]
-            
+
             # Mock pipeline controller methods
             agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
-            agent_processor._pipeline_controller.get_pipeline_state = Mock(return_value=Mock(
-                thoughts_by_step={}, dict=Mock(return_value={})
-            ))
-            
+            agent_processor._pipeline_controller.get_pipeline_state = Mock(
+                return_value=Mock(thoughts_by_step={}, dict=Mock(return_value={}))
+            )
+
             # ACT: Call single_step - this should NOT hang now that the bug is fixed
             result = await asyncio.wait_for(agent_processor.single_step(), timeout=2.0)
-            
+
             # ASSERT: The deadlock is FIXED - single step now completes successfully
             assert result is not None, "Result should not be None"
             assert "success" in result, "Result should contain success field"
@@ -201,26 +202,26 @@ class TestSingleStepHangValidation:
         """Test that pause_processing works without hanging."""
         # ARRANGE: Processor not paused
         assert not agent_processor.is_paused()
-        
+
         # ACT: Pause processing
         result = await agent_processor.pause_processing()
-        
+
         # ASSERT: Pause succeeds
         assert result is True
         assert agent_processor.is_paused()
         assert agent_processor._pipeline_controller is not None
         assert agent_processor._pause_event is not None
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_resume_processing_works_correctly(self, agent_processor):
         """Test that resume_processing works correctly."""
         # ARRANGE: Pause first
         await agent_processor.pause_processing()
         assert agent_processor.is_paused()
-        
+
         # ACT: Resume processing
         result = await agent_processor.resume_processing()
-        
+
         # ASSERT: Resume succeeds
         assert result is True
         assert not agent_processor.is_paused()
@@ -230,19 +231,19 @@ class TestSingleStepHangValidation:
         """Test single_step behavior with empty pipeline and no pending thoughts."""
         # ARRANGE: Paused processor with empty pipeline
         await agent_processor.pause_processing()
-        
+
         # Mock empty pipeline and no pending thoughts - this should trigger fallback
         agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
-        agent_processor._pipeline_controller.get_pipeline_state = Mock(return_value=Mock(
-            thoughts_by_step={}, dict=Mock(return_value={})
-        ))
-        
-        with patch('ciris_engine.logic.persistence.get_thoughts_by_status') as mock_get_thoughts:
+        agent_processor._pipeline_controller.get_pipeline_state = Mock(
+            return_value=Mock(thoughts_by_step={}, dict=Mock(return_value={}))
+        )
+
+        with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get_thoughts:
             mock_get_thoughts.return_value = []  # No pending thoughts
-            
+
             # ACT: Call single_step
             result = await agent_processor.single_step()
-            
+
             # ASSERT: COVENANT compliance - PDMA must step through transparently even with no thoughts
             assert result["success"] is True
             # SUT currently returns hardcoded "no_work" string (not in StepPoint enum)
@@ -252,6 +253,6 @@ class TestSingleStepHangValidation:
             assert len(result.get("step_results", [])) == 0  # No step results
             assert "processing_time_ms" in result
             assert "pipeline_state" in result
-            
+
             # The SUT returns the expected fields for no_work case
             # (no message field in actual implementation)

@@ -43,7 +43,7 @@ class TestExtractBearerToken:
         """Test handling of missing authorization header."""
         with pytest.raises(HTTPException) as exc_info:
             _extract_bearer_token(None)
-        
+
         assert exc_info.value.status_code == 401
         assert "Missing authorization header" in exc_info.value.detail
         assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
@@ -52,7 +52,7 @@ class TestExtractBearerToken:
         """Test handling of empty authorization header."""
         with pytest.raises(HTTPException) as exc_info:
             _extract_bearer_token("")
-        
+
         assert exc_info.value.status_code == 401
         assert "Missing authorization header" in exc_info.value.detail
 
@@ -60,7 +60,7 @@ class TestExtractBearerToken:
         """Test handling of invalid authorization format."""
         with pytest.raises(HTTPException) as exc_info:
             _extract_bearer_token("Basic abc123token")
-        
+
         assert exc_info.value.status_code == 401
         assert "Invalid authorization format" in exc_info.value.detail
         assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
@@ -69,7 +69,7 @@ class TestExtractBearerToken:
         """Test handling of bearer format without space."""
         with pytest.raises(HTTPException) as exc_info:
             _extract_bearer_token("Bearerabc123token")
-        
+
         assert exc_info.value.status_code == 401
         assert "Invalid authorization format" in exc_info.value.detail
 
@@ -88,11 +88,11 @@ class TestHandleServiceTokenAuth:
         mock_auth_service = Mock()
         mock_service_user = Mock()
         mock_service_user.wa_id = "service-user-123"
-        
+
         mock_auth_service.validate_service_token.return_value = mock_service_user
-        
+
         context = _handle_service_token_auth(mock_request, mock_auth_service, "valid-service-token")
-        
+
         assert isinstance(context, AuthContext)
         assert context.user_id == "service-user-123"
         assert context.role == UserRole.SERVICE_ACCOUNT
@@ -104,10 +104,10 @@ class TestHandleServiceTokenAuth:
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
         mock_auth_service.validate_service_token.return_value = None
-        
+
         with pytest.raises(HTTPException) as exc_info:
             _handle_service_token_auth(mock_request, mock_auth_service, "invalid-token")
-        
+
         assert exc_info.value.status_code == 401
         assert "Invalid service token" in exc_info.value.detail
 
@@ -124,11 +124,11 @@ class TestHandlePasswordAuth:
         mock_user.wa_id = "user-123"
         mock_user.api_role = Mock()
         mock_user.api_role.value = "ADMIN"
-        
+
         mock_auth_service.verify_user_password = AsyncMock(return_value=mock_user)
-        
+
         context = await _handle_password_auth(mock_request, mock_auth_service, "username:password")
-        
+
         assert isinstance(context, AuthContext)
         assert context.user_id == "user-123"
         assert context.role == UserRole.ADMIN
@@ -141,10 +141,10 @@ class TestHandlePasswordAuth:
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
         mock_auth_service.verify_user_password = AsyncMock(return_value=None)
-        
+
         with pytest.raises(HTTPException) as exc_info:
             await _handle_password_auth(mock_request, mock_auth_service, "username:wrong_password")
-        
+
         assert exc_info.value.status_code == 401
         assert "Invalid username or password" in exc_info.value.detail
 
@@ -153,7 +153,7 @@ class TestHandlePasswordAuth:
         """Test handling of malformed password format."""
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
-        
+
         # This would raise an exception when trying to split
         with pytest.raises(ValueError):
             await _handle_password_auth(mock_request, mock_auth_service, "no_colon_here")
@@ -166,9 +166,9 @@ class TestBuildPermissionsSet:
         """Test building permissions from role only."""
         mock_key_info = Mock()
         mock_key_info.role = UserRole.ADMIN
-        
+
         permissions = _build_permissions_set(mock_key_info, None)
-        
+
         # Should have role-based permissions
         assert isinstance(permissions, set)
         # Admin role should have permissions
@@ -178,12 +178,12 @@ class TestBuildPermissionsSet:
         """Test building permissions with custom user permissions."""
         mock_key_info = Mock()
         mock_key_info.role = UserRole.OBSERVER
-        
+
         mock_user = Mock()
         mock_user.custom_permissions = ["send_messages", "view_logs"]  # Use enum values, not names
-        
+
         permissions = _build_permissions_set(mock_key_info, mock_user)
-        
+
         assert isinstance(permissions, set)
         # Should include custom permissions if they're valid
         # Note: OBSERVER role doesn't have SEND_MESSAGES by default, but custom permissions can add it
@@ -193,12 +193,12 @@ class TestBuildPermissionsSet:
         """Test handling of invalid custom permissions."""
         mock_key_info = Mock()
         mock_key_info.role = UserRole.OBSERVER
-        
+
         mock_user = Mock()
         mock_user.custom_permissions = ["INVALID_PERMISSION", "ANOTHER_INVALID"]
-        
+
         permissions = _build_permissions_set(mock_key_info, mock_user)
-        
+
         assert isinstance(permissions, set)
         # Should only have role-based permissions, invalid ones skipped
 
@@ -206,12 +206,12 @@ class TestBuildPermissionsSet:
         """Test building permissions when user has no custom permissions."""
         mock_key_info = Mock()
         mock_key_info.role = UserRole.ADMIN
-        
+
         mock_user = Mock()
         mock_user.custom_permissions = None
-        
+
         permissions = _build_permissions_set(mock_key_info, mock_user)
-        
+
         assert isinstance(permissions, set)
 
     def test_authority_role_has_wa_resolve_deferral_permission(self):
@@ -222,7 +222,7 @@ class TestBuildPermissionsSet:
 
         # Build permissions for AUTHORITY role
         permissions = _build_permissions_set(mock_key_info, None)
-        permission_values = [str(p.value) for p in permissions if hasattr(p, 'value')]
+        permission_values = [str(p.value) for p in permissions if hasattr(p, "value")]
 
         # Verify AUTHORITY role has resolve_deferrals permission (enum value for wa.resolve_deferral)
         assert "resolve_deferrals" in permission_values
@@ -230,12 +230,12 @@ class TestBuildPermissionsSet:
         # Also test that other roles don't have this permission
         mock_key_info.role = UserRole.ADMIN
         admin_permissions = _build_permissions_set(mock_key_info, None)
-        admin_permission_values = [str(p.value) for p in admin_permissions if hasattr(p, 'value')]
+        admin_permission_values = [str(p.value) for p in admin_permissions if hasattr(p, "value")]
         assert "resolve_deferrals" not in admin_permission_values
 
         mock_key_info.role = UserRole.OBSERVER
         observer_permissions = _build_permissions_set(mock_key_info, None)
-        observer_permission_values = [str(p.value) for p in observer_permissions if hasattr(p, 'value')]
+        observer_permission_values = [str(p.value) for p in observer_permissions if hasattr(p, "value")]
         assert "resolve_deferrals" not in observer_permission_values
 
 
@@ -251,13 +251,13 @@ class TestHandleApiKeyAuth:
         mock_key_info.role = UserRole.ADMIN
         mock_user = Mock()
         mock_user.custom_permissions = []  # Fix: Make it iterable
-        
+
         mock_auth_service.validate_api_key.return_value = mock_key_info
         mock_auth_service.get_user.return_value = mock_user
         mock_auth_service._get_key_id.return_value = "key-id-123"
-        
+
         context = _handle_api_key_auth(mock_request, mock_auth_service, "valid-api-key")
-        
+
         assert isinstance(context, AuthContext)
         assert context.user_id == "user-123"
         assert context.role == UserRole.ADMIN
@@ -269,10 +269,10 @@ class TestHandleApiKeyAuth:
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
         mock_auth_service.validate_api_key.return_value = None
-        
+
         with pytest.raises(HTTPException) as exc_info:
             _handle_api_key_auth(mock_request, mock_auth_service, "invalid-api-key")
-        
+
         assert exc_info.value.status_code == 401
         assert "Invalid API key" in exc_info.value.detail
 
@@ -287,11 +287,11 @@ class TestGetAuthContextIntegration:
         mock_auth_service = Mock()
         mock_service_user = Mock()
         mock_service_user.wa_id = "service-123"
-        
+
         mock_auth_service.validate_service_token.return_value = mock_service_user
-        
+
         context = await get_auth_context(mock_request, "Bearer service:valid-token", mock_auth_service)
-        
+
         assert isinstance(context, AuthContext)
         assert context.user_id == "service-123"
         assert context.role == UserRole.SERVICE_ACCOUNT
@@ -305,11 +305,11 @@ class TestGetAuthContextIntegration:
         mock_user.wa_id = "user-123"
         mock_user.api_role = Mock()
         mock_user.api_role.value = "ADMIN"
-        
+
         mock_auth_service.verify_user_password = AsyncMock(return_value=mock_user)
-        
+
         context = await get_auth_context(mock_request, "Bearer username:password", mock_auth_service)
-        
+
         assert isinstance(context, AuthContext)
         assert context.user_id == "user-123"
         assert context.role == UserRole.ADMIN
@@ -324,13 +324,13 @@ class TestGetAuthContextIntegration:
         mock_key_info.role = UserRole.OBSERVER
         mock_user = Mock()
         mock_user.custom_permissions = []  # Fix: Make it iterable
-        
+
         mock_auth_service.validate_api_key.return_value = mock_key_info
         mock_auth_service.get_user.return_value = mock_user
         mock_auth_service._get_key_id.return_value = "key-123"
-        
+
         context = await get_auth_context(mock_request, "Bearer api-key-123", mock_auth_service)
-        
+
         assert isinstance(context, AuthContext)
         assert context.user_id == "user-123"
         assert context.role == UserRole.OBSERVER
@@ -340,10 +340,10 @@ class TestGetAuthContextIntegration:
         """Test handling of missing authorization header."""
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
-        
+
         with pytest.raises(HTTPException) as exc_info:
             await get_auth_context(mock_request, None, mock_auth_service)
-        
+
         assert exc_info.value.status_code == 401
         assert "Missing authorization header" in exc_info.value.detail
 
@@ -352,10 +352,10 @@ class TestGetAuthContextIntegration:
         """Test handling of invalid authorization format."""
         mock_request = Mock(spec=Request)
         mock_auth_service = Mock()
-        
+
         with pytest.raises(HTTPException) as exc_info:
             await get_auth_context(mock_request, "Basic invalid", mock_auth_service)
-        
+
         assert exc_info.value.status_code == 401
         assert "Invalid authorization format" in exc_info.value.detail
 
@@ -367,7 +367,7 @@ class TestAuthContextProperties:
         """Test AuthContext creation with all properties."""
         permissions = {Permission.VIEW_MESSAGES}  # Use an actual permission
         auth_time = datetime.now(timezone.utc)
-        
+
         context = AuthContext(
             user_id="user-123",
             role=UserRole.ADMIN,
@@ -375,7 +375,7 @@ class TestAuthContextProperties:
             api_key_id="key-123",
             authenticated_at=auth_time,
         )
-        
+
         assert context.user_id == "user-123"
         assert context.role == UserRole.ADMIN
         assert context.permissions == permissions
@@ -385,7 +385,7 @@ class TestAuthContextProperties:
     def test_auth_context_has_permission(self):
         """Test AuthContext has_permission method."""
         permissions = {Permission.VIEW_MESSAGES}
-        
+
         context = AuthContext(
             user_id="user-123",
             role=UserRole.ADMIN,
@@ -393,7 +393,7 @@ class TestAuthContextProperties:
             api_key_id=None,
             authenticated_at=datetime.now(timezone.utc),
         )
-        
+
         assert context.has_permission(Permission.VIEW_MESSAGES) is True
         # Test with permission not in set
         assert context.has_permission(Permission.SEND_MESSAGES) is False

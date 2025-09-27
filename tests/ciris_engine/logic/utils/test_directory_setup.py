@@ -364,10 +364,10 @@ class TestDatabaseExclusiveAccess:
         """Test successful database access check."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "test.db")
-            
+
             # Should succeed on first access
             ensure_database_exclusive_access(db_path, fail_fast=False)
-            
+
             # Verify database file was created
             assert Path(db_path).exists()
 
@@ -375,10 +375,10 @@ class TestDatabaseExclusiveAccess:
         """Test that parent directories are created if needed."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "subdir" / "nested" / "test.db")
-            
+
             # Should succeed and create parent directories
             ensure_database_exclusive_access(db_path, fail_fast=False)
-            
+
             # Verify database and parent directories were created
             assert Path(db_path).exists()
             assert Path(db_path).parent.exists()
@@ -386,20 +386,20 @@ class TestDatabaseExclusiveAccess:
     def test_database_exclusive_access_locked_database(self):
         """Test detection of locked database (another agent running)."""
         import sqlite3
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "test.db")
-            
+
             # Create and hold a lock on the database
             conn = sqlite3.connect(db_path)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("BEGIN IMMEDIATE")  # Hold exclusive lock
-            
+
             try:
                 # Should detect the lock and fail
                 with pytest.raises(DatabaseAccessError) as exc_info:
                     ensure_database_exclusive_access(db_path, fail_fast=False)
-                
+
                 error_msg = str(exc_info.value)
                 assert "CANNOT ACCESS DATABASE" in error_msg
                 assert "ANOTHER AGENT MAY BE RUNNING" in error_msg
@@ -411,15 +411,15 @@ class TestDatabaseExclusiveAccess:
     def test_database_exclusive_access_fail_fast_exits(self):
         """Test that fail_fast=True causes system exit."""
         import sqlite3
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "test.db")
-            
+
             # Create and hold a lock
             conn = sqlite3.connect(db_path)
-            conn.execute("PRAGMA journal_mode=WAL") 
+            conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("BEGIN IMMEDIATE")
-            
+
             try:
                 with patch("sys.exit") as mock_exit:
                     with pytest.raises(DatabaseAccessError):
@@ -433,14 +433,14 @@ class TestDatabaseExclusiveAccess:
     def test_database_exclusive_access_unexpected_error(self, mock_connect):
         """Test handling of unexpected database errors."""
         mock_connect.side_effect = Exception("Unexpected database error")
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "test.db")
-            
+
             # Should catch and wrap unexpected errors
             with pytest.raises(DatabaseAccessError) as exc_info:
                 ensure_database_exclusive_access(db_path, fail_fast=False)
-            
+
             error_msg = str(exc_info.value)
             assert "UNEXPECTED DATABASE ERROR" in error_msg
             assert "Unexpected database error" in error_msg
@@ -449,15 +449,16 @@ class TestDatabaseExclusiveAccess:
         """Test that setup_application_directories includes database check by default."""
         with tempfile.TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
-            
+
             with patch("ciris_engine.logic.utils.directory_setup.ensure_database_exclusive_access") as mock_db_check:
                 # Mock the config import to use our test path
                 expected_db_path = str(base_dir / "data" / "ciris_engine.db")
-                
-                with patch("ciris_engine.logic.config.get_sqlite_db_full_path", 
-                          side_effect=ImportError("Config not available")):
+
+                with patch(
+                    "ciris_engine.logic.config.get_sqlite_db_full_path", side_effect=ImportError("Config not available")
+                ):
                     setup_application_directories(base_dir=base_dir, fail_fast=False)
-                
+
                 # Verify database check was called with default path
                 mock_db_check.assert_called_once_with(expected_db_path, False)
 
@@ -465,10 +466,10 @@ class TestDatabaseExclusiveAccess:
         """Test that database check can be disabled."""
         with tempfile.TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
-            
+
             with patch("ciris_engine.logic.utils.directory_setup.ensure_database_exclusive_access") as mock_db_check:
                 setup_application_directories(base_dir=base_dir, fail_fast=False, check_database_access=False)
-                
+
                 # Verify database check was NOT called
                 mock_db_check.assert_not_called()
 
@@ -477,31 +478,30 @@ class TestDatabaseExclusiveAccess:
         with tempfile.TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             config_db_path = str(base_dir / "custom" / "config.db")
-            
+
             with patch("ciris_engine.logic.utils.directory_setup.ensure_database_exclusive_access") as mock_db_check:
-                with patch("ciris_engine.logic.config.get_sqlite_db_full_path", 
-                          return_value=config_db_path):
+                with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=config_db_path):
                     setup_application_directories(base_dir=base_dir, fail_fast=False)
-                
+
                 # Verify database check was called with config path
                 mock_db_check.assert_called_once_with(config_db_path, False)
 
     def test_database_exclusive_access_error_messages(self):
         """Test that database access errors have helpful messages."""
         import sqlite3
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "locked.db")
-            
+
             # Create and lock the database
             conn = sqlite3.connect(db_path)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("BEGIN IMMEDIATE")
-            
+
             try:
                 with pytest.raises(DatabaseAccessError) as exc_info:
                     ensure_database_exclusive_access(db_path, fail_fast=False)
-                
+
                 error_msg = str(exc_info.value)
                 assert "CANNOT ACCESS DATABASE" in error_msg
                 assert db_path in error_msg

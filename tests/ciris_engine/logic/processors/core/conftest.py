@@ -145,13 +145,13 @@ def sample_processing_queue_item():
     """Create a sample ProcessingQueueItem for testing."""
     from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
     from ciris_engine.schemas.runtime.enums import ThoughtType
-    
+
     content = ThoughtContent(text="Test thought content")
     return ProcessingQueueItem(
         thought_id="test_thought_123",
-        source_task_id="test_task_123", 
+        source_task_id="test_task_123",
         thought_type=ThoughtType.STANDARD,
-        content=content
+        content=content,
     )
 
 
@@ -168,7 +168,7 @@ def sample_final_result():
 def thought_processor_phase_with_telemetry(mock_telemetry_service, mock_time_service):
     """Create a thought processor phase with telemetry and time service configured."""
     from ciris_engine.logic.processors.core.thought_processor.round_complete import RoundCompletePhase
-    
+
     phase = RoundCompletePhase()
     phase.telemetry_service = mock_telemetry_service
     phase._time_service = mock_time_service

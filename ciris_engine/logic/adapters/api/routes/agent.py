@@ -181,7 +181,7 @@ def _create_interaction_message(auth: AuthContext, body: InteractRequest) -> Tup
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
     channel_id = f"api_{auth.user_id}"  # User-specific channel
-    
+
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
@@ -190,7 +190,7 @@ def _create_interaction_message(auth: AuthContext, body: InteractRequest) -> Tup
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
-    
+
     return message_id, channel_id, msg
 
 
@@ -256,7 +256,7 @@ async def _handle_paused_message(request: Request, msg: IncomingMessage) -> None
 def _get_processor_cognitive_state(processor) -> str:
     """Get current cognitive state from processor with fallback."""
     try:
-        if hasattr(processor, 'get_current_state'):
+        if hasattr(processor, "get_current_state"):
             return processor.get_current_state()
     except Exception:
         pass
@@ -275,31 +275,33 @@ def _create_paused_response(message_id: str, cognitive_state: str, processing_ti
     )
 
 
-async def _check_processor_pause_status(request: Request, msg: IncomingMessage, message_id: str, start_time: datetime) -> Optional[SuccessResponse]:
+async def _check_processor_pause_status(
+    request: Request, msg: IncomingMessage, message_id: str, start_time: datetime
+) -> Optional[SuccessResponse]:
     """Check if processor is paused and handle accordingly. Returns response if paused, None if not paused."""
     try:
         processor = _get_runtime_processor(request)
         if not processor or not _is_processor_paused(processor):
             return None
-        
+
         # Processor is paused - route message and prepare response
         await _handle_paused_message(request, msg)
-        
+
         # Clean up response tracking since we're returning immediately
         _response_events.pop(message_id, None)
-        
+
         # Calculate processing time and get state
         processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
         cognitive_state = _get_processor_cognitive_state(processor)
-        
+
         return _create_paused_response(message_id, cognitive_state, processing_time)
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions (like 503 for missing message handler)
         raise
     except Exception as e:
         logger.debug(f"Could not check pause state: {e}")
-    
+
     return None
 
 

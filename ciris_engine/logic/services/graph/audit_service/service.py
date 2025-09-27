@@ -274,9 +274,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to log action {action_type}: {e}")
 
-    async def log_event(
-        self, event_type: str, event_data: "EventPayload", **kwargs: object
-    ) -> None:
+    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> None:
         """Log a general event.
 
         Args:
@@ -285,13 +283,13 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         """
         # Convert EventPayload to AuditEventData
         audit_data = AuditEventData(
-            entity_id=str(getattr(event_data, 'user_id', 'unknown')),
-            actor=str(getattr(event_data, 'service_name', 'system')),
-            outcome=str(getattr(event_data, 'result', 'success')),
+            entity_id=str(getattr(event_data, "user_id", "unknown")),
+            actor=str(getattr(event_data, "service_name", "system")),
+            outcome=str(getattr(event_data, "result", "success")),
             severity="info",
-            action=str(getattr(event_data, 'action', event_type)),
-            resource=str(getattr(event_data, 'service_name', event_type)),
-            reason=str(getattr(event_data, 'error', 'event_logged') or 'event_logged'),
+            action=str(getattr(event_data, "action", event_type)),
+            resource=str(getattr(event_data, "service_name", event_type)),
+            reason=str(getattr(event_data, "error", "event_logged") or "event_logged"),
             metadata={},
         )
         try:
@@ -1326,7 +1324,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         # Fallback: manual parsing for backwards compatibility
         attrs = data.attributes.model_dump() if hasattr(data.attributes, "model_dump") else {}
-        
+
         action_type = self._extract_action_type_from_attrs(attrs)
         if not action_type:
             return None
@@ -1373,15 +1371,14 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         # Convert to AuditLogEntry format
         from ciris_engine.schemas.audit.core import AuditLogEntry, EventPayload
+
         result = []
         for entry in entries:
             # Create EventPayload from entry context
             event_payload = EventPayload(
-                action=entry.action,
-                user_id=entry.actor,
-                service_name=getattr(entry, "resource", "audit_service")
+                action=entry.action, user_id=entry.actor, service_name=getattr(entry, "resource", "audit_service")
             )
-            
+
             # Create AuditLogEntry
             log_entry = AuditLogEntry(
                 event_id=entry.id,
@@ -1392,7 +1389,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 event_summary=f"{entry.action} by {entry.actor}",
                 event_payload=event_payload,
                 thought_id=entry.entity_id if entry.entity_id.startswith("thought") else None,
-                entry_hash=entry.signature
+                entry_hash=entry.signature,
             )
             result.append(log_entry)
         return result
@@ -1412,19 +1409,19 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         """Search for event in memory bus."""
         if not self._memory_bus:
             return None
-            
+
         query = MemoryQuery(
             node_id=event_id, scope=GraphScope.LOCAL, type=NodeType.AUDIT_ENTRY, include_edges=False, depth=1
         )
-        
+
         nodes = await self._memory_bus.recall(query)
         if not nodes or len(nodes) == 0:
             return None
-            
+
         entry = self._tsdb_to_audit_entry(nodes[0])
         if not entry:
             return None
-            
+
         return self._convert_entry_to_audit_log_dict(entry)
 
     def _search_event_in_recent_cache(self, event_id: str) -> Optional[Dict[str, Any]]:
@@ -1440,7 +1437,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         result = await self._search_event_in_memory_bus(event_id)
         if result:
             return result
-            
+
         # Fall back to recent cache
         return self._search_event_in_recent_cache(event_id)
 

@@ -32,16 +32,16 @@ def mock_config_service_registry(tmp_path):
         yield mock_instance
 
 
-@pytest.fixture(autouse=False) 
+@pytest.fixture(autouse=False)
 def mock_db_path(tmp_path):
     """
     Direct mock of get_sqlite_db_full_path for simpler tests.
-    
+
     Mocks both the direct import path and the module import path to support
     different usage patterns in the codebase.
     """
     test_db_path = str(tmp_path / "test.db")
-    
+
     # Patch both possible import paths
     with patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", return_value=test_db_path) as mock1:
         with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=test_db_path) as mock2:
@@ -52,7 +52,7 @@ def mock_db_path(tmp_path):
 def mock_runtime_db_setup(tmp_path):
     """
     Mock for runtime initialization tests that need database access control disabled.
-    
+
     This is specifically for tests that create their own CIRISRuntime with EssentialConfig
     and handle their own database setup.
     """

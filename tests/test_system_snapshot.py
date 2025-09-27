@@ -20,14 +20,14 @@ from ciris_engine.schemas.runtime.models import Task, TaskStatus
 from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot, ThoughtSummary, UserProfile
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from tests.fixtures.mocks import (
-    MockTelemetryService,
-    MockResourceMonitor, 
     MockMemoryService,
+    MockResourceMonitor,
     MockRuntime,
     MockSecretsService,
     MockServiceRegistry,
+    MockTelemetryService,
+    create_mock_task,
     create_mock_thought,
-    create_mock_task
 )
 
 
@@ -701,37 +701,37 @@ class TestGraphQLIntegration:
         """Test extraction of consent attributes from GraphQL profiles."""
         mock_graphql = AsyncMock()
         mock_enriched = MagicMock()
-        
+
         # Create GraphQL profile with consent attributes
         mock_profile = MagicMock()
         mock_profile.nick = "ConsentUser"
         mock_profile.trust_score = 0.7
         mock_profile.last_seen = "2025-01-20T12:00:00"
-        
+
         # Consent stream attribute
         consent_attr = MagicMock()
         consent_attr.key = "consent_stream"
         consent_attr.value = "PARTNERED"
-        
+
         # Consent expires at attribute
         expires_attr = MagicMock()
         expires_attr.key = "consent_expires_at"
         expires_attr.value = "2025-12-31T23:59:59"
-        
+
         # Partnership requested at attribute
         partnership_attr = MagicMock()
         partnership_attr.key = "partnership_requested_at"
         partnership_attr.value = "2025-01-15T10:00:00"
-        
+
         mock_profile.attributes = [consent_attr, expires_attr, partnership_attr]
         mock_enriched.user_profiles = [("consent_user", mock_profile)]
-        
+
         mock_graphql.enrich_context = AsyncMock(return_value=mock_enriched)
-        
+
         snapshot = await build_system_snapshot(
             task=None, thought=None, resource_monitor=mock_resource_monitor, graphql_provider=mock_graphql
         )
-        
+
         # Verify consent attributes were extracted
         assert len(snapshot.user_profiles) == 1
         profile = snapshot.user_profiles[0]
@@ -744,33 +744,33 @@ class TestGraphQLIntegration:
         """Test handling of invalid dates in consent attributes."""
         mock_graphql = AsyncMock()
         mock_enriched = MagicMock()
-        
+
         # Create profile with invalid date values
         mock_profile = MagicMock()
         mock_profile.nick = "BadDateUser"
         mock_profile.trust_score = 0.5
         mock_profile.last_seen = None
-        
+
         # Invalid expires date
         expires_attr = MagicMock()
         expires_attr.key = "consent_expires_at"
         expires_attr.value = "not-a-date"
-        
+
         # Invalid partnership date
         partnership_attr = MagicMock()
         partnership_attr.key = "partnership_requested_at"
         partnership_attr.value = None  # Will cause TypeError
-        
+
         mock_profile.attributes = [expires_attr, partnership_attr]
         mock_enriched.user_profiles = [("bad_date_user", mock_profile)]
-        
+
         mock_graphql.enrich_context = AsyncMock(return_value=mock_enriched)
-        
+
         # Should handle invalid dates gracefully
         snapshot = await build_system_snapshot(
             task=None, thought=None, resource_monitor=mock_resource_monitor, graphql_provider=mock_graphql
         )
-        
+
         # Profile created but dates are None
         assert len(snapshot.user_profiles) == 1
         profile = snapshot.user_profiles[0]
@@ -811,33 +811,25 @@ class TestServiceHealthCollection:
 
 class TestResourceMonitorEdgeCases:
     """Test resource monitor unavailability and exceptions."""
-    
+
     @pytest.mark.asyncio
     async def test_resource_monitor_unavailable(self):
         """Test when resource monitor is None."""
         # Should handle None resource monitor
-        snapshot = await build_system_snapshot(
-            task=None, 
-            thought=None, 
-            resource_monitor=None  # Unavailable
-        )
-        
+        snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=None)  # Unavailable
+
         # Should have warning in alerts
         assert len(snapshot.resource_alerts) == 0  # No alerts when monitor unavailable
-    
+
     @pytest.mark.asyncio
     async def test_resource_monitor_exception(self):
         """Test when resource monitor throws exception."""
         mock_monitor = MagicMock()
         # Make snapshot a property that throws exception when accessed
         mock_monitor.snapshot = property(lambda self: (_ for _ in ()).throw(RuntimeError("Monitor failed")))
-        
-        snapshot = await build_system_snapshot(
-            task=None,
-            thought=None, 
-            resource_monitor=mock_monitor
-        )
-        
+
+        snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=mock_monitor)
+
         # Should have critical alert about failure
         assert len(snapshot.resource_alerts) > 0
         assert any("CRITICAL! FAILED TO CHECK RESOURCES" in alert for alert in snapshot.resource_alerts)
@@ -845,61 +837,55 @@ class TestResourceMonitorEdgeCases:
 
 class TestToolServiceValidation:
     """Test tool service validation and error handling."""
-    
+
     @pytest.mark.asyncio
     async def test_tool_services_non_iterable(self, mock_resource_monitor):
         """Test handling when get_services_by_type returns non-iterable."""
         mock_runtime = MagicMock()
         mock_registry = MagicMock()
-        
+
         # Return non-iterable (single object instead of list)
         mock_registry.get_services_by_type.return_value = MagicMock()  # Not iterable!
-        
+
         mock_runtime.service_registry = mock_registry
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.current_shutdown_context = None
-        
+
         # Should handle gracefully
         snapshot = await build_system_snapshot(
-            task=None,
-            thought=None,
-            resource_monitor=mock_resource_monitor,
-            runtime=mock_runtime
+            task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime
         )
-        
+
         # Should have empty tools (fallback to empty list)
         assert snapshot.available_tools == {}
 
 
 class TestChannelContextExtraction:
     """Test channel context extraction including system_snapshot.channel_context."""
-    
+
     @pytest.mark.asyncio
     async def test_channel_context_object_extraction(self, mock_resource_monitor):
         """Test extracting channel_context object from system_snapshot."""
         mock_task = MagicMock()
         mock_context = MagicMock()
         mock_system_snapshot = MagicMock()
-        
+
         # Create proper ChannelContext object
         from ciris_engine.schemas.runtime.system_context import ChannelContext
+
         channel_ctx = ChannelContext(
             channel_id="context_channel_123",
             channel_type="discord",
             created_at=datetime.now(timezone.utc),
-            is_active=True
+            is_active=True,
         )
-        
+
         mock_system_snapshot.channel_context = channel_ctx
         mock_context.system_snapshot = mock_system_snapshot
         mock_task.context = mock_context
-        
-        snapshot = await build_system_snapshot(
-            task=mock_task,
-            thought=None,
-            resource_monitor=mock_resource_monitor
-        )
-        
+
+        snapshot = await build_system_snapshot(task=mock_task, thought=None, resource_monitor=mock_resource_monitor)
+
         # Should extract channel_id from channel_context object
         assert snapshot.channel_id == "context_channel_123"
         assert snapshot.channel_context is not None

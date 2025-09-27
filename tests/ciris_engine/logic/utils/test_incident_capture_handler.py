@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -13,9 +13,9 @@ from ciris_engine.logic.utils.incident_capture_handler import (
     add_incident_capture_handler,
     inject_graph_audit_service_to_handlers,
 )
-from ciris_engine.schemas.services.graph.incident import IncidentSeverity, IncidentStatus, IncidentNode
-from ciris_engine.schemas.services.graph_core import NodeType, GraphScope
-from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryOpResult
+from ciris_engine.schemas.services.graph.incident import IncidentNode, IncidentSeverity, IncidentStatus
+from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
 
 # Use centralized fixtures from conftest.py files
 
@@ -60,7 +60,9 @@ class TestIncidentCaptureHandler:
     def test_emit_captures_warning_and_error(self, log_dir, mock_time_service):
         handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
 
-        warning_record = logging.LogRecord("test.warning", logging.WARNING, "file.py", 10, "This is a warning", (), None)
+        warning_record = logging.LogRecord(
+            "test.warning", logging.WARNING, "file.py", 10, "This is a warning", (), None
+        )
         error_record = logging.LogRecord("test.error", logging.ERROR, "file.py", 20, "This is an error", (), None)
 
         handler.emit(warning_record)
@@ -70,7 +72,7 @@ class TestIncidentCaptureHandler:
             content = f.read()
             assert "This is a warning" in content
             assert "This is an error" in content
-            assert ("-" * 80) in content # Separator for error
+            assert ("-" * 80) in content  # Separator for error
 
     def test_emit_captures_exception_traceback(self, log_dir, mock_time_service):
         handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
@@ -79,7 +81,9 @@ class TestIncidentCaptureHandler:
             raise ValueError("Test exception")
         except ValueError:
             exc_info = sys.exc_info()
-            record = logging.LogRecord("test.exc", logging.ERROR, "file.py", 30, "Error with exception", (), exc_info=exc_info)
+            record = logging.LogRecord(
+                "test.exc", logging.ERROR, "file.py", 30, "Error with exception", (), exc_info=exc_info
+            )
             handler.emit(record)
 
         with open(handler.log_file, "r", encoding="utf-8") as f:
@@ -102,7 +106,7 @@ class TestIncidentCaptureHandler:
         call_args = mock_graph_audit_service._memory_bus.memorize.call_args
 
         # Check the incident node passed to memorize
-        incident_node_graph = call_args.kwargs['node']
+        incident_node_graph = call_args.kwargs["node"]
         incident = IncidentNode.from_graph_node(incident_node_graph)
 
         assert incident.severity == IncidentSeverity.HIGH
@@ -113,7 +117,9 @@ class TestIncidentCaptureHandler:
 
     @pytest.mark.asyncio
     async def test_save_incident_to_graph_memorize_fails(self, mock_time_service, mock_graph_audit_service, caplog):
-        mock_graph_audit_service._memory_bus.memorize.return_value = MemoryOpResult(status=MemoryOpStatus.ERROR, error="DB down")
+        mock_graph_audit_service._memory_bus.memorize.return_value = MemoryOpResult(
+            status=MemoryOpStatus.ERROR, error="DB down"
+        )
         handler = IncidentCaptureHandler(time_service=mock_time_service, graph_audit_service=mock_graph_audit_service)
 
         record = logging.LogRecord("test.fail", logging.WARNING, "fail.py", 10, "Memorize fail", (), None)
@@ -147,8 +153,10 @@ class TestIncidentCaptureHandler:
         assert handler._calculate_urgency(IncidentSeverity.MEDIUM) == "MEDIUM"
         assert handler._calculate_urgency(IncidentSeverity.LOW) == "LOW"
 
-    @patch('asyncio.get_running_loop')
-    def test_set_graph_audit_service_with_pending_incidents(self, mock_get_loop, log_dir, mock_time_service, mock_graph_audit_service):
+    @patch("asyncio.get_running_loop")
+    def test_set_graph_audit_service_with_pending_incidents(
+        self, mock_get_loop, log_dir, mock_time_service, mock_graph_audit_service
+    ):
         handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
 
         mock_loop = MagicMock()
@@ -165,6 +173,7 @@ class TestIncidentCaptureHandler:
         assert mock_loop.create_task.call_count == 2
         assert len(handler._pending_incidents) == 0
 
+
 class TestHelperFunctions:
 
     def test_add_incident_capture_handler_to_root(self, root_logger, log_dir, mock_time_service):
@@ -177,15 +186,26 @@ class TestHelperFunctions:
 
     def test_add_incident_capture_handler_to_specific_logger(self, specific_logger, log_dir, mock_time_service):
         assert len(specific_logger.handlers) == 0
-        handler = add_incident_capture_handler(logger_instance=specific_logger, log_dir=str(log_dir), time_service=mock_time_service)
+        handler = add_incident_capture_handler(
+            logger_instance=specific_logger, log_dir=str(log_dir), time_service=mock_time_service
+        )
 
         assert len(specific_logger.handlers) == 1
         assert handler in specific_logger.handlers
 
-    def test_inject_graph_audit_service(self, root_logger, specific_logger, log_dir, mock_time_service, mock_graph_audit_service):
+    def test_inject_graph_audit_service(
+        self, root_logger, specific_logger, log_dir, mock_time_service, mock_graph_audit_service
+    ):
         # Add handlers to multiple loggers
-        handler1 = add_incident_capture_handler(logger_instance=root_logger, log_dir=str(log_dir), time_service=mock_time_service, filename_prefix="root")
-        handler2 = add_incident_capture_handler(logger_instance=specific_logger, log_dir=str(log_dir), time_service=mock_time_service, filename_prefix="specific")
+        handler1 = add_incident_capture_handler(
+            logger_instance=root_logger, log_dir=str(log_dir), time_service=mock_time_service, filename_prefix="root"
+        )
+        handler2 = add_incident_capture_handler(
+            logger_instance=specific_logger,
+            log_dir=str(log_dir),
+            time_service=mock_time_service,
+            filename_prefix="specific",
+        )
 
         # Add a non-incident handler to ensure it's skipped
         non_incident_handler = logging.StreamHandler()
@@ -197,7 +217,9 @@ class TestHelperFunctions:
         assert handler1._graph_audit_service == mock_graph_audit_service
         assert handler2._graph_audit_service == mock_graph_audit_service
 
-    def test_inject_graph_audit_service_no_handlers_found(self, root_logger, mock_graph_audit_service, clean_logger_config, caplog):
+    def test_inject_graph_audit_service_no_handlers_found(
+        self, root_logger, mock_graph_audit_service, clean_logger_config, caplog
+    ):
         # Ensure no IncidentCaptureHandlers exist
         root_logger.handlers = [logging.StreamHandler()]
 
@@ -205,7 +227,7 @@ class TestHelperFunctions:
         inject_logger = logging.getLogger("ciris_engine.logic.utils.incident_capture_handler")
         inject_logger.setLevel(logging.WARNING)
         inject_logger.propagate = True  # Ensure propagation to caplog
-        
+
         with caplog.at_level(logging.WARNING, logger="ciris_engine.logic.utils.incident_capture_handler"):
             updated_count = inject_graph_audit_service_to_handlers(mock_graph_audit_service)
 

@@ -164,16 +164,15 @@ class APIAuthService:
             custom_permissions=wa.custom_permissions if hasattr(wa, "custom_permissions") else None,
         )
 
-
     async def _process_wa_record(self, wa) -> None:
         """Process a single WA record and add/update user."""
         is_oauth_wa = wa.oauth_provider and wa.oauth_external_id
         oauth_user_id = f"{wa.oauth_provider}:{wa.oauth_external_id}" if is_oauth_wa else None
-        
+
         if is_oauth_wa and oauth_user_id in self._users:
             self._update_existing_oauth_user(oauth_user_id, wa)
             return
-        
+
         user = self._create_user_from_wa(wa)
         user_key = oauth_user_id if is_oauth_wa else wa.wa_id
         self._users[user_key] = user
@@ -185,7 +184,7 @@ class APIAuthService:
 
         try:
             was = await self._auth_service.list_was(active_only=False)
-            
+
             for wa in was:
                 await self._process_wa_record(wa)
 
@@ -915,30 +914,31 @@ class APIAuthService:
         base_permissions = self.get_permissions_for_role(user.api_role)
         return base_permissions + [
             "wa.resolve_deferral",  # Critical for deferral resolution
-            "wa.mint"  # Allow WA to mint others
+            "wa.mint",  # Allow WA to mint others
         ]
 
     async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
         """Create new WA certificate for OAuth user and return the wa_id."""
         wa_permissions = self._get_wa_permissions(user)
-        
+
         # Create WA certificate with proper wa_id format, but link to OAuth user
-        from ciris_engine.schemas.services.authority_core import WACertificate
-        from datetime import datetime, timezone
         import json
-        
+        from datetime import datetime, timezone
+
+        from ciris_engine.schemas.services.authority_core import WACertificate
+
         timestamp = datetime.now(timezone.utc)
-        
+
         # Generate proper wa_id (format: wa-YYYY-MM-DD-XXXXXX)
         wa_id = self._auth_service._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-oauth-{wa_id[-6:].lower()}"
-        
+
         # Extract OAuth info from user_id (format: "provider:external_id")
         oauth_provider = None
         oauth_external_id = None
         if ":" in user_id:
             oauth_provider, oauth_external_id = user_id.split(":", 1)
-        
+
         # Create WA certificate with proper wa_id but linked to OAuth identity
         wa_cert = WACertificate(
             wa_id=wa_id,  # Proper wa_id format
@@ -953,10 +953,10 @@ class APIAuthService:
             created_at=timestamp,
             last_auth=timestamp,
         )
-        
+
         # Store WA certificate in database
         await self._auth_service._store_wa_certificate(wa_cert)
-        
+
         print(f"Created WA certificate {wa_id} for OAuth user {user_id} with role {wa_role}")
         return wa_id
 
@@ -971,7 +971,7 @@ class APIAuthService:
     async def _handle_wa_database_operations(self, user: User, user_id: str, wa_role: WARole) -> None:
         """Handle WA database create/update operations."""
         existing_wa = await self._auth_service.get_wa(user_id)
-        
+
         if existing_wa:
             await self._update_existing_wa(user_id, wa_role)
         else:

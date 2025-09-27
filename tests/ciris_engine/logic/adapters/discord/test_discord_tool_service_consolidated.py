@@ -301,8 +301,9 @@ class TestSpecificTools:
 class TestGuildModeratorsSecurityFeatures:
     """Test discord_get_guild_moderators security and ECHO filtering."""
 
-    def _create_mock_member(self, user_id: str, username: str, display_name: str = None,
-                           nickname: str = None, **permissions) -> Mock:
+    def _create_mock_member(
+        self, user_id: str, username: str, display_name: str = None, nickname: str = None, **permissions
+    ) -> Mock:
         """Create a mock Discord member with specified permissions."""
         member = Mock(spec=discord.Member)
         member.id = int(user_id)
@@ -339,12 +340,36 @@ class TestGuildModeratorsSecurityFeatures:
 
         # Create mock members with moderator permissions
         moderators = [
-            self._create_mock_member("111", "Mod1", "Moderator One", "ModNick1",
-                                   manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
-            self._create_mock_member("222", "Mod2", "Moderator Two", None,
-                                   manage_messages=False, kick_members=True, ban_members=False, manage_roles=False),
-            self._create_mock_member("333", "AdminMod", "Admin Moderator", "AdminNick",
-                                   manage_messages=True, kick_members=True, ban_members=True, manage_roles=True),
+            self._create_mock_member(
+                "111",
+                "Mod1",
+                "Moderator One",
+                "ModNick1",
+                manage_messages=True,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
+            self._create_mock_member(
+                "222",
+                "Mod2",
+                "Moderator Two",
+                None,
+                manage_messages=False,
+                kick_members=True,
+                ban_members=False,
+                manage_roles=False,
+            ),
+            self._create_mock_member(
+                "333",
+                "AdminMod",
+                "Admin Moderator",
+                "AdminNick",
+                manage_messages=True,
+                kick_members=True,
+                ban_members=True,
+                manage_roles=True,
+            ),
         ]
 
         # Mock async iterator for guild members
@@ -374,14 +399,46 @@ class TestGuildModeratorsSecurityFeatures:
         guild.id = 123456789
 
         members = [
-            self._create_mock_member("111", "RegularMod", "Regular Moderator", None,
-                                   manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
-            self._create_mock_member("222", "ECHO_Bot", "ECHO Bot", None,  # Should be filtered
-                                   manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
-            self._create_mock_member("333", "echo_user", "Echo User", None,  # Should be filtered
-                                   manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
-            self._create_mock_member("444", "GoodMod", "Good Moderator", None,
-                                   manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
+            self._create_mock_member(
+                "111",
+                "RegularMod",
+                "Regular Moderator",
+                None,
+                manage_messages=True,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
+            self._create_mock_member(
+                "222",
+                "ECHO_Bot",
+                "ECHO Bot",
+                None,  # Should be filtered
+                manage_messages=True,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
+            self._create_mock_member(
+                "333",
+                "echo_user",
+                "Echo User",
+                None,  # Should be filtered
+                manage_messages=True,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
+            self._create_mock_member(
+                "444",
+                "GoodMod",
+                "Good Moderator",
+                None,
+                manage_messages=True,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
         ]
 
         async def async_members():
@@ -412,24 +469,60 @@ class TestGuildModeratorsSecurityFeatures:
         # Mix of members with different permission combinations
         all_members = [
             # Should be included - has manage_messages
-            self._create_mock_member("111", "MessageMod", "Message Mod", None,
-                manage_messages=True, kick_members=False, ban_members=False, manage_roles=False),
-
+            self._create_mock_member(
+                "111",
+                "MessageMod",
+                "Message Mod",
+                None,
+                manage_messages=True,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
             # Should be included - has kick_members
-            self._create_mock_member("222", "KickMod", "Kick Mod", None,
-                manage_messages=False, kick_members=True, ban_members=False, manage_roles=False),
-
+            self._create_mock_member(
+                "222",
+                "KickMod",
+                "Kick Mod",
+                None,
+                manage_messages=False,
+                kick_members=True,
+                ban_members=False,
+                manage_roles=False,
+            ),
             # Should be included - has ban_members
-            self._create_mock_member("333", "BanMod", "Ban Mod", None,
-                manage_messages=False, kick_members=False, ban_members=True, manage_roles=False),
-
+            self._create_mock_member(
+                "333",
+                "BanMod",
+                "Ban Mod",
+                None,
+                manage_messages=False,
+                kick_members=False,
+                ban_members=True,
+                manage_roles=False,
+            ),
             # Should be included - has manage_roles
-            self._create_mock_member("444", "RoleMod", "Role Mod", None,
-                manage_messages=False, kick_members=False, ban_members=False, manage_roles=True),
-
+            self._create_mock_member(
+                "444",
+                "RoleMod",
+                "Role Mod",
+                None,
+                manage_messages=False,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=True,
+            ),
             # Should NOT be included - no moderator permissions
-            self._create_mock_member("555", "RegularUser", "Regular User", None,
-                manage_messages=False, kick_members=False, ban_members=False, manage_roles=False),
+            self._create_mock_member(
+                "555",
+                "RegularUser",
+                "Regular User",
+                None,
+                manage_messages=False,
+                kick_members=False,
+                ban_members=False,
+                manage_roles=False,
+            ),
         ]
 
         async def async_members():
@@ -677,10 +770,9 @@ class TestIntegrationScenarios:
         service = DiscordToolService(client=client)
         correlation_id = str(uuid.uuid4())
 
-        result = await service.execute_tool("discord_get_guild_moderators", {
-            "guild_id": "123456789",
-            "correlation_id": correlation_id
-        })
+        result = await service.execute_tool(
+            "discord_get_guild_moderators", {"guild_id": "123456789", "correlation_id": correlation_id}
+        )
 
         assert result.success is True
         assert result.correlation_id == correlation_id

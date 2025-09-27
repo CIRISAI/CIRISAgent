@@ -738,6 +738,7 @@ class TestServiceUnavailableFailover:
     @pytest.mark.asyncio
     async def test_503_error_triggers_failover_to_secondary_provider(self, llm_bus, service_registry):
         """Test that 503 Service Unavailable from primary triggers immediate failover to secondary."""
+
         # Create primary service that fails with 503-like errors
         class ServiceUnavailableLLMService(MockLLMService):
             def __init__(self, name):
@@ -775,8 +776,7 @@ class TestServiceUnavailableFailover:
 
         # First call should fail on primary, succeed on secondary
         result, usage = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test failover"}],
-            response_model=TestResponse
+            messages=[{"role": "user", "content": "Test failover"}], response_model=TestResponse
         )
 
         # Should get response from secondary service
@@ -792,8 +792,7 @@ class TestServiceUnavailableFailover:
         for i in range(4):
             try:
                 await llm_bus.call_llm_structured(
-                    messages=[{"role": "user", "content": f"Trigger failure {i}"}],
-                    response_model=TestResponse
+                    messages=[{"role": "user", "content": f"Trigger failure {i}"}], response_model=TestResponse
                 )
             except:
                 pass  # Expected to succeed on secondary after primary fails
@@ -807,8 +806,7 @@ class TestServiceUnavailableFailover:
         secondary_service.call_count = 0
 
         result2, usage2 = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test circuit breaker"}],
-            response_model=TestResponse
+            messages=[{"role": "user", "content": "Test circuit breaker"}], response_model=TestResponse
         )
 
         assert result2.message == "Response from Lambda.AI"
@@ -847,8 +845,7 @@ class TestServiceUnavailableFailover:
         # Should fail with appropriate error after trying both providers
         with pytest.raises(RuntimeError) as exc_info:
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test all failing"}],
-                response_model=TestResponse
+                messages=[{"role": "user", "content": "Test all failing"}], response_model=TestResponse
             )
 
         # Should indicate all services failed
@@ -895,8 +892,7 @@ class TestServiceUnavailableFailover:
 
         # Initial call fails over to secondary
         result1, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Initial call"}],
-            response_model=TestResponse
+            messages=[{"role": "user", "content": "Initial call"}], response_model=TestResponse
         )
         assert result1.message == "Response from Lambda.AI"
 
@@ -915,8 +911,7 @@ class TestServiceUnavailableFailover:
         secondary_service.call_count = 0
 
         result2, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Recovery test"}],
-            response_model=TestResponse
+            messages=[{"role": "user", "content": "Recovery test"}], response_model=TestResponse
         )
 
         assert result2.message == "Response from Together.AI"

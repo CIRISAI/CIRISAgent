@@ -4,6 +4,7 @@ Simplified tests for Discord adapter helper methods focusing on coverage.
 
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 
 from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform
@@ -20,8 +21,8 @@ def platform():
     mock_config.monitored_channel_ids = ["123456789"]
 
     # Mock the entire DiscordPlatform initialization to avoid real Discord setup
-    with patch('ciris_engine.logic.adapters.discord.adapter.DiscordAdapter'):
-        with patch.object(DiscordPlatform, '__init__', return_value=None):
+    with patch("ciris_engine.logic.adapters.discord.adapter.DiscordAdapter"):
+        with patch.object(DiscordPlatform, "__init__", return_value=None):
             platform = DiscordPlatform.__new__(DiscordPlatform)
 
     # Manually set up the platform attributes we need for testing
@@ -79,7 +80,7 @@ class TestDiscordHelpers:
         """Test successful task recreation."""
         context = {"test": "context"}
 
-        with patch('asyncio.create_task') as mock_create:
+        with patch("asyncio.create_task") as mock_create:
             mock_task = Mock()
             mock_create.return_value = mock_task
 
@@ -93,8 +94,8 @@ class TestDiscordHelpers:
         """Test task recreation failure."""
         context = {"test": "context"}
 
-        with patch('asyncio.create_task', side_effect=Exception("failed")):
-            with patch('asyncio.sleep') as mock_sleep:
+        with patch("asyncio.create_task", side_effect=Exception("failed")):
+            with patch("asyncio.sleep") as mock_sleep:
                 result = await platform._recreate_discord_task(context)
 
                 assert result is False
@@ -159,7 +160,9 @@ class TestDiscordHelpers:
         platform._discord_client_task = discord_task
 
         # Mock the error classifier to return non-retryable
-        with patch('ciris_engine.logic.adapters.discord.discord_error_classifier.DiscordErrorClassifier') as mock_classifier:
+        with patch(
+            "ciris_engine.logic.adapters.discord.discord_error_classifier.DiscordErrorClassifier"
+        ) as mock_classifier:
             mock_classification = Mock()
             mock_classification.should_retry = False
             mock_classification.description = "Non-retryable"

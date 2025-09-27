@@ -1,6 +1,7 @@
 import importlib
 import logging
 
+
 def test_importing_profile_manager_logs_deprecation_warning(caplog):
     """
     Tests that importing the deprecated profile_manager module logs a warning.

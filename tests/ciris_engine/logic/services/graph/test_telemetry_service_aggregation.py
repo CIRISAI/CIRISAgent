@@ -225,41 +225,33 @@ class TestGraphTelemetryServiceAggregation:
     async def test_aggregator_with_registry_providers(self, telemetry_service, mock_service_registry):
         """Test aggregator handles registry providers correctly, triggering debug logs."""
         telemetry_service._set_service_registry(mock_service_registry)
-        
+
         # Set up registry to return providers that will trigger our debug paths
         mock_memory_provider = Mock()
         mock_memory_provider.__class__.__name__ = "LocalGraphMemoryService"
-        
+
         mock_tool_provider = Mock()
         mock_tool_provider.__class__.__name__ = "SecretsToolService"
-        
+
         # This should trigger the debug logging paths we changed
         mock_service_registry.list_providers.return_value = {
             "ServiceType.MEMORY": {
-                "LocalGraphMemoryService_12345": {
-                    "instance": mock_memory_provider,
-                    "metadata": {"healthy": True}
-                }
+                "LocalGraphMemoryService_12345": {"instance": mock_memory_provider, "metadata": {"healthy": True}}
             },
             "ServiceType.TOOL": {
-                "SecretsToolService_67890": {
-                    "instance": mock_tool_provider,
-                    "metadata": {"healthy": True}
-                }
-            }
+                "SecretsToolService_67890": {"instance": mock_tool_provider, "metadata": {"healthy": True}}
+            },
         }
-        
+
         # Create aggregator and run collection
         aggregator = TelemetryAggregator(
-            service_registry=mock_service_registry,
-            time_service=telemetry_service._time_service,
-            runtime=None
+            service_registry=mock_service_registry, time_service=telemetry_service._time_service, runtime=None
         )
-        
+
         # This will exercise the code paths with debug logging
         # The method is collect_all_parallel, not collect_telemetry
         result = await aggregator.collect_all_parallel()
-        
+
         # Verify we got some result (doesn't matter what, we just want coverage)
         assert result is not None
         assert isinstance(result, dict)

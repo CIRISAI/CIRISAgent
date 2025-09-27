@@ -221,7 +221,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
                 else:
                     # Try to convert other message types to dict first
                     try:
-                        msg_dict = msg.model_dump() if hasattr(msg, 'model_dump') else dict(msg)
+                        msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
                         fetched_messages.append(FetchedMessage(**msg_dict))
                     except Exception as e:
                         logger.warning(f"Skipping message of type {type(msg)}: {e}")

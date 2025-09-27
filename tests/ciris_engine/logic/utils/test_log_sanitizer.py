@@ -1,9 +1,7 @@
 import pytest
-from ciris_engine.logic.utils.log_sanitizer import (
-    sanitize_for_log,
-    sanitize_email,
-    sanitize_username,
-)
+
+from ciris_engine.logic.utils.log_sanitizer import sanitize_email, sanitize_for_log, sanitize_username
+
 
 class TestSanitizeForLog:
     def test_handles_none_and_empty(self):
@@ -65,7 +63,7 @@ class TestSanitizeEmail:
         assert sanitize_email(email) == expected
 
     def test_long_email_truncation(self):
-        long_email = "a" * 50 + "@" + "b" * 50 + ".com" # length 104
+        long_email = "a" * 50 + "@" + "b" * 50 + ".com"  # length 104
         # Truncates to 97 chars + "..."
         expected = ("a" * 50 + "@" + "b" * 46) + "..."
         assert sanitize_email(long_email) == expected

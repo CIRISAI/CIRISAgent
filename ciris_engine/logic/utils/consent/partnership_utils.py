@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class PartnershipRequestHandler:
     """Utility class for creating and checking partnership consent tasks.
-    
+
     This is NOT a handler - it's a helper used by ConsentService to create
     tasks that actual handlers (REJECT/DEFER/TASK_COMPLETE) will process.
     """
@@ -154,15 +154,15 @@ class PartnershipRequestHandler:
             return None
 
         action = thought.final_action
-        
+
         if action.action_type == "REJECT":
             reason = self._extract_reason_from_params(action.action_params, "No reason provided")
             return ("rejected", reason)
-        
+
         if action.action_type == "DEFER":
             reason = self._extract_reason_from_params(action.action_params, "More information needed")
             return ("deferred", reason)
-        
+
         return None
 
     def _extract_reason_from_params(self, params, default: str) -> str:

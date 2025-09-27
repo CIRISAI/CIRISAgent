@@ -13,7 +13,7 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot, UserProfile
 from ciris_engine.schemas.services.core.runtime import ServiceHealthStatus
-from ciris_engine.schemas.services.graph_core import GraphScope, NodeType, GraphNode, GraphNodeAttributes
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.services.runtime_control import CircuitBreakerStatus
 
@@ -542,13 +542,15 @@ async def build_system_snapshot(
             discord_mentions = re.findall(r"<@(\d+)>", thought_content)
             if discord_mentions:
                 user_ids_to_enrich.update(discord_mentions)
-                logger.debug(f"[USER EXTRACTION] Found {len(discord_mentions)} users from Discord mentions: {discord_mentions}")
+                logger.debug(
+                    f"[USER EXTRACTION] Found {len(discord_mentions)} users from Discord mentions: {discord_mentions}"
+                )
             # Also look for "ID: <number>" pattern
             id_mentions = re.findall(r"ID:\s*(\d+)", thought_content)
             if id_mentions:
                 user_ids_to_enrich.update(id_mentions)
                 logger.debug(f"[USER EXTRACTION] Found {len(id_mentions)} users from ID patterns: {id_mentions}")
-            
+
             # 3. From thought context (may have user_id)
             if hasattr(thought, "context") and thought.context:
                 if hasattr(thought.context, "user_id") and thought.context.user_id:
@@ -568,7 +570,7 @@ async def build_system_snapshot(
                         WHERE correlation_id = ?
                         AND json_extract(tags, '$.user_id') IS NOT NULL
                         """,
-                        (task.context.correlation_id,)
+                        (task.context.correlation_id,),
                     )
                     correlation_users = cursor.fetchall()
                     for row in correlation_users:
@@ -601,7 +603,9 @@ async def build_system_snapshot(
                 )
                 logger.info(f"[DEBUG] Querying memory for user/{user_id}")
                 user_results = await memory_service.recall(user_query)
-                logger.debug(f"[USER EXTRACTION] Query returned {len(user_results) if user_results else 0} results for user {user_id}")
+                logger.debug(
+                    f"[USER EXTRACTION] Query returned {len(user_results) if user_results else 0} results for user {user_id}"
+                )
 
                 if user_results:
                     user_node = user_results[0]
@@ -683,20 +687,20 @@ async def build_system_snapshot(
                                 )
                                 # Set to current time instead of None
                                 last_interaction = datetime.now(timezone.utc)
-                                
+
                                 # Fix the corrupted node in the graph
                                 try:
                                     # Update the node attributes to fix the corruption
                                     attrs["last_seen"] = last_interaction.isoformat()
-                                    
+
                                     # Create an update for the node
                                     update_node = GraphNode(
                                         id=f"user/{user_id}",
                                         type=NodeType.USER,
                                         attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
-                                        scope=GraphScope.LOCAL
+                                        scope=GraphScope.LOCAL,
                                     )
-                                    
+
                                     # Use memorize to update the node
                                     await memory_service.memorize(update_node)
                                     logger.info(f"Successfully fixed corrupted last_seen for user {user_id}")
@@ -716,14 +720,14 @@ async def build_system_snapshot(
                                     last_interaction = datetime.now(timezone.utc)
                                     try:
                                         attrs["last_seen"] = last_interaction.isoformat()
-                                        
+
                                         update_node = GraphNode(
                                             id=f"user/{user_id}",
                                             type=NodeType.USER,
                                             attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
-                                            scope=GraphScope.LOCAL
+                                            scope=GraphScope.LOCAL,
                                         )
-                                        
+
                                         await memory_service.memorize(update_node)
                                         logger.info(f"Successfully fixed unparseable last_seen for user {user_id}")
                                     except Exception as fix_e:
@@ -737,14 +741,14 @@ async def build_system_snapshot(
                             last_interaction = datetime.now(timezone.utc)
                             try:
                                 attrs["last_seen"] = last_interaction.isoformat()
-                                
+
                                 update_node = GraphNode(
                                     id=f"user/{user_id}",
                                     type=NodeType.USER,
                                     attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
-                                    scope=GraphScope.LOCAL
+                                    scope=GraphScope.LOCAL,
                                 )
-                                
+
                                 await memory_service.memorize(update_node)
                                 logger.info(f"Successfully fixed invalid last_seen type for user {user_id}")
                             except Exception as fix_e:
@@ -898,11 +902,22 @@ async def build_system_snapshot(
             for profile in existing_profiles:
                 profile_bytes = len(json.dumps(profile.model_dump(), default=json_serial))
                 total_user_bytes += profile_bytes
-            logger.info(f"[CONTEXT BUILD] {len(existing_profiles)} User Profiles queried - {total_user_bytes:,} bytes added to context")
+            logger.info(
+                f"[CONTEXT BUILD] {len(existing_profiles)} User Profiles queried - {total_user_bytes:,} bytes added to context"
+            )
 
     # Log channel context size
     if "channel_context" in context_data and context_data["channel_context"]:
-        channel_bytes = len(json.dumps(context_data["channel_context"].model_dump() if hasattr(context_data["channel_context"], "model_dump") else context_data["channel_context"], default=json_serial))
+        channel_bytes = len(
+            json.dumps(
+                (
+                    context_data["channel_context"].model_dump()
+                    if hasattr(context_data["channel_context"], "model_dump")
+                    else context_data["channel_context"]
+                ),
+                default=json_serial,
+            )
+        )
         logger.info(f"[CONTEXT BUILD] 1 Channel queried - {channel_bytes:,} bytes added to context")
 
     # Create the snapshot - FAIL FAST AND LOUD if there's any problem
@@ -911,16 +926,18 @@ async def build_system_snapshot(
     # Calculate and log total snapshot size
     snapshot_json = snapshot.model_dump_json()
     snapshot_bytes = len(snapshot_json)
-    
+
     # Check for any validation errors or missing critical data
     errors = []
     if not context_data.get("user_profiles"):
         errors.append("No user profiles")
     if not context_data.get("channel_context"):
         errors.append("No channel context")
-    
+
     if errors:
-        logger.warning(f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes:,} bytes total, WARNINGS: {', '.join(errors)}")
+        logger.warning(
+            f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes:,} bytes total, WARNINGS: {', '.join(errors)}"
+        )
     else:
         logger.info(f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes:,} bytes total, no errors")
 

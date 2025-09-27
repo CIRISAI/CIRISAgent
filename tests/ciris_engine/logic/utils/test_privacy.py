@@ -1,19 +1,21 @@
 import hashlib
+
 from ciris_engine.logic.utils.privacy import (
-    should_sanitize_for_user,
-    redact_personal_info,
-    sanitize_for_anonymous,
-    sanitize_correlation_parameters,
-    sanitize_audit_details,
-    sanitize_trace_content,
-    verify_content_hash,
-    create_refutation_proof,
-    REDACTED_MENTION,
     REDACTED_EMAIL,
+    REDACTED_MENTION,
+    REDACTED_NAME,
     REDACTED_PHONE,
     REDACTED_URL,
-    REDACTED_NAME,
+    create_refutation_proof,
+    redact_personal_info,
+    sanitize_audit_details,
+    sanitize_correlation_parameters,
+    sanitize_for_anonymous,
+    sanitize_trace_content,
+    should_sanitize_for_user,
+    verify_content_hash,
 )
+
 
 class TestShouldSanitize:
     def test_should_sanitize_for_anonymous_types(self):
@@ -27,6 +29,7 @@ class TestShouldSanitize:
         assert not should_sanitize_for_user("")
         assert not should_sanitize_for_user("full_consent")
         assert not should_sanitize_for_user("temporary")
+
 
 class TestRedactPersonalInfo:
     def test_redacts_all_pii_patterns(self):
@@ -46,6 +49,7 @@ class TestRedactPersonalInfo:
     def test_does_not_change_clean_text(self):
         text = "This is a clean sentence with no PII."
         assert redact_personal_info(text) == text
+
 
 class TestSanitizeForAnonymous:
     def test_sanitizes_data_dictionary(self):
@@ -69,7 +73,7 @@ class TestSanitizeForAnonymous:
 
         # Content fields are hashed, truncated, and redacted
         assert "content_hash" in sanitized
-        assert sanitized["content"] == "This is the original message content." # Not long enough to truncate
+        assert sanitized["content"] == "This is the original message content."  # Not long enough to truncate
 
         # Other fields are preserved
         assert sanitized["other_field"] == "should remain"
@@ -80,6 +84,7 @@ class TestSanitizeForAnonymous:
         sanitized = sanitize_for_anonymous(data)
         assert sanitized["message"] == "a" * 47 + "..."
         assert "message_hash" in sanitized
+
 
 class TestWrapperFunctions:
     def test_sanitize_wrappers_no_op_on_consent(self):
@@ -92,6 +97,7 @@ class TestWrapperFunctions:
         sanitized = sanitize_correlation_parameters(params, "anonymous")
         assert "author_name" not in sanitized
         assert "author_id" in sanitized
+
 
 class TestSanitizeTraceContent:
     def test_no_op_on_consent(self):
@@ -108,9 +114,10 @@ class TestSanitizeTraceContent:
     def test_long_trace_content_truncation(self):
         content = "a" * 600
         sanitized = sanitize_trace_content(content, "anonymous")
-        assert len(sanitized) <= 500 + 25 # 500 for content, plus hash
+        assert len(sanitized) <= 500 + 25  # 500 for content, plus hash
         assert sanitized.startswith("a" * 497 + "...")
         assert "[Hash:" in sanitized
+
 
 class TestHashingUtils:
     def test_verify_content_hash(self):

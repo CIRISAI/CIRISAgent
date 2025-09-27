@@ -4,8 +4,9 @@ This file merges test_discord_reply_processing.py and test_discord_reply_edge_ca
 for better test efficiency while maintaining comprehensive coverage.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 
@@ -21,10 +22,7 @@ class TestReplyDetectionAndProcessing:
         # Create a regular message with attachments using enhanced fixtures
         raw_message = MockDiscordMessage(
             content="Regular message",
-            attachments=[
-                mock_attachment_collection["image_png"],
-                mock_attachment_collection["document_pdf"]
-            ]
+            attachments=[mock_attachment_collection["image_png"], mock_attachment_collection["document_pdf"]],
         )
 
         result = await discord_observer._collect_message_attachments_with_reply(raw_message)
@@ -51,16 +49,11 @@ class TestReplyDetectionAndProcessing:
         """Test reply message where reference needs to be fetched."""
         # Create reply with unresolved reference
         reference = mock_reference("original123", resolved=None)
-        reply_message = mock_message(
-            content="Reply content",
-            reference=reference
-        )
+        reply_message = mock_message(content="Reply content", reference=reference)
 
         # Mock the fetch behavior
         original_message = mock_message(
-            message_id="original123",
-            content="Fetched original content",
-            author_name="FetchedUser"
+            message_id="original123", content="Fetched original content", author_name="FetchedUser"
         )
         reply_message.reference.resolved = MagicMock()
         reply_message.reference.resolved.fetch = AsyncMock(return_value=original_message)
@@ -99,15 +92,13 @@ class TestAttachmentPriorityAndLimits:
         original = MockDiscordMessage(
             message_id="original123",
             content="Original with image",
-            attachments=[mock_attachment_collection["image_png"]]
+            attachments=[mock_attachment_collection["image_png"]],
         )
 
         # Reply message with different image
         reference = MockDiscordReference("original123", resolved=original)
         reply = MockDiscordMessage(
-            content="Reply with image",
-            reference=reference,
-            attachments=[mock_attachment_collection["image_jpg"]]
+            content="Reply with image", reference=reference, attachments=[mock_attachment_collection["image_jpg"]]
         )
 
         result = await discord_observer._collect_message_attachments_with_reply(reply)
@@ -122,9 +113,7 @@ class TestAttachmentPriorityAndLimits:
         from tests.ciris_engine.logic.adapters.discord.conftest import MockDiscordMessage, MockDiscordReference
 
         # Original message with image
-        original = MockDiscordMessage(
-            attachments=[mock_attachment_collection["image_png"]]
-        )
+        original = MockDiscordMessage(attachments=[mock_attachment_collection["image_png"]])
 
         # Reply message with no images
         reference = MockDiscordReference("original123", resolved=original)
@@ -143,10 +132,7 @@ class TestAttachmentPriorityAndLimits:
 
         # Original message with 2 documents
         original = MockDiscordMessage(
-            attachments=[
-                mock_attachment_collection["document_pdf"],
-                mock_attachment_collection["document_docx"]
-            ]
+            attachments=[mock_attachment_collection["document_pdf"], mock_attachment_collection["document_docx"]]
         )
 
         # Reply message with 2 more documents
@@ -155,8 +141,8 @@ class TestAttachmentPriorityAndLimits:
             reference=reference,
             attachments=[
                 mock_attachment_collection["document_pdf"],  # Different instance
-                mock_attachment_collection["document_docx"]  # Different instance
-            ]
+                mock_attachment_collection["document_docx"],  # Different instance
+            ],
         )
 
         result = await discord_observer._collect_message_attachments_with_reply(reply)
@@ -185,8 +171,8 @@ class TestEdgeCasesAndErrorHandling:
 
         raw_message = MockDiscordMessage(content="No reply message")
         # Ensure no reference attribute
-        if hasattr(raw_message, 'reference'):
-            delattr(raw_message, 'reference')
+        if hasattr(raw_message, "reference"):
+            delattr(raw_message, "reference")
 
         result = await discord_observer._collect_message_attachments_with_reply(raw_message)
 
@@ -209,9 +195,7 @@ class TestEdgeCasesAndErrorHandling:
         """Test when referenced message has no content."""
         # Original message with empty content
         original_message = mock_message(
-            message_id="original123",
-            content="",  # Empty content
-            author_name="OriginalUser"
+            message_id="original123", content="", author_name="OriginalUser"  # Empty content
         )
 
         reference = mock_reference("original123", resolved=original_message)
@@ -233,8 +217,7 @@ class TestEdgeCasesAndErrorHandling:
         # Missing content_type attribute
 
         raw_message = MockDiscordMessage(
-            content="Message with malformed attachment",
-            attachments=[malformed_attachment]
+            content="Message with malformed attachment", attachments=[malformed_attachment]
         )
 
         # Should not crash
@@ -257,7 +240,7 @@ class TestEdgeCasesAndErrorHandling:
             author_name="TestUser",
             author_id="user123",
             channel_id="channel123",
-            raw_message=MagicMock()
+            raw_message=MagicMock(),
         )
 
         enhanced_message = await discord_observer._enhance_message(discord_msg)
@@ -279,7 +262,7 @@ class TestEdgeCasesAndErrorHandling:
             author_name="TestUser",
             author_id="user123",
             channel_id="channel123",
-            raw_message=MagicMock()
+            raw_message=MagicMock(),
         )
 
         enhanced_message = await discord_observer._enhance_message(discord_msg)
@@ -295,10 +278,7 @@ class TestImageAttachmentDetection:
     async def test_is_image_attachment_valid_types(self, discord_observer, mock_attachment_collection):
         """Test image detection for valid image types."""
         # Test various valid image types
-        valid_images = [
-            mock_attachment_collection["image_png"],
-            mock_attachment_collection["image_jpg"]
-        ]
+        valid_images = [mock_attachment_collection["image_png"], mock_attachment_collection["image_jpg"]]
 
         for attachment in valid_images:
             is_image = discord_observer._is_image_attachment(attachment)
@@ -308,10 +288,7 @@ class TestImageAttachmentDetection:
     async def test_is_image_attachment_invalid_types(self, discord_observer, mock_attachment_collection):
         """Test image detection for non-image types."""
         # Test non-image types
-        non_images = [
-            mock_attachment_collection["document_pdf"],
-            mock_attachment_collection["other_txt"]
-        ]
+        non_images = [mock_attachment_collection["document_pdf"], mock_attachment_collection["other_txt"]]
 
         for attachment in non_images:
             is_image = discord_observer._is_image_attachment(attachment)
@@ -334,8 +311,9 @@ class TestMessageEnhancement:
     @pytest.mark.asyncio
     async def test_enhanced_message_with_reply_context(self, discord_observer, sample_reply_chain):
         """Test message enhancement includes reply context."""
-        from ciris_engine.schemas.runtime.messages import DiscordMessage
         from unittest.mock import patch
+
+        from ciris_engine.schemas.runtime.messages import DiscordMessage
 
         reply = sample_reply_chain["reply1"]
 
@@ -345,19 +323,19 @@ class TestMessageEnhancement:
             author_name="ReplyUser",
             author_id="user123",
             channel_id="channel123",
-            raw_message=reply
+            raw_message=reply,
         )
 
         # Mock the collection method to return reply context
         with patch.object(
             discord_observer,
-            '_collect_message_attachments_with_reply',
+            "_collect_message_attachments_with_reply",
             return_value={
                 "images": [],
                 "documents": [],
                 "embeds": [],
-                "reply_context": "@OriginalUser: Original message content"
-            }
+                "reply_context": "@OriginalUser: Original message content",
+            },
         ):
             enhanced = await discord_observer._enhance_message(discord_msg)
 
@@ -368,8 +346,9 @@ class TestMessageEnhancement:
     @pytest.mark.asyncio
     async def test_enhanced_message_with_attachments_and_reply(self, discord_observer, mock_attachment_collection):
         """Test message enhancement with both attachments and reply context."""
-        from ciris_engine.schemas.runtime.messages import DiscordMessage
         from unittest.mock import patch
+
+        from ciris_engine.schemas.runtime.messages import DiscordMessage
 
         discord_msg = DiscordMessage(
             message_id="reply123",
@@ -377,19 +356,19 @@ class TestMessageEnhancement:
             author_name="ReplyUser",
             author_id="user123",
             channel_id="channel123",
-            raw_message=MagicMock()
+            raw_message=MagicMock(),
         )
 
         # Mock the collection method to return both attachments and reply context
         with patch.object(
             discord_observer,
-            '_collect_message_attachments_with_reply',
+            "_collect_message_attachments_with_reply",
             return_value={
                 "images": [mock_attachment_collection["image_png"]],
                 "documents": [mock_attachment_collection["document_pdf"]],
                 "embeds": [],
-                "reply_context": "@OriginalUser: Original message"
-            }
+                "reply_context": "@OriginalUser: Original message",
+            },
         ):
             enhanced = await discord_observer._enhance_message(discord_msg)
 
@@ -400,8 +379,9 @@ class TestMessageEnhancement:
     @pytest.mark.asyncio
     async def test_enhanced_message_processing_error(self, discord_observer, sample_reply_chain):
         """Test graceful error handling during message enhancement."""
-        from ciris_engine.schemas.runtime.messages import DiscordMessage
         from unittest.mock import patch
+
+        from ciris_engine.schemas.runtime.messages import DiscordMessage
 
         reply = sample_reply_chain["reply1"]
 
@@ -411,14 +391,12 @@ class TestMessageEnhancement:
             author_name="ReplyUser",
             author_id="user123",
             channel_id="channel123",
-            raw_message=reply
+            raw_message=reply,
         )
 
         # Mock to raise exception
         with patch.object(
-            discord_observer,
-            '_collect_message_attachments_with_reply',
-            side_effect=Exception("Processing failed")
+            discord_observer, "_collect_message_attachments_with_reply", side_effect=Exception("Processing failed")
         ):
             enhanced = await discord_observer._enhance_message(discord_msg)
 
@@ -441,8 +419,8 @@ class TestAttachmentLimitsAndBoundaries:
                 mock_attachment_collection["image_png"],  # 1 image (limit)
                 mock_attachment_collection["document_pdf"],  # 3 documents
                 mock_attachment_collection["document_docx"],
-                mock_attachment_collection["document_pdf"]  # Different instance
-            ]
+                mock_attachment_collection["document_pdf"],  # Different instance
+            ],
         )
 
         result = await discord_observer._collect_message_attachments_with_reply(raw_message)
@@ -455,10 +433,7 @@ class TestAttachmentLimitsAndBoundaries:
         """Test handling of empty attachments list."""
         from tests.ciris_engine.logic.adapters.discord.conftest import MockDiscordMessage
 
-        raw_message = MockDiscordMessage(
-            content="Message with no attachments",
-            attachments=[]
-        )
+        raw_message = MockDiscordMessage(content="Message with no attachments", attachments=[])
 
         result = await discord_observer._collect_message_attachments_with_reply(raw_message)
 

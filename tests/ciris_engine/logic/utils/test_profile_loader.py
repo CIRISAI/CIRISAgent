@@ -1,11 +1,13 @@
+from pathlib import Path
+
 import pytest
 import yaml
-from pathlib import Path
 from pydantic import ValidationError
 
-from ciris_engine.logic.utils.profile_loader import load_template, DEFAULT_TEMPLATE_PATH
+from ciris_engine.logic.utils.profile_loader import DEFAULT_TEMPLATE_PATH, load_template
 from ciris_engine.schemas.config.agent import AgentTemplate
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+
 
 @pytest.fixture
 def valid_template_dict():
@@ -18,6 +20,7 @@ def valid_template_dict():
         "permitted_actions": ["speak", "defer"],
     }
 
+
 @pytest.fixture
 def create_yaml_file(tmp_path):
     def _create_yaml(filename, data):
@@ -25,7 +28,9 @@ def create_yaml_file(tmp_path):
         with open(file_path, "w") as f:
             yaml.dump(data, f)
         return file_path
+
     return _create_yaml
+
 
 @pytest.mark.asyncio
 class TestLoadTemplate:
@@ -40,10 +45,7 @@ class TestLoadTemplate:
 
     async def test_load_from_default_path(self, monkeypatch, create_yaml_file, valid_template_dict):
         default_path = create_yaml_file("default.yaml", valid_template_dict)
-        monkeypatch.setattr(
-            "ciris_engine.logic.utils.profile_loader.DEFAULT_TEMPLATE_PATH",
-            default_path
-        )
+        monkeypatch.setattr("ciris_engine.logic.utils.profile_loader.DEFAULT_TEMPLATE_PATH", default_path)
         template = await load_template(None)
         assert template is not None
         assert template.name == "test_agent"
@@ -60,7 +62,7 @@ class TestLoadTemplate:
     async def test_invalid_yaml_file(self, create_yaml_file):
         template_path = create_yaml_file("invalid.yaml", None)
         with open(template_path, "w") as f:
-            f.write("key: value: another_value") # Invalid YAML
+            f.write("key: value: another_value")  # Invalid YAML
 
         with pytest.raises(ValueError, match="Error parsing YAML"):
             await load_template(template_path)
@@ -91,15 +93,17 @@ class TestLoadTemplate:
         assert HandlerActionType.SPEAK in template.permitted_actions
         assert HandlerActionType.DEFER in template.permitted_actions
         assert HandlerActionType.OBSERVE in template.permitted_actions
-        assert len(template.permitted_actions) == 3 # unknown_action should be skipped
+        assert len(template.permitted_actions) == 3  # unknown_action should be skipped
         assert "Unknown action 'unknown_action'" in caplog.text
 
-    async def test_permitted_actions_handles_mixed_and_invalid_types(self, create_yaml_file, valid_template_dict, caplog):
+    async def test_permitted_actions_handles_mixed_and_invalid_types(
+        self, create_yaml_file, valid_template_dict, caplog
+    ):
         # A YAML file can't contain a Python enum object, so we test with strings and other primitives.
         valid_template_dict["permitted_actions"] = [
             "speak",
-            123, # Invalid type
-            "oBsErVe", # Case-insensitive value match
+            123,  # Invalid type
+            "oBsErVe",  # Case-insensitive value match
         ]
         template_path = create_yaml_file("mixed_actions.yaml", valid_template_dict)
 

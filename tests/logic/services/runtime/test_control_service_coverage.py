@@ -51,16 +51,18 @@ class TestRuntimeControlServiceCoverage:
         mock.agent_processor.is_paused = Mock(return_value=False)
         mock.agent_processor.pause_processing = AsyncMock(return_value=True)
         mock.agent_processor.resume_processing = AsyncMock(return_value=True)
-        mock.agent_processor.single_step = AsyncMock(return_value={
-            "success": True, 
-            "processing_time_ms": 50.0,
-            "step_point": "BUILD_CONTEXT",
-            "step_results": [{"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}],
-            "thoughts_processed": 1,
-            "pipeline_state": {"current_round": 1, "thoughts_in_pipeline": 2},
-            "current_round": 1,
-            "pipeline_empty": False
-        })
+        mock.agent_processor.single_step = AsyncMock(
+            return_value={
+                "success": True,
+                "processing_time_ms": 50.0,
+                "step_point": "BUILD_CONTEXT",
+                "step_results": [{"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}],
+                "thoughts_processed": 1,
+                "pipeline_state": {"current_round": 1, "thoughts_in_pipeline": 2},
+                "current_round": 1,
+                "pipeline_empty": False,
+            }
+        )
         mock.agent_processor.get_queue_status = Mock(return_value=Mock(pending_thoughts=5, pending_tasks=2))
 
         # Mock service registry
@@ -133,10 +135,12 @@ class TestRuntimeControlServiceCoverage:
         assert response.operation == "single_step"
         assert control_service._single_steps == 1
         mock_runtime.agent_processor.single_step.assert_called_once()
-        
+
         # Verify H3ERE step data is passed through
         assert response.step_point == "BUILD_CONTEXT"
-        assert response.step_results == [{"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}]
+        assert response.step_results == [
+            {"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}
+        ]
         assert response.thoughts_processed == 1
         assert response.processing_time_ms == 50.0
         assert response.pipeline_state == {"current_round": 1, "thoughts_in_pipeline": 2}
@@ -438,7 +442,6 @@ class TestRuntimeControlServiceCoverage:
         assert isinstance(metrics, dict)
         # Don't check specific values as they depend on implementation details
 
-
     @pytest.mark.asyncio
     async def test_queue_depth_integration(self, control_service, mock_runtime):
         """Test queue depth integration using get_processor_queue_status method."""
@@ -446,11 +449,13 @@ class TestRuntimeControlServiceCoverage:
         mock_queue_status = Mock()
         mock_queue_status.queue_size = 15
         control_service.get_processor_queue_status = AsyncMock(return_value=mock_queue_status)
-        
+
         status = await control_service.get_runtime_status()
-        
+
         # Verify queue_depth is correctly set from processor queue status
-        assert status.queue_depth == 15, f"Expected queue_depth=15 from processor queue status, got {status.queue_depth}"
+        assert (
+            status.queue_depth == 15
+        ), f"Expected queue_depth=15 from processor queue status, got {status.queue_depth}"
         control_service.get_processor_queue_status.assert_called_once()
 
     @pytest.mark.asyncio
@@ -458,10 +463,10 @@ class TestRuntimeControlServiceCoverage:
         """Test exception handling when get_processor_queue_status fails."""
         # Mock get_processor_queue_status to raise exception
         control_service.get_processor_queue_status = AsyncMock(side_effect=RuntimeError("Queue status error"))
-        
-        with patch('ciris_engine.logic.services.runtime.control_service.service.logger') as mock_logger:
+
+        with patch("ciris_engine.logic.services.runtime.control_service.service.logger") as mock_logger:
             status = await control_service.get_runtime_status()
-            
+
             # Should log warning and fallback to 0
             mock_logger.warning.assert_called_once()
             warning_call = mock_logger.warning.call_args[0][0]
@@ -473,9 +478,9 @@ class TestRuntimeControlServiceCoverage:
         """Test queue depth when agent processor is not available."""
         # Remove agent processor to test fallback
         control_service.runtime.agent_processor = None
-        
+
         status = await control_service.get_runtime_status()
-        
+
         # Should fallback to 0 when no agent processor
         assert status.queue_depth == 0, f"Expected queue_depth=0 when no agent processor, got {status.queue_depth}"
 
@@ -484,12 +489,14 @@ class TestRuntimeControlServiceCoverage:
         """Test get_processor_queue_status when agent processor is None."""
         # Set agent processor to None to trigger the uncovered branch
         control_service.runtime.agent_processor = None
-        
-        with patch('ciris_engine.logic.services.runtime.control_service.service.logger') as mock_logger:
+
+        with patch("ciris_engine.logic.services.runtime.control_service.service.logger") as mock_logger:
             status = await control_service.get_processor_queue_status()
-            
+
             # Should log debug message and return empty queue status
-            mock_logger.debug.assert_called_once_with("Agent processor not yet initialized, returning empty queue status")
+            mock_logger.debug.assert_called_once_with(
+                "Agent processor not yet initialized, returning empty queue status"
+            )
             assert status.processor_name == "agent"
             assert status.queue_size == 0
             assert status.max_size == 1000
@@ -503,20 +510,20 @@ class TestRuntimeControlServiceCoverage:
         # Setup mock to return queue status
         mock_queue_status = Mock(pending_thoughts=5, pending_tasks=3)
         mock_runtime.agent_processor.get_queue_status.return_value = mock_queue_status
-        
+
         # Set up calculation methods to return values
         control_service._calculate_processing_rate = Mock(return_value=2.5)
         control_service._calculate_average_latency = Mock(return_value=45.0)
-        
+
         status = await control_service.get_processor_queue_status()
-        
+
         assert status.processor_name == "agent"
         assert status.queue_size == 8  # 5 thoughts + 3 tasks
         assert status.max_size == 1000
         assert status.processing_rate == 2.5
         assert status.average_latency_ms == 45.0
         assert status.oldest_message_age_seconds is None
-        
+
         mock_runtime.agent_processor.get_queue_status.assert_called_once()
 
     @pytest.mark.asyncio
@@ -524,15 +531,15 @@ class TestRuntimeControlServiceCoverage:
         """Test get_processor_queue_status exception handling."""
         # Make get_queue_status raise an exception
         mock_runtime.agent_processor.get_queue_status.side_effect = RuntimeError("Queue access failed")
-        
-        with patch('ciris_engine.logic.services.runtime.control_service.service.logger') as mock_logger:
+
+        with patch("ciris_engine.logic.services.runtime.control_service.service.logger") as mock_logger:
             status = await control_service.get_processor_queue_status()
-            
+
             # Should log error and return error status
             mock_logger.error.assert_called_once()
             error_call = mock_logger.error.call_args[0][0]
             assert "Failed to get queue status:" in error_call
-            
+
             assert status.processor_name == "agent"
             assert status.queue_size == 0
             assert status.max_size == 0

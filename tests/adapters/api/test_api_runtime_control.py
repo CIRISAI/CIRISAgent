@@ -173,7 +173,6 @@ class TestAPIRuntimeControlStateTransitions:
 class TestAPIRuntimeControlDebugging:
     """Test debugging functionality."""
 
-
     @pytest.mark.asyncio
     async def test_get_queue_status(self, runtime_control_service, mock_runtime):
         """Test getting queue status."""

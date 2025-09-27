@@ -158,9 +158,10 @@ class AgentProcessor:
         self._is_paused = False
         self._pause_event: Optional[asyncio.Event] = None
         self._single_step_mode = False
-        
+
         # Initialize pipeline controller for single-step debugging
         from ciris_engine.protocols.pipeline_control import PipelineController
+
         self._pipeline_controller = PipelineController(is_paused=False, main_processor=self)
 
         # Track processing time for thoughts
@@ -750,7 +751,7 @@ class AgentProcessor:
             True if successfully paused (or already paused), False if error occurred
         """
         logger.info(f"[DEBUG] pause_processing() called, current _is_paused: {self._is_paused}")
-        
+
         if self._is_paused:
             logger.info("AgentProcessor already paused")
             logger.info(f"[DEBUG] Returning True from pause_processing, _is_paused: {self._is_paused}")
@@ -775,7 +776,7 @@ class AgentProcessor:
 
             logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
             return True  # Successfully paused
-            
+
         except Exception as e:
             logger.error(f"Failed to pause processor: {e}")
             self._is_paused = False  # Reset state on error
@@ -789,7 +790,7 @@ class AgentProcessor:
             True if successfully resumed
         """
         logger.info(f"[DEBUG] resume_processing() called, current _is_paused: {self._is_paused}")
-        
+
         if not self._is_paused:
             logger.info("AgentProcessor not paused")
             logger.info(f"[DEBUG] Returning False from resume_processing, _is_paused: {self._is_paused}")
@@ -823,10 +824,10 @@ class AgentProcessor:
     async def single_step(self) -> dict:
         """
         Execute one step point in the PDMA pipeline when paused.
-        
-        FAIL FAST: No fallbacks, no fake data. Either the pipeline controller 
+
+        FAIL FAST: No fallbacks, no fake data. Either the pipeline controller
         has execute_single_step_point or we fail loudly.
-        
+
         Returns:
             Dict containing:
             - success: bool
@@ -837,34 +838,34 @@ class AgentProcessor:
             - pipeline_state: dict
         """
         logger.info(f"single_step() called, paused: {self._is_paused}")
-        
+
         if not self._is_paused:
             raise RuntimeError("Cannot single-step unless processor is paused")
-            
+
         if not self._pipeline_controller:
             raise RuntimeError("No pipeline controller available")
-            
-        if not hasattr(self._pipeline_controller, 'execute_single_step_point'):
+
+        if not hasattr(self._pipeline_controller, "execute_single_step_point"):
             raise NotImplementedError(
                 f"Pipeline controller {type(self._pipeline_controller).__name__} missing execute_single_step_point method. "
                 "Single-step functionality requires a proper pipeline controller implementation."
             )
-        
+
         start_time = self._time_service.now()
-        
+
         # Enable single-step mode
         self._single_step_mode = True
         self._pipeline_controller._single_step_mode = True
-        
+
         try:
             logger.info("Executing single step point via pipeline controller")
             step_result = await self._pipeline_controller.execute_single_step_point()
-            
+
             if not step_result or not isinstance(step_result, dict):
                 raise ValueError(f"Invalid step result from pipeline controller: {step_result}")
-            
+
             processing_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000
-            
+
             return {
                 "success": True,
                 "step_point": step_result["step_point"],  # Fail if missing
@@ -875,7 +876,7 @@ class AgentProcessor:
                 "current_round": step_result.get("current_round"),
                 "pipeline_empty": step_result.get("pipeline_empty", False),
             }
-            
+
         finally:
             # Always disable single-step mode
             self._single_step_mode = False
@@ -921,13 +922,13 @@ class AgentProcessor:
     async def _check_pause_state(self) -> bool:
         """
         Check pause state and handle waiting for resume.
-        
+
         Returns:
             True if processing should continue, False if should skip this round
         """
         if not self._is_paused:
             return True
-            
+
         logger.debug("Processor is paused, waiting for resume or single-step")
         if self._pause_event:
             await self._pause_event.wait()
@@ -938,21 +939,21 @@ class AgentProcessor:
             await asyncio.sleep(0.1)
             return False
         return True
-    
+
     async def _handle_shutdown_transitions(self, current_state: AgentState) -> bool:
         """
         Handle shutdown-related state transitions.
-        
+
         Args:
             current_state: Current agent state
-            
+
         Returns:
             True to continue processing, False to break from loop
         """
         if current_state == AgentState.SHUTDOWN:
             logger.debug("In SHUTDOWN state, skipping transition checks")
             return True
-            
+
         # Check if shutdown has been requested
         if is_global_shutdown_requested():
             shutdown_reason = get_global_shutdown_reason() or "Unknown reason"
@@ -969,25 +970,29 @@ class AgentProcessor:
             if next_state:
                 await self._handle_state_transition(next_state)
         return True
-    
-    async def _process_regular_state(self, processor, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int) -> tuple[int, int, bool]:
+
+    async def _process_regular_state(
+        self, processor, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int
+    ) -> tuple[int, int, bool]:
         """
         Process regular (non-shutdown) states.
-        
+
         Args:
             processor: State processor
             current_state: Current agent state
             consecutive_errors: Current consecutive error count
             max_consecutive_errors: Maximum allowed consecutive errors
-            
+
         Returns:
             Tuple of (round_count_increment, new_consecutive_errors, should_break)
         """
         try:
             logger.debug(f"Calling {processor.__class__.__name__}.process(round={self.current_round_number})")
             result = await processor.process(self.current_round_number)
-            logger.debug(f"Processor returned: {result.__class__.__name__ if hasattr(result, '__class__') else type(result)}")
-            
+            logger.debug(
+                f"Processor returned: {result.__class__.__name__ if hasattr(result, '__class__') else type(result)}"
+            )
+
             # Check for state transition recommendations
             if current_state == AgentState.WORK:
                 # Check for scheduled dream tasks
@@ -1000,26 +1005,26 @@ class AgentProcessor:
                     exit_reason = getattr(result, "exit_reason", "Unknown reason")
                     logger.info(f"Exiting solitude: {exit_reason}")
                     await self._handle_state_transition(AgentState.WORK)
-            
+
             return 1, 0, False  # increment round, reset errors, don't break
-            
+
         except Exception as e:
             consecutive_errors += 1
             logger.error(f"Error in {processor} for state {current_state}: {e}", exc_info=True)
-            
+
             if consecutive_errors >= max_consecutive_errors:
                 logger.error(f"Too many consecutive processing errors ({consecutive_errors}), requesting shutdown")
                 request_global_shutdown(f"Processing errors: {consecutive_errors} consecutive failures")
                 return 0, consecutive_errors, True  # don't increment round, keep errors, break
-            
+
             # Add backoff delay after errors
             await asyncio.sleep(min(consecutive_errors * 2, 30))
             return 0, consecutive_errors, False  # don't increment round, keep errors, don't break
-    
+
     async def _process_dream_state(self) -> bool:
         """
         Process dream state.
-        
+
         Returns:
             True to continue processing, False should not happen
         """
@@ -1031,29 +1036,29 @@ class AgentProcessor:
         else:
             await asyncio.sleep(5)  # Check periodically
         return True
-    
+
     async def _process_shutdown_state(self, processor, consecutive_errors: int) -> tuple[int, int, bool]:
         """
         Process shutdown state with negotiation.
-        
+
         Args:
             processor: Shutdown processor
             consecutive_errors: Current consecutive error count
-            
+
         Returns:
             Tuple of (round_count_increment, new_consecutive_errors, should_break)
         """
         logger.info("In SHUTDOWN state, processing shutdown negotiation")
         logger.debug(f"Shutdown processor from state_processors: {processor}")
-        
+
         if not processor:
             logger.error("No shutdown processor available")
             return 0, consecutive_errors, True
-            
+
         try:
             result = await processor.process(self.current_round_number)
             logger.info(f"Shutdown check - result type: {type(result)}, result: {result}")
-            
+
             # Handle ShutdownResult object (not dict)
             logger.debug(f"Result is object, checking for shutdown_ready: hasattr={hasattr(result, 'shutdown_ready')}")
             if hasattr(result, "shutdown_ready"):
@@ -1061,28 +1066,30 @@ class AgentProcessor:
                 if result.shutdown_ready:
                     logger.info("Shutdown negotiation complete (from result object), exiting processing loop")
                     return 1, 0, True  # increment round, reset errors, break
-            
+
             # Check processor's shutdown_complete attribute directly
             if hasattr(processor, "shutdown_complete"):
                 logger.debug(f"processor.shutdown_complete = {processor.shutdown_complete}")
                 if processor.shutdown_complete:
-                    logger.info("Shutdown negotiation complete (processor.shutdown_complete is True), exiting processing loop")
+                    logger.info(
+                        "Shutdown negotiation complete (processor.shutdown_complete is True), exiting processing loop"
+                    )
                     return 1, 0, True  # increment round, reset errors, break
-            
+
             return 1, 0, False  # increment round, reset errors, don't break
-            
+
         except Exception as e:
             consecutive_errors += 1
             logger.error(f"Error in shutdown processor: {e}", exc_info=True)
             return 0, consecutive_errors, True  # don't increment round, keep errors, break
-    
+
     def _calculate_round_delay(self, current_state: AgentState) -> float:
         """
         Calculate delay between processing rounds based on config and state.
-        
+
         Args:
             current_state: Current agent state
-            
+
         Returns:
             Delay in seconds
         """
@@ -1094,7 +1101,7 @@ class AgentProcessor:
                 delay = self.app_config.workflow.get_round_delay(mock_llm)
             elif hasattr(self.app_config.workflow, "round_delay_seconds"):
                 delay = self.app_config.workflow.round_delay_seconds
-        
+
         # State-specific delays override config only if not using mock LLM
         if not getattr(self.app_config, "mock_llm", False):
             if current_state == AgentState.WORK:
@@ -1103,16 +1110,16 @@ class AgentProcessor:
                 delay = 10.0  # Slower pace in solitude
             elif current_state == AgentState.DREAM:
                 delay = 5.0  # Check dream state periodically
-        
+
         return delay
-    
+
     async def _handle_delay_with_stop_check(self, delay: float) -> bool:
         """
         Handle delay with stop event checking.
-        
+
         Args:
             delay: Delay time in seconds
-            
+
         Returns:
             True to continue processing, False to break from loop
         """
@@ -1127,10 +1134,12 @@ class AgentProcessor:
                 pass  # Continue processing
         return True
 
-    async def _process_single_round(self, round_count: int, consecutive_errors: int, max_consecutive_errors: int, num_rounds: Optional[int]) -> tuple[int, int, bool]:
+    async def _process_single_round(
+        self, round_count: int, consecutive_errors: int, max_consecutive_errors: int, num_rounds: Optional[int]
+    ) -> tuple[int, int, bool]:
         """
         Process a single round of the main loop.
-        
+
         Returns:
             Tuple of (new_round_count, new_consecutive_errors, should_break)
         """
@@ -1160,7 +1169,7 @@ class AgentProcessor:
         # Handle delay between rounds
         if not await self._handle_round_delay(current_state):
             return round_count, consecutive_errors, True
-            
+
         return round_count, consecutive_errors, False
 
     def _should_stop_after_target_rounds(self, round_count: int, num_rounds: Optional[int]) -> bool:
@@ -1171,7 +1180,9 @@ class AgentProcessor:
             return True
         return False
 
-    async def _process_current_state(self, round_count: int, consecutive_errors: int, max_consecutive_errors: int, current_state: AgentState) -> tuple[int, int, bool]:
+    async def _process_current_state(
+        self, round_count: int, consecutive_errors: int, max_consecutive_errors: int, current_state: AgentState
+    ) -> tuple[int, int, bool]:
         """Process based on the current agent state."""
         logger.debug(f"Processing round {round_count}, current state: {current_state}")
 
@@ -1192,7 +1203,14 @@ class AgentProcessor:
         else:
             return await self._handle_unknown_state(round_count, consecutive_errors, current_state)
 
-    async def _handle_regular_state_processing(self, processor, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int, round_count: int) -> tuple[int, int, bool]:
+    async def _handle_regular_state_processing(
+        self,
+        processor,
+        current_state: AgentState,
+        consecutive_errors: int,
+        max_consecutive_errors: int,
+        round_count: int,
+    ) -> tuple[int, int, bool]:
         """Handle processing for regular (non-special) states."""
         round_increment, consecutive_errors, should_break = await self._process_regular_state(
             processor, current_state, consecutive_errors, max_consecutive_errors
@@ -1206,7 +1224,9 @@ class AgentProcessor:
             return round_count, consecutive_errors, True
         return round_count, consecutive_errors, False
 
-    async def _handle_shutdown_state_processing(self, consecutive_errors: int, round_count: int) -> tuple[int, int, bool]:
+    async def _handle_shutdown_state_processing(
+        self, consecutive_errors: int, round_count: int
+    ) -> tuple[int, int, bool]:
         """Handle shutdown state processing."""
         processor = self.state_processors.get(AgentState.SHUTDOWN)
         round_increment, consecutive_errors, should_break = await self._process_shutdown_state(
@@ -1215,7 +1235,9 @@ class AgentProcessor:
         round_count += round_increment
         return round_count, consecutive_errors, should_break
 
-    async def _handle_unknown_state(self, round_count: int, consecutive_errors: int, current_state: AgentState) -> tuple[int, int, bool]:
+    async def _handle_unknown_state(
+        self, round_count: int, consecutive_errors: int, current_state: AgentState
+    ) -> tuple[int, int, bool]:
         """Handle unknown or unsupported states."""
         logger.warning(f"No processor for state: {current_state}")
         await asyncio.sleep(1)

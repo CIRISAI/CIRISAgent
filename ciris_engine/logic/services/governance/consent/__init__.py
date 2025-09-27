@@ -6,11 +6,11 @@ Default: TEMPORARY (14 days) unless explicitly changed.
 This is the 22nd core CIRIS service.
 """
 
-from .service import ConsentService, ConsentNotFoundError, ConsentValidationError, logger
+from .service import ConsentNotFoundError, ConsentService, ConsentValidationError, logger
 
 __all__ = [
     "ConsentService",
-    "ConsentNotFoundError", 
+    "ConsentNotFoundError",
     "ConsentValidationError",
     "logger",
 ]

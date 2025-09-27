@@ -65,12 +65,12 @@ async def api_communication_service(mock_time_service, mock_app_state):
     service = APICommunicationService()
     service._time_service = mock_time_service
     service._app_state = mock_app_state
-    
+
     # Start the service
     await service.start()
-    
+
     yield service
-    
+
     # Clean up
     await service.stop()
 
@@ -79,7 +79,7 @@ async def api_communication_service(mock_time_service, mock_app_state):
 def sample_speak_correlation(mock_time_service):
     """Create sample 'speak' correlation for testing message fetching."""
     fixed_time = mock_time_service.now()
-    
+
     return ServiceCorrelation(
         correlation_id="speak-corr-123",
         service_type="api",
@@ -94,16 +94,10 @@ def sample_speak_correlation(mock_time_service):
             method_name="speak",
             request_timestamp=fixed_time,
             channel_id="api_127.0.0.1_8080",
-            parameters={
-                "content": "Hello from CIRIS!",
-                "channel_id": "api_127.0.0.1_8080"
-            },
+            parameters={"content": "Hello from CIRIS!", "channel_id": "api_127.0.0.1_8080"},
         ),
         response_data=ServiceResponseData(
-            success=True,
-            result_summary="Message sent",
-            execution_time_ms=15,
-            response_timestamp=fixed_time
+            success=True, result_summary="Message sent", execution_time_ms=15, response_timestamp=fixed_time
         ),
     )
 
@@ -112,7 +106,7 @@ def sample_speak_correlation(mock_time_service):
 def sample_observe_correlation(mock_time_service):
     """Create sample 'observe' correlation for testing message fetching."""
     fixed_time = mock_time_service.now()
-    
+
     return ServiceCorrelation(
         correlation_id="observe-corr-456",
         service_type="api",
@@ -131,14 +125,11 @@ def sample_observe_correlation(mock_time_service):
                 "content": "Hello CIRIS!",
                 "author_id": "user123",
                 "author_name": "Test User",
-                "message_id": "msg-456"
+                "message_id": "msg-456",
             },
         ),
         response_data=ServiceResponseData(
-            success=True,
-            result_summary="Message observed",
-            execution_time_ms=5,
-            response_timestamp=fixed_time
+            success=True, result_summary="Message observed", execution_time_ms=5, response_timestamp=fixed_time
         ),
     )
 
@@ -153,7 +144,7 @@ def sample_correlations(sample_speak_correlation, sample_observe_correlation):
 def expected_fetched_messages(mock_time_service):
     """Create expected FetchedMessage objects for testing."""
     timestamp = mock_time_service.now().isoformat()
-    
+
     return [
         # User message (observe)
         FetchedMessage(
@@ -172,7 +163,7 @@ def expected_fetched_messages(mock_time_service):
             content="Hello from CIRIS!",
             timestamp=timestamp,
             is_bot=True,
-        )
+        ),
     ]
 
 
@@ -182,10 +173,10 @@ def mock_persistence():
     with pytest.MonkeyPatch().context() as m:
         mock_add_correlation = Mock()
         mock_get_correlations = Mock()
-        
+
         m.setattr("ciris_engine.logic.persistence.add_correlation", mock_add_correlation)
         m.setattr("ciris_engine.logic.persistence.get_correlations_by_channel", mock_get_correlations)
-        
+
         yield {
             "add_correlation": mock_add_correlation,
             "get_correlations_by_channel": mock_get_correlations,
@@ -269,16 +260,16 @@ def mock_oauth_user():
 def mock_consent_service():
     """Create mock ConsentService for testing consent flows."""
     service = AsyncMock()
-    
+
     # Mock successful consent check (existing user)
     mock_consent = Mock()
     mock_consent.user_id = "test-user-123"
     mock_consent.stream = "TEMPORARY"
     service.get_consent.return_value = mock_consent
-    
+
     # Mock consent creation for new users
     service.grant_consent.return_value = mock_consent
-    
+
     return service
 
 
@@ -308,23 +299,23 @@ def mock_request_with_full_state(mock_runtime, mock_api_config, mock_agent_proce
     """Create mock request with fully populated app state."""
     request = Mock(spec=Request)
     request.app.state = Mock()
-    
+
     # Add all state components
     request.app.state.runtime = mock_runtime
     request.app.state.runtime.agent_processor = mock_agent_processor
     request.app.state.runtime.state_manager = Mock()
     request.app.state.runtime.state_manager.current_state = "WORK"
-    
+
     request.app.state.api_config = mock_api_config
     request.app.state.consent_manager = mock_consent_service
-    
+
     # Mock auth service
     auth_service = Mock()
     auth_service.get_user.return_value = None
     auth_service._users = {}
     request.app.state.auth_service = auth_service
-    
+
     # Mock message handler
     request.app.state.on_message = AsyncMock()
-    
+
     return request

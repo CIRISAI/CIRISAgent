@@ -9,12 +9,12 @@ import logging
 from typing import Any
 
 from ciris_engine.logic.dma.exceptions import DMAFailure
+from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.processors.core.step_decorators import streaming_step, step_point
-from ciris_engine.schemas.services.runtime_control import StepPoint
 from ciris_engine.schemas.actions.parameters import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.services.runtime_control import StepPoint
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class DMAExecutionPhase:
     """
     Phase 2: DMA Execution
-    
+
     Runs 3 Decision Making Algorithms in parallel through the DMA orchestrator:
     - 3 parallel DMAs for comprehensive analysis
     - Multi-perspective decision insights
@@ -34,37 +34,37 @@ class DMAExecutionPhase:
     async def _perform_dmas_step(self, thought_item: ProcessingQueueItem, thought_context):
         """
         Step 2: Execute 3 parallel Decision Making Algorithms.
-        
+
         This decorated method automatically handles:
         - Real-time streaming of DMA execution progress
         - Single-step pause/resume capability
         - Comprehensive error handling with deferral
         - Telemetry recording for critical failures
-        
+
         Args:
             thought_item: The thought being processed
             thought_context: Context built in previous step
-            
+
         Returns:
             DMA results (from 3 parallel algorithms) or ActionSelectionDMAResult (deferral on failure)
         """
         try:
             logger.debug(f"Starting DMA execution for thought {thought_item.thought_id}")
-            
+
             dma_results = await self.dma_orchestrator.run_initial_dmas(
                 thought_item=thought_item,
                 processing_context=thought_context,
             )
-            
+
             logger.info(f"DMA execution completed for thought {thought_item.thought_id}")
             return dma_results
-            
+
         except DMAFailure as dma_err:
             logger.error(
                 f"DMA failure during initial processing for {thought_item.thought_id}: {dma_err}",
                 exc_info=True,
             )
-            
+
             # Record telemetry for critical DMA failure
             if self.telemetry_service:
                 await self.telemetry_service.record_metric(
@@ -77,14 +77,10 @@ class DMAExecutionPhase:
                         "source_module": "thought_processor",
                     },
                 )
-            
+
             # Return deferral result for DMA failures
-            defer_params = DeferParams(
-                reason="DMA timeout", 
-                context={"error": str(dma_err)}, 
-                defer_until=None
-            )
-            
+            defer_params = DeferParams(reason="DMA timeout", context={"error": str(dma_err)}, defer_until=None)
+
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.DEFER,
                 action_parameters=defer_params,

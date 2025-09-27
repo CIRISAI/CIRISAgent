@@ -471,32 +471,36 @@ class DiscordToolService(ToolService):
         try:
             if not self._client:
                 return {"success": False, "error": "Discord client not initialized"}
-            
+
             guild = self._client.get_guild(int(guild_id))
             if not guild:
                 guild = await self._client.fetch_guild(int(guild_id))
-            
+
             if not guild:
                 return {"success": False, "error": f"Guild with ID {guild_id} not found"}
 
             moderators = []
-            
+
             # Iterate through guild members to find those with moderator permissions
             async for member in guild.fetch_members(limit=None):
                 # Check if user has moderator permissions (can manage messages, kick, ban, etc.)
-                if (member.guild_permissions.manage_messages or 
-                    member.guild_permissions.kick_members or 
-                    member.guild_permissions.ban_members or
-                    member.guild_permissions.manage_roles):
-                    
+                if (
+                    member.guild_permissions.manage_messages
+                    or member.guild_permissions.kick_members
+                    or member.guild_permissions.ban_members
+                    or member.guild_permissions.manage_roles
+                ):
+
                     # Filter out ECHO users
                     if "ECHO" not in str(member.display_name).upper() and "ECHO" not in str(member.name).upper():
-                        moderators.append({
-                            "user_id": str(member.id),
-                            "username": member.name,
-                            "display_name": member.display_name,
-                            "nickname": member.nick
-                        })
+                        moderators.append(
+                            {
+                                "user_id": str(member.id),
+                                "username": member.name,
+                                "display_name": member.display_name,
+                                "nickname": member.nick,
+                            }
+                        )
 
             return {"success": True, "data": {"moderators": moderators}}
         except Exception as e:

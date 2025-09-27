@@ -11,11 +11,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.protocols.services import CommunicationService, WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.adapters.discord import (
-    DiscordApprovalData,
-    DiscordChannelInfo,
-    DiscordGuidanceData,
-)
+from ciris_engine.schemas.adapters.discord import DiscordApprovalData, DiscordChannelInfo, DiscordGuidanceData
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage, IncomingMessage
@@ -102,21 +98,21 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
         # Pass monitored channel IDs from config
         monitored_channels = self.discord_config.monitored_channel_ids if self.discord_config else []
-        
+
         # Get filter and consent services from bus manager if available
         filter_service = None
         consent_service = None
         if bus_manager:
-            filter_service = getattr(bus_manager, 'adaptive_filter_service', None)
-            consent_service = getattr(bus_manager, 'consent_service', None)
+            filter_service = getattr(bus_manager, "adaptive_filter_service", None)
+            consent_service = getattr(bus_manager, "consent_service", None)
 
         self._channel_manager = DiscordChannelManager(
-            token=token, 
-            client=bot, 
-            on_message_callback=on_message, 
+            token=token,
+            client=bot,
+            on_message_callback=on_message,
             monitored_channel_ids=monitored_channels,
             filter_service=filter_service,
-            consent_service=consent_service
+            consent_service=consent_service,
         )
         self._message_handler = DiscordMessageHandler(bot)
         self._guidance_handler = DiscordGuidanceHandler(

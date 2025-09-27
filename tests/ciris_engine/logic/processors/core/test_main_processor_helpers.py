@@ -67,7 +67,7 @@ class TestAgentProcessorHelpers:
     def mock_processors(self):
         """Create mock state processors."""
         processors = {}
-        
+
         for state in ["wakeup", "work", "play", "solitude", "dream", "shutdown"]:
             processor = Mock()
             processor.process = AsyncMock(return_value={"state": state, "success": True})
@@ -125,13 +125,13 @@ class TestAgentProcessorHelpers:
         """Test _check_pause_state when paused with event."""
         main_processor._is_paused = True
         main_processor._pause_event = AsyncMock()
-        
+
         # Mock the event to resolve immediately
         main_processor._pause_event.wait = AsyncMock()
         main_processor._pause_event.clear = Mock()
-        
+
         result = await main_processor._check_pause_state()
-        
+
         assert result is True
         main_processor._pause_event.wait.assert_called_once()
         main_processor._pause_event.clear.assert_called_once()
@@ -141,11 +141,11 @@ class TestAgentProcessorHelpers:
         """Test _check_pause_state when paused without event (fallback)."""
         main_processor._is_paused = True
         main_processor._pause_event = None
-        
-        with patch('asyncio.sleep') as mock_sleep:
+
+        with patch("asyncio.sleep") as mock_sleep:
             mock_sleep.return_value = None  # Make sleep non-blocking
             result = await main_processor._check_pause_state()
-            
+
         assert result is False
         mock_sleep.assert_called_once_with(0.1)
 
@@ -159,39 +159,47 @@ class TestAgentProcessorHelpers:
     @pytest.mark.asyncio
     async def test_handle_shutdown_transitions_shutdown_requested(self, main_processor):
         """Test _handle_shutdown_transitions when shutdown is requested."""
-        with patch('ciris_engine.logic.processors.core.main_processor.is_global_shutdown_requested', return_value=True), \
-             patch('ciris_engine.logic.processors.core.main_processor.get_global_shutdown_reason', return_value="Test reason"):
-            
+        with patch(
+            "ciris_engine.logic.processors.core.main_processor.is_global_shutdown_requested", return_value=True
+        ), patch(
+            "ciris_engine.logic.processors.core.main_processor.get_global_shutdown_reason", return_value="Test reason"
+        ):
+
             main_processor.state_manager.can_transition_to = Mock(return_value=True)
             main_processor._handle_state_transition = AsyncMock()
-            
+
             result = await main_processor._handle_shutdown_transitions(AgentState.WORK)
-            
+
             assert result is True
             main_processor._handle_state_transition.assert_called_once_with(AgentState.SHUTDOWN)
 
     @pytest.mark.asyncio
     async def test_handle_shutdown_transitions_cannot_transition(self, main_processor):
         """Test _handle_shutdown_transitions when transition to SHUTDOWN fails."""
-        with patch('ciris_engine.logic.processors.core.main_processor.is_global_shutdown_requested', return_value=True), \
-             patch('ciris_engine.logic.processors.core.main_processor.get_global_shutdown_reason', return_value="Test reason"):
-            
+        with patch(
+            "ciris_engine.logic.processors.core.main_processor.is_global_shutdown_requested", return_value=True
+        ), patch(
+            "ciris_engine.logic.processors.core.main_processor.get_global_shutdown_reason", return_value="Test reason"
+        ):
+
             main_processor.state_manager.can_transition_to = Mock(return_value=False)
-            
+
             result = await main_processor._handle_shutdown_transitions(AgentState.WORK)
-            
+
             assert result is False
 
     @pytest.mark.asyncio
     async def test_handle_shutdown_transitions_auto_transition(self, main_processor):
         """Test _handle_shutdown_transitions with auto transition."""
-        with patch('ciris_engine.logic.processors.core.main_processor.is_global_shutdown_requested', return_value=False):
-            
+        with patch(
+            "ciris_engine.logic.processors.core.main_processor.is_global_shutdown_requested", return_value=False
+        ):
+
             main_processor.state_manager.should_auto_transition = Mock(return_value=AgentState.PLAY)
             main_processor._handle_state_transition = AsyncMock()
-            
+
             result = await main_processor._handle_shutdown_transitions(AgentState.WORK)
-            
+
             assert result is True
             main_processor._handle_state_transition.assert_called_once_with(AgentState.PLAY)
 
@@ -202,11 +210,11 @@ class TestAgentProcessorHelpers:
         processor = mock_processors["work"]
         processor.process.return_value = {"success": True}
         main_processor._check_scheduled_dream = AsyncMock(return_value=False)
-        
+
         round_increment, consecutive_errors, should_break = await main_processor._process_regular_state(
             processor, AgentState.WORK, 0, 5
         )
-        
+
         assert round_increment == 1
         assert consecutive_errors == 0
         assert should_break is False
@@ -219,11 +227,11 @@ class TestAgentProcessorHelpers:
         processor.process.return_value = {"success": True}
         main_processor._check_scheduled_dream = AsyncMock(return_value=True)
         main_processor._handle_state_transition = AsyncMock()
-        
+
         round_increment, consecutive_errors, should_break = await main_processor._process_regular_state(
             processor, AgentState.WORK, 0, 5
         )
-        
+
         assert round_increment == 1
         assert consecutive_errors == 0
         assert should_break is False
@@ -239,11 +247,11 @@ class TestAgentProcessorHelpers:
         processor.process.return_value = result_mock
         main_processor.solitude_processor = processor  # Set the reference for comparison
         main_processor._handle_state_transition = AsyncMock()
-        
+
         round_increment, consecutive_errors, should_break = await main_processor._process_regular_state(
             processor, AgentState.SOLITUDE, 0, 5
         )
-        
+
         assert round_increment == 1
         assert consecutive_errors == 0
         assert should_break is False
@@ -254,12 +262,12 @@ class TestAgentProcessorHelpers:
         """Test _process_regular_state error handling."""
         processor = mock_processors["work"]
         processor.process.side_effect = Exception("Test error")
-        
-        with patch('asyncio.sleep') as mock_sleep:
+
+        with patch("asyncio.sleep") as mock_sleep:
             round_increment, consecutive_errors, should_break = await main_processor._process_regular_state(
                 processor, AgentState.WORK, 0, 5
             )
-        
+
         assert round_increment == 0
         assert consecutive_errors == 1
         assert should_break is False
@@ -270,12 +278,12 @@ class TestAgentProcessorHelpers:
         """Test _process_regular_state with max consecutive errors."""
         processor = mock_processors["work"]
         processor.process.side_effect = Exception("Test error")
-        
-        with patch('ciris_engine.logic.processors.core.main_processor.request_global_shutdown') as mock_shutdown:
+
+        with patch("ciris_engine.logic.processors.core.main_processor.request_global_shutdown") as mock_shutdown:
             round_increment, consecutive_errors, should_break = await main_processor._process_regular_state(
                 processor, AgentState.WORK, 4, 5  # One more error will trigger shutdown
             )
-        
+
         assert round_increment == 0
         assert consecutive_errors == 5
         assert should_break is True
@@ -289,9 +297,9 @@ class TestAgentProcessorHelpers:
         main_processor.dream_processor._dream_task = Mock()
         main_processor.dream_processor._dream_task.done.return_value = True
         main_processor._handle_state_transition = AsyncMock()
-        
+
         result = await main_processor._process_dream_state()
-        
+
         assert result is True
         main_processor._handle_state_transition.assert_called_once_with(AgentState.WORK)
 
@@ -301,10 +309,10 @@ class TestAgentProcessorHelpers:
         # Mock dream processor with running task
         main_processor.dream_processor._dream_task = Mock()
         main_processor.dream_processor._dream_task.done.return_value = False
-        
-        with patch('asyncio.sleep') as mock_sleep:
+
+        with patch("asyncio.sleep") as mock_sleep:
             result = await main_processor._process_dream_state()
-        
+
         assert result is True
         mock_sleep.assert_called_once_with(5)
 
@@ -314,9 +322,9 @@ class TestAgentProcessorHelpers:
         # Mock dream processor without task
         main_processor.dream_processor._dream_task = None
         main_processor._handle_state_transition = AsyncMock()
-        
+
         result = await main_processor._process_dream_state()
-        
+
         assert result is True
         main_processor._handle_state_transition.assert_called_once_with(AgentState.WORK)
 
@@ -324,10 +332,8 @@ class TestAgentProcessorHelpers:
     @pytest.mark.asyncio
     async def test_process_shutdown_state_no_processor(self, main_processor):
         """Test _process_shutdown_state without processor."""
-        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(
-            None, 0
-        )
-        
+        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(None, 0)
+
         assert round_increment == 0
         assert consecutive_errors == 0
         assert should_break is True
@@ -339,11 +345,9 @@ class TestAgentProcessorHelpers:
         result_mock = Mock()
         result_mock.shutdown_ready = True
         processor.process.return_value = result_mock
-        
-        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(
-            processor, 0
-        )
-        
+
+        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(processor, 0)
+
         assert round_increment == 1
         assert consecutive_errors == 0
         assert should_break is True
@@ -356,11 +360,9 @@ class TestAgentProcessorHelpers:
         result_mock = Mock()
         result_mock.shutdown_ready = False  # Test processor attribute takes precedence
         processor.process.return_value = result_mock
-        
-        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(
-            processor, 0
-        )
-        
+
+        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(processor, 0)
+
         assert round_increment == 1
         assert consecutive_errors == 0
         assert should_break is True
@@ -370,11 +372,9 @@ class TestAgentProcessorHelpers:
         """Test _process_shutdown_state error handling."""
         processor = mock_processors["shutdown"]
         processor.process.side_effect = Exception("Shutdown error")
-        
-        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(
-            processor, 0
-        )
-        
+
+        round_increment, consecutive_errors, should_break = await main_processor._process_shutdown_state(processor, 0)
+
         assert round_increment == 0
         assert consecutive_errors == 1
         assert should_break is True
@@ -383,8 +383,8 @@ class TestAgentProcessorHelpers:
     def test_calculate_round_delay_default(self, main_processor, mock_config):
         """Test _calculate_round_delay with default values."""
         # Remove workflow to test default
-        delattr(mock_config, 'workflow')
-        
+        delattr(mock_config, "workflow")
+
         delay = main_processor._calculate_round_delay(AgentState.PLAY)
         assert delay == 1.0
 
@@ -411,7 +411,7 @@ class TestAgentProcessorHelpers:
     def test_calculate_round_delay_mock_llm(self, main_processor, mock_config):
         """Test _calculate_round_delay with mock LLM (no state overrides)."""
         mock_config.mock_llm = True
-        
+
         delay = main_processor._calculate_round_delay(AgentState.WORK)
         assert delay == 2.0  # Config value, no state override
 
@@ -427,7 +427,7 @@ class TestAgentProcessorHelpers:
         """Test _handle_delay_with_stop_check with stop event set."""
         main_processor._stop_event = Mock()
         main_processor._stop_event.is_set.return_value = True
-        
+
         result = await main_processor._handle_delay_with_stop_check(1.0)
         assert result is True  # No delay when stop is set
 
@@ -436,13 +436,13 @@ class TestAgentProcessorHelpers:
         """Test _handle_delay_with_stop_check with stop event that gets set during wait."""
         main_processor._stop_event = Mock()
         main_processor._stop_event.is_set.return_value = False
-        
+
         # Mock wait_for to resolve immediately (simulating stop event being set)
-        with patch('asyncio.wait_for') as mock_wait_for:
+        with patch("asyncio.wait_for") as mock_wait_for:
             mock_wait_for.return_value = None  # Event was set
-            
+
             result = await main_processor._handle_delay_with_stop_check(1.0)
-            
+
         assert result is False  # Should break when stop event is set
         mock_wait_for.assert_called_once()
 
@@ -451,13 +451,13 @@ class TestAgentProcessorHelpers:
         """Test _handle_delay_with_stop_check with timeout (normal case)."""
         main_processor._stop_event = Mock()
         main_processor._stop_event.is_set.return_value = False
-        
+
         # Mock wait_for to timeout
-        with patch('asyncio.wait_for') as mock_wait_for:
+        with patch("asyncio.wait_for") as mock_wait_for:
             mock_wait_for.side_effect = asyncio.TimeoutError()
-            
+
             result = await main_processor._handle_delay_with_stop_check(1.0)
-            
+
         assert result is True  # Should continue when timeout occurs
         mock_wait_for.assert_called_once()
 
@@ -465,10 +465,10 @@ class TestAgentProcessorHelpers:
     async def test_handle_delay_with_stop_check_no_event(self, main_processor):
         """Test _handle_delay_with_stop_check without stop event."""
         main_processor._stop_event = None
-        
-        with patch('asyncio.sleep') as mock_sleep:
+
+        with patch("asyncio.sleep") as mock_sleep:
             result = await main_processor._handle_delay_with_stop_check(1.0)
-            
+
         assert result is True
         mock_sleep.assert_called_once_with(1.0)
 
@@ -476,11 +476,11 @@ class TestAgentProcessorHelpers:
     @pytest.mark.asyncio
     async def test_process_single_round_max_rounds_reached(self, main_processor):
         """Test _process_single_round when max rounds reached."""
-        with patch('ciris_engine.logic.processors.core.main_processor.request_global_shutdown') as mock_shutdown:
+        with patch("ciris_engine.logic.processors.core.main_processor.request_global_shutdown") as mock_shutdown:
             round_count, consecutive_errors, should_break = await main_processor._process_single_round(
                 5, 0, 5, 5  # round_count == num_rounds
             )
-            
+
         assert round_count == 5
         assert consecutive_errors == 0
         assert should_break is True
@@ -490,11 +490,9 @@ class TestAgentProcessorHelpers:
     async def test_process_single_round_pause_skip(self, main_processor):
         """Test _process_single_round when paused (skip round)."""
         main_processor._check_pause_state = AsyncMock(return_value=False)
-        
-        round_count, consecutive_errors, should_break = await main_processor._process_single_round(
-            3, 0, 5, 10
-        )
-        
+
+        round_count, consecutive_errors, should_break = await main_processor._process_single_round(3, 0, 5, 10)
+
         assert round_count == 3  # No change
         assert consecutive_errors == 0
         assert should_break is False
@@ -508,18 +506,16 @@ class TestAgentProcessorHelpers:
         main_processor._process_regular_state = AsyncMock(return_value=(1, 0, False))
         main_processor._calculate_round_delay = Mock(return_value=1.0)
         main_processor._handle_delay_with_stop_check = AsyncMock(return_value=True)
-        
+
         # Mock state manager
         main_processor.state_manager.get_state = Mock(return_value=AgentState.WORK)
-        
-        round_count, consecutive_errors, should_break = await main_processor._process_single_round(
-            3, 0, 5, 10
-        )
-        
+
+        round_count, consecutive_errors, should_break = await main_processor._process_single_round(3, 0, 5, 10)
+
         assert round_count == 4  # Incremented by 1
         assert consecutive_errors == 0
         assert should_break is False
-        
+
         # Verify all helpers were called
         main_processor._check_pause_state.assert_called_once()
         main_processor._handle_shutdown_transitions.assert_called_once()
@@ -533,9 +529,9 @@ class TestProcessSingleRoundHelpers:
 
     def test_should_stop_after_target_rounds_reached(self, main_processor):
         """Test _should_stop_after_target_rounds when target is reached."""
-        with patch('ciris_engine.logic.processors.core.main_processor.request_global_shutdown') as mock_shutdown:
+        with patch("ciris_engine.logic.processors.core.main_processor.request_global_shutdown") as mock_shutdown:
             result = main_processor._should_stop_after_target_rounds(round_count=5, num_rounds=5)
-            
+
             assert result is True
             mock_shutdown.assert_called_once_with("Processing completed after 5 rounds")
 
@@ -554,9 +550,9 @@ class TestProcessSingleRoundHelpers:
         """Test _process_current_state with regular state."""
         main_processor.state_processors = mock_processors
         main_processor._handle_regular_state_processing = AsyncMock(return_value=(1, 0, False))
-        
+
         result = await main_processor._process_current_state(0, 0, 5, AgentState.WORK)
-        
+
         assert result == (1, 0, False)
         main_processor._handle_regular_state_processing.assert_called_once()
 
@@ -565,11 +561,11 @@ class TestProcessSingleRoundHelpers:
         """Test _process_current_state with dream state."""
         # Ensure DREAM state doesn't have a processor to trigger the elif branch
         main_processor.state_processors = {state: Mock() for state in ["work", "play", "shutdown"]}
-        
+
         # Mock the helper method that actually gets called
-        with patch.object(main_processor, '_handle_dream_state_processing', return_value=(1, 0, False)) as mock_handler:
+        with patch.object(main_processor, "_handle_dream_state_processing", return_value=(1, 0, False)) as mock_handler:
             result = await main_processor._process_current_state(0, 0, 5, AgentState.DREAM)
-            
+
             assert result == (1, 0, False)
             mock_handler.assert_called_once_with(0, 0)
 
@@ -577,9 +573,9 @@ class TestProcessSingleRoundHelpers:
     async def test_process_current_state_shutdown_state(self, main_processor):
         """Test _process_current_state with shutdown state."""
         main_processor._handle_shutdown_state_processing = AsyncMock(return_value=(1, 0, True))
-        
+
         result = await main_processor._process_current_state(0, 0, 5, AgentState.SHUTDOWN)
-        
+
         assert result == (1, 0, True)
         main_processor._handle_shutdown_state_processing.assert_called_once_with(0, 0)
 
@@ -587,12 +583,12 @@ class TestProcessSingleRoundHelpers:
     async def test_process_current_state_unknown_state(self, main_processor):
         """Test _process_current_state with unknown state."""
         main_processor._handle_unknown_state = AsyncMock(return_value=(0, 0, False))
-        
+
         # Use a state that doesn't have a processor
         main_processor.state_processors = {}
-        
+
         result = await main_processor._process_current_state(0, 0, 5, AgentState.PLAY)
-        
+
         assert result == (0, 0, False)
         main_processor._handle_unknown_state.assert_called_once()
 
@@ -601,23 +597,19 @@ class TestProcessSingleRoundHelpers:
         """Test _handle_regular_state_processing helper method."""
         processor = mock_processors["work"]
         main_processor._process_regular_state = AsyncMock(return_value=(1, 0, False))
-        
-        result = await main_processor._handle_regular_state_processing(
-            processor, AgentState.WORK, 0, 5, 3
-        )
-        
+
+        result = await main_processor._handle_regular_state_processing(processor, AgentState.WORK, 0, 5, 3)
+
         assert result == (4, 0, False)  # round_count incremented
-        main_processor._process_regular_state.assert_called_once_with(
-            processor, AgentState.WORK, 0, 5
-        )
+        main_processor._process_regular_state.assert_called_once_with(processor, AgentState.WORK, 0, 5)
 
     @pytest.mark.asyncio
     async def test_handle_dream_state_processing_success(self, main_processor):
         """Test _handle_dream_state_processing when dream processing succeeds."""
         main_processor._process_dream_state = AsyncMock(return_value=True)
-        
+
         result = await main_processor._handle_dream_state_processing(5, 2)
-        
+
         assert result == (5, 2, False)  # Continue processing
         main_processor._process_dream_state.assert_called_once()
 
@@ -625,9 +617,9 @@ class TestProcessSingleRoundHelpers:
     async def test_handle_dream_state_processing_failure(self, main_processor):
         """Test _handle_dream_state_processing when dream processing fails."""
         main_processor._process_dream_state = AsyncMock(return_value=False)
-        
+
         result = await main_processor._handle_dream_state_processing(5, 2)
-        
+
         assert result == (5, 2, True)  # Should break
 
     @pytest.mark.asyncio
@@ -635,18 +627,18 @@ class TestProcessSingleRoundHelpers:
         """Test _handle_shutdown_state_processing helper method."""
         main_processor.state_processors = mock_processors
         main_processor._process_shutdown_state = AsyncMock(return_value=(1, 1, True))
-        
+
         result = await main_processor._handle_shutdown_state_processing(0, 4)
-        
+
         assert result == (5, 1, True)  # round_count incremented
         main_processor._process_shutdown_state.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handle_unknown_state(self, main_processor):
         """Test _handle_unknown_state helper method."""
-        with patch('asyncio.sleep') as mock_sleep:
+        with patch("asyncio.sleep") as mock_sleep:
             result = await main_processor._handle_unknown_state(3, 1, AgentState.PLAY)
-            
+
             assert result == (3, 1, False)  # No changes, continue processing
             mock_sleep.assert_called_once_with(1)
 
@@ -655,9 +647,9 @@ class TestProcessSingleRoundHelpers:
         """Test _handle_round_delay helper method."""
         main_processor._calculate_round_delay = Mock(return_value=2.0)
         main_processor._handle_delay_with_stop_check = AsyncMock(return_value=True)
-        
+
         result = await main_processor._handle_round_delay(AgentState.WORK)
-        
+
         assert result is True
         main_processor._calculate_round_delay.assert_called_once_with(AgentState.WORK)
         main_processor._handle_delay_with_stop_check.assert_called_once_with(2.0)

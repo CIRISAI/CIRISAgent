@@ -130,28 +130,28 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
     def _detect_and_replace_spoofed_markers(self, content: str) -> str:
         """Detect and replace attempts to spoof CIRIS observation markers."""
         import re
-        
+
         # Patterns for detecting spoofed markers (case insensitive, with variations)
         patterns = [
-            r'CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START',
-            r'CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END',
-            r'CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START',  # Common misspelling
-            r'CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END',
-            r'CIRIS[_\s]*OBS(?:ERV)?[_\s]*START',  # Shortened version
-            r'CIRIS[_\s]*OBS(?:ERV)?[_\s]*END',
+            r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",
+            r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
+            r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",  # Common misspelling
+            r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
+            r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*START",  # Shortened version
+            r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*END",
         ]
-        
+
         modified_content = content
         for pattern in patterns:
             if re.search(pattern, content, re.IGNORECASE):
                 modified_content = re.sub(
-                    pattern, 
-                    "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!", 
-                    modified_content, 
-                    flags=re.IGNORECASE
+                    pattern,
+                    "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!",
+                    modified_content,
+                    flags=re.IGNORECASE,
                 )
                 logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern}")
-        
+
         return modified_content
 
     async def _collect_message_attachments_with_reply(self, raw_message) -> dict:
@@ -166,12 +166,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         Returns:
             dict with keys: images, documents, embeds, reply_context
         """
-        result = {
-            "images": [],
-            "documents": [],
-            "embeds": [],
-            "reply_context": None
-        }
+        result = {"images": [], "documents": [], "embeds": [], "reply_context": None}
 
         # Fetch referenced message and build reply context
         referenced_message = await self._fetch_referenced_message(raw_message)
@@ -188,12 +183,12 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
     async def _fetch_referenced_message(self, raw_message):
         """Fetch the referenced message if this is a reply."""
-        if not hasattr(raw_message, 'reference') or not raw_message.reference:
+        if not hasattr(raw_message, "reference") or not raw_message.reference:
             return None
 
         try:
             # Use resolved message if available
-            if hasattr(raw_message.reference, 'resolved') and raw_message.reference.resolved:
+            if hasattr(raw_message.reference, "resolved") and raw_message.reference.resolved:
                 return raw_message.reference.resolved
 
             # Fallback: fetch manually if not resolved
@@ -209,7 +204,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         if not referenced_message or not referenced_message.content:
             return None
 
-        author_name = getattr(referenced_message.author, 'display_name', 'Unknown')
+        author_name = getattr(referenced_message.author, "display_name", "Unknown")
         return f"@{author_name}: {referenced_message.content}"
 
     def _build_message_processing_order(self, raw_message, referenced_message) -> list:
@@ -242,13 +237,13 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             document_count += self._process_document_attachments(message, result["documents"], document_count)
 
             # Process embeds (only from reply message to avoid duplication)
-            if message_type == "reply" and hasattr(message, 'embeds') and message.embeds:
+            if message_type == "reply" and hasattr(message, "embeds") and message.embeds:
                 result["embeds"] = message.embeds
 
     def _process_image_attachments(self, message, images_list, current_count) -> int:
         """Process image attachments from a message, return count of images added."""
         added_count = 0
-        if not hasattr(message, 'attachments') or not message.attachments or current_count >= 1:
+        if not hasattr(message, "attachments") or not message.attachments or current_count >= 1:
             return added_count
 
         for attachment in message.attachments:
@@ -263,7 +258,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
     def _process_document_attachments(self, message, documents_list, current_count) -> int:
         """Process document attachments from a message, return count of documents added."""
         added_count = 0
-        if not hasattr(message, 'attachments') or not message.attachments or current_count >= 3:
+        if not hasattr(message, "attachments") or not message.attachments or current_count >= 3:
             return added_count
 
         for attachment in message.attachments:
@@ -279,13 +274,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
     def _is_image_attachment(self, attachment) -> bool:
         """Check if attachment is an image."""
-        if not hasattr(attachment, 'content_type') or not attachment.content_type:
+        if not hasattr(attachment, "content_type") or not attachment.content_type:
             return False
 
-        image_types = [
-            'image/png', 'image/jpeg', 'image/jpg', 'image/gif',
-            'image/webp', 'image/svg+xml', 'image/bmp'
-        ]
+        image_types = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/svg+xml", "image/bmp"]
         return attachment.content_type.lower() in image_types
 
     async def _enhance_message(self, msg: DiscordMessage) -> DiscordMessage:
@@ -357,7 +349,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         monitored_channel_ids = self.monitored_channel_ids or []
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
-        
+
         # Log the routing decision
         logger.info(
             f"[DISCORD-PRIORITY] Routing message {msg.message_id} from @{msg.author_name} "
@@ -387,11 +379,17 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             )
             logger.info(f"  - Raw channel ID: {raw_channel_id}")
             logger.info(f"  - Monitored channels: {monitored_channel_ids}")
-            logger.info(f"  - Channel {msg.channel_id} monitored: {raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids}")
+            logger.info(
+                f"  - Channel {msg.channel_id} monitored: {raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids}"
+            )
             logger.info(f"  - Deferral channel: {self.deferral_channel_id}")
-            logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}")
+            logger.info(
+                f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}"
+            )
             if msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id:
-                logger.info(f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}")
+                logger.info(
+                    f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}"
+                )
                 # Username matching removed for security - only numeric IDs are checked
 
     def _create_task_context_with_extras(self, msg: DiscordMessage) -> TaskContext:
@@ -405,7 +403,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         monitored_channel_ids = self.monitored_channel_ids or []
 
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
-        
+
         # Log the routing decision
         logger.info(
             f"[DISCORD-PASSIVE] Routing message {msg.message_id} from @{msg.author_name} "
@@ -414,9 +412,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         # First check if it's a monitored channel - create task regardless of author
         if raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids:
-            logger.info(
-                f"[DISCORD-PASSIVE] Channel {msg.channel_id} IS MONITORED - CREATING PASSIVE TASK"
-            )
+            logger.info(f"[DISCORD-PASSIVE] Channel {msg.channel_id} IS MONITORED - CREATING PASSIVE TASK")
             await self._create_passive_observation_result(msg)
         # Then check if it's deferral channel AND author is WA
         elif (raw_channel_id == self.deferral_channel_id or msg.channel_id == self.deferral_channel_id) and (
@@ -434,11 +430,17 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             )
             logger.info(f"  - Raw channel ID: {raw_channel_id}")
             logger.info(f"  - Monitored channels: {monitored_channel_ids}")
-            logger.info(f"  - Channel {msg.channel_id} monitored: {raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids}")
+            logger.info(
+                f"  - Channel {msg.channel_id} monitored: {raw_channel_id in monitored_channel_ids or msg.channel_id in monitored_channel_ids}"
+            )
             logger.info(f"  - Deferral channel: {self.deferral_channel_id}")
-            logger.info(f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}")
+            logger.info(
+                f"  - Is deferral channel: {msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id}"
+            )
             if msg.channel_id == self.deferral_channel_id or raw_channel_id == self.deferral_channel_id:
-                logger.info(f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}")
+                logger.info(
+                    f"  - Author ID {msg.author_id} in WA list {self.wa_user_ids}: {msg.author_id in self.wa_user_ids}"
+                )
                 # Username matching removed for security - only numeric IDs are checked
 
     async def _add_to_feedback_queue(self, msg: DiscordMessage) -> None:
@@ -630,20 +632,20 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 return []
 
             # Try to get the Discord tool service from communication service
-            if hasattr(self.communication_service, '_discord_tool_service'):
+            if hasattr(self.communication_service, "_discord_tool_service"):
                 tool_service = self.communication_service._discord_tool_service
                 result = await tool_service._get_guild_moderators({"guild_id": guild_id})
-                
+
                 if result.get("success") and "data" in result:
                     moderators = result["data"].get("moderators", [])
                     logger.info(f"Retrieved {len(moderators)} moderators from guild {guild_id}")
                     return moderators
                 else:
                     logger.warning(f"Failed to get moderators: {result.get('error', 'Unknown error')}")
-                    
+
         except Exception as e:
             logger.error(f"Error getting guild moderators: {e}")
-            
+
         return []
 
     def _extract_guild_id_from_channel(self, channel_id: str) -> Optional[str]:
@@ -654,7 +656,9 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 return parts[1]
         return None
 
-    async def _add_custom_context_sections(self, task_lines: List[str], msg: DiscordMessage, history_context: List[Dict]) -> None:
+    async def _add_custom_context_sections(
+        self, task_lines: List[str], msg: DiscordMessage, history_context: List[Dict]
+    ) -> None:
         """Add Discord-specific ACTIVE MODS section to context."""
         # Add ACTIVE MODS section for Discord
         guild_id = self._extract_guild_id_from_channel(msg.channel_id)
@@ -663,7 +667,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             if moderators:
                 task_lines.append("\n=== ACTIVE MODS ===")
                 for mod in moderators:
-                    nickname = mod.get('nickname') or mod.get('display_name') or mod.get('username')
+                    nickname = mod.get("nickname") or mod.get("display_name") or mod.get("username")
                     task_lines.append(f"ID: {mod['user_id']} | Nick: {nickname}")
                 task_lines.append("=== END ACTIVE MODS ===")
             else:

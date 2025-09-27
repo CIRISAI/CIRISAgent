@@ -460,9 +460,7 @@ def _load_oauth_config(provider: str) -> Dict[str, str]:
 
     config = json.loads(oauth_config_file.read_text())
     if provider not in config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"OAuth provider '{provider}' not configured"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"OAuth provider '{provider}' not configured")
 
     return config[provider]
 
@@ -610,7 +608,7 @@ async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -
         external_id = user_info["id"]
         email = user_info.get("email")
         name = user_info.get("username", email)
-        
+
         # Construct Discord avatar URL if avatar exists
         avatar_hash = user_info.get("avatar")
         picture = f"https://cdn.discordapp.com/avatars/{external_id}/{avatar_hash}.png" if avatar_hash else None
@@ -679,6 +677,7 @@ def _build_redirect_response(api_key: str, oauth_user, provider: str) -> Redirec
     }
 
     import urllib.parse
+
     query_string = urllib.parse.urlencode(redirect_params)
     redirect_url = f"{gui_callback_url}?{query_string}"
 

@@ -30,10 +30,10 @@ class DocumentParser:
     MAX_TEXT_LENGTH = 50000  # 50k characters max output
 
     # Allowed formats (whitelist approach)
-    ALLOWED_EXTENSIONS: Set[str] = {'.pdf', '.docx'}
+    ALLOWED_EXTENSIONS: Set[str] = {".pdf", ".docx"}
     ALLOWED_CONTENT_TYPES: Set[str] = {
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
 
     def __init__(self):
@@ -44,6 +44,7 @@ class DocumentParser:
         """Check if required dependencies are available."""
         try:
             import pypdf  # noqa: F401
+
             self._pdf_available = True
         except ImportError:
             logger.warning("pypdf not available - PDF parsing disabled")
@@ -51,6 +52,7 @@ class DocumentParser:
 
         try:
             import docx2txt  # noqa: F401
+
             self._docx_available = True
         except ImportError:
             logger.warning("docx2txt not available - DOCX parsing disabled")
@@ -89,8 +91,10 @@ class DocumentParser:
 
         # Limit number of attachments processed
         if len(document_attachments) > self.MAX_ATTACHMENTS:
-            logger.warning(f"Too many document attachments ({len(document_attachments)}), processing first {self.MAX_ATTACHMENTS}")
-            document_attachments = document_attachments[:self.MAX_ATTACHMENTS]
+            logger.warning(
+                f"Too many document attachments ({len(document_attachments)}), processing first {self.MAX_ATTACHMENTS}"
+            )
+            document_attachments = document_attachments[: self.MAX_ATTACHMENTS]
 
         extracted_texts = []
 
@@ -108,8 +112,10 @@ class DocumentParser:
 
             # Apply text length limit
             if len(combined_text) > self.MAX_TEXT_LENGTH:
-                logger.warning(f"Extracted text too long ({len(combined_text)} chars), truncating to {self.MAX_TEXT_LENGTH}")
-                combined_text = combined_text[:self.MAX_TEXT_LENGTH] + "\n\n[Text truncated due to length limit]"
+                logger.warning(
+                    f"Extracted text too long ({len(combined_text)} chars), truncating to {self.MAX_TEXT_LENGTH}"
+                )
+                combined_text = combined_text[: self.MAX_TEXT_LENGTH] + "\n\n[Text truncated due to length limit]"
 
             return combined_text
 
@@ -118,27 +124,29 @@ class DocumentParser:
     def _is_document_attachment(self, attachment: Any) -> bool:
         """Check if attachment is a supported document."""
         # Check file size first
-        if hasattr(attachment, 'size') and attachment.size > self.MAX_FILE_SIZE:
-            logger.debug(f"Attachment {attachment.filename} too large ({attachment.size / 1024:.1f}KB, max {self.MAX_FILE_SIZE / 1024}KB)")
+        if hasattr(attachment, "size") and attachment.size > self.MAX_FILE_SIZE:
+            logger.debug(
+                f"Attachment {attachment.filename} too large ({attachment.size / 1024:.1f}KB, max {self.MAX_FILE_SIZE / 1024}KB)"
+            )
             return False
 
         # Check file extension
-        if hasattr(attachment, 'filename') and attachment.filename:
+        if hasattr(attachment, "filename") and attachment.filename:
             file_ext = Path(attachment.filename).suffix.lower()
             if file_ext not in self.ALLOWED_EXTENSIONS:
                 return False
 
         # Check content type if available
-        if hasattr(attachment, 'content_type') and attachment.content_type:
+        if hasattr(attachment, "content_type") and attachment.content_type:
             if attachment.content_type not in self.ALLOWED_CONTENT_TYPES:
                 return False
 
         # Check if we have the right parser available
-        if hasattr(attachment, 'filename') and attachment.filename:
+        if hasattr(attachment, "filename") and attachment.filename:
             file_ext = Path(attachment.filename).suffix.lower()
-            if file_ext == '.pdf' and not self._pdf_available:
+            if file_ext == ".pdf" and not self._pdf_available:
                 return False
-            if file_ext == '.docx' and not self._docx_available:
+            if file_ext == ".docx" and not self._docx_available:
                 return False
 
         return True
@@ -152,7 +160,7 @@ class DocumentParser:
         Returns:
             Extracted text or None if failed
         """
-        if not hasattr(attachment, 'url') or not hasattr(attachment, 'filename'):
+        if not hasattr(attachment, "url") or not hasattr(attachment, "filename"):
             return None
 
         file_ext = Path(attachment.filename).suffix.lower()
@@ -160,8 +168,7 @@ class DocumentParser:
         try:
             # Download the file with timeout
             file_data = await asyncio.wait_for(
-                self._download_file(attachment.url),
-                timeout=10.0  # 10 second download timeout
+                self._download_file(attachment.url), timeout=10.0  # 10 second download timeout
             )
 
             if not file_data:
@@ -169,10 +176,8 @@ class DocumentParser:
 
             # Process in a separate thread with timeout to prevent blocking
             text = await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(
-                    None, self._extract_text_sync, file_data, file_ext
-                ),
-                timeout=self.PROCESSING_TIMEOUT
+                asyncio.get_event_loop().run_in_executor(None, self._extract_text_sync, file_data, file_ext),
+                timeout=self.PROCESSING_TIMEOUT,
             )
 
             return text
@@ -193,14 +198,14 @@ class DocumentParser:
                         return None
 
                     # Check content length header
-                    if response.headers.get('content-length'):
-                        content_length = int(response.headers['content-length'])
+                    if response.headers.get("content-length"):
+                        content_length = int(response.headers["content-length"])
                         if content_length > self.MAX_FILE_SIZE:
                             logger.error(f"File too large ({content_length} bytes)")
                             return None
 
                     # Read with size limit
-                    file_data = b''
+                    file_data = b""
                     async for chunk in response.content.iter_chunked(8192):
                         file_data += chunk
                         if len(file_data) > self.MAX_FILE_SIZE:
@@ -224,9 +229,9 @@ class DocumentParser:
             Extracted text or error message
         """
         try:
-            if file_ext == '.pdf':
+            if file_ext == ".pdf":
                 return self._extract_pdf_text(file_data)
-            elif file_ext == '.docx':
+            elif file_ext == ".docx":
                 return self._extract_docx_text(file_data)
             else:
                 return f"Unsupported file type: {file_ext}"
@@ -249,7 +254,7 @@ class DocumentParser:
                 temp_file.flush()
 
                 # Open and extract text
-                with open(temp_file.name, 'rb') as pdf_file:
+                with open(temp_file.name, "rb") as pdf_file:
                     reader = pypdf.PdfReader(pdf_file)
 
                     # Security check - limit number of pages
@@ -284,7 +289,7 @@ class DocumentParser:
             import docx2txt
 
             # Use temporary file for security (auto-cleaned up)
-            with tempfile.NamedTemporaryFile(suffix='.docx') as temp_file:
+            with tempfile.NamedTemporaryFile(suffix=".docx") as temp_file:
                 temp_file.write(file_data)
                 temp_file.flush()
 

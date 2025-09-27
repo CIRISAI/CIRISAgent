@@ -10,7 +10,7 @@ import pytest
 from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.schemas.runtime.messages import DiscordMessage
-from ciris_engine.schemas.services.filters_core import FilterResult, FilterPriority
+from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 
 
 class ConcreteObserver(BaseObserver[DiscordMessage]):
@@ -249,7 +249,7 @@ class TestFilterErrorHandling:
             priority=FilterPriority.HIGH,
             triggered_filters=["spam_filter", "content_filter"],
             should_process=False,
-            reasoning="Message contains spam"
+            reasoning="Message contains spam",
         )
         mock_filter_service.filter_message.return_value = mock_filter_result
 
@@ -258,7 +258,7 @@ class TestFilterErrorHandling:
 
         # Verify filter was called
         mock_filter_service.filter_message.assert_called_once()
-        
+
         # Verify result matches
         assert result == mock_filter_result
         assert result.triggered_filters == ["spam_filter", "content_filter"]
@@ -395,6 +395,7 @@ class TestTaskSigning:
 
         # Create a mock task with spec to control attributes
         from ciris_engine.schemas.runtime.models import Task
+
         mock_task = Mock(spec=Task)
         mock_task.task_id = "unsigned_task_789"
 
@@ -406,7 +407,7 @@ class TestTaskSigning:
         # The code only sets these attributes if auth_service and observer_wa_id exist
         # Since they don't exist, the attributes should not be set
         mock_add_task.assert_called_once_with(mock_task)
-        
+
         # Verify the task passed to persistence is the same mock_task
         # without any signing attributes set on it
         assert mock_add_task.call_args[0][0] == mock_task

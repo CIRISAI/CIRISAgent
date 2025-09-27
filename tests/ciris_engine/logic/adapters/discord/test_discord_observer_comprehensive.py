@@ -1,7 +1,8 @@
 """Comprehensive tests for Discord observer to achieve 80%+ coverage."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -72,7 +73,7 @@ class TestDiscordObserverMessageHandling:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="channel789"
+            channel_id="channel789",
         )
 
         context = discord_observer._create_task_context_with_extras(msg)
@@ -103,7 +104,7 @@ class TestDiscordObserverMessageHandling:
             author_id="user456",
             author_name="TestUser",
             content="Priority message",
-            channel_id="test_channel"  # This is in monitored_channel_ids
+            channel_id="test_channel",  # This is in monitored_channel_ids
         )
 
         filter_result = MagicMock()
@@ -111,7 +112,9 @@ class TestDiscordObserverMessageHandling:
         filter_result.triggered_filters = ["filter1", "filter2"]
 
         # Remove the mock to test the real method
-        discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(discord_observer)
+        discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(
+            discord_observer
+        )
 
         await discord_observer._handle_priority_observation(msg, filter_result)
 
@@ -125,14 +128,16 @@ class TestDiscordObserverMessageHandling:
             author_id="wa_user",  # This is in wa_user_ids
             author_name="WAUser",
             content="WA message",
-            channel_id="deferral_channel"  # This is the deferral channel
+            channel_id="deferral_channel",  # This is the deferral channel
         )
 
         filter_result = MagicMock()
         filter_result.priority.value = "high"
 
         # Remove the mock to test the real method
-        discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(discord_observer)
+        discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(
+            discord_observer
+        )
 
         await discord_observer._handle_priority_observation(msg, filter_result)
 
@@ -146,7 +151,7 @@ class TestDiscordObserverMessageHandling:
             author_id="regular_user",
             author_name="RegularUser",
             content="Regular message",
-            channel_id="random_channel"
+            channel_id="random_channel",
         )
 
         filter_result = MagicMock()
@@ -154,7 +159,9 @@ class TestDiscordObserverMessageHandling:
         filter_result.triggered_filters = []
 
         # Remove the mock to test the real method
-        discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(discord_observer)
+        discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(
+            discord_observer
+        )
 
         await discord_observer._handle_priority_observation(msg, filter_result)
 
@@ -170,17 +177,19 @@ class TestDiscordObserverMessageHandling:
             author_id="user456",
             author_name="TestUser",
             content="Message",
-            channel_id="discord_guild_test_channel"
+            channel_id="discord_guild_test_channel",
         )
 
         # Mock the channel extraction to return monitored channel
-        with patch.object(discord_observer, '_extract_channel_id', return_value="test_channel"):
+        with patch.object(discord_observer, "_extract_channel_id", return_value="test_channel"):
             filter_result = MagicMock()
             filter_result.priority.value = "high"
             filter_result.triggered_filters = ["filter1"]
 
             # Remove the mock to test the real method
-            discord_observer._handle_priority_observation = discord_observer.__class__._handle_priority_observation.__get__(discord_observer)
+            discord_observer._handle_priority_observation = (
+                discord_observer.__class__._handle_priority_observation.__get__(discord_observer)
+            )
 
             await discord_observer._handle_priority_observation(msg, filter_result)
 
@@ -219,7 +228,7 @@ class TestSpoofingDetection:
             "CIRIS__OBS__START",
             "CIRIS   OBS   START",
             "ciris_obs_start",
-            "CIRIS OBS END"
+            "CIRIS OBS END",
         ]
 
         for content in test_cases:
@@ -246,7 +255,9 @@ class TestMessageObservation:
     """Test message observation workflow."""
 
     @pytest.mark.asyncio
-    async def test_handle_incoming_message_with_filtering(self, discord_observer, sample_discord_message, priority_filter_result):
+    async def test_handle_incoming_message_with_filtering(
+        self, discord_observer, sample_discord_message, priority_filter_result
+    ):
         """Test handling incoming message with filtering."""
         # Create a proper DiscordMessage with required attributes
         from ciris_engine.schemas.runtime.messages import DiscordMessage
@@ -256,7 +267,7 @@ class TestMessageObservation:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="test_channel"
+            channel_id="test_channel",
         )
 
         # Set up mocks for the base observer workflow
@@ -292,7 +303,7 @@ class TestMessageObservation:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="random_channel"
+            channel_id="random_channel",
         )
 
         # Set up mocks for passive handling
@@ -326,7 +337,7 @@ class TestMessageObservation:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="random_channel"
+            channel_id="random_channel",
         )
 
         # Set up mocks for ignore handling
@@ -380,7 +391,7 @@ class TestChannelIdExtraction:
             ("discord_987654321_111222333", "111222333"),
             ("discord__", ""),
             ("discord_guild_", ""),
-            ("discord_guild_channel", "channel")
+            ("discord_guild_channel", "channel"),
         ]
 
         for input_id, expected in test_cases:
@@ -389,12 +400,7 @@ class TestChannelIdExtraction:
 
     def test_extract_channel_id_non_discord_format(self, discord_observer):
         """Test extraction from non-Discord format."""
-        test_cases = [
-            ("regular_channel", "regular_channel"),
-            ("123456", "123456"),
-            ("", ""),
-            ("single", "single")
-        ]
+        test_cases = [("regular_channel", "regular_channel"), ("123456", "123456"), ("", ""), ("single", "single")]
 
         for input_id, expected in test_cases:
             result = discord_observer._extract_channel_id(input_id)
@@ -407,7 +413,7 @@ class TestChannelIdExtraction:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="test_channel"  # This is in monitored_channel_ids
+            channel_id="test_channel",  # This is in monitored_channel_ids
         )
 
         result = discord_observer._should_process_message(msg)
@@ -420,7 +426,7 @@ class TestChannelIdExtraction:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="deferral_channel"  # This is the deferral channel
+            channel_id="deferral_channel",  # This is the deferral channel
         )
 
         result = discord_observer._should_process_message(msg)
@@ -433,7 +439,7 @@ class TestChannelIdExtraction:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="random_channel"  # This is NOT monitored
+            channel_id="random_channel",  # This is NOT monitored
         )
 
         result = discord_observer._should_process_message(msg)
@@ -442,11 +448,7 @@ class TestChannelIdExtraction:
     def test_should_process_message_empty_channel_id(self, discord_observer):
         """Test message processing check with empty channel ID."""
         msg = DiscordMessage(
-            message_id="msg123",
-            author_id="user456",
-            author_name="TestUser",
-            content="Test message",
-            channel_id=""
+            message_id="msg123", author_id="user456", author_name="TestUser", content="Test message", channel_id=""
         )
 
         result = discord_observer._should_process_message(msg)
@@ -494,7 +496,7 @@ class TestErrorHandling:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="test_channel"
+            channel_id="test_channel",
         )
 
         # Set up mocks with enhancement failure
@@ -519,7 +521,7 @@ class TestErrorHandling:
             author_id="user456",
             author_name="TestUser",
             content="Test message",
-            channel_id="test_channel"
+            channel_id="test_channel",
         )
 
         # Set up mocks with filter failure

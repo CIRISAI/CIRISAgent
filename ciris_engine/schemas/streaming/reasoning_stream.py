@@ -204,12 +204,13 @@ class ReasoningStreamUpdate(BaseModel):
 def _create_typed_step_result(raw_result: Dict[str, Any], step_point: StepPoint, step_data: Dict[str, Any]):
     """Create typed step result from raw data."""
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     step_result_model = STEP_RESULT_MAP.get(step_point)
     if not step_result_model or not (step_data or raw_result):
         return None
-        
+
     try:
         combined_data = {
             "step_point": step_point,
@@ -219,22 +220,20 @@ def _create_typed_step_result(raw_result: Dict[str, Any], step_point: StepPoint,
             "task_id": raw_result.get("task_id"),
             "processing_time_ms": raw_result.get("processing_time_ms", 0.0),
             "error": raw_result.get("error") if not raw_result.get("success", True) else None,
-            **step_data
+            **step_data,
         }
         return step_result_model(**combined_data)
     except Exception as e:
-        logger.warning(
-            f"Could not create typed step result for {step_point.value}: {e}. "
-            f"Raw data: {step_data}"
-        )
+        logger.warning(f"Could not create typed step result for {step_point.value}: {e}. " f"Raw data: {step_data}")
         return None
 
 
 def _create_thought_stream_data(raw_result: Dict[str, Any]) -> ThoughtStreamData:
     """Create ThoughtStreamData from raw result."""
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     logger.debug(
         f"Stream update for step {raw_result.get('step_point')}: task_id={raw_result.get('task_id')}, thought_id={raw_result.get('thought_id')}"
     )

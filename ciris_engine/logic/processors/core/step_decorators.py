@@ -177,7 +177,7 @@ def _add_step_specific_data(
     """Add step-specific data to step_data dict based on step type."""
     # Add common data and debug logging
     _add_common_step_data(step_data, thought_item, step)
-    
+
     # Add step-specific data based on step type
     try:
         if step == StepPoint.START_ROUND:
@@ -223,7 +223,7 @@ def _add_start_round_data(step_data: Dict[str, Any], args: tuple) -> None:
     """Add START_ROUND specific data."""
     if not args:
         raise ValueError("START_ROUND args is empty - thought list is required for processing")
-    
+
     step_data["thoughts_processed"] = len(args)
     step_data["round_started"] = True
 
@@ -232,7 +232,7 @@ def _add_gather_context_data(step_data: Dict[str, Any], result: Any) -> None:
     """Add GATHER_CONTEXT specific data."""
     if result is None:
         raise ValueError("GATHER_CONTEXT step result is None - this indicates a serious pipeline issue")
-    
+
     step_data["context"] = str(result)
 
 
@@ -240,8 +240,8 @@ def _add_perform_dmas_data(step_data: Dict[str, Any], result: Any, thought_item:
     """Add PERFORM_DMAS specific data."""
     if not result:
         raise ValueError("PERFORM_DMAS step result is None - this indicates a serious pipeline issue")
-    
-    if hasattr(result, 'ethical_pdma'):
+
+    if hasattr(result, "ethical_pdma"):
         # Handle InitialDMAResults object
         dma_parts = []
         if result.ethical_pdma:
@@ -254,13 +254,15 @@ def _add_perform_dmas_data(step_data: Dict[str, Any], result: Any, thought_item:
     else:
         # Non-InitialDMAResults object - validate it has expected structure
         step_data["dma_results"] = str(result)
-    
+
     if not thought_item:
         raise ValueError("PERFORM_DMAS thought_item is None - this indicates a serious pipeline issue")
-    
-    if not hasattr(thought_item, 'initial_context'):
-        raise AttributeError(f"PERFORM_DMAS thought_item missing 'initial_context' attribute. Type: {type(thought_item)}, attributes: {dir(thought_item)}")
-    
+
+    if not hasattr(thought_item, "initial_context"):
+        raise AttributeError(
+            f"PERFORM_DMAS thought_item missing 'initial_context' attribute. Type: {type(thought_item)}, attributes: {dir(thought_item)}"
+        )
+
     step_data["context"] = str(thought_item.initial_context)
 
 
@@ -268,13 +270,17 @@ def _add_perform_aspdma_data(step_data: Dict[str, Any], result: Any) -> None:
     """Add PERFORM_ASPDMA specific data."""
     if not result:
         raise ValueError("PERFORM_ASPDMA step result is None - this indicates a serious pipeline issue")
-    
+
     if not hasattr(result, "selected_action"):
-        raise AttributeError(f"PERFORM_ASPDMA result missing 'selected_action' attribute. Result type: {type(result)}, available attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"PERFORM_ASPDMA result missing 'selected_action' attribute. Result type: {type(result)}, available attributes: {dir(result)}"
+        )
+
     if not hasattr(result, "rationale"):
-        raise AttributeError(f"PERFORM_ASPDMA result missing 'rationale' attribute. Result type: {type(result)}, available attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"PERFORM_ASPDMA result missing 'rationale' attribute. Result type: {type(result)}, available attributes: {dir(result)}"
+        )
+
     step_data["selected_action"] = str(result.selected_action)
     step_data["action_rationale"] = str(result.rationale)
 
@@ -283,28 +289,36 @@ def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any) -> No
     """Add CONSCIENCE_EXECUTION specific data with full transparency."""
     if not result:
         raise ValueError("CONSCIENCE_EXECUTION step result is None - this indicates a serious pipeline issue")
-    
+
     if not hasattr(result, "overridden"):
-        raise AttributeError(f"CONSCIENCE_EXECUTION result missing 'overridden' attribute. Expected ConscienceApplicationResult, got {type(result)}, attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"CONSCIENCE_EXECUTION result missing 'overridden' attribute. Expected ConscienceApplicationResult, got {type(result)}, attributes: {dir(result)}"
+        )
+
     if not hasattr(result, "final_action"):
-        raise AttributeError(f"CONSCIENCE_EXECUTION result missing 'final_action' attribute. Expected ConscienceApplicationResult, got {type(result)}, attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"CONSCIENCE_EXECUTION result missing 'final_action' attribute. Expected ConscienceApplicationResult, got {type(result)}, attributes: {dir(result)}"
+        )
+
     if not hasattr(result.final_action, "selected_action"):
-        raise AttributeError(f"CONSCIENCE_EXECUTION final_action missing 'selected_action' attribute. final_action type: {type(result.final_action)}, attributes: {dir(result.final_action)}")
-    
+        raise AttributeError(
+            f"CONSCIENCE_EXECUTION final_action missing 'selected_action' attribute. final_action type: {type(result.final_action)}, attributes: {dir(result.final_action)}"
+        )
+
     # Extract selected action from ConscienceApplicationResult
     step_data["selected_action"] = str(result.final_action.selected_action)
-    
+
     # Extract conscience pass/fail - conscience passes if not overridden
     step_data["conscience_passed"] = not result.overridden
     step_data["action_result"] = str(result.final_action)
-    
+
     if result.overridden:
         if not hasattr(result, "override_reason"):
-            raise AttributeError(f"CONSCIENCE_EXECUTION result overridden but missing 'override_reason'. Result type: {type(result)}, attributes: {dir(result)}")
+            raise AttributeError(
+                f"CONSCIENCE_EXECUTION result overridden but missing 'override_reason'. Result type: {type(result)}, attributes: {dir(result)}"
+            )
         step_data["override_reason"] = str(result.override_reason)
-    
+
     # Add comprehensive conscience evaluation details for full transparency
     step_data["conscience_result"] = _create_comprehensive_conscience_result(result)
 
@@ -312,64 +326,81 @@ def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any) -> No
 def _create_comprehensive_conscience_result(result: Any) -> Dict[str, Any]:
     """Create comprehensive ConscienceCheckResult with all 4 typed evaluations for transparency."""
     from datetime import datetime, timezone
+
     from ciris_engine.schemas.conscience.core import (
+        CoherenceCheckResult,
         ConscienceCheckResult,
         ConscienceStatus,
         EntropyCheckResult,
-        CoherenceCheckResult,
-        OptimizationVetoResult,
-        EpistemicHumilityResult,
         EpistemicData,
+        EpistemicHumilityResult,
+        OptimizationVetoResult,
     )
-    
+
     # Determine overall conscience status
     status = ConscienceStatus.FAILED if result.overridden else ConscienceStatus.PASSED
     passed = not result.overridden
     reason = result.override_reason if result.overridden else None
-    
+
     # Create the 4 required typed conscience evaluations
     # These provide the detailed evaluation transparency we need
-    
+
     # 1. Entropy Check - Information-theoretic safety
     entropy_check = EntropyCheckResult(
         passed=passed,
         entropy_score=0.3,  # Mock value - in real implementation would come from actual entropy calculation
         threshold=0.5,
-        message="Entropy check: Action maintains appropriate information uncertainty" if passed else "Entropy check failed: Action reduces information uncertainty below threshold"
+        message=(
+            "Entropy check: Action maintains appropriate information uncertainty"
+            if passed
+            else "Entropy check failed: Action reduces information uncertainty below threshold"
+        ),
     )
-    
+
     # 2. Coherence Check - Internal consistency validation
     coherence_check = CoherenceCheckResult(
         passed=passed,
         coherence_score=0.8,  # Mock value - in real implementation would come from coherence analysis
         threshold=0.6,
-        message="Coherence check: Action maintains internal consistency" if passed else "Coherence check failed: Action creates internal inconsistencies"
+        message=(
+            "Coherence check: Action maintains internal consistency"
+            if passed
+            else "Coherence check failed: Action creates internal inconsistencies"
+        ),
     )
-    
+
     # 3. Optimization Veto Check - Prevents harmful optimization
     optimization_veto_check = OptimizationVetoResult(
         decision="proceed" if passed else "abort",
-        justification="Action aligns with preservation of human values" if passed else "Action may compromise human values - optimization vetoed",
+        justification=(
+            "Action aligns with preservation of human values"
+            if passed
+            else "Action may compromise human values - optimization vetoed"
+        ),
         entropy_reduction_ratio=0.15,  # Mock value
-        affected_values=[] if passed else ["human_autonomy", "epistemic_humility"]
+        affected_values=[] if passed else ["human_autonomy", "epistemic_humility"],
     )
-    
+
     # 4. Epistemic Humility Check - Uncertainty acknowledgment
     epistemic_humility_check = EpistemicHumilityResult(
         epistemic_certainty=0.7,  # Mock value - appropriate certainty level
         identified_uncertainties=["action_outcome_variance", "context_completeness"] if not passed else [],
-        reflective_justification="Action demonstrates appropriate uncertainty about outcomes" if passed else "Action shows overconfidence requiring reflection",
-        recommended_action="proceed" if passed else "ponder"
+        reflective_justification=(
+            "Action demonstrates appropriate uncertainty about outcomes"
+            if passed
+            else "Action shows overconfidence requiring reflection"
+        ),
+        recommended_action="proceed" if passed else "ponder",
     )
-    
+
     # Create epistemic metadata
     epistemic_data = EpistemicData(
         entropy_level=entropy_check.entropy_score,
         coherence_level=coherence_check.coherence_score,
         uncertainty_acknowledged=True,
-        reasoning_transparency=0.9  # High transparency due to detailed reporting
+        reasoning_transparency=0.9,  # High transparency due to detailed reporting
     )
-    
+
     # Build comprehensive conscience result
     conscience_result = ConscienceCheckResult(
         status=status,
@@ -383,9 +414,9 @@ def _create_comprehensive_conscience_result(result: Any) -> Dict[str, Any]:
         entropy_score=entropy_check.entropy_score,
         coherence_score=coherence_check.coherence_score,
         check_timestamp=datetime.now(timezone.utc),
-        processing_time_ms=None  # Could be calculated if timing info available
+        processing_time_ms=None,  # Could be calculated if timing info available
     )
-    
+
     return conscience_result.model_dump()
 
 
@@ -393,15 +424,17 @@ def _add_recursive_aspdma_data(step_data: Dict[str, Any], result: Any, args: tup
     """Add RECURSIVE_ASPDMA specific data."""
     if not args:
         raise ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")
-    
+
     step_data["retry_reason"] = str(args[0])
-    
+
     if not result:
         raise ValueError("RECURSIVE_ASPDMA result is None - this indicates a serious pipeline issue")
-    
+
     if not hasattr(result, "selected_action"):
-        raise AttributeError(f"RECURSIVE_ASPDMA result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"RECURSIVE_ASPDMA result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
+        )
+
     step_data["original_action"] = str(result.selected_action)
 
 
@@ -409,10 +442,12 @@ def _add_recursive_conscience_data(step_data: Dict[str, Any], result: Any) -> No
     """Add RECURSIVE_CONSCIENCE specific data."""
     if not result:
         raise ValueError("RECURSIVE_CONSCIENCE result is None - this indicates a serious pipeline issue")
-    
+
     if not hasattr(result, "selected_action"):
-        raise AttributeError(f"RECURSIVE_CONSCIENCE result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"RECURSIVE_CONSCIENCE result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
+        )
+
     step_data["retry_action"] = str(result.selected_action)
     step_data["retry_result"] = str(result)
 
@@ -421,13 +456,17 @@ def _add_finalize_action_data(step_data: Dict[str, Any], result: Any) -> None:
     """Add FINALIZE_ACTION specific data."""
     if not result:
         raise ValueError("FINALIZE_ACTION result is None - this indicates a serious pipeline issue")
-    
+
     if not hasattr(result, "selected_action"):
-        raise AttributeError(f"FINALIZE_ACTION result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"FINALIZE_ACTION result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
+        )
+
     if not hasattr(result, "rationale"):
-        raise AttributeError(f"FINALIZE_ACTION result missing 'rationale' attribute. Result type: {type(result)}, attributes: {dir(result)}")
-    
+        raise AttributeError(
+            f"FINALIZE_ACTION result missing 'rationale' attribute. Result type: {type(result)}, attributes: {dir(result)}"
+        )
+
     step_data["selected_action"] = str(result.selected_action)
     step_data["selection_reasoning"] = str(result.rationale)
     step_data["conscience_passed"] = True  # If we reach here, conscience passed
@@ -442,16 +481,18 @@ def _add_perform_action_data(step_data: Dict[str, Any], result: Any, args: tuple
     elif args:
         selected_action = str(args[0])
     else:
-        raise ValueError("PERFORM_ACTION cannot determine selected_action - neither result.selected_action nor args[0] available")
-    
+        raise ValueError(
+            "PERFORM_ACTION cannot determine selected_action - neither result.selected_action nor args[0] available"
+        )
+
     step_data["selected_action"] = selected_action
-    
+
     # Extract action_parameters - fail fast if result doesn't have it
     if result and hasattr(result, "action_parameters"):
         step_data["action_parameters"] = str(result.action_parameters)
     else:
         step_data["action_parameters"] = "None"  # This is acceptable as parameters can be None
-    
+
     # Extract dispatch_context from kwargs or args - provide empty dict as reasonable default
     if "context" in kwargs:
         step_data["dispatch_context"] = str(kwargs["context"])
@@ -465,18 +506,20 @@ def _add_action_complete_data(step_data: Dict[str, Any], result: Any) -> None:
     """Add ACTION_COMPLETE specific data."""
     if not result:
         raise ValueError("ACTION_COMPLETE step result is None - this indicates a serious pipeline issue")
-    
+
     # Extract action_type from dispatch_result dict (primary path)
     if isinstance(result, dict):
         if "action_type" not in result:
-            raise KeyError(f"ACTION_COMPLETE dispatch_result missing 'action_type'. Available keys: {list(result.keys())}")
-        
+            raise KeyError(
+                f"ACTION_COMPLETE dispatch_result missing 'action_type'. Available keys: {list(result.keys())}"
+            )
+
         if "success" not in result:
             raise KeyError(f"ACTION_COMPLETE dispatch_result missing 'success'. Available keys: {list(result.keys())}")
-        
+
         if "handler" not in result:
             raise KeyError(f"ACTION_COMPLETE dispatch_result missing 'handler'. Available keys: {list(result.keys())}")
-        
+
         step_data["action_executed"] = str(result["action_type"])
         step_data["dispatch_success"] = result["success"]
         step_data["handler_completed"] = result["handler"] != "Unknown"
@@ -485,11 +528,15 @@ def _add_action_complete_data(step_data: Dict[str, Any], result: Any) -> None:
     else:
         # Object-based results (should be rare, fail fast if wrong structure)
         if not hasattr(result, "selected_action"):
-            raise AttributeError(f"ACTION_COMPLETE object result missing 'selected_action'. Result type: {type(result)}, attributes: {dir(result)}")
-        
+            raise AttributeError(
+                f"ACTION_COMPLETE object result missing 'selected_action'. Result type: {type(result)}, attributes: {dir(result)}"
+            )
+
         if not hasattr(result, "success"):
-            raise AttributeError(f"ACTION_COMPLETE object result missing 'success'. Result type: {type(result)}, attributes: {dir(result)}")
-        
+            raise AttributeError(
+                f"ACTION_COMPLETE object result missing 'success'. Result type: {type(result)}, attributes: {dir(result)}"
+            )
+
         step_data["action_executed"] = str(result.selected_action)
         step_data["dispatch_success"] = result.success
         step_data["handler_completed"] = getattr(result, "completed", True)
@@ -501,7 +548,7 @@ def _add_round_complete_data(step_data: Dict[str, Any], args: tuple) -> None:
     """Add ROUND_COMPLETE specific data."""
     if not args:
         raise ValueError("ROUND_COMPLETE args is empty - completed thought count is required")
-    
+
     step_data["round_status"] = "completed"
     step_data["thoughts_processed"] = len(args)
 
@@ -540,7 +587,9 @@ def _create_step_result_schema(step: StepPoint, step_data: Dict[str, Any]):
     result_class = step_result_map.get(step)
     if result_class:
         if step == StepPoint.GATHER_CONTEXT:
-            logger.debug(f"Creating StepResultGatherContext with step_data keys: {list(step_data.keys())}, values: {step_data}")
+            logger.debug(
+                f"Creating StepResultGatherContext with step_data keys: {list(step_data.keys())}, values: {step_data}"
+            )
         return result_class(**step_data)
     return None
 
@@ -548,23 +597,29 @@ def _create_step_result_schema(step: StepPoint, step_data: Dict[str, Any]):
 def _extract_timing_data(step_data: Dict[str, Any]) -> tuple:
     """Extract and normalize timing data from step_data."""
     from datetime import datetime, timezone
-    
+
     timestamp_str = step_data.get("timestamp", datetime.now().isoformat())
     # Ensure both timestamps have timezone info for consistent calculation
-    if timestamp_str.endswith('+00:00') or timestamp_str.endswith('Z'):
-        start_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+    if timestamp_str.endswith("+00:00") or timestamp_str.endswith("Z"):
+        start_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
     else:
         start_time = datetime.fromisoformat(timestamp_str).replace(tzinfo=timezone.utc)
     end_time = datetime.now(timezone.utc)
-    
+
     return start_time, end_time
 
 
-def _build_step_result_data(step: StepPoint, step_data: Dict[str, Any], step_result, trace_context: Dict[str, Any], span_attributes: Dict[str, Any]) -> Dict[str, Any]:
+def _build_step_result_data(
+    step: StepPoint,
+    step_data: Dict[str, Any],
+    step_result,
+    trace_context: Dict[str, Any],
+    span_attributes: Dict[str, Any],
+) -> Dict[str, Any]:
     """Build the complete step result data structure."""
     return {
         "step_point": step.value,
-        "success": step_data.get("success", True), 
+        "success": step_data.get("success", True),
         "processing_time_ms": step_data.get("processing_time_ms", 0.0),
         "thought_id": step_data.get("thought_id", ""),
         "task_id": step_data.get("task_id", ""),
@@ -588,17 +643,21 @@ async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> 
         if step_result:
             # Extract and normalize timing data
             start_time, end_time = _extract_timing_data(step_data)
-            
+
             # Build trace context using our helper function
-            trace_context = _build_trace_context_dict(step_data.get("thought_id", ""), step_data.get("task_id"), step, start_time, end_time)
-            
+            trace_context = _build_trace_context_dict(
+                step_data.get("thought_id", ""), step_data.get("task_id"), step, start_time, end_time
+            )
+
             # Build span attributes using our helper function
             span_attributes = _build_span_attributes_dict(step, step_result, step_data)
-            
+
             # Build complete step result data
             step_result_data = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
-            
-            logger.debug(f"Broadcasting step result for {step.value}: task_id={step_result_data['task_id']}, thought_id={step_result_data['thought_id']}")
+
+            logger.debug(
+                f"Broadcasting step result for {step.value}: task_id={step_result_data['task_id']}, thought_id={step_result_data['thought_id']}"
+            )
             await step_result_stream.broadcast_step_result(step_result_data)
         else:
             logger.warning(f"No step result created for {step.value}, step_data keys: {list(step_data.keys())}")
@@ -725,23 +784,23 @@ def _build_trace_context_dict(
 ) -> Dict[str, Any]:
     """
     Build trace context compatible with OTLP format.
-    
+
     This ensures streaming and OTLP traces have consistent trace correlation data.
     """
     import hashlib
     import time
-    
+
     # Generate trace and span IDs using same logic as OTLP converter
     trace_base = f"{thought_id}_{task_id or 'no_task'}_{step.value}"
     trace_id = hashlib.sha256(trace_base.encode()).hexdigest()[:32].upper()
-    
+
     span_base = f"{trace_id}_{step.value}_{start_time.timestamp()}"
     span_id = hashlib.sha256(span_base.encode()).hexdigest()[:16].upper()
-    
+
     # Build parent span relationship - each step in the same thought is related
     parent_span_base = f"{thought_id}_pipeline_{task_id or 'no_task'}"
     parent_span_id = hashlib.sha256(parent_span_base.encode()).hexdigest()[:16].upper()
-    
+
     return {
         "trace_id": trace_id,
         "span_id": span_id,
@@ -755,17 +814,15 @@ def _build_trace_context_dict(
     }
 
 
-def _build_span_attributes_dict(
-    step: StepPoint, step_result: Any, step_data: Dict[str, Any]
-) -> List[Dict[str, Any]]:
+def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Build span attributes compatible with OTLP format.
-    
+
     This creates rich attribute data that's consistent between streaming and OTLP traces.
     """
     thought_id = step_data.get("thought_id", "unknown")
     task_id = step_data.get("task_id")
-    
+
     # Start with core CIRIS attributes (matching OTLP format)
     attributes = [
         {"key": "ciris.step_point", "value": {"stringValue": step.value}},
@@ -776,27 +833,29 @@ def _build_span_attributes_dict(
         {"key": "span.success", "value": {"boolValue": step_data.get("success", True)}},
         {"key": "processing_time_ms", "value": {"doubleValue": step_data.get("processing_time_ms", 0.0)}},
     ]
-    
+
     # Add task_id if available - critical for correlation
     if task_id:
         attributes.append({"key": "ciris.task_id", "value": {"stringValue": str(task_id)}})
-    
+
     # Add step-specific attributes based on the typed step result
     if step_result and hasattr(step_result, "model_dump"):
         result_data = step_result.model_dump()
         _add_typed_step_attributes(attributes, step, result_data)
-    
+
     # Add error information if present
     error = step_data.get("error")
     if error:
-        attributes.extend([
-            {"key": "error", "value": {"boolValue": True}},
-            {"key": "error.message", "value": {"stringValue": str(error)}},
-            {"key": "error.type", "value": {"stringValue": "ProcessingError"}},
-        ])
+        attributes.extend(
+            [
+                {"key": "error", "value": {"boolValue": True}},
+                {"key": "error.message", "value": {"stringValue": str(error)}},
+                {"key": "error.type", "value": {"stringValue": "ProcessingError"}},
+            ]
+        )
     else:
         attributes.append({"key": "error", "value": {"boolValue": False}})
-    
+
     return attributes
 
 
@@ -804,19 +863,23 @@ def _add_gather_context_attributes(attributes: List[Dict[str, Any]], result_data
     """Add attributes specific to GATHER_CONTEXT step."""
     if "context" in result_data and result_data["context"]:
         context_size = len(str(result_data["context"]))
-        attributes.extend([
-            {"key": "context.size_bytes", "value": {"intValue": context_size}},
-            {"key": "context.available", "value": {"boolValue": True}},
-        ])
+        attributes.extend(
+            [
+                {"key": "context.size_bytes", "value": {"intValue": context_size}},
+                {"key": "context.available", "value": {"boolValue": True}},
+            ]
+        )
 
 
 def _add_perform_dmas_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to PERFORM_DMAS step."""
     if "dma_results" in result_data and result_data["dma_results"]:
-        attributes.extend([
-            {"key": "dma.results_available", "value": {"boolValue": True}},
-            {"key": "dma.results_size", "value": {"intValue": len(str(result_data["dma_results"]))}},
-        ])
+        attributes.extend(
+            [
+                {"key": "dma.results_available", "value": {"boolValue": True}},
+                {"key": "dma.results_size", "value": {"intValue": len(str(result_data["dma_results"]))}},
+            ]
+        )
     if "context" in result_data:
         attributes.append({"key": "dma.context_provided", "value": {"boolValue": bool(result_data["context"])}})
 
@@ -826,7 +889,9 @@ def _add_perform_aspdma_attributes(attributes: List[Dict[str, Any]], result_data
     if "selected_action" in result_data:
         attributes.append({"key": "action.selected", "value": {"stringValue": str(result_data["selected_action"])}})
     if "action_rationale" in result_data:
-        attributes.append({"key": "action.has_rationale", "value": {"boolValue": bool(result_data["action_rationale"])}})
+        attributes.append(
+            {"key": "action.has_rationale", "value": {"boolValue": bool(result_data["action_rationale"])}}
+        )
 
 
 def _add_conscience_execution_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
@@ -842,7 +907,9 @@ def _add_finalize_action_attributes(attributes: List[Dict[str, Any]], result_dat
     if "selected_action" in result_data:
         attributes.append({"key": "finalized.action", "value": {"stringValue": str(result_data["selected_action"])}})
     if "selection_reasoning" in result_data:
-        attributes.append({"key": "finalized.has_reasoning", "value": {"boolValue": bool(result_data["selection_reasoning"])}})
+        attributes.append(
+            {"key": "finalized.has_reasoning", "value": {"boolValue": bool(result_data["selection_reasoning"])}}
+        )
 
 
 def _add_perform_action_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
@@ -858,14 +925,14 @@ def _add_action_complete_attributes(attributes: List[Dict[str, Any]], result_dat
     if "handler_completed" in result_data:
         attributes.append({"key": "action.handler_completed", "value": {"boolValue": result_data["handler_completed"]}})
     if "execution_time_ms" in result_data:
-        attributes.append({"key": "action.execution_time_ms", "value": {"doubleValue": result_data["execution_time_ms"]}})
+        attributes.append(
+            {"key": "action.execution_time_ms", "value": {"doubleValue": result_data["execution_time_ms"]}}
+        )
 
 
-def _add_typed_step_attributes(
-    attributes: List[Dict[str, Any]], step: StepPoint, result_data: Dict[str, Any]
-) -> None:
+def _add_typed_step_attributes(attributes: List[Dict[str, Any]], step: StepPoint, result_data: Dict[str, Any]) -> None:
     """Add step-specific attributes based on typed step result data."""
-    
+
     # Map step types to their handler functions
     step_attribute_handlers = {
         StepPoint.GATHER_CONTEXT: _add_gather_context_attributes,
@@ -876,7 +943,7 @@ def _add_typed_step_attributes(
         StepPoint.PERFORM_ACTION: _add_perform_action_attributes,
         StepPoint.ACTION_COMPLETE: _add_action_complete_attributes,
     }
-    
+
     # Call the appropriate handler function if one exists
     handler = step_attribute_handlers.get(step)
     if handler:

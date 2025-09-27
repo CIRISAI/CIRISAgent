@@ -3,7 +3,7 @@ Comprehensive test suite for refactored APICommunicationService helper methods.
 
 Tests coverage for the newly extracted helper methods that reduce cognitive complexity:
 - _create_speak_correlation
-- _send_websocket_message  
+- _send_websocket_message
 - _handle_api_interaction_response
 - _track_response_time
 - _extract_parameters
@@ -30,19 +30,17 @@ class TestCreateSpeakCorrelation:
     """Test _create_speak_correlation helper method."""
 
     @patch("uuid.uuid4")
-    def test_create_speak_correlation_success(
-        self, mock_uuid, api_communication_service, mock_persistence
-    ):
+    def test_create_speak_correlation_success(self, mock_uuid, api_communication_service, mock_persistence):
         """Test successful correlation creation."""
         mock_uuid.return_value = Mock()
         mock_uuid.return_value.__str__ = Mock(return_value="test-correlation-id")
-        
+
         api_communication_service._create_speak_correlation("api_test_8080", "Test message")
-        
+
         # Verify correlation was stored
         mock_persistence["add_correlation"].assert_called_once()
         correlation = mock_persistence["add_correlation"].call_args[0][0]
-        
+
         assert correlation.correlation_id == "test-correlation-id"
         assert correlation.service_type == "api"
         assert correlation.action_type == "speak"
@@ -54,18 +52,16 @@ class TestCreateSpeakCorrelation:
     ):
         """Test correlation creation uses time service when available."""
         api_communication_service._create_speak_correlation("api_test", "Message")
-        
+
         # Verify time service was passed to persistence
         mock_persistence["add_correlation"].assert_called_once()
         time_service_arg = mock_persistence["add_correlation"].call_args[0][1]
         assert time_service_arg == mock_time_service
 
-    def test_create_speak_correlation_handles_persistence_error(
-        self, api_communication_service, mock_persistence
-    ):
+    def test_create_speak_correlation_handles_persistence_error(self, api_communication_service, mock_persistence):
         """Test correlation creation handles persistence errors gracefully."""
         mock_persistence["add_correlation"].side_effect = Exception("DB error")
-        
+
         # Should raise exception as helper doesn't handle it
         with pytest.raises(Exception, match="DB error"):
             api_communication_service._create_speak_correlation("api_test", "Message")
@@ -76,15 +72,13 @@ class TestSendWebSocketMessage:
     """Test _send_websocket_message helper method."""
 
     @pytest.mark.asyncio
-    async def test_send_websocket_message_success(
-        self, api_communication_service, mock_websocket_client
-    ):
+    async def test_send_websocket_message_success(self, api_communication_service, mock_websocket_client):
         """Test successful WebSocket message sending."""
         # Register WebSocket client
         api_communication_service._websocket_clients["client123"] = mock_websocket_client
-        
+
         result = await api_communication_service._send_websocket_message("ws:client123", "WebSocket test")
-        
+
         assert result is True
         mock_websocket_client.send_json.assert_called_once()
         call_data = mock_websocket_client.send_json.call_args[0][0]
@@ -111,13 +105,11 @@ class TestSendWebSocketMessage:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_send_websocket_message_websocket_error(
-        self, api_communication_service, mock_websocket_client
-    ):
+    async def test_send_websocket_message_websocket_error(self, api_communication_service, mock_websocket_client):
         """Test handles WebSocket send errors."""
         mock_websocket_client.send_json.side_effect = Exception("WebSocket error")
         api_communication_service._websocket_clients["client123"] = mock_websocket_client
-        
+
         # Should raise exception (not handled at this level)
         with pytest.raises(Exception, match="WebSocket error"):
             await api_communication_service._send_websocket_message("ws:client123", "Message")
@@ -128,15 +120,13 @@ class TestHandleApiInteractionResponse:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.agent.store_message_response")
-    async def test_handle_api_interaction_response_success(
-        self, mock_store, api_communication_service, mock_app_state
-    ):
+    async def test_handle_api_interaction_response_success(self, mock_store, api_communication_service, mock_app_state):
         """Test successful API interaction response handling."""
         # Setup message channel mapping
         mock_app_state.message_channel_map = {"api_test": "msg-123"}
-        
+
         await api_communication_service._handle_api_interaction_response("api_test", "Response content")
-        
+
         mock_store.assert_called_once_with("msg-123", "Response content")
         assert "api_test" not in mock_app_state.message_channel_map  # Should be cleaned up
 
@@ -150,17 +140,15 @@ class TestHandleApiInteractionResponse:
     async def test_handle_api_interaction_response_no_app_state(self, api_communication_service):
         """Test handles missing app state gracefully."""
         delattr(api_communication_service, "_app_state")
-        
+
         await api_communication_service._handle_api_interaction_response("api_test", "Message")
         # Should complete without error
 
     @pytest.mark.asyncio
-    async def test_handle_api_interaction_response_no_message_id(
-        self, api_communication_service, mock_app_state
-    ):
+    async def test_handle_api_interaction_response_no_message_id(self, api_communication_service, mock_app_state):
         """Test handles missing message ID in mapping."""
         mock_app_state.message_channel_map = {}  # Empty mapping
-        
+
         await api_communication_service._handle_api_interaction_response("api_test", "Message")
         # Should complete without error
 
@@ -171,7 +159,7 @@ class TestHandleApiInteractionResponse:
     ):
         """Test handles store_message_response errors gracefully."""
         mock_app_state.message_channel_map = {"api_test": "msg-123"}
-        
+
         # Should not raise exception
         await api_communication_service._handle_api_interaction_response("api_test", "Message")
         mock_store.assert_called_once()
@@ -183,14 +171,14 @@ class TestTrackResponseTime:
     def test_track_response_time_success(self, api_communication_service):
         """Test successful response time tracking."""
         start_time = datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc)
-        
+
         # Mock the current time to be 100ms later
         with patch("ciris_engine.logic.adapters.api.api_communication.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2025, 9, 8, 12, 0, 0, 100000, tzinfo=timezone.utc)  # 100ms later
             mock_dt.timezone = timezone
-            
+
             api_communication_service._track_response_time(start_time)
-        
+
         assert len(api_communication_service._response_times) == 1
         assert api_communication_service._response_times[0] == 100.0  # 100ms
 
@@ -198,11 +186,11 @@ class TestTrackResponseTime:
         """Test response times list is limited to max size."""
         api_communication_service._max_response_times = 2
         start_time = datetime.now(timezone.utc)
-        
+
         # Add 3 response times
         for i in range(3):
             api_communication_service._track_response_time(start_time)
-        
+
         # Should only keep the last 2
         assert len(api_communication_service._response_times) == 2
 
@@ -213,9 +201,9 @@ class TestExtractParameters:
     def test_extract_parameters_dict_format(self, api_communication_service):
         """Test parameter extraction from dict-like request data."""
         request_data = {"parameters": {"content": "test", "author_id": "user1"}}
-        
+
         params = api_communication_service._extract_parameters(request_data)
-        
+
         assert params == {"content": "test", "author_id": "user1"}
 
     def test_extract_parameters_pydantic_format(self, api_communication_service):
@@ -224,34 +212,34 @@ class TestExtractParameters:
         request_data.parameters = {"content": "test", "author_id": "user1"}
         # Ensure hasattr works correctly
         del request_data.get  # Remove get method to force pydantic path
-        
+
         params = api_communication_service._extract_parameters(request_data)
-        
+
         assert params == {"content": "test", "author_id": "user1"}
 
     def test_extract_parameters_no_parameters(self, api_communication_service):
         """Test parameter extraction when no parameters exist."""
         request_data = Mock(spec=[])  # Mock with no attributes
-        
+
         params = api_communication_service._extract_parameters(request_data)
-        
+
         assert params == {}
 
     def test_extract_parameters_none_parameters(self, api_communication_service):
         """Test parameter extraction when parameters is None."""
         request_data = Mock(spec=["parameters"])
         request_data.parameters = None
-        
+
         params = api_communication_service._extract_parameters(request_data)
-        
+
         assert params == {}
 
     def test_extract_parameters_empty_dict(self, api_communication_service):
         """Test parameter extraction from dict without parameters key."""
         request_data = {}
-        
+
         params = api_communication_service._extract_parameters(request_data)
-        
+
         assert params == {}
 
 
@@ -261,7 +249,7 @@ class TestCreateSpeakMessage:
     def test_create_speak_message_success(self, api_communication_service, sample_speak_correlation):
         """Test successful speak message creation."""
         message = api_communication_service._create_speak_message(sample_speak_correlation)
-        
+
         assert isinstance(message, FetchedMessage)
         assert message.message_id == "speak-corr-123"
         assert message.author_id == "ciris"
@@ -280,9 +268,9 @@ class TestCreateSpeakMessage:
         correlation.request_data.parameters = {}
         # Remove get method to force pydantic path
         delattr(correlation.request_data, "get") if hasattr(correlation.request_data, "get") else None
-        
+
         message = api_communication_service._create_speak_message(correlation)
-        
+
         assert message.content == ""
         assert message.author_id == "ciris"
         assert message.is_bot is True
@@ -294,7 +282,7 @@ class TestCreateObserveMessage:
     def test_create_observe_message_success(self, api_communication_service, sample_observe_correlation):
         """Test successful observe message creation."""
         message = api_communication_service._create_observe_message(sample_observe_correlation)
-        
+
         assert isinstance(message, FetchedMessage)
         assert message.message_id == "observe-corr-456"
         assert message.author_id == "user123"
@@ -313,9 +301,9 @@ class TestCreateObserveMessage:
         correlation.request_data.parameters = {"content": "test message"}  # Missing author info
         # Remove get method to force pydantic path
         delattr(correlation.request_data, "get") if hasattr(correlation.request_data, "get") else None
-        
+
         message = api_communication_service._create_observe_message(correlation)
-        
+
         assert message.content == "test message"
         assert message.author_id == "unknown"
         assert message.author_name == "User"
@@ -330,9 +318,9 @@ class TestFormatTimestamp:
         correlation = Mock()
         correlation.timestamp = datetime(2025, 9, 8, 12, 0, 0, tzinfo=timezone.utc)
         correlation.created_at = datetime(2025, 9, 8, 11, 0, 0, tzinfo=timezone.utc)
-        
+
         result = api_communication_service._format_timestamp(correlation)
-        
+
         assert result == "2025-09-08T12:00:00+00:00"  # Uses timestamp, not created_at
 
     def test_format_timestamp_fallback_to_created_at(self, api_communication_service):
@@ -340,9 +328,9 @@ class TestFormatTimestamp:
         correlation = Mock()
         correlation.timestamp = None
         correlation.created_at = datetime(2025, 9, 8, 11, 0, 0, tzinfo=timezone.utc)
-        
+
         result = api_communication_service._format_timestamp(correlation)
-        
+
         assert result == "2025-09-08T11:00:00+00:00"
 
     def test_format_timestamp_none_values(self, api_communication_service):
@@ -350,9 +338,9 @@ class TestFormatTimestamp:
         correlation = Mock()
         correlation.timestamp = None
         correlation.created_at = None
-        
+
         result = api_communication_service._format_timestamp(correlation)
-        
+
         assert result is None
 
 
@@ -362,7 +350,7 @@ class TestProcessCorrelation:
     def test_process_correlation_speak_type(self, api_communication_service, sample_speak_correlation):
         """Test processing speak correlation."""
         message = api_communication_service._process_correlation(sample_speak_correlation)
-        
+
         assert message is not None
         assert message.author_id == "ciris"
         assert message.is_bot is True
@@ -370,7 +358,7 @@ class TestProcessCorrelation:
     def test_process_correlation_observe_type(self, api_communication_service, sample_observe_correlation):
         """Test processing observe correlation."""
         message = api_communication_service._process_correlation(sample_observe_correlation)
-        
+
         assert message is not None
         assert message.author_id == "user123"
         assert message.is_bot is False
@@ -380,9 +368,9 @@ class TestProcessCorrelation:
         correlation = Mock()
         correlation.action_type = "unknown"
         correlation.request_data = Mock()
-        
+
         message = api_communication_service._process_correlation(correlation)
-        
+
         assert message is None
 
     def test_process_correlation_no_request_data(self, api_communication_service):
@@ -390,9 +378,9 @@ class TestProcessCorrelation:
         correlation = Mock()
         correlation.action_type = "speak"
         correlation.request_data = None
-        
+
         message = api_communication_service._process_correlation(correlation)
-        
+
         assert message is None
 
 
@@ -400,15 +388,13 @@ class TestRefactoredSendMessage:
     """Test the refactored send_message method integration."""
 
     @pytest.mark.asyncio
-    async def test_send_message_integration(
-        self, api_communication_service, mock_websocket_client, mock_persistence
-    ):
+    async def test_send_message_integration(self, api_communication_service, mock_websocket_client, mock_persistence):
         """Test complete send_message flow with refactored helpers."""
         # Setup WebSocket client
         api_communication_service._websocket_clients["client123"] = mock_websocket_client
-        
+
         result = await api_communication_service.send_message("ws:client123", "Integration test")
-        
+
         assert result is True
         # Verify correlation was created
         mock_persistence["add_correlation"].assert_called_once()
@@ -420,19 +406,17 @@ class TestRefactoredFetchMessages:
     """Test the refactored fetch_messages method integration."""
 
     @pytest.mark.asyncio
-    async def test_fetch_messages_integration(
-        self, api_communication_service, sample_correlations, mock_persistence
-    ):
+    async def test_fetch_messages_integration(self, api_communication_service, sample_correlations, mock_persistence):
         """Test complete fetch_messages flow with refactored helpers."""
         mock_persistence["get_correlations_by_channel"].return_value = sample_correlations
-        
+
         messages = await api_communication_service.fetch_messages("api_test")
-        
+
         assert len(messages) == 2
         # Verify both message types are processed
         user_msg = next((m for m in messages if not m.is_bot), None)
         bot_msg = next((m for m in messages if m.is_bot), None)
-        
+
         assert user_msg is not None
         assert user_msg.author_id == "user123"
         assert bot_msg is not None

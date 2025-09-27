@@ -24,27 +24,27 @@ PASSIVE_CONTEXT_LIMIT = 20
 
 def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] = None) -> str:
     """Format Discord mentions to include username alongside numeric IDs.
-    
+
     Args:
         content: The message content containing Discord mentions like <@123456789>
         user_lookup: Optional dict mapping user IDs to usernames
-    
+
     Returns:
         Content with mentions formatted as <@123456789> (username: UserName)
     """
     import re
-    
+
     if not user_lookup:
         return content
-    
+
     # Pattern to match Discord mentions: <@USER_ID> or <@!USER_ID>
-    mention_pattern = r'<@!?(\d+)>'
-    
+    mention_pattern = r"<@!?(\d+)>"
+
     def replace_mention(match):
         user_id = match.group(1)
         username = user_lookup.get(user_id, "Unknown")
         return f"{match.group(0)} (username: {username})"
-    
+
     return re.sub(mention_pattern, replace_mention, content)
 
 
@@ -81,7 +81,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
         if self._document_parser.is_available():
             logger.info(f"Document parser initialized for {origin_service} adapter - PDF/DOCX processing enabled")
         else:
-            logger.warning(f"Document parser not available for {origin_service} adapter - install pypdf and docx2txt to enable")
+            logger.warning(
+                f"Document parser not available for {origin_service} adapter - install pypdf and docx2txt to enable"
+            )
 
     @abstractmethod
     async def start(self) -> None:  # pragma: no cover - implemented by subclasses
@@ -305,18 +307,18 @@ class BaseObserver[MessageT: BaseModel](ABC):
     def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[Dict]) -> Dict[str, str]:
         """Build a user lookup dictionary for mention resolution."""
         user_lookup = {}
-        
+
         # Add users from history
         for hist_msg in history_context:
             aid = hist_msg.get("author_id")
             aname = hist_msg.get("author")
             if aid and aname:
                 user_lookup[str(aid)] = aname
-        
+
         # Add current message author
-        if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+        if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
             user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
-        
+
         return user_lookup
 
     def _format_history_lines(self, history_context: List[Dict], user_lookup: Dict[str, str]) -> List[str]:
@@ -326,39 +328,45 @@ class BaseObserver[MessageT: BaseModel](ABC):
             author = hist_msg.get("author", "Unknown")
             author_id = hist_msg.get("author_id", "unknown")
             content = hist_msg.get("content", "")
-            
+
             # Format mentions in content to include usernames
             content = format_discord_mentions(content, user_lookup)
             lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
-        
+
         return lines
-    
-    async def _add_custom_context_sections(self, task_lines: List[str], msg: MessageT, history_context: List[Dict]) -> None:
+
+    async def _add_custom_context_sections(
+        self, task_lines: List[str], msg: MessageT, history_context: List[Dict]
+    ) -> None:
         """Extension point for subclasses to add custom context sections.
-        
+
         This method is called before the conversation history is added,
         allowing subclasses to inject their own context information.
-        
+
         Args:
             task_lines: The task lines list to append to
-            msg: The message being processed  
+            msg: The message being processed
             history_context: The conversation history context
         """
         # Base implementation does nothing - subclasses can override
         pass
-    
-    async def _append_consent_aware_content(self, task_lines: List[str], msg: MessageT, user_lookup: Dict[str, str]) -> None:
+
+    async def _append_consent_aware_content(
+        self, task_lines: List[str], msg: MessageT, user_lookup: Dict[str, str]
+    ) -> None:
         """Append current message content with consent awareness."""
-        from ciris_engine.schemas.consent.core import ConsentStream
         import hashlib
-        
+
+        from ciris_engine.schemas.consent.core import ConsentStream
+
         consent_stream = await self._get_user_consent_stream(msg.author_id)  # type: ignore[attr-defined]
         is_anonymous = consent_stream == ConsentStream.ANONYMOUS.value
-        
+
         if is_anonymous:
             content_hash = hashlib.sha256(str(msg.content).encode()).hexdigest()  # type: ignore[attr-defined]
             author_hash = f"anon_{hashlib.sha256(str(msg.author_id).encode()).hexdigest()[:8]}"  # type: ignore[attr-defined]
             from ciris_engine.logic.utils.privacy import redact_personal_info
+
             sanitized_content = redact_personal_info(
                 str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content)  # type: ignore[attr-defined]
             )
@@ -370,28 +378,31 @@ class BaseObserver[MessageT: BaseModel](ABC):
     async def _create_channel_snapshot(self, msg: MessageT) -> None:
         """Create channel context and system snapshot for observation."""
         from datetime import datetime, timezone
+
         from ciris_engine.schemas.runtime.system_context import ChannelContext, SystemSnapshot
-        
+
         channel_context = ChannelContext(
-                channel_id=getattr(msg, "channel_id", "system"),
-                channel_name=getattr(msg, "channel_name", f"Channel {getattr(msg, 'channel_id', 'system')}"),
-                channel_type="text",
-                is_private=False,
-                created_at=self.time_service.now() if self.time_service else datetime.now(timezone.utc),
-                allowed_actions=["send_messages", "read_messages"],
-                is_active=True,
-                last_activity=self.time_service.now() if self.time_service else datetime.now(timezone.utc),
-                message_count=0,
-                moderation_level="standard",
-            )
+            channel_id=getattr(msg, "channel_id", "system"),
+            channel_name=getattr(msg, "channel_name", f"Channel {getattr(msg, 'channel_id', 'system')}"),
+            channel_type="text",
+            is_private=False,
+            created_at=self.time_service.now() if self.time_service else datetime.now(timezone.utc),
+            allowed_actions=["send_messages", "read_messages"],
+            is_active=True,
+            last_activity=self.time_service.now() if self.time_service else datetime.now(timezone.utc),
+            message_count=0,
+            moderation_level="standard",
+        )
 
         SystemSnapshot(
             channel_context=channel_context,
             channel_id=getattr(msg, "channel_id", "system"),
             agent_identity={"agent_id": self.agent_id or "ciris", "purpose": "Process and respond to messages"},
         )
-    
-    async def _create_passive_observation_result(self, msg: MessageT, priority: int = 0, filter_result: Optional[Any] = None) -> None:
+
+    async def _create_passive_observation_result(
+        self, msg: MessageT, priority: int = 0, filter_result: Optional[Any] = None
+    ) -> None:
         try:
             import uuid
             from datetime import datetime, timezone
@@ -399,7 +410,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             from ciris_engine.logic import persistence
             from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
             from ciris_engine.schemas.runtime.models import Task, Thought
-            
+
             # Create channel snapshot
             await self._create_channel_snapshot(msg)
 
@@ -415,16 +426,16 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
             # Format mentions for task description
             passive_task_lookup = {}
-            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+            if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
                 passive_task_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
-            
+
             # Build description based on whether this is priority or passive
             if filter_result and priority > 0:
                 description = f"PRIORITY: Respond to {getattr(filter_result.priority, 'value', 'high')} message from @{msg.author_name} (ID: {msg.author_id}): '{formatted_passive_content}'"  # type: ignore[attr-defined]
             else:
                 description = f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'"  # type: ignore[attr-defined]
-            
+
             task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
@@ -442,7 +453,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             )
 
             await self._sign_and_add_task(task)
-            
+
             logger.info(
                 f"[OBSERVER] PASSIVE TASK CREATED: {task.task_id} for message {msg.message_id} "  # type: ignore[attr-defined]
                 f"from @{msg.author_name} in channel {channel_id}"  # type: ignore[attr-defined]
@@ -451,13 +462,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
             # Build conversation context for thought - thoughts are NEVER sanitized
             # Build user lookup for the current message
             initial_user_lookup = {}
-            if hasattr(msg, 'author_id') and hasattr(msg, 'author_name'):
+            if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
                 initial_user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
             formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
             # Build thought content based on priority vs passive
             if filter_result and priority > 0:
-                priority_level = getattr(filter_result.priority, 'value', 'high')
-                filter_reasoning = getattr(filter_result, 'reasoning', 'Priority message detected')
+                priority_level = getattr(filter_result.priority, "value", "high")
+                filter_reasoning = getattr(filter_result, "reasoning", "Priority message detected")
                 task_lines = [f"PRIORITY ({priority_level}): @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} said: {formatted_msg_content}"]  # type: ignore[attr-defined]
                 task_lines.append(f"Filter: {filter_reasoning}")
             else:
@@ -465,30 +476,28 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
             # Allow subclasses to add custom context sections before conversation history
             await self._add_custom_context_sections(task_lines, msg, history_context)
-            
+
             task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
             task_lines.append("CIRIS_OBSERVATION_START")
-            
+
             # Build user lookup and format history lines
             user_lookup = self._build_user_lookup_from_history(msg, history_context)
             history_lines = self._format_history_lines(history_context, user_lookup)
             task_lines.extend(history_lines)
-            
+
             task_lines.append("CIRIS_OBSERVATION_END")
 
             task_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="
             )
-            
+
             # Handle consent-aware content formatting
             await self._append_consent_aware_content(task_lines, msg, user_lookup)  # type: ignore[attr-defined]
 
             task_content = "\n".join(task_lines)
 
             # Log context building details
-            history_line_count = len(
-                [line for line in task_lines for i in range(1, 11) if line.startswith(f"{i}. @")]
-            )
+            history_line_count = len([line for line in task_lines for i in range(1, 11) if line.startswith(f"{i}. @")])
             logger.info(
                 f"[CONTEXT] Built thought context with {history_line_count} history messages, "
                 f"total thought size: {len(task_content)} chars"
@@ -529,16 +538,16 @@ class BaseObserver[MessageT: BaseModel](ABC):
         try:
             # Determine priority based on filter result
             task_priority = 10 if getattr(filter_result.priority, "value", "") == "critical" else 5
-            
+
             # Delegate to passive observation with priority and filter information
             await self._create_passive_observation_result(msg, priority=task_priority, filter_result=filter_result)
-            
+
             logger.info(
                 f"[OBSERVER] PRIORITY OBSERVATION: Message {msg.message_id} from @{msg.author_name} "  # type: ignore[attr-defined]
                 f"triggered {filter_result.priority.value} priority "
                 f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
             )
-            
+
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error creating priority observation task: %s", e, exc_info=True)
 
@@ -547,9 +556,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
         msg_id = getattr(msg, "message_id", "unknown")
         channel_id = getattr(msg, "channel_id", "unknown")
         author = f"{getattr(msg, 'author_name', 'unknown')} (ID: {getattr(msg, 'author_id', 'unknown')})"
-        
+
         logger.info(f"[OBSERVER] Processing message {msg_id} from {author} in channel {channel_id}")
-        
+
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
 
@@ -572,7 +581,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 f"{filter_result.reasoning} (triggered filters: {', '.join(filter_result.triggered_filters) or 'none'})"
             )
             return
-        
+
         logger.info(
             f"[OBSERVER] Message {msg_id} PASSED filter with priority {filter_result.priority.value}: "
             f"{filter_result.reasoning}"
@@ -615,29 +624,29 @@ class BaseObserver[MessageT: BaseModel](ABC):
     async def _should_process_message(self, msg: MessageT) -> bool:
         """Check if this observer should process the message - to be overridden by subclasses."""
         return True  # Default: process all messages
-    
+
     async def _get_user_consent_stream(self, user_id: str) -> Optional[str]:
         """
         Get user's consent stream for privacy handling.
-        
+
         Returns consent stream or None if not found.
         """
         try:
             # Try to get consent from consent service if available
-            if hasattr(self, 'consent_service') and self.consent_service:
+            if hasattr(self, "consent_service") and self.consent_service:
                 try:
                     consent = await self.consent_service.get_consent(user_id)
                     return consent.stream.value if consent else None
                 except Exception:
                     return None
-            
+
             # Try to get from filter service if available
-            if hasattr(self, 'filter_service') and self.filter_service:
-                if hasattr(self.filter_service, '_config') and self.filter_service._config:
+            if hasattr(self, "filter_service") and self.filter_service:
+                if hasattr(self.filter_service, "_config") and self.filter_service._config:
                     if user_id in self.filter_service._config.user_profiles:
                         profile = self.filter_service._config.user_profiles[user_id]
                         return profile.consent_stream
-            
+
             return None
         except Exception as e:
             logger.debug(f"Could not get consent stream for {user_id}: {e}")

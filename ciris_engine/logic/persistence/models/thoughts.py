@@ -12,9 +12,11 @@ from ciris_engine.schemas.runtime.models import Thought
 logger = logging.getLogger(__name__)
 
 
-def get_thoughts_by_status(status: ThoughtStatus, db_path: Optional[str] = None, limit: Optional[int] = None) -> List[Thought]:
+def get_thoughts_by_status(
+    status: ThoughtStatus, db_path: Optional[str] = None, limit: Optional[int] = None
+) -> List[Thought]:
     """Returns all thoughts with the given status from the thoughts table as Thought objects.
-    
+
     Args:
         status: The ThoughtStatus to filter by
         db_path: Optional database path override

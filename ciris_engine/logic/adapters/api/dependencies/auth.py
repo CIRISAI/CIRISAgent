@@ -14,8 +14,6 @@ from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, UserRol
 from ..services.auth_service import APIAuthService
 
 
-
-
 def get_auth_service(request: Request) -> APIAuthService:
     """Get auth service from app state."""
     if not hasattr(request.app.state, "auth_service"):
@@ -43,8 +41,6 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
         )
 
     return authorization[7:]  # Remove "Bearer " prefix
-
-
 
 
 def _handle_service_token_auth(request: Request, auth_service: APIAuthService, service_token: str) -> AuthContext:
@@ -108,7 +104,7 @@ def _build_permissions_set(key_info, user) -> set:
             except ValueError:
                 # Skip invalid permission strings
                 pass
-    
+
     return permissions
 
 

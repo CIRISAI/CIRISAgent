@@ -41,6 +41,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
     def _create_speak_correlation(self, channel_id: str, content: str) -> None:
         """Create and store a speak correlation for outgoing message."""
         import uuid
+
         from ciris_engine.logic import persistence
         from ciris_engine.schemas.telemetry.core import (
             ServiceCorrelation,
@@ -88,10 +89,12 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             return False
 
         ws = self._websocket_clients[client_id]
-        await ws.send_json({
-            "type": "message",
-            "data": {"content": content, "timestamp": datetime.now(timezone.utc).isoformat()},
-        })
+        await ws.send_json(
+            {
+                "type": "message",
+                "data": {"content": content, "timestamp": datetime.now(timezone.utc).isoformat()},
+            }
+        )
         return True
 
     async def _handle_api_interaction_response(self, channel_id: str, content: str) -> None:
@@ -109,6 +112,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
                 return
 
             from ciris_engine.logic.adapters.api.routes.agent import store_message_response
+
             await store_message_response(message_id, content)
             logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
             # Clean up the mapping
@@ -174,7 +178,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         """Create a FetchedMessage from a 'speak' correlation (outgoing agent message)."""
         params = self._extract_parameters(correlation.request_data)
         content = params.get("content", "")
-        
+
         return FetchedMessage(
             message_id=correlation.correlation_id,
             author_id="ciris",
@@ -187,7 +191,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
     def _create_observe_message(self, correlation: Any) -> FetchedMessage:
         """Create a FetchedMessage from an 'observe' correlation (incoming user message)."""
         params = self._extract_parameters(correlation.request_data)
-        
+
         return FetchedMessage(
             message_id=correlation.correlation_id,
             author_id=params.get("author_id", "unknown"),
@@ -211,7 +215,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             return self._create_speak_message(correlation)
         elif correlation.action_type == "observe":
             return self._create_observe_message(correlation)
-        
+
         return None
 
     async def fetch_messages(

@@ -24,20 +24,17 @@ class ModelConfig(BaseModel):
     deprecated: bool = Field(default=False, description="Whether this model is deprecated")
     effective_date: str = Field(..., description="Date when pricing became effective (YYYY-MM-DD)")
     description: Optional[str] = Field(None, description="Human-readable model description")
-    provider_specific: Optional[Dict[str, str]] = Field(
-        default=None,
-        description="Provider-specific metadata"
-    )
+    provider_specific: Optional[Dict[str, str]] = Field(default=None, description="Provider-specific metadata")
 
-    @field_validator('effective_date')
+    @field_validator("effective_date")
     @classmethod
     def validate_date_format(cls, v: str) -> str:
         """Validate date format is YYYY-MM-DD."""
         try:
-            datetime.strptime(v, '%Y-%m-%d')
+            datetime.strptime(v, "%Y-%m-%d")
             return v
         except ValueError:
-            raise ValueError('Date must be in YYYY-MM-DD format')
+            raise ValueError("Date must be in YYYY-MM-DD format")
 
 
 class RateLimits(BaseModel):
@@ -52,34 +49,21 @@ class ProviderConfig(BaseModel):
 
     display_name: str = Field(..., description="Human-readable provider name")
     models: Dict[str, ModelConfig] = Field(..., description="Available models")
-    rate_limits: Optional[Dict[str, RateLimits]] = Field(
-        default=None,
-        description="Rate limiting tiers"
-    )
+    rate_limits: Optional[Dict[str, RateLimits]] = Field(default=None, description="Rate limiting tiers")
     base_url: Optional[str] = Field(None, description="Provider's base API URL")
 
 
 class EnergyEstimates(BaseModel):
     """Energy consumption estimates for models."""
 
-    model_patterns: Dict[str, Dict[str, float]] = Field(
-        ...,
-        description="Energy consumption by model pattern"
-    )
+    model_patterns: Dict[str, Dict[str, float]] = Field(..., description="Energy consumption by model pattern")
 
 
 class CarbonIntensity(BaseModel):
     """Carbon intensity data by region."""
 
-    global_average_g_co2_per_kwh: float = Field(
-        ...,
-        ge=0.0,
-        description="Global average CO2 grams per kWh"
-    )
-    regions: Dict[str, float] = Field(
-        ...,
-        description="CO2 grams per kWh by region"
-    )
+    global_average_g_co2_per_kwh: float = Field(..., ge=0.0, description="Global average CO2 grams per kWh")
+    regions: Dict[str, float] = Field(..., description="CO2 grams per kWh by region")
 
 
 class EnvironmentalFactors(BaseModel):
@@ -112,22 +96,16 @@ class PricingConfig(BaseModel):
     last_updated: datetime = Field(..., description="Last update timestamp")
     metadata: PricingMetadata = Field(..., description="Configuration metadata")
     providers: Dict[str, ProviderConfig] = Field(..., description="Provider configurations")
-    environmental_factors: EnvironmentalFactors = Field(
-        ...,
-        description="Environmental impact factors"
-    )
-    fallback_pricing: FallbackPricing = Field(
-        ...,
-        description="Fallback pricing for unknown models"
-    )
+    environmental_factors: EnvironmentalFactors = Field(..., description="Environmental impact factors")
+    fallback_pricing: FallbackPricing = Field(..., description="Fallback pricing for unknown models")
 
-    @field_validator('version')
+    @field_validator("version")
     @classmethod
     def validate_semver(cls, v: str) -> str:
         """Validate semantic versioning format."""
-        parts = v.split('.')
+        parts = v.split(".")
         if len(parts) != 3 or not all(p.isdigit() for p in parts):
-            raise ValueError('Version must be in semantic versioning format (x.y.z)')
+            raise ValueError("Version must be in semantic versioning format (x.y.z)")
         return v
 
     @classmethod
@@ -155,7 +133,7 @@ class PricingConfig(BaseModel):
             raise FileNotFoundError(f"Pricing configuration file not found: {path}")
 
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             return cls(**data)
         except json.JSONDecodeError as e:
@@ -208,15 +186,15 @@ class PricingConfig(BaseModel):
 
         # Try exact match first
         if model_name in patterns:
-            return patterns[model_name]['kwh_per_1k_tokens']
+            return patterns[model_name]["kwh_per_1k_tokens"]
 
         # Try pattern matching
         for pattern, values in patterns.items():
-            if pattern != 'default' and pattern.lower() in model_name.lower():
-                return values['kwh_per_1k_tokens']
+            if pattern != "default" and pattern.lower() in model_name.lower():
+                return values["kwh_per_1k_tokens"]
 
         # Return default
-        return patterns['default']['kwh_per_1k_tokens']
+        return patterns["default"]["kwh_per_1k_tokens"]
 
     def get_carbon_intensity(self, region: Optional[str] = None) -> float:
         """
@@ -287,5 +265,5 @@ __all__ = [
     "RateLimits",
     "EnvironmentalFactors",
     "PricingMetadata",
-    "FallbackPricing"
+    "FallbackPricing",
 ]

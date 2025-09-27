@@ -61,7 +61,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     if adapter_config and hasattr(adapter_config, "proxy_path") and adapter_config.proxy_path:
         root_path = adapter_config.proxy_path
         print(f"Configuring FastAPI with root_path='{root_path}' for reverse proxy support")
-    
+
     app = FastAPI(
         title="CIRIS API v1",
         description="Autonomous AI Agent Interaction and Observability API (Pre-Beta)",

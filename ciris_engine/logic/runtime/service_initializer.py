@@ -15,7 +15,6 @@ import aiofiles
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor
 from ciris_engine.logic.persistence import get_sqlite_db_full_path
-from ciris_engine.logic.services.infrastructure.database_maintenance import DatabaseMaintenanceService
 from ciris_engine.logic.registries.base import Priority, ServiceRegistry
 
 # CoreToolService removed - SELF_HELP moved to memory per user request
@@ -27,6 +26,7 @@ from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilte
 from ciris_engine.logic.services.governance.wise_authority import WiseAuthorityService
 from ciris_engine.logic.services.graph.audit_service import GraphAuditService as AuditService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
+from ciris_engine.logic.services.infrastructure.database_maintenance import DatabaseMaintenanceService
 from ciris_engine.logic.services.lifecycle.initialization import InitializationService
 from ciris_engine.logic.services.lifecycle.shutdown import ShutdownService
 

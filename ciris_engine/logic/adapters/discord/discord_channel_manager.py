@@ -209,7 +209,7 @@ class DiscordChannelManager:
                                 "author_name": message.author.display_name,
                                 "message_id": str(message.id),
                             },
-                            str(message.author.id)
+                            str(message.author.id),
                         ),
                         request_timestamp=now,
                     ),
@@ -298,30 +298,30 @@ class DiscordChannelManager:
         except Exception as e:
             logger.exception(f"Error getting channel info for {channel_id}: {e}")
             return {"exists": True, "accessible": False, "error": str(e)}
-    
+
     async def _sanitize_message_parameters(self, params: dict, author_id: str) -> dict:
         """
         Sanitize message parameters based on user consent.
-        
+
         Checks user consent and applies privacy filters if needed.
         """
         try:
             # Try to get user consent stream
             consent_stream = await self._get_user_consent_stream(author_id)
-            
+
             # If user is anonymous, sanitize the parameters
             if consent_stream in ["anonymous", "expired", "revoked"]:
                 return sanitize_correlation_parameters(params, consent_stream)
-            
+
             return params
         except Exception as e:
             logger.debug(f"Could not sanitize parameters: {e}")
             return params
-    
+
     async def _get_user_consent_stream(self, user_id: str) -> Optional[str]:
         """
         Get user's consent stream for privacy handling.
-        
+
         Returns consent stream or None if not found.
         """
         try:
@@ -332,14 +332,14 @@ class DiscordChannelManager:
                     return consent.stream.value if consent else None
                 except Exception:
                     pass
-            
+
             # Try to get from filter service if available
             if self.filter_service:
-                if hasattr(self.filter_service, '_config') and self.filter_service._config:
+                if hasattr(self.filter_service, "_config") and self.filter_service._config:
                     if user_id in self.filter_service._config.user_profiles:
                         profile = self.filter_service._config.user_profiles[user_id]
                         return profile.consent_stream
-            
+
             return None
         except Exception as e:
             logger.debug(f"Could not get consent stream for {user_id}: {e}")

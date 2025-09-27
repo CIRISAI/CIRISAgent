@@ -460,6 +460,14 @@ class CIRISRuntime:
             phase=InitializationPhase.SERVICES, name="Start Adapters", handler=self._start_adapters, critical=True
         )
 
+        # Initialize maintenance service and perform cleanup BEFORE components
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
+            name="Initialize Maintenance Service",
+            handler=self._initialize_maintenance_service,
+            critical=True,
+        )
+
         # Adapter connections will be started in COMPONENTS phase after services are ready
 
         # Phase 6: COMPONENTS
@@ -478,13 +486,6 @@ class CIRISRuntime:
 
         # Adapter services are now registered inside _start_adapter_connections
         # after waiting for adapters to be healthy
-
-        init_manager.register_step(
-            phase=InitializationPhase.COMPONENTS,
-            name="Initialize Maintenance Service",
-            handler=self._initialize_maintenance_service,
-            critical=True,
-        )
 
         # Phase 7: VERIFICATION
         init_manager.register_step(

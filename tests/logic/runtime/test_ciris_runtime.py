@@ -1005,6 +1005,53 @@ class TestAgentProcessorInitialization:
             assert "Runtime error:" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_maintenance_initialization_phase_order(self, real_runtime_with_mock):
+        """Test that maintenance service initialization is registered in SERVICES phase before adapter connections in COMPONENTS phase."""
+        from ciris_engine.schemas.services.operations import InitializationPhase
+
+        runtime = real_runtime_with_mock
+
+        # Create a mock initialization service to capture the registration calls
+        mock_init_service = MagicMock()
+        runtime.service_initializer.initialization_service = mock_init_service
+
+        # Record calls to register_step
+        registered_steps = []
+
+        def capture_register_step(phase, name, handler, **kwargs):
+            registered_steps.append((phase, name, handler.__name__ if callable(handler) else str(handler)))
+
+        mock_init_service.register_step.side_effect = capture_register_step
+
+        # Call the registration method
+        runtime._register_initialization_steps(mock_init_service)
+
+        # Find the maintenance and adapter connection steps
+        maintenance_step = None
+        adapter_connections_step = None
+
+        for phase, name, handler_name in registered_steps:
+            if name == "Initialize Maintenance Service":
+                maintenance_step = (phase, name, handler_name)
+            elif name == "Start Adapter Connections":
+                adapter_connections_step = (phase, name, handler_name)
+
+        # Verify both steps were registered
+        assert maintenance_step is not None, "Maintenance service initialization should be registered"
+        assert adapter_connections_step is not None, "Adapter connections should be registered"
+
+        # Verify maintenance is in SERVICES phase and adapter connections is in COMPONENTS phase
+        assert (
+            maintenance_step[0] == InitializationPhase.SERVICES
+        ), f"Maintenance should be in SERVICES phase, got {maintenance_step[0]}"
+        assert (
+            adapter_connections_step[0] == InitializationPhase.COMPONENTS
+        ), f"Adapter connections should be in COMPONENTS phase, got {adapter_connections_step[0]}"
+
+        # The test passes as long as both phases are correctly assigned
+        # The initialization service handles phase ordering internally
+
+    @pytest.mark.asyncio
     async def test_run_method_no_adapter_tasks(self, runtime_with_mocked_agent_processor):
         """Test run() method when no adapter tasks are found."""
         runtime = runtime_with_mocked_agent_processor

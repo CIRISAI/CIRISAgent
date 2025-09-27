@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced test fixtures with AsyncMock compatibility for state manager operations
   - Eliminated RuntimeWarnings about unawaited coroutines in state management system
   - Achieved 100% test pass rate with parallel execution (pytest -n 16) maintaining 4x+ performance improvements
+- **🧹 Cognitive Complexity Refactoring**: Resolved all SonarCloud critical complexity issues in API routes
+  - Refactored `get_history` function: reduced complexity from 48 to ≤15 with 24 helper functions
+  - Refactored `get_status` function: reduced complexity from 20 to ≤15 with 4 helper functions
+  - Refactored `websocket_stream` function: reduced complexity from 16 to ≤15 with 7 helper functions
+  - Created 35 total helper functions with single responsibility principle and comprehensive error handling
+  - Achieved 100% test pass rate (57/57 tests) with comprehensive coverage across all helper functions
 
 ## [1.1.5] - 2025-09-26
 

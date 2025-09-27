@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
@@ -425,84 +425,16 @@ async def get_history(
 
     Get the conversation history for the current user.
     """
-    # Use user-specific channel
+    # Build channels to query based on user role
+    channels_to_query = _build_channels_to_query(auth, request)
     channel_id = f"api_{auth.user_id}"
-
-    # For admin users and above, also include the default API channel (home)
-    channels_to_query = [channel_id]
-    if auth.role in ["ADMIN", "AUTHORITY", "SYSTEM_ADMIN"]:
-        # Get default API channel from config
-        api_host = getattr(request.app.state, "api_host", "127.0.0.1")
-        api_port = getattr(request.app.state, "api_port", "8080")
-        default_channel = f"api_{api_host}_{api_port}"
-        channels_to_query.append(default_channel)
-
-        # Also add common variations of the API channel
-        # This ensures we catch messages regardless of how the channel was recorded
-        channels_to_query.extend(
-            [
-                f"api_0.0.0.0_{api_port}",  # Bind address
-                f"api_127.0.0.1_{api_port}",  # Localhost
-                f"api_localhost_{api_port}",  # Hostname variant
-            ]
-        )
 
     logger.info(f"History query for user {auth.user_id} with role {auth.role}, channels: {channels_to_query}")
 
     # Check for mock message history first
     message_history = getattr(request.app.state, "message_history", None)
     if message_history is not None:
-        # Filter messages for this user (including default channel for admins)
-        user_messages = [m for m in message_history if m.get("channel_id") in channels_to_query]
-
-        # Convert to response format
-        messages = []
-
-        # First, expand all messages (user + response pairs)
-        all_messages = []
-        for msg in user_messages:
-            # Add user message
-            all_messages.append(
-                ConversationMessage(
-                    id=msg["message_id"],
-                    author=msg["author_id"],
-                    content=msg["content"],
-                    timestamp=(
-                        datetime.fromisoformat(msg["timestamp"])
-                        if isinstance(msg["timestamp"], str)
-                        else msg["timestamp"]
-                    ),
-                    is_agent=False,
-                )
-            )
-            # Add agent response if exists
-            if msg.get("response"):
-                all_messages.append(
-                    ConversationMessage(
-                        id=f"{msg['message_id']}_response",
-                        author="Scout",
-                        content=msg["response"],
-                        timestamp=(
-                            datetime.fromisoformat(msg["timestamp"])
-                            if isinstance(msg["timestamp"], str)
-                            else msg["timestamp"]
-                        ),
-                        is_agent=True,
-                    )
-                )
-
-        # Now take only the last 'limit' messages
-        if len(all_messages) > limit:
-            messages = all_messages[-limit:]
-        else:
-            messages = all_messages
-
-        history = ConversationHistory(
-            messages=messages,
-            total_count=len(user_messages),
-            has_more=len(user_messages) > len(messages),  # Fixed: has_more should be based on actual truncation
-        )
-
+        history = await _get_history_from_mock(message_history, channels_to_query, limit)
         return SuccessResponse(data=history)
 
     # Get communication service
@@ -511,112 +443,11 @@ async def get_history(
         # Fallback: query from memory
         memory_service = getattr(request.app.state, "memory_service", None)
         if memory_service:
-            # Query conversation nodes from memory
-            from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
-            from ciris_engine.schemas.services.operations import MemoryQuery
-
-            # MemoryQuery expects node_id, not filters
-            # For conversation history, we'll need to use a different approach
-            # For now, create a placeholder query
-            query = MemoryQuery(
-                node_id=f"conversation_{channel_id}",
-                scope=GraphScope.LOCAL,
-                type=NodeType.CONVERSATION_SUMMARY,
-                include_edges=True,
-                depth=1,
-            )
-
-            nodes = await memory_service.recall(query)
-
-            # Convert to conversation messages
-            messages = []
-            for node in nodes:
-                attrs = node.attributes
-                messages.append(
-                    ConversationMessage(
-                        id=attrs.get("message_id", node.id),
-                        author=attrs.get("author", "unknown"),
-                        content=attrs.get("content", ""),
-                        timestamp=datetime.fromisoformat(attrs.get("timestamp", node.created_at)),
-                        is_agent=attrs.get("is_agent", False),
-                    )
-                )
-
-            history = ConversationHistory(messages=messages, total_count=len(messages), has_more=len(messages) == limit)
-
+            history = await _get_history_from_memory(memory_service, channel_id, limit)
             return SuccessResponse(data=history)
 
     try:
-        # Fetch messages from communication service (fetch more to allow filtering)
-        fetch_limit = limit * 2 if before else limit
-
-        # Fetch messages from all relevant channels
-        fetched_messages: List[Dict[str, Any]] = []
-        for channel in channels_to_query:
-            try:
-                logger.info(f"Fetching messages from channel: {channel}")
-                if comm_service is None:
-                    logger.warning("Communication service is not available")
-                    continue
-                channel_messages = await comm_service.fetch_messages(channel, limit=fetch_limit)
-                logger.info(f"Retrieved {len(channel_messages)} messages from {channel}")
-                fetched_messages.extend(channel_messages)
-            except Exception as e:
-                # If a channel doesn't exist or has no messages, continue
-                logger.warning(f"Failed to fetch from channel {channel}: {e}")
-                continue
-
-        # Sort messages by timestamp (newest first)
-        sorted_messages = sorted(
-            fetched_messages,
-            key=lambda m: (
-                m.timestamp
-                if isinstance(m.timestamp, datetime)
-                else datetime.fromisoformat(str(m.timestamp)) if m.timestamp else datetime.now(timezone.utc)
-            ),
-            reverse=True,
-        )
-
-        # Filter by time if specified
-        if before:
-            filtered_messages = [
-                m
-                for m in sorted_messages
-                if m.timestamp
-                and (m.timestamp if isinstance(m.timestamp, datetime) else datetime.fromisoformat(str(m.timestamp)))
-                < before
-            ]
-        else:
-            filtered_messages = sorted_messages
-
-        # Convert to conversation messages
-        conv_messages = []
-        for msg in filtered_messages[:limit]:  # Apply limit after filtering
-            # Safely access model attributes
-            timestamp_val = msg.timestamp
-            msg_timestamp = (
-                timestamp_val
-                if isinstance(timestamp_val, datetime)
-                else datetime.fromisoformat(str(timestamp_val)) if timestamp_val else datetime.now(timezone.utc)
-            )
-
-            conv_messages.append(
-                ConversationMessage(
-                    id=str(msg.message_id or ""),
-                    author=str(msg.author_name or msg.author_id or ""),
-                    content=str(msg.content or ""),
-                    timestamp=msg_timestamp,
-                    is_agent=bool(getattr(msg, "is_agent_message", False) or getattr(msg, "is_bot", False)),
-                )
-            )
-
-        # Build response
-        history = ConversationHistory(
-            messages=conv_messages,
-            total_count=len(filtered_messages),  # Total before limiting
-            has_more=len(filtered_messages) > limit,
-        )
-
+        history = await _get_history_from_communication_service(comm_service, channels_to_query, limit, before)
         return SuccessResponse(data=history)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -704,6 +535,285 @@ def _count_active_services(service_registry) -> tuple[int, dict]:
     return services_active, multi_provider_services
 
 
+def _get_admin_channels(auth: AuthContext, request: Request) -> List[str]:
+    """Get additional admin channels for privileged users."""
+    channels = []
+    if auth.role in ["ADMIN", "AUTHORITY", "SYSTEM_ADMIN"]:
+        # Get default API channel from config
+        api_host = getattr(request.app.state, "api_host", "127.0.0.1")
+        api_port = getattr(request.app.state, "api_port", "8080")
+        default_channel = f"api_{api_host}_{api_port}"
+        channels.append(default_channel)
+
+        # Add common variations of the API channel
+        channels.extend(
+            [
+                f"api_0.0.0.0_{api_port}",  # Bind address
+                f"api_127.0.0.1_{api_port}",  # Localhost
+                f"api_localhost_{api_port}",  # Hostname variant
+            ]
+        )
+    return channels
+
+
+def _build_channels_to_query(auth: AuthContext, request: Request) -> List[str]:
+    """Build list of channels to query for conversation history."""
+    channel_id = f"api_{auth.user_id}"
+    channels_to_query = [channel_id]
+    channels_to_query.extend(_get_admin_channels(auth, request))
+    return channels_to_query
+
+
+def _convert_timestamp(timestamp) -> datetime:
+    """Convert timestamp string or datetime to datetime object."""
+    if isinstance(timestamp, str):
+        try:
+            return datetime.fromisoformat(timestamp)
+        except (ValueError, TypeError):
+            return datetime.now(timezone.utc)
+    elif isinstance(timestamp, datetime):
+        return timestamp
+    else:
+        return datetime.now(timezone.utc)
+
+
+def _create_conversation_message_from_mock(msg: dict, is_response: bool = False) -> ConversationMessage:
+    """Create ConversationMessage from mock message data."""
+    if is_response:
+        return ConversationMessage(
+            id=f"{msg['message_id']}_response",
+            author="Scout",
+            content=msg["response"],
+            timestamp=_convert_timestamp(msg["timestamp"]),
+            is_agent=True,
+        )
+    else:
+        return ConversationMessage(
+            id=msg["message_id"],
+            author=msg["author_id"],
+            content=msg["content"],
+            timestamp=_convert_timestamp(msg["timestamp"]),
+            is_agent=False,
+        )
+
+
+def _expand_mock_messages(user_messages: List[dict]) -> List[ConversationMessage]:
+    """Expand mock messages into user message + response pairs."""
+    all_messages = []
+    for msg in user_messages:
+        # Add user message
+        all_messages.append(_create_conversation_message_from_mock(msg))
+        # Add agent response if exists
+        if msg.get("response"):
+            all_messages.append(_create_conversation_message_from_mock(msg, is_response=True))
+    return all_messages
+
+
+def _apply_message_limit(messages: List[ConversationMessage], limit: int) -> List[ConversationMessage]:
+    """Apply message limit, taking the last N messages."""
+    if len(messages) > limit:
+        return messages[-limit:]
+    return messages
+
+
+async def _get_history_from_mock(
+    message_history: List[dict], channels_to_query: List[str], limit: int
+) -> ConversationHistory:
+    """Process conversation history from mock data."""
+    # Filter messages for requested channels
+    user_messages = [m for m in message_history if m.get("channel_id") in channels_to_query]
+
+    # Expand all messages (user + response pairs)
+    all_messages = _expand_mock_messages(user_messages)
+
+    # Apply limit
+    limited_messages = _apply_message_limit(all_messages, limit)
+
+    return ConversationHistory(
+        messages=limited_messages,
+        total_count=len(user_messages),
+        has_more=len(user_messages) > len(limited_messages),
+    )
+
+
+async def _get_history_from_memory(memory_service, channel_id: str, limit: int) -> ConversationHistory:
+    """Query conversation history from memory service."""
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+    from ciris_engine.schemas.services.operations import MemoryQuery
+
+    query = MemoryQuery(
+        node_id=f"conversation_{channel_id}",
+        scope=GraphScope.LOCAL,
+        type=NodeType.CONVERSATION_SUMMARY,
+        include_edges=True,
+        depth=1,
+    )
+
+    nodes = await memory_service.recall(query)
+
+    # Convert to conversation messages
+    messages = []
+    for node in nodes:
+        attrs = node.attributes
+        messages.append(
+            ConversationMessage(
+                id=attrs.get("message_id", node.id),
+                author=attrs.get("author", "unknown"),
+                content=attrs.get("content", ""),
+                timestamp=datetime.fromisoformat(attrs.get("timestamp", node.created_at)),
+                is_agent=attrs.get("is_agent", False),
+            )
+        )
+
+    return ConversationHistory(messages=messages, total_count=len(messages), has_more=len(messages) == limit)
+
+
+def _safe_convert_message_timestamp(msg) -> datetime:
+    """Safely convert message timestamp with fallback."""
+    timestamp_val = msg.timestamp
+    if isinstance(timestamp_val, datetime):
+        return timestamp_val
+    elif timestamp_val:
+        try:
+            return datetime.fromisoformat(str(timestamp_val))
+        except (ValueError, TypeError):
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _convert_service_message_to_conversation(msg) -> ConversationMessage:
+    """Convert communication service message to ConversationMessage."""
+    return ConversationMessage(
+        id=str(msg.message_id or ""),
+        author=str(msg.author_name or msg.author_id or ""),
+        content=str(msg.content or ""),
+        timestamp=_safe_convert_message_timestamp(msg),
+        is_agent=bool(getattr(msg, "is_agent_message", False) or getattr(msg, "is_bot", False)),
+    )
+
+
+async def _fetch_messages_from_channels(comm_service, channels_to_query: List[str], fetch_limit: int) -> List:
+    """Fetch messages from all specified channels."""
+    fetched_messages = []
+    for channel in channels_to_query:
+        try:
+            logger.info(f"Fetching messages from channel: {channel}")
+            if comm_service is None:
+                logger.warning("Communication service is not available")
+                continue
+            channel_messages = await comm_service.fetch_messages(channel, limit=fetch_limit)
+            logger.info(f"Retrieved {len(channel_messages)} messages from {channel}")
+            fetched_messages.extend(channel_messages)
+        except Exception as e:
+            logger.warning(f"Failed to fetch from channel {channel}: {e}")
+            continue
+    return fetched_messages
+
+
+def _sort_and_filter_messages(fetched_messages: List, before: Optional[datetime]) -> List:
+    """Sort messages by timestamp and apply time filter."""
+    # Sort messages by timestamp (newest first)
+    sorted_messages = sorted(
+        fetched_messages,
+        key=lambda m: _safe_convert_message_timestamp(m),
+        reverse=True,
+    )
+
+    # Filter by time if specified
+    if before:
+        return [m for m in sorted_messages if _safe_convert_message_timestamp(m) < before]
+    return sorted_messages
+
+
+async def _get_history_from_communication_service(
+    comm_service, channels_to_query: List[str], limit: int, before: Optional[datetime]
+) -> ConversationHistory:
+    """Get conversation history from communication service."""
+    # Fetch more messages to allow filtering
+    fetch_limit = limit * 2 if before else limit
+
+    # Fetch messages from all relevant channels
+    fetched_messages = await _fetch_messages_from_channels(comm_service, channels_to_query, fetch_limit)
+
+    # Sort and filter messages
+    filtered_messages = _sort_and_filter_messages(fetched_messages, before)
+
+    # Convert to conversation messages and apply final limit
+    conv_messages = [_convert_service_message_to_conversation(msg) for msg in filtered_messages[:limit]]
+
+    return ConversationHistory(
+        messages=conv_messages,
+        total_count=len(filtered_messages),
+        has_more=len(filtered_messages) > limit,
+    )
+
+
+def _get_current_task_info(request: Request):
+    """Get current task information from task scheduler."""
+    task_scheduler = getattr(request.app.state, "task_scheduler", None)
+    if task_scheduler and hasattr(task_scheduler, "get_current_task"):
+        return task_scheduler.get_current_task()
+    return None
+
+
+def _get_memory_usage(request: Request) -> float:
+    """Get current memory usage from resource monitor."""
+    resource_monitor = getattr(request.app.state, "resource_monitor", None)
+    if resource_monitor and hasattr(resource_monitor, "snapshot"):
+        return float(resource_monitor.snapshot.memory_mb)
+    return 0.0
+
+
+def _get_version_info() -> tuple[str, str, str]:
+    """Get version information including codename and code hash."""
+    from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
+
+    try:
+        from version import __version__ as code_hash
+    except ImportError:
+        code_hash = None
+
+    return CIRIS_VERSION, CIRIS_CODENAME, code_hash
+
+
+async def _build_agent_status(
+    request: Request, cognitive_state: str, uptime: float, messages_processed: int, runtime
+) -> AgentStatus:
+    """Build AgentStatus object with all required information."""
+    # Get current task
+    current_task_coro = _get_current_task_info(request)
+    current_task = await current_task_coro if current_task_coro else None
+
+    # Get resource usage
+    memory_usage_mb = _get_memory_usage(request)
+
+    # Count services
+    service_registry = getattr(request.app.state, "service_registry", None)
+    services_active, multi_provider_services = _count_active_services(service_registry)
+
+    # Get identity
+    agent_id, agent_name = _get_agent_identity_info(runtime)
+
+    # Get version information
+    version, codename, code_hash = _get_version_info()
+
+    return AgentStatus(
+        agent_id=agent_id,
+        name=agent_name,
+        version=version,
+        codename=codename,
+        code_hash=code_hash,
+        cognitive_state=cognitive_state,
+        uptime_seconds=uptime,
+        messages_processed=messages_processed,
+        last_activity=datetime.now(timezone.utc),
+        current_task=current_task,
+        services_active=services_active,
+        memory_usage_mb=memory_usage_mb,
+        multi_provider_services=multi_provider_services,
+    )
+
+
 def _get_agent_identity_info(runtime) -> tuple[str, str]:
     """Get agent ID and name."""
     agent_id = "ciris_agent"
@@ -739,49 +849,8 @@ async def get_status(request: Request, auth: AuthContext = Depends(require_obser
         uptime = _calculate_uptime(time_service)
         messages_processed = _count_wakeup_tasks(uptime)
 
-        # Get current task
-        current_task = None
-        task_scheduler = getattr(request.app.state, "task_scheduler", None)
-        if task_scheduler and hasattr(task_scheduler, "get_current_task"):
-            current_task = await task_scheduler.get_current_task()
-
-        # Get resource usage
-        memory_usage_mb = 0.0
-        resource_monitor = getattr(request.app.state, "resource_monitor", None)
-        if resource_monitor and hasattr(resource_monitor, "snapshot"):
-            memory_usage_mb = float(resource_monitor.snapshot.memory_mb)
-
-        # Count services
-        service_registry = getattr(request.app.state, "service_registry", None)
-        services_active, multi_provider_services = _count_active_services(service_registry)
-
-        # Get identity
-        agent_id, agent_name = _get_agent_identity_info(runtime)
-
-        # Get version information
-        from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
-
-        try:
-            from version import __version__ as code_hash
-        except ImportError:
-            code_hash = None
-
-        status = AgentStatus(
-            agent_id=agent_id,
-            name=agent_name,
-            version=CIRIS_VERSION,
-            codename=CIRIS_CODENAME,
-            code_hash=code_hash,
-            cognitive_state=cognitive_state,
-            uptime_seconds=uptime,
-            messages_processed=messages_processed,
-            last_activity=datetime.now(timezone.utc),
-            current_task=current_task,
-            services_active=services_active,
-            memory_usage_mb=memory_usage_mb,
-            multi_provider_services=multi_provider_services,
-        )
-
+        # Build comprehensive status
+        status = await _build_agent_status(request, cognitive_state, uptime, messages_processed, runtime)
         return SuccessResponse(data=status)
 
     except Exception as e:
@@ -1100,8 +1169,74 @@ async def notify_interact_response(message_id: str, content: str) -> None:
         _response_events[message_id].set()
 
 
+def _validate_websocket_authorization(websocket: WebSocket) -> Optional[str]:
+    """Validate websocket authorization header and return API key."""
+    authorization = websocket.headers.get("authorization")
+    if not authorization:
+        return None
+    if not authorization.startswith("Bearer "):
+        return None
+    return authorization[7:]  # Remove "Bearer " prefix
+
+
+async def _authenticate_websocket_user(websocket: WebSocket, api_key: str) -> Optional[AuthContext]:
+    """Authenticate websocket user and return auth context."""
+    auth_service = getattr(websocket.app.state, "auth_service", None)
+    if not auth_service:
+        return None
+
+    key_info = auth_service.validate_api_key(api_key)
+    if not key_info:
+        return None
+
+    return AuthContext(
+        user_id=key_info.user_id,
+        role=key_info.role,
+        permissions=ROLE_PERMISSIONS.get(key_info.role, set()),
+        api_key_id=auth_service._get_key_id(api_key),
+        authenticated_at=datetime.now(timezone.utc),
+    )
+
+
+async def _handle_websocket_subscription_action(websocket: WebSocket, data: dict, subscribed_channels: set) -> None:
+    """Handle websocket subscribe/unsubscribe actions."""
+    action = data.get("action")
+    channels = data.get("channels", [])
+
+    if action == "subscribe":
+        subscribed_channels.update(channels)
+    elif action == "unsubscribe":
+        subscribed_channels.difference_update(channels)
+    elif action == "ping":
+        await websocket.send_json({"type": "pong", "timestamp": datetime.now(timezone.utc).isoformat()})
+        return
+
+    # Send subscription update for subscribe/unsubscribe
+    if action in ["subscribe", "unsubscribe"]:
+        await websocket.send_json(
+            {
+                "type": "subscription_update",
+                "channels": list(subscribed_channels),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+
+def _register_websocket_client(websocket: WebSocket, client_id: str) -> None:
+    """Register websocket client with communication service."""
+    comm_service = getattr(websocket.app.state, "communication_service", None)
+    if comm_service and hasattr(comm_service, "register_websocket"):
+        comm_service.register_websocket(client_id, websocket)
+
+
+def _unregister_websocket_client(websocket: WebSocket, client_id: str) -> None:
+    """Unregister websocket client from communication service."""
+    comm_service = getattr(websocket.app.state, "communication_service", None)
+    if comm_service and hasattr(comm_service, "unregister_websocket"):
+        comm_service.unregister_websocket(client_id)
+
+
 # WebSocket endpoint for streaming
-from fastapi import WebSocket, WebSocketDisconnect
 
 
 @router.websocket("/stream")
@@ -1117,40 +1252,17 @@ async def websocket_stream(
     - reasoning: Reasoning traces
     - logs: System logs
     """
-    # Extract authorization header from WebSocket request
-    authorization = websocket.headers.get("authorization")
-
-    if not authorization:
-        await websocket.close(code=1008, reason="Missing authorization header")
+    # Validate authorization
+    api_key = _validate_websocket_authorization(websocket)
+    if not api_key:
+        await websocket.close(code=1008, reason="Missing or invalid authorization header")
         return
 
-    # Get auth service from app state
-    auth_service = getattr(websocket.app.state, "auth_service", None)
-    if not auth_service:
-        await websocket.close(code=1011, reason="Auth service not initialized")
+    # Authenticate user
+    auth_context = await _authenticate_websocket_user(websocket, api_key)
+    if not auth_context:
+        await websocket.close(code=1008, reason="Authentication failed")
         return
-
-    # Validate bearer token
-    if not authorization.startswith("Bearer "):
-        await websocket.close(code=1008, reason="Invalid authorization format")
-        return
-
-    api_key = authorization[7:]  # Remove "Bearer " prefix
-
-    # Validate API key
-    key_info = auth_service.validate_api_key(api_key)
-    if not key_info:
-        await websocket.close(code=1008, reason="Invalid API key")
-        return
-
-    # Create auth context
-    auth_context = AuthContext(
-        user_id=key_info.user_id,
-        role=key_info.role,
-        permissions=ROLE_PERMISSIONS.get(key_info.role, set()),
-        api_key_id=auth_service._get_key_id(api_key),
-        authenticated_at=datetime.now(timezone.utc),
-    )
 
     # Check minimum role requirement (OBSERVER)
     if not auth_context.role.has_permission(UserRole.OBSERVER):
@@ -1160,10 +1272,8 @@ async def websocket_stream(
     await websocket.accept()
     client_id = f"ws_{id(websocket)}"
 
-    # Get communication service to register WebSocket
-    comm_service = getattr(websocket.app.state, "communication_service", None)
-    if comm_service and hasattr(comm_service, "register_websocket"):
-        comm_service.register_websocket(client_id, websocket)
+    # Register websocket client
+    _register_websocket_client(websocket, client_id)
 
     subscribed_channels = set(["messages"])  # Default subscription
 
@@ -1171,34 +1281,9 @@ async def websocket_stream(
         while True:
             # Receive and process client messages
             data = await websocket.receive_json()
-
-            if data.get("action") == "subscribe":
-                channels = data.get("channels", [])
-                subscribed_channels.update(channels)
-                await websocket.send_json(
-                    {
-                        "type": "subscription_update",
-                        "channels": list(subscribed_channels),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-
-            elif data.get("action") == "unsubscribe":
-                channels = data.get("channels", [])
-                subscribed_channels.difference_update(channels)
-                await websocket.send_json(
-                    {
-                        "type": "subscription_update",
-                        "channels": list(subscribed_channels),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-
-            elif data.get("action") == "ping":
-                await websocket.send_json({"type": "pong", "timestamp": datetime.now(timezone.utc).isoformat()})
+            await _handle_websocket_subscription_action(websocket, data, subscribed_channels)
 
     except WebSocketDisconnect:
         # Clean up on disconnect
-        if comm_service and hasattr(comm_service, "unregister_websocket"):
-            comm_service.unregister_websocket(client_id)
+        _unregister_websocket_client(websocket, client_id)
         logger.info(f"WebSocket client {client_id} disconnected")

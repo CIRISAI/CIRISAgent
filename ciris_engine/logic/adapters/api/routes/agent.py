@@ -314,18 +314,9 @@ def _get_interaction_timeout(request: Request) -> float:
 
 
 def _get_current_cognitive_state(request: Request) -> str:
-    """Get current cognitive state from runtime or return default."""
+    """Get current cognitive state from request runtime."""
     runtime = getattr(request.app.state, "runtime", None)
-    if runtime and hasattr(runtime, "state_manager") and runtime.state_manager:
-        if hasattr(runtime.state_manager, "current_state"):
-            state = runtime.state_manager.current_state
-            # Convert AgentState enum to string if necessary
-            return str(state)
-        else:
-            logger.warning("Runtime state_manager exists but has no current_state attribute")
-    else:
-        logger.warning("Runtime has no state_manager or state_manager is None")
-    return "UNKNOWN"  # Don't default to WORK - be explicit about unknown state
+    return _get_cognitive_state(runtime)
 
 
 def _cleanup_interaction_tracking(message_id: str) -> None:
@@ -454,7 +445,11 @@ async def get_history(
 
 
 def _get_cognitive_state(runtime) -> str:
-    """Get the agent's cognitive state."""
+    """Get the agent's cognitive state with proper None checking."""
+    if runtime is None:
+        logger.warning("Runtime is None")
+        return "UNKNOWN"
+
     if hasattr(runtime, "state_manager") and runtime.state_manager:
         if hasattr(runtime.state_manager, "current_state"):
             state = runtime.state_manager.current_state

@@ -173,27 +173,47 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             "reply_context": None
         }
 
-        # Check if this is a reply
-        referenced_message = None
-        if hasattr(raw_message, 'reference') and raw_message.reference:
-            try:
-                # Fetch the referenced message
-                if hasattr(raw_message.reference, 'resolved') and raw_message.reference.resolved:
-                    referenced_message = raw_message.reference.resolved
-                else:
-                    # Fallback: fetch manually if not resolved
-                    channel = raw_message.channel
-                    referenced_message = await channel.fetch_message(raw_message.reference.message_id)
+        # Fetch referenced message and build reply context
+        referenced_message = await self._fetch_referenced_message(raw_message)
+        if referenced_message:
+            result["reply_context"] = self._build_reply_context(referenced_message)
 
-                # Add reply context (always include replied-to message text)
-                if referenced_message and referenced_message.content:
-                    author_name = getattr(referenced_message.author, 'display_name', 'Unknown')
-                    result["reply_context"] = f"@{author_name}: {referenced_message.content}"
+        # Build message processing order (reply gets priority)
+        messages_to_process = self._build_message_processing_order(raw_message, referenced_message)
 
-            except Exception as e:
-                logger.warning(f"Failed to fetch referenced message: {e}")
+        # Process attachments respecting limits
+        self._process_message_attachments(messages_to_process, result)
 
-        # Collect attachments with priority (reply wins)
+        return result
+
+    async def _fetch_referenced_message(self, raw_message):
+        """Fetch the referenced message if this is a reply."""
+        if not hasattr(raw_message, 'reference') or not raw_message.reference:
+            return None
+
+        try:
+            # Use resolved message if available
+            if hasattr(raw_message.reference, 'resolved') and raw_message.reference.resolved:
+                return raw_message.reference.resolved
+
+            # Fallback: fetch manually if not resolved
+            channel = raw_message.channel
+            return await channel.fetch_message(raw_message.reference.message_id)
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch referenced message: {e}")
+            return None
+
+    def _build_reply_context(self, referenced_message) -> str | None:
+        """Build reply context string from referenced message."""
+        if not referenced_message or not referenced_message.content:
+            return None
+
+        author_name = getattr(referenced_message.author, 'display_name', 'Unknown')
+        return f"@{author_name}: {referenced_message.content}"
+
+    def _build_message_processing_order(self, raw_message, referenced_message) -> list:
+        """Build the order of messages to process (reply gets priority)."""
         messages_to_process = []
 
         # Reply message gets first priority
@@ -204,7 +224,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         if referenced_message:
             messages_to_process.append(("original", referenced_message))
 
-        # Process attachments respecting limits
+        return messages_to_process
+
+    def _process_message_attachments(self, messages_to_process, result):
+        """Process attachments from messages respecting limits."""
         image_count = 0
         document_count = 0
 
@@ -213,30 +236,46 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 continue
 
             # Process image attachments (max 1 total)
-            if hasattr(message, 'attachments') and message.attachments and image_count < 1:
-                for attachment in message.attachments:
-                    if image_count >= 1:
-                        break
-                    if self._is_image_attachment(attachment):
-                        result["images"].append(attachment)
-                        image_count += 1
+            image_count += self._process_image_attachments(message, result["images"], image_count)
 
             # Process document attachments (max 3 total)
-            if hasattr(message, 'attachments') and message.attachments and document_count < 3:
-                for attachment in message.attachments:
-                    if document_count >= 3:
-                        break
-                    # Use document parser's filtering if available
-                    if self._document_parser.is_available():
-                        if self._document_parser._is_document_attachment(attachment):
-                            result["documents"].append(attachment)
-                            document_count += 1
+            document_count += self._process_document_attachments(message, result["documents"], document_count)
 
             # Process embeds (only from reply message to avoid duplication)
             if message_type == "reply" and hasattr(message, 'embeds') and message.embeds:
                 result["embeds"] = message.embeds
 
-        return result
+    def _process_image_attachments(self, message, images_list, current_count) -> int:
+        """Process image attachments from a message, return count of images added."""
+        added_count = 0
+        if not hasattr(message, 'attachments') or not message.attachments or current_count >= 1:
+            return added_count
+
+        for attachment in message.attachments:
+            if current_count + added_count >= 1:
+                break
+            if self._is_image_attachment(attachment):
+                images_list.append(attachment)
+                added_count += 1
+
+        return added_count
+
+    def _process_document_attachments(self, message, documents_list, current_count) -> int:
+        """Process document attachments from a message, return count of documents added."""
+        added_count = 0
+        if not hasattr(message, 'attachments') or not message.attachments or current_count >= 3:
+            return added_count
+
+        for attachment in message.attachments:
+            if current_count + added_count >= 3:
+                break
+            # Use document parser's filtering if available
+            if self._document_parser.is_available():
+                if self._document_parser._is_document_attachment(attachment):
+                    documents_list.append(attachment)
+                    added_count += 1
+
+        return added_count
 
     def _is_image_attachment(self, attachment) -> bool:
         """Check if attachment is an image."""

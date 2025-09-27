@@ -96,11 +96,12 @@ async def run_formatters() -> List[str]:
     """Run auto-formatters in parallel and return list of files modified."""
     modified_files = []
 
-    # Run black and isort in parallel
+    # Run black, isort, and version.py in parallel
     black_task = run_command_async(["black", ".", "--exclude=venv", "--line-length=120"])
     isort_task = run_command_async(["isort", ".", "--skip=venv", "--profile=black", "--line-length=120"])
+    version_task = run_command_async(["python", "version.py"])
 
-    black_result, isort_result = await asyncio.gather(black_task, isort_task)
+    black_result, isort_result, version_result = await asyncio.gather(black_task, isort_task, version_task)
 
     if "reformatted" in black_result[1]:
         for line in black_result[1].splitlines():
@@ -110,6 +111,9 @@ async def run_formatters() -> List[str]:
 
     if "Fixing" in isort_result[1]:
         modified_files.append("isort sorted imports")
+
+    if version_result[0] == 0 and "BUILD_INFO.txt has been created" in version_result[1]:
+        modified_files.append("updated BUILD_INFO.txt")
 
     return modified_files
 

@@ -174,9 +174,7 @@ class TestAuthenticationServiceUnit:
         with pytest.raises(ValueError, match="Invalid encrypted data format"):
             auth_service._decrypt_secret(b"too short")
 
-        # Invalid tag (corrupted data)
-        from cryptography.exceptions import InvalidTag
-
+        # Invalid tag (corrupted data) - now consistently returns ValueError for security
         # Use longer data to ensure we stay above 60 byte threshold
         # This guarantees we hit the new format path, not legacy
         test_data = b"test" * 20  # 80 bytes of plaintext
@@ -185,10 +183,22 @@ class TestAuthenticationServiceUnit:
         # Verify we're in new format territory (should be > 60 bytes)
         assert len(encrypted) > 60, f"Encrypted data too short: {len(encrypted)} bytes"
 
-        # Corrupt the tag (last 16 bytes) to trigger InvalidTag
-        corrupted = encrypted[:-1] + b"X"  # Corrupt last byte of tag
-        with pytest.raises(InvalidTag):  # Now guaranteed to raise InvalidTag
+        # Corrupt the tag completely - should raise consistent ValueError for security
+        # Replace the entire 16-byte tag with zeros (guaranteed to be wrong)
+        corrupted = encrypted[:-16] + b"\x00" * 16
+        with pytest.raises(ValueError, match="Invalid encrypted data format"):
             auth_service._decrypt_secret(corrupted)
+
+        # Also test corrupting the ciphertext - should also trigger consistent ValueError
+        # Corrupt a byte in the middle of the ciphertext section
+        mid_point = 44 + len(encrypted[44:-16]) // 2  # Middle of ciphertext
+        corrupted_ciphertext = (
+            encrypted[:mid_point] +
+            bytes([encrypted[mid_point] ^ 0xFF]) +  # Flip all bits in one byte
+            encrypted[mid_point + 1:]
+        )
+        with pytest.raises(ValueError, match="Invalid encrypted data format"):
+            auth_service._decrypt_secret(corrupted_ciphertext)
 
     def test_gateway_secret_persistence(self, temp_db, time_service, temp_dir):
         """Test gateway secret creation and persistence."""

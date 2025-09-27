@@ -1,10 +1,17 @@
-name: Update Version Info
+name: Update Version Info (DEPRECATED - Moved to pre-commit)
+
+# DEPRECATED: This workflow is no longer needed as version.py
+# has been moved to pre-commit hooks for more reliable execution.
+# Keeping this file for historical reference but disabling all triggers.
 
 on:
+  # Removed all triggers - this workflow is deprecated
   workflow_dispatch:
-  schedule:
-    # Run weekly on Mondays at 00:00 UTC
-    - cron: '0 0 * * 1'
+    inputs:
+      deprecated_notice:
+        description: 'This workflow is deprecated. Version updates now happen via pre-commit hooks.'
+        required: false
+        default: 'Use pre-commit hooks instead'
 
 permissions:
   contents: write

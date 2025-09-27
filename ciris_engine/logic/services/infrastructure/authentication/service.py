@@ -206,12 +206,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         Expected format: salt (32 bytes) + nonce (12 bytes) + ciphertext + tag (16 bytes)
         """
-        # Check minimum length: salt(32) + nonce(12) + tag(16) = 60 bytes minimum
-        if len(encrypted) < 60:
-            # Handle legacy format without salt for backward compatibility
-            # Legacy format: nonce (12 bytes) + ciphertext + tag (16 bytes)
-            try:
-                # Try legacy decryption with hardcoded salt
+        try:
+            # Check minimum length: salt(32) + nonce(12) + tag(16) = 60 bytes minimum
+            if len(encrypted) < 60:
+                # Handle legacy format without salt for backward compatibility
+                # Legacy format: nonce (12 bytes) + ciphertext + tag (16 bytes)
                 legacy_salt = b"ciris-gateway-encryption-salt"
                 key = self._derive_encryption_key(legacy_salt)
 
@@ -222,24 +221,27 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend())
                 decryptor = cipher.decryptor()
                 return decryptor.update(ciphertext) + decryptor.finalize()
-            except Exception:
-                raise ValueError("Invalid encrypted data format")
+            else:
+                # Extract components for new format
+                salt = encrypted[:32]
+                nonce = encrypted[32:44]
+                tag = encrypted[-16:]
+                ciphertext = encrypted[44:-16]
 
-        # Extract components for new format
-        salt = encrypted[:32]
-        nonce = encrypted[32:44]
-        tag = encrypted[-16:]
-        ciphertext = encrypted[44:-16]
+                # Derive key with extracted salt
+                key = self._derive_encryption_key(salt)
 
-        # Derive key with extracted salt
-        key = self._derive_encryption_key(salt)
+                # Create cipher
+                cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend())
+                decryptor = cipher.decryptor()
 
-        # Create cipher
-        cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend())
-        decryptor = cipher.decryptor()
-
-        # Decrypt
-        return decryptor.update(ciphertext) + decryptor.finalize()
+                # Decrypt
+                return decryptor.update(ciphertext) + decryptor.finalize()
+        except Exception as e:
+            # Log the actual error for debugging (not exposed to caller)
+            logger.debug(f"Decryption failed: {type(e).__name__}: {e}")
+            # Always raise consistent error regardless of format or failure type
+            raise ValueError("Invalid encrypted data format")
 
     def _get_or_create_gateway_secret(self) -> bytes:
         """Get or create the gateway secret for JWT signing."""
@@ -540,17 +542,17 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Update to set active=False
         await self.update_wa(wa_id, active=False)
-        
+
         # Add audit log entry for revocation
-        if hasattr(self, '_audit_service') and self._audit_service:
+        if hasattr(self, "_audit_service") and self._audit_service:
             await self._audit_service.log_event(
                 event_type="wa_revocation",
                 source_service="authentication",
                 details={
                     "wa_id": wa_id,
                     "reason": reason,
-                    "timestamp": self._time_service.now().isoformat() if self._time_service else None
-                }
+                    "timestamp": self._time_service.now().isoformat() if self._time_service else None,
+                },
             )
         logger.info(f"Revoked WA {wa_id}: {reason}")
         return True

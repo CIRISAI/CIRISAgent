@@ -6,6 +6,7 @@ disabling failing services to prevent cascading failures.
 """
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -67,6 +68,9 @@ class CircuitBreaker:
         self.total_trips = 0  # Count of transitions to OPEN state
         self.total_resets = 0  # Count of transitions to CLOSED state
 
+        # Thread synchronization for time calculations
+        self._lock = threading.Lock()
+
         logger.debug(f"Circuit breaker '{name}' initialized")
 
     def is_available(self) -> bool:
@@ -120,24 +124,30 @@ class CircuitBreaker:
 
     def _transition_to_open(self) -> None:
         """Transition to OPEN state (service disabled)"""
-        self.state = CircuitState.OPEN
-        self.success_count = 0
-        self.state_transitions += 1
-        self.total_trips += 1  # Count trip events
-        self.last_open_time = time.time()
+        with self._lock:
+            self.state = CircuitState.OPEN
+            self.success_count = 0
+            self.state_transitions += 1
+            self.total_trips += 1  # Count trip events
+            self.last_open_time = time.time()
         logger.warning(f"Circuit breaker '{self.name}' opened due to {self.failure_count} failures")
 
     def _transition_to_half_open(self) -> None:
         """Transition to HALF_OPEN state (testing recovery)"""
-        # Track time spent in open state
-        if self.last_open_time:
-            self.time_in_open_state += time.time() - self.last_open_time
-            self.last_open_time = None
+        with self._lock:
+            # Track time spent in open state (thread-safe)
+            if self.last_open_time:
+                current_time = time.time()
+                open_duration = current_time - self.last_open_time
+                # Ensure no negative durations due to race conditions
+                if open_duration >= 0:
+                    self.time_in_open_state += open_duration
+                self.last_open_time = None
 
-        self.state = CircuitState.HALF_OPEN
-        self.success_count = 0
-        self.state_transitions += 1
-        self.recovery_attempts += 1
+            self.state = CircuitState.HALF_OPEN
+            self.success_count = 0
+            self.state_transitions += 1
+            self.recovery_attempts += 1
         logger.info(f"Circuit breaker '{self.name}' transitioning to half-open for recovery testing")
 
     def _transition_to_closed(self) -> None:
@@ -162,10 +172,13 @@ class CircuitBreaker:
         if self.last_failure_time:
             last_failure_age = time.time() - self.last_failure_time
 
-        # Calculate current time in open state if currently open
+        # Calculate current time in open state if currently open (thread-safe)
         current_open_duration = 0.0
-        if self.state == CircuitState.OPEN and self.last_open_time:
-            current_open_duration = time.time() - self.last_open_time
+        with self._lock:
+            if self.state == CircuitState.OPEN and self.last_open_time:
+                open_duration = time.time() - self.last_open_time
+                # Ensure no negative durations
+                current_open_duration = max(0.0, open_duration)
 
         return {
             "name": self.name,

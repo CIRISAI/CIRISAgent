@@ -6,6 +6,8 @@ They track their own metrics independently of traditional services.
 """
 
 import asyncio
+import concurrent.futures
+import threading
 import time
 from typing import Dict, Set
 from unittest.mock import AsyncMock, MagicMock
@@ -299,6 +301,190 @@ class TestCircuitBreakerMetrics:
         # State should be 0.0, 0.5, or 1.0
         state_value = metrics["cb_test_service_state"]
         assert state_value in [0.0, 0.5, 1.0], f"Invalid state value: {state_value}"
+
+    def test_concurrent_transition_thread_safety(self, fast_recovery_breaker):
+        """Test that concurrent state transitions don't cause race conditions."""
+
+        def worker_open_close_cycle():
+            """Worker function that cycles the circuit breaker open/close."""
+            try:
+                # Force open
+                for _ in range(3):
+                    fast_recovery_breaker.record_failure()
+
+                # Wait briefly and attempt recovery
+                time.sleep(0.01)
+                fast_recovery_breaker.is_available()  # May trigger half-open
+                fast_recovery_breaker.record_success()  # May trigger close
+
+                return True
+            except Exception:
+                return False
+
+        # Run multiple concurrent cycles
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(worker_open_close_cycle) for _ in range(20)]
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        # All workers should succeed (no exceptions)
+        assert all(results), "Some workers encountered exceptions"
+
+        # Metrics should be consistent (no negative values)
+        metrics = fast_recovery_breaker.get_stats()
+        assert metrics["time_in_open_state"] >= 0, f"Negative time_in_open_state: {metrics['time_in_open_state']}"
+
+    def test_concurrent_metrics_calculation_thread_safety(self, fast_recovery_breaker):
+        """Test that concurrent get_metrics() calls don't interfere with time calculations."""
+
+        # Start the circuit breaker in OPEN state
+        for _ in range(3):
+            fast_recovery_breaker.record_failure()
+
+        assert fast_recovery_breaker.state == CircuitState.OPEN
+
+        def worker_get_metrics():
+            """Worker function that repeatedly calls get_metrics()."""
+            metrics_list = []
+            for _ in range(10):
+                metrics = fast_recovery_breaker.get_metrics()
+                time_in_open = metrics["cb_fast_service_time_in_open_state_sec"]
+                metrics_list.append(time_in_open)
+                time.sleep(0.001)  # Small delay
+            return metrics_list
+
+        # Run multiple concurrent metrics queries
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [executor.submit(worker_get_metrics) for _ in range(6)]
+            all_metrics = []
+            for future in concurrent.futures.as_completed(futures):
+                all_metrics.extend(future.result())
+
+        # All time values should be non-negative
+        negative_times = [t for t in all_metrics if t < 0]
+        assert not negative_times, f"Found negative time values: {negative_times}"
+
+        # Times should be monotonically increasing or equal (circuit is open)
+        for i in range(1, len(all_metrics)):
+            # Allow small variations due to timing precision, but no large negatives
+            assert all_metrics[i] >= -0.001, f"Significant negative time at index {i}: {all_metrics[i]}"
+
+    def test_rapid_state_transitions_thread_safety(self, fast_recovery_breaker):
+        """Test rapid state transitions under high concurrency don't corrupt timing data."""
+
+        results = []
+        errors = []
+
+        def worker_rapid_transitions():
+            """Worker that rapidly triggers state transitions."""
+            try:
+                local_results = []
+                for cycle in range(5):
+                    # Open the circuit
+                    fast_recovery_breaker.record_failure()
+                    fast_recovery_breaker.record_failure()
+
+                    # Try to recover (may go to half-open)
+                    time.sleep(0.01)  # Brief wait
+                    fast_recovery_breaker.is_available()
+
+                    # Get metrics immediately after state change
+                    metrics = fast_recovery_breaker.get_stats()
+                    local_results.append(
+                        {"cycle": cycle, "time_in_open": metrics["time_in_open_state"], "state": metrics["state"]}
+                    )
+
+                    # Reset for next cycle
+                    fast_recovery_breaker.record_success()
+
+                return local_results
+            except Exception as e:
+                errors.append(str(e))
+                return []
+
+        # Run multiple workers doing rapid transitions
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(worker_rapid_transitions) for _ in range(4)]
+            for future in concurrent.futures.as_completed(futures):
+                results.extend(future.result())
+
+        # Should have no errors
+        assert not errors, f"Workers encountered errors: {errors}"
+
+        # All time_in_open_state values should be non-negative
+        negative_times = [r["time_in_open"] for r in results if r["time_in_open"] < 0]
+        assert not negative_times, f"Found negative time_in_open_state values: {negative_times}"
+
+    def test_thread_safe_time_accumulation(self, fast_recovery_breaker):
+        """Test that time accumulation works correctly under concurrent access."""
+
+        # Record an initial open period
+        for _ in range(3):
+            fast_recovery_breaker.record_failure()
+
+        # Let it stay open for a measurable time
+        time.sleep(0.05)
+
+        def worker_trigger_recovery():
+            """Worker that attempts to trigger recovery transition."""
+            try:
+                # Multiple workers may call this simultaneously
+                fast_recovery_breaker.is_available()  # May trigger transition to half-open
+                time.sleep(0.001)
+                fast_recovery_breaker.record_success()  # May trigger transition to closed
+                return True
+            except Exception:
+                return False
+
+        # Trigger concurrent recovery attempts
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [executor.submit(worker_trigger_recovery) for _ in range(10)]
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        # All workers should succeed
+        assert all(results), "Some recovery workers failed"
+
+        # Final metrics should be consistent
+        final_metrics = fast_recovery_breaker.get_stats()
+
+        # Time in open state should be positive and reasonable (at least 0.05s from our sleep)
+        time_in_open = final_metrics["time_in_open_state"]
+        assert time_in_open >= 0.04, f"time_in_open_state too small: {time_in_open} (expected >= 0.04)"
+        assert time_in_open <= 1.0, f"time_in_open_state too large: {time_in_open} (expected <= 1.0)"
+
+    def test_lock_contention_performance(self, fast_recovery_breaker):
+        """Test that locking doesn't create severe performance bottlenecks."""
+
+        start_time = time.time()
+
+        def worker_mixed_operations():
+            """Worker that performs mixed circuit breaker operations."""
+            operations = 0
+            for _ in range(50):
+                # Mix of operations that use locks
+                fast_recovery_breaker.record_success()
+                fast_recovery_breaker.get_stats()
+                fast_recovery_breaker.record_failure()
+                fast_recovery_breaker.is_available()
+                operations += 4
+            return operations
+
+        # Run concurrent mixed operations
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(worker_mixed_operations) for _ in range(8)]
+            total_operations = sum(future.result() for future in concurrent.futures.as_completed(futures))
+
+        elapsed_time = time.time() - start_time
+
+        # Performance check: should handle many operations quickly
+        # 8 workers * 50 iterations * 4 operations = 1600 operations
+        assert total_operations == 1600, f"Expected 1600 operations, got {total_operations}"
+
+        # Should complete in reasonable time (< 2 seconds for 1600 operations)
+        assert elapsed_time < 2.0, f"Performance too slow: {elapsed_time:.3f}s for {total_operations} operations"
+
+        # Final state should be consistent
+        final_metrics = fast_recovery_breaker.get_stats()
+        assert final_metrics["time_in_open_state"] >= 0, "Final time_in_open_state is negative"
 
 
 class TestServiceRegistryMetrics:

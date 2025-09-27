@@ -48,7 +48,7 @@ jobs:
         env:
           CI: true
         run: |
-          pytest --cov=./ --cov-report=xml:coverage.xml
+          pytest tests/ -n 16 --cov=./ --cov-report=xml:coverage.xml
 
       - name: Display and write version
         env:
@@ -176,7 +176,7 @@ jobs:
           # Extract semantic version from constants.py
           SEMANTIC_VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
           echo "Semantic version: $SEMANTIC_VERSION"
-          
+
           # Extract changelog from CHANGELOG.md using Keep a Changelog format
           if [ -f "CHANGELOG.md" ]; then
             echo "Extracting changelog from CHANGELOG.md"
@@ -199,7 +199,7 @@ jobs:
           echo "  Version: ${{ steps.release_info.outputs.version }}"
           echo "  Changelog: ${{ steps.release_info.outputs.changelog }}"
           echo "  Risk Level: ${{ steps.release_info.outputs.risk_level }}"
-          
+
           response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST https://agents.ciris.ai/manager/v1/updates/notify \
             -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
             -H "Content-Type: application/json" \

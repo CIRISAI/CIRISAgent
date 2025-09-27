@@ -192,75 +192,7 @@ def get_correlation(correlation_id: str, db_path: Optional[str] = None) -> Optio
             cursor = conn.cursor()
             cursor.execute(sql, (correlation_id,))
             row = cursor.fetchone()
-            if row:
-                # Parse timestamp if present
-                timestamp = None
-                if row["timestamp"]:
-                    try:
-                        # Handle both 'Z' and '+00:00' formats
-                        timestamp_str = row["timestamp"]
-                        if timestamp_str.endswith("Z"):
-                            timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
-                        timestamp = datetime.fromisoformat(timestamp_str)
-                    except (ValueError, AttributeError):
-                        timestamp = None
-
-                # Parse request_data
-                request_data_json = json.loads(row["request_data"]) if row["request_data"] else {}
-
-                # Build the correlation without None values for optional fields
-                correlation_data = {
-                    "correlation_id": row["correlation_id"],
-                    "service_type": row["service_type"],
-                    "handler_name": row["handler_name"],
-                    "action_type": row["action_type"],
-                    "request_data": request_data_json if request_data_json else None,
-                    "response_data": _parse_response_data(
-                        json.loads(row["response_data"]) if row["response_data"] else None, timestamp
-                    ),
-                    "status": ServiceCorrelationStatus(row["status"]),
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                    "correlation_type": CorrelationType(row["correlation_type"] or "service_interaction"),
-                    "timestamp": timestamp or datetime.now(timezone.utc),
-                    "tags": json.loads(row["tags"]) if row["tags"] else {},
-                    "retention_policy": row["retention_policy"] or "raw",
-                }
-
-                # Only add optional TSDB fields if they have values
-                if row["metric_name"] and row["metric_value"] is not None:
-                    from ciris_engine.schemas.telemetry.core import MetricData
-
-                    correlation_data["metric_data"] = MetricData(
-                        metric_name=row["metric_name"],
-                        metric_value=row["metric_value"],
-                        metric_unit="count",
-                        metric_type="gauge",
-                        labels={},
-                    )
-
-                if row["log_level"]:
-                    from ciris_engine.schemas.telemetry.core import LogData
-
-                    correlation_data["log_data"] = LogData(
-                        log_level=row["log_level"],
-                        log_message="",
-                        logger_name="",
-                        module_name="",
-                        function_name="",
-                        line_number=0,
-                    )
-
-                if row["trace_id"]:
-                    from ciris_engine.schemas.telemetry.core import TraceContext
-
-                    trace_context = TraceContext(trace_id=row["trace_id"], span_id=row["span_id"] or "", span_name="")
-                    if row["parent_span_id"]:
-                        trace_context.parent_span_id = row["parent_span_id"]
-                    correlation_data["trace_context"] = trace_context
-
-                return ServiceCorrelation(**correlation_data)
-            return None
+            return _row_to_service_correlation(row) if row else None
     except Exception as e:
         logger.exception("Failed to fetch correlation %s: %s", correlation_id, e)
         return None
@@ -289,76 +221,7 @@ def get_correlations_by_task_and_action(
             cursor.execute(sql, params)
             rows = cursor.fetchall()
 
-            correlations = []
-            for row in rows:
-                # Parse timestamp if present
-                timestamp = None
-                if row["timestamp"]:
-                    try:
-                        # Handle both 'Z' and '+00:00' formats
-                        timestamp_str = row["timestamp"]
-                        if timestamp_str.endswith("Z"):
-                            timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
-                        timestamp = datetime.fromisoformat(timestamp_str)
-                    except (ValueError, AttributeError):
-                        timestamp = None
-
-                # Parse request_data
-                request_data_json = json.loads(row["request_data"]) if row["request_data"] else {}
-
-                # Build the correlation without None values for optional fields
-                correlation_data = {
-                    "correlation_id": row["correlation_id"],
-                    "service_type": row["service_type"],
-                    "handler_name": row["handler_name"],
-                    "action_type": row["action_type"],
-                    "request_data": request_data_json if request_data_json else None,
-                    "response_data": _parse_response_data(
-                        json.loads(row["response_data"]) if row["response_data"] else None, timestamp
-                    ),
-                    "status": ServiceCorrelationStatus(row["status"]),
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                    "correlation_type": CorrelationType(row["correlation_type"] or "service_interaction"),
-                    "timestamp": timestamp or datetime.now(timezone.utc),
-                    "tags": json.loads(row["tags"]) if row["tags"] else {},
-                    "retention_policy": row["retention_policy"] or "raw",
-                }
-
-                # Only add optional TSDB fields if they have values
-                if row["metric_name"] and row["metric_value"] is not None:
-                    from ciris_engine.schemas.telemetry.core import MetricData
-
-                    correlation_data["metric_data"] = MetricData(
-                        metric_name=row["metric_name"],
-                        metric_value=row["metric_value"],
-                        metric_unit="count",
-                        metric_type="gauge",
-                        labels={},
-                    )
-
-                if row["log_level"]:
-                    from ciris_engine.schemas.telemetry.core import LogData
-
-                    correlation_data["log_data"] = LogData(
-                        log_level=row["log_level"],
-                        log_message="",
-                        logger_name="",
-                        module_name="",
-                        function_name="",
-                        line_number=0,
-                    )
-
-                if row["trace_id"]:
-                    from ciris_engine.schemas.telemetry.core import TraceContext
-
-                    trace_context = TraceContext(trace_id=row["trace_id"], span_id=row["span_id"] or "", span_name="")
-                    if row["parent_span_id"]:
-                        trace_context.parent_span_id = row["parent_span_id"]
-                    correlation_data["trace_context"] = trace_context
-
-                correlations.append(ServiceCorrelation(**correlation_data))
-            return correlations
+            return [_row_to_service_correlation(row) for row in rows]
     except Exception as e:
         logger.exception("Failed to fetch correlations for task %s and action %s: %s", task_id, action_type, e)
         return []
@@ -407,80 +270,7 @@ def get_correlations_by_type_and_time(
             cursor.execute(sql, params)
             rows = cursor.fetchall()
 
-            correlations = []
-            for row in rows:
-                timestamp = None
-                if row["timestamp"]:
-                    try:
-                        # Handle both 'Z' and '+00:00' formats
-                        timestamp_str = row["timestamp"]
-                        if timestamp_str.endswith("Z"):
-                            timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
-                        timestamp = datetime.fromisoformat(timestamp_str)
-                    except (ValueError, AttributeError):
-                        timestamp = None
-
-                # Import required types
-                from ciris_engine.schemas.telemetry.core import LogData, MetricData, TraceContext
-
-                # Build metric_data if this is a metric correlation
-                metric_data = None
-                if row["metric_name"] and row["metric_value"] is not None:
-                    metric_data = MetricData(
-                        metric_name=row["metric_name"],
-                        metric_value=row["metric_value"],
-                        metric_unit="count",
-                        metric_type="gauge",
-                        labels={},
-                    )
-
-                # Build log_data if this is a log correlation
-                log_data = None
-                if row["log_level"]:
-                    log_data = LogData(
-                        log_level=row["log_level"],
-                        log_message="",  # Not stored in DB
-                        logger_name="",
-                        module_name="",
-                        function_name="",
-                        line_number=0,
-                    )
-
-                # Build trace_context if this is a trace correlation
-                trace_context = None
-                if row["trace_id"]:
-                    trace_context = TraceContext(trace_id=row["trace_id"], span_id=row["span_id"] or "", span_name="")
-                    if row["parent_span_id"]:
-                        trace_context.parent_span_id = row["parent_span_id"]
-
-                # Map 'success' to 'completed' for backwards compatibility
-                status_value = row["status"]
-                if status_value == "success":
-                    status_value = "completed"
-
-                correlations.append(
-                    ServiceCorrelation(
-                        correlation_id=row["correlation_id"],
-                        service_type=row["service_type"],
-                        handler_name=row["handler_name"],
-                        action_type=row["action_type"],
-                        request_data=json.loads(row["request_data"]) if row["request_data"] else None,
-                        response_data=_parse_response_data(
-                            json.loads(row["response_data"]) if row["response_data"] else None, timestamp
-                        ),
-                        status=ServiceCorrelationStatus(status_value),
-                        created_at=row["created_at"],
-                        updated_at=row["updated_at"],
-                        correlation_type=CorrelationType(row["correlation_type"] or "service_interaction"),
-                        timestamp=timestamp,
-                        metric_data=metric_data,
-                        log_data=log_data,
-                        trace_context=trace_context,
-                        tags={k: str(v) for k, v in json.loads(row["tags"]).items()} if row["tags"] else {},
-                        retention_policy=row["retention_policy"] or "raw",
-                    )
-                )
-            return correlations
+            return [_row_to_service_correlation(row) for row in rows]
     except Exception as e:
         logger.exception("Failed to fetch correlations by type %s: %s", correlation_type, e)
         return []
@@ -513,44 +303,7 @@ def get_correlations_by_channel(
             cursor.execute(sql, params)
             rows = cursor.fetchall()
 
-            correlations = []
-            for row in rows:
-                # Parse timestamp if present
-                timestamp = None
-                if row["timestamp"]:
-                    try:
-                        # Handle both 'Z' and '+00:00' formats
-                        timestamp_str = row["timestamp"]
-                        if timestamp_str.endswith("Z"):
-                            timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
-                        timestamp = datetime.fromisoformat(timestamp_str)
-                    except (ValueError, AttributeError):
-                        timestamp = None
-
-                # Parse request_data
-                request_data_json = json.loads(row["request_data"]) if row["request_data"] else {}
-
-                # Build the correlation without None values for optional fields
-                correlation_data = {
-                    "correlation_id": row["correlation_id"],
-                    "service_type": row["service_type"],
-                    "handler_name": row["handler_name"],
-                    "action_type": row["action_type"],
-                    "request_data": request_data_json if request_data_json else None,
-                    "response_data": _parse_response_data(
-                        json.loads(row["response_data"]) if row["response_data"] else None, timestamp
-                    ),
-                    "status": ServiceCorrelationStatus(row["status"]),
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                    "correlation_type": CorrelationType(row["correlation_type"] or "service_interaction"),
-                    "timestamp": timestamp or datetime.now(timezone.utc),
-                    "tags": json.loads(row["tags"]) if row["tags"] else {},
-                    "retention_policy": row["retention_policy"] or "raw",
-                }
-
-                correlations.append(ServiceCorrelation(**correlation_data))
-
+            correlations = [_row_to_service_correlation(row) for row in rows]
             # Reverse to get chronological order (oldest first)
             correlations.reverse()
             return correlations
@@ -877,6 +630,92 @@ def get_channel_last_activity(
     return last_activity
 
 
+def _row_to_service_correlation(row) -> ServiceCorrelation:
+    """
+    Convert a database row to a ServiceCorrelation object.
+
+    Centralizes the row parsing logic to eliminate code duplication.
+
+    Args:
+        row: Database row with correlation data
+
+    Returns:
+        ServiceCorrelation object
+    """
+    # Parse timestamp if present
+    timestamp = None
+    if row["timestamp"]:
+        try:
+            # Handle both 'Z' and '+00:00' formats
+            timestamp_str = row["timestamp"]
+            if timestamp_str.endswith("Z"):
+                timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
+            timestamp = datetime.fromisoformat(timestamp_str)
+        except (ValueError, AttributeError):
+            timestamp = None
+
+    # Parse request_data
+    request_data_json = json.loads(row["request_data"]) if row["request_data"] else {}
+
+    # Map 'success' to 'completed' for backwards compatibility
+    status_value = row["status"]
+    if status_value == "success":
+        status_value = "completed"
+
+    # Build the correlation without None values for optional fields
+    correlation_data = {
+        "correlation_id": row["correlation_id"],
+        "service_type": row["service_type"],
+        "handler_name": row["handler_name"],
+        "action_type": row["action_type"],
+        "request_data": request_data_json if request_data_json else None,
+        "response_data": _parse_response_data(
+            json.loads(row["response_data"]) if row["response_data"] else None, timestamp
+        ),
+        "status": ServiceCorrelationStatus(status_value),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "correlation_type": CorrelationType(row["correlation_type"] or "service_interaction"),
+        "timestamp": timestamp or datetime.now(timezone.utc),
+        "tags": json.loads(row["tags"]) if row["tags"] else {},
+        "retention_policy": row["retention_policy"] or "raw",
+    }
+
+    # Only add optional TSDB fields if they have values
+    if row["metric_name"] and row["metric_value"] is not None:
+        from ciris_engine.schemas.telemetry.core import MetricData
+
+        correlation_data["metric_data"] = MetricData(
+            metric_name=row["metric_name"],
+            metric_value=row["metric_value"],
+            metric_unit="count",
+            metric_type="gauge",
+            labels={},
+        )
+
+    if row["log_level"]:
+        from ciris_engine.schemas.telemetry.core import LogData
+
+        correlation_data["log_data"] = LogData(
+            log_level=row["log_level"],
+            log_message="",
+            logger_name="",
+            module_name="",
+            function_name="",
+            line_number=0,
+        )
+
+    if row["trace_id"]:
+        from ciris_engine.schemas.telemetry.core import TraceContext
+
+        trace_context = TraceContext(trace_id=row["trace_id"], span_id=row["span_id"] or "", span_name="")
+        if row["parent_span_id"]:
+            trace_context.parent_span_id = row["parent_span_id"]
+        correlation_data["trace_context"] = trace_context
+
+    return ServiceCorrelation(**correlation_data)
+
+
 def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
     """
     Determine if a channel belongs to an admin user.
@@ -945,76 +784,7 @@ def get_recent_correlations(limit: int = 100, db_path: Optional[str] = None) -> 
             cursor.execute(sql, (limit,))
             rows = cursor.fetchall()
 
-            correlations = []
-            for row in rows:
-                # Parse timestamp if present
-                timestamp = None
-                if row["timestamp"]:
-                    try:
-                        # Handle both 'Z' and '+00:00' formats
-                        timestamp_str = row["timestamp"]
-                        if timestamp_str.endswith("Z"):
-                            timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
-                        timestamp = datetime.fromisoformat(timestamp_str)
-                    except (ValueError, AttributeError):
-                        timestamp = None
-
-                # Parse request_data
-                request_data_json = json.loads(row["request_data"]) if row["request_data"] else {}
-
-                # Build the correlation without None values for optional fields
-                correlation_data = {
-                    "correlation_id": row["correlation_id"],
-                    "service_type": row["service_type"],
-                    "handler_name": row["handler_name"],
-                    "action_type": row["action_type"],
-                    "request_data": request_data_json if request_data_json else None,
-                    "response_data": _parse_response_data(
-                        json.loads(row["response_data"]) if row["response_data"] else None, timestamp
-                    ),
-                    "status": ServiceCorrelationStatus(row["status"]),
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                    "correlation_type": CorrelationType(row["correlation_type"] or "service_interaction"),
-                    "timestamp": timestamp or datetime.now(timezone.utc),
-                    "tags": json.loads(row["tags"]) if row["tags"] else {},
-                    "retention_policy": row["retention_policy"] or "raw",
-                }
-
-                # Only add optional TSDB fields if they have values
-                if row["metric_name"] and row["metric_value"] is not None:
-                    from ciris_engine.schemas.telemetry.core import MetricData
-
-                    correlation_data["metric_data"] = MetricData(
-                        metric_name=row["metric_name"],
-                        metric_value=row["metric_value"],
-                        metric_unit="count",
-                        metric_type="gauge",
-                        labels={},
-                    )
-
-                if row["log_level"]:
-                    from ciris_engine.schemas.telemetry.core import LogData
-
-                    correlation_data["log_data"] = LogData(
-                        log_level=row["log_level"],
-                        log_message="",
-                        logger_name="",
-                        module_name="",
-                        function_name="",
-                        line_number=0,
-                    )
-
-                if row["trace_id"]:
-                    from ciris_engine.schemas.telemetry.core import TraceContext
-
-                    trace_context = TraceContext(trace_id=row["trace_id"], span_id=row["span_id"] or "", span_name="")
-                    if row["parent_span_id"]:
-                        trace_context.parent_span_id = row["parent_span_id"]
-                    correlation_data["trace_context"] = trace_context
-
-                correlations.append(ServiceCorrelation(**correlation_data))
-            return correlations
+            return [_row_to_service_correlation(row) for row in rows]
     except Exception as e:
         logger.exception("Failed to fetch recent correlations: %s", e)
         return []

@@ -25,6 +25,7 @@ from ciris_engine.logic.persistence.models.correlations import (
     get_correlations_by_task_and_action,
     get_correlations_by_type_and_time,
     get_metrics_timeseries,
+    get_recent_correlations,
     update_correlation,
 )
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
@@ -570,3 +571,304 @@ class TestGetMetricsTimeseries:
 
         recent_metrics = get_metrics_timeseries(query, db_path=temp_db)
         assert len(recent_metrics) == 4  # i=0,1,2,3 (within 6 hours)
+
+
+class TestGetRecentCorrelations:
+    """Test get_recent_correlations function."""
+
+    def test_get_recent_correlations_default_limit(self, time_service, temp_db):
+        """Test getting recent correlations with default limit."""
+        # Add multiple correlations at different times
+        base_time = datetime.now(timezone.utc)
+        correlations_added = []
+
+        for i in range(10):
+            correlation = ServiceCorrelation(
+                correlation_id=f"recent_corr_{i}",
+                service_type="test_service",
+                handler_name=f"handler_{i}",
+                action_type="test_action",
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                timestamp=base_time - timedelta(minutes=i),  # Newest first
+                created_at=(base_time - timedelta(minutes=i)).isoformat(),
+                updated_at=(base_time - timedelta(minutes=i)).isoformat(),
+                retention_policy="raw",
+            )
+            add_correlation(correlation, time_service, db_path=temp_db)
+            correlations_added.append(correlation)
+
+        # Get recent correlations (default limit 100)
+        recent = get_recent_correlations(db_path=temp_db)
+
+        assert len(recent) == 10
+        # Should be ordered by timestamp DESC (newest first)
+        assert recent[0].correlation_id == "recent_corr_0"  # Most recent
+        assert recent[9].correlation_id == "recent_corr_9"  # Oldest
+
+    def test_get_recent_correlations_custom_limit(self, time_service, temp_db):
+        """Test getting recent correlations with custom limit."""
+        # Add 15 correlations
+        base_time = datetime.now(timezone.utc)
+
+        for i in range(15):
+            correlation = ServiceCorrelation(
+                correlation_id=f"limited_corr_{i}",
+                service_type="test_service",
+                handler_name="handler",
+                action_type="action",
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                timestamp=base_time - timedelta(seconds=i),
+                created_at=(base_time - timedelta(seconds=i)).isoformat(),
+                updated_at=(base_time - timedelta(seconds=i)).isoformat(),
+            )
+            add_correlation(correlation, time_service, db_path=temp_db)
+
+        # Get only 5 most recent
+        recent = get_recent_correlations(limit=5, db_path=temp_db)
+
+        assert len(recent) == 5
+        # Verify order (newest first)
+        for i in range(5):
+            assert recent[i].correlation_id == f"limited_corr_{i}"
+
+    def test_get_recent_correlations_mixed_types(self, time_service, temp_db):
+        """Test getting recent correlations with mixed correlation types."""
+        base_time = datetime.now(timezone.utc)
+
+        # Add correlations of different types
+        correlation_types = [
+            CorrelationType.SERVICE_INTERACTION,
+            CorrelationType.METRIC_DATAPOINT,
+            CorrelationType.LOG_ENTRY,
+            CorrelationType.TRACE_SPAN,
+        ]
+
+        for i, corr_type in enumerate(correlation_types):
+            correlation = ServiceCorrelation(
+                correlation_id=f"mixed_corr_{i}",
+                service_type="mixed_service",
+                handler_name="handler",
+                action_type="action",
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=corr_type,
+                timestamp=base_time - timedelta(minutes=i),
+                created_at=(base_time - timedelta(minutes=i)).isoformat(),
+                updated_at=(base_time - timedelta(minutes=i)).isoformat(),
+            )
+            add_correlation(correlation, time_service, db_path=temp_db)
+
+        recent = get_recent_correlations(limit=10, db_path=temp_db)
+
+        assert len(recent) == 4
+        # Verify all types are present
+        types_found = {corr.correlation_type for corr in recent}
+        assert types_found == set(correlation_types)
+
+    def test_get_recent_correlations_with_metric_data(self, time_service, temp_db):
+        """Test getting recent correlations that include metric data."""
+        # Add correlations with metric data
+        for i in range(3):
+            correlation = ServiceCorrelation(
+                correlation_id=f"metric_recent_{i}",
+                service_type="telemetry",
+                handler_name="metric_handler",
+                action_type="record",
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.METRIC_DATAPOINT,
+                timestamp=datetime.now(timezone.utc) - timedelta(seconds=i),
+                created_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
+                updated_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
+                metric_data=MetricData(
+                    metric_name=f"test_metric_{i}",
+                    metric_value=float(100 + i),
+                    metric_unit="ms",
+                    metric_type="gauge",
+                    labels={"test": f"value_{i}"},
+                ),
+            )
+            add_correlation(correlation, time_service, db_path=temp_db)
+
+        recent = get_recent_correlations(limit=5, db_path=temp_db)
+
+        assert len(recent) == 3
+        # Verify metric data is properly reconstructed
+        for i, corr in enumerate(recent):
+            assert corr.metric_data is not None
+            assert corr.metric_data.metric_name == f"test_metric_{i}"
+            assert corr.metric_data.metric_value == float(100 + i)
+
+    def test_get_recent_correlations_with_trace_context(self, time_service, temp_db):
+        """Test getting recent correlations that include trace context."""
+        # Add correlations with trace context
+        for i in range(2):
+            correlation = ServiceCorrelation(
+                correlation_id=f"trace_recent_{i}",
+                service_type="api",
+                handler_name="trace_handler",
+                action_type="process",
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.TRACE_SPAN,
+                timestamp=datetime.now(timezone.utc) - timedelta(seconds=i),
+                created_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
+                updated_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
+                trace_context=TraceContext(
+                    trace_id=f"trace_{i}",
+                    span_id=f"span_{i}",
+                    span_name=f"test_span_{i}",
+                    parent_span_id=f"parent_{i}" if i > 0 else None,
+                ),
+            )
+            add_correlation(correlation, time_service, db_path=temp_db)
+
+        recent = get_recent_correlations(limit=5, db_path=temp_db)
+
+        assert len(recent) == 2
+        # Verify trace context is properly reconstructed
+        for i, corr in enumerate(recent):
+            assert corr.trace_context is not None
+            assert corr.trace_context.trace_id == f"trace_{i}"
+            assert corr.trace_context.span_id == f"span_{i}"
+
+    def test_get_recent_correlations_with_log_data(self, time_service, temp_db):
+        """Test getting recent correlations that include log data."""
+        # Add correlations with log data
+        for i in range(2):
+            correlation = ServiceCorrelation(
+                correlation_id=f"log_recent_{i}",
+                service_type="logging",
+                handler_name="log_handler",
+                action_type="log",
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.LOG_ENTRY,
+                timestamp=datetime.now(timezone.utc) - timedelta(seconds=i),
+                created_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
+                updated_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
+                log_data=LogData(
+                    log_level=f"INFO" if i == 0 else "ERROR",
+                    log_message=f"Test message {i}",
+                    logger_name="test_logger",
+                    module_name="test_module",
+                    function_name="test_function",
+                    line_number=100 + i,
+                ),
+            )
+            add_correlation(correlation, time_service, db_path=temp_db)
+
+        recent = get_recent_correlations(limit=5, db_path=temp_db)
+
+        assert len(recent) == 2
+        # Verify log data is properly reconstructed
+        for i, corr in enumerate(recent):
+            assert corr.log_data is not None
+            assert corr.log_data.log_level == ("INFO" if i == 0 else "ERROR")
+
+    def test_get_recent_correlations_with_complex_request_data(self, time_service, temp_db):
+        """Test getting correlations with complex request data structures."""
+        correlation = ServiceCorrelation(
+            correlation_id="complex_request",
+            service_type="complex_service",
+            handler_name="complex_handler",
+            action_type="complex_action",
+            request_data=ServiceRequestData(
+                service_type="complex_service",
+                method_name="complex_method",
+                task_id="complex_task_123",
+                thought_id="complex_thought_456",
+                channel_id="complex_channel_789",
+                request_timestamp=datetime.now(timezone.utc),
+            ),
+            response_data=ServiceResponseData(
+                success=True,
+                execution_time_ms=250.5,
+                error_message=None,
+                response_timestamp=datetime.now(timezone.utc),
+            ),
+            status=ServiceCorrelationStatus.COMPLETED,
+            correlation_type=CorrelationType.SERVICE_INTERACTION,
+            timestamp=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            tags={"environment": "test", "priority": "high"},
+        )
+
+        add_correlation(correlation, time_service, db_path=temp_db)
+
+        recent = get_recent_correlations(limit=1, db_path=temp_db)
+
+        assert len(recent) == 1
+        retrieved = recent[0]
+        assert retrieved.correlation_id == "complex_request"
+        assert retrieved.request_data is not None
+        assert retrieved.response_data is not None
+        assert retrieved.tags["environment"] == "test"
+        assert retrieved.tags["priority"] == "high"
+
+    def test_get_recent_correlations_empty_database(self, temp_db):
+        """Test getting recent correlations from empty database."""
+        recent = get_recent_correlations(db_path=temp_db)
+        assert recent == []
+
+    def test_get_recent_correlations_handles_database_error(self):
+        """Test that database errors are handled gracefully."""
+        with patch("ciris_engine.logic.persistence.models.correlations.get_db_connection") as mock_db:
+            mock_db.side_effect = Exception("Database connection failed")
+
+            recent = get_recent_correlations()
+            assert recent == []  # Should return empty list on error
+
+    def test_get_recent_correlations_timestamp_parsing_error(self, time_service, temp_db):
+        """Test handling of malformed timestamp data."""
+        # Insert correlation with malformed timestamp directly
+        from ciris_engine.logic.persistence.db import get_db_connection
+
+        with get_db_connection(db_path=temp_db) as conn:
+            conn.execute(
+                """
+                INSERT INTO service_correlations (
+                    correlation_id, service_type, handler_name, action_type,
+                    status, correlation_type, timestamp, created_at, updated_at,
+                    retention_policy
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "malformed_timestamp",
+                    "test",
+                    "handler",
+                    "action",
+                    "completed",  # Use correct lowercase enum value
+                    "service_interaction",
+                    "not-a-timestamp",  # Malformed timestamp
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                    "raw",
+                ),
+            )
+            conn.commit()
+
+        # Should handle gracefully and use current time as fallback
+        recent = get_recent_correlations(db_path=temp_db)
+        assert len(recent) == 1
+        assert recent[0].correlation_id == "malformed_timestamp"
+        assert recent[0].timestamp is not None  # Should have fallback timestamp
+
+    def test_get_recent_correlations_zero_limit(self, time_service, temp_db):
+        """Test getting recent correlations with zero limit."""
+        # Add a correlation
+        correlation = ServiceCorrelation(
+            correlation_id="test_zero_limit",
+            service_type="test",
+            handler_name="handler",
+            action_type="action",
+            status=ServiceCorrelationStatus.COMPLETED,
+            correlation_type=CorrelationType.SERVICE_INTERACTION,
+            timestamp=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
+        add_correlation(correlation, time_service, db_path=temp_db)
+
+        # Get with zero limit
+        recent = get_recent_correlations(limit=0, db_path=temp_db)
+        assert recent == []

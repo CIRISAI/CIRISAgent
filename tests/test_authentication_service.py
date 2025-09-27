@@ -193,9 +193,9 @@ class TestAuthenticationServiceUnit:
         # Corrupt a byte in the middle of the ciphertext section
         mid_point = 44 + len(encrypted[44:-16]) // 2  # Middle of ciphertext
         corrupted_ciphertext = (
-            encrypted[:mid_point] +
-            bytes([encrypted[mid_point] ^ 0xFF]) +  # Flip all bits in one byte
-            encrypted[mid_point + 1:]
+            encrypted[:mid_point]
+            + bytes([encrypted[mid_point] ^ 0xFF])  # Flip all bits in one byte
+            + encrypted[mid_point + 1 :]
         )
         with pytest.raises(ValueError, match="Invalid encrypted data format"):
             auth_service._decrypt_secret(corrupted_ciphertext)

@@ -311,7 +311,7 @@ class TestMemorizeHandler:
                 # Create params for this node type
                 attributes = {"content": content, "created_by": "test_handler", "tags": [node_type.value.lower()]}
                 attributes.update(extra_attrs)  # Add any extra attributes (like value for CONFIG)
-                
+
                 node = GraphNode(
                     id=f"test_{node_type.value}_node",
                     type=node_type,
@@ -336,7 +336,7 @@ class TestMemorizeHandler:
                 # Verify correct node type was used
                 memorize_call = mock_memory_bus.memorize.call_args
                 assert memorize_call.kwargs["node"].type == node_type
-                
+
                 # For CONFIG nodes, the structure is transformed
                 if node_type == NodeType.CONFIG:
                     # CONFIG nodes get special handling - check for the value
@@ -763,6 +763,7 @@ class TestMemorizeHandler:
     ) -> None:
         """Test USER node with valid TEMPORARY consent."""
         from datetime import timedelta
+
         from ciris_engine.logic.services.governance.consent import ConsentService
         from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
 
@@ -801,8 +802,8 @@ class TestMemorizeHandler:
         )
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            with patch.object(ConsentService, '__init__', return_value=None):
-                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+            with patch.object(ConsentService, "__init__", return_value=None):
+                with patch.object(ConsentService, "get_consent", return_value=mock_consent_status) as mock_get_consent:
                     # Execute handler
                     follow_up_id = await memorize_handler.handle(result, test_thought, dispatch_context)
 
@@ -832,6 +833,7 @@ class TestMemorizeHandler:
     ) -> None:
         """Test USER node with expired TEMPORARY consent - should be blocked."""
         from datetime import timedelta
+
         from ciris_engine.logic.services.governance.consent import ConsentService
         from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
 
@@ -870,9 +872,9 @@ class TestMemorizeHandler:
         )
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            with patch.object(ConsentService, '__init__', return_value=None):
-                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
-                    with patch.object(ConsentService, 'revoke_consent', return_value=None) as mock_revoke_consent:
+            with patch.object(ConsentService, "__init__", return_value=None):
+                with patch.object(ConsentService, "get_consent", return_value=mock_consent_status) as mock_get_consent:
+                    with patch.object(ConsentService, "revoke_consent", return_value=None) as mock_revoke_consent:
                         # Execute handler
                         follow_up_id = await memorize_handler.handle(result, test_thought, dispatch_context)
 
@@ -880,7 +882,9 @@ class TestMemorizeHandler:
                         mock_get_consent.assert_called_once_with("expired_user_456")
 
                         # Verify consent was revoked due to expiration
-                        mock_revoke_consent.assert_called_once_with("expired_user_456", "TEMPORARY consent expired (14 days)")
+                        mock_revoke_consent.assert_called_once_with(
+                            "expired_user_456", "TEMPORARY consent expired (14 days)"
+                        )
 
                         # Verify memory was NOT stored
                         mock_memory_bus.memorize.assert_not_called()
@@ -908,8 +912,9 @@ class TestMemorizeHandler:
     ) -> None:
         """Test USER node without consent - should create default TEMPORARY consent."""
         from datetime import timedelta
-        from ciris_engine.logic.services.governance.consent import ConsentService, ConsentNotFoundError
-        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream, ConsentRequest
+
+        from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
+        from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStatus, ConsentStream
 
         # Create USER node
         node = GraphNode(
@@ -946,9 +951,13 @@ class TestMemorizeHandler:
         )
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            with patch.object(ConsentService, '__init__', return_value=None):
-                with patch.object(ConsentService, 'get_consent', side_effect=ConsentNotFoundError("No consent found")) as mock_get_consent:
-                    with patch.object(ConsentService, 'grant_consent', return_value=mock_created_consent) as mock_grant_consent:
+            with patch.object(ConsentService, "__init__", return_value=None):
+                with patch.object(
+                    ConsentService, "get_consent", side_effect=ConsentNotFoundError("No consent found")
+                ) as mock_get_consent:
+                    with patch.object(
+                        ConsentService, "grant_consent", return_value=mock_created_consent
+                    ) as mock_grant_consent:
                         # Execute handler
                         follow_up_id = await memorize_handler.handle(result, test_thought, dispatch_context)
 
@@ -987,6 +996,7 @@ class TestMemorizeHandler:
     ) -> None:
         """Test USER node with user_ prefix variant."""
         from datetime import timedelta
+
         from ciris_engine.logic.services.governance.consent import ConsentService
         from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
 
@@ -1025,8 +1035,8 @@ class TestMemorizeHandler:
         )
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            with patch.object(ConsentService, '__init__', return_value=None):
-                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+            with patch.object(ConsentService, "__init__", return_value=None):
+                with patch.object(ConsentService, "get_consent", return_value=mock_consent_status) as mock_get_consent:
                     # Execute handler
                     await memorize_handler.handle(result, test_thought, dispatch_context)
 
@@ -1047,7 +1057,7 @@ class TestMemorizeHandler:
     ) -> None:
         """Test USER node with PARTNERED consent stream."""
         from ciris_engine.logic.services.governance.consent import ConsentService
-        from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream, ConsentCategory
+        from ciris_engine.schemas.consent.core import ConsentCategory, ConsentStatus, ConsentStream
 
         # Create USER node
         node = GraphNode(
@@ -1083,8 +1093,8 @@ class TestMemorizeHandler:
         )
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            with patch.object(ConsentService, '__init__', return_value=None):
-                with patch.object(ConsentService, 'get_consent', return_value=mock_consent_status) as mock_get_consent:
+            with patch.object(ConsentService, "__init__", return_value=None):
+                with patch.object(ConsentService, "get_consent", return_value=mock_consent_status) as mock_get_consent:
                     # Execute handler
                     await memorize_handler.handle(result, test_thought, dispatch_context)
 
@@ -1140,8 +1150,8 @@ class TestMemorizeHandler:
         )
 
         with patch_persistence_properly(test_task) as (mock_persistence, mock_base_persistence):
-            with patch.object(ConsentService, '__init__', return_value=None) as mock_init:
-                with patch.object(ConsentService, 'get_consent') as mock_get_consent:
+            with patch.object(ConsentService, "__init__", return_value=None) as mock_init:
+                with patch.object(ConsentService, "get_consent") as mock_get_consent:
                     # Execute handler
                     await memorize_handler.handle(result, test_thought, dispatch_context)
 

@@ -9,12 +9,12 @@ import logging
 from typing import Any
 
 from ciris_engine.logic.dma.exceptions import DMAFailure
+from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.processors.core.step_decorators import streaming_step, step_point
-from ciris_engine.schemas.services.runtime_control import StepPoint
 from ciris_engine.schemas.actions.parameters import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.services.runtime_control import StepPoint
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class ActionSelectionPhase:
     """
     Phase 3: Action Selection (ASPDMA)
-    
+
     Uses LLM-powered Action Selection to synthesize the 3 parallel DMA results:
     - Analyzes all DMA perspectives
     - Selects optimal action based on comprehensive analysis
@@ -34,9 +34,13 @@ class ActionSelectionPhase:
     async def _perform_aspdma_step(self, thought_item: ProcessingQueueItem, thought_context, dma_results):
         """Step 3: LLM-powered action selection."""
         thought = await self._fetch_thought(thought_item.thought_id)
-        
+
         # Check for WA deferral first
-        if dma_results and hasattr(dma_results, 'should_defer_to_wise_authority') and dma_results.should_defer_to_wise_authority:
+        if (
+            dma_results
+            and hasattr(dma_results, "should_defer_to_wise_authority")
+            and dma_results.should_defer_to_wise_authority
+        ):
             return self._create_deferral_result(dma_results, thought)
 
         profile_name = self._get_profile_name(thought)

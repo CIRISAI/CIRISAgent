@@ -22,6 +22,7 @@ from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.llm import ExtractedJSONData, JSONExtractionResult
+
 from .pricing_calculator import LLMPricingCalculator
 
 
@@ -345,7 +346,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     model_name=self.model_name,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
-                    provider_name="openai"  # Since this is OpenAI-compatible client
+                    provider_name="openai",  # Since this is OpenAI-compatible client
                 )
 
                 # Track metrics for get_metrics() method
@@ -386,7 +387,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                             raise TimeoutError("LLM API timeout in structured call - circuit breaker activated") from e
                         elif "service unavailable" in error_str or "503" in error_str:
                             logger.error(f"LLM service unavailable (503), circuit breaker recorded failure: {e}")
-                            raise RuntimeError("LLM service unavailable - circuit breaker activated for failover") from e
+                            raise RuntimeError(
+                                "LLM service unavailable - circuit breaker activated for failover"
+                            ) from e
                         else:
                             logger.error(f"LLM structured call failed, circuit breaker recorded failure: {e}")
                             raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from e

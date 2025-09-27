@@ -13,8 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as FastAPIPath
+from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
@@ -113,7 +114,7 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         context=context,
         signature=entry.signature,
         hash_chain=entry.hash_chain,
-        storage_sources=["graph"]  # Graph entries come from graph by definition
+        storage_sources=["graph"],  # Graph entries come from graph by definition
     )
 
 
@@ -126,36 +127,36 @@ def _get_audit_service(request: Request) -> AuditServiceProtocol:
 
 
 def _sync_query_sqlite_audit(
-    db_path: str, 
-    start_time: Optional[datetime] = None, 
+    db_path: str,
+    start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
     """Query SQLite audit database directly (synchronous version)."""
     if not Path(db_path).exists():
         return []
-    
+
     try:
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
+
             # Build query with time filters
             query = "SELECT * FROM audit_log WHERE 1=1"
             params = []
-            
+
             if start_time:
                 query += " AND event_timestamp >= ?"
                 params.append(start_time.isoformat())
-            
+
             if end_time:
                 query += " AND event_timestamp <= ?"
                 params.append(end_time.isoformat())
-            
+
             query += " ORDER BY event_timestamp DESC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
-            
+
             cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
     except Exception:
@@ -163,44 +164,44 @@ def _sync_query_sqlite_audit(
 
 
 async def _query_sqlite_audit(
-    db_path: str, 
-    start_time: Optional[datetime] = None, 
+    db_path: str,
+    start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
     """Query SQLite audit database directly using async thread pool."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, _sync_query_sqlite_audit, db_path, start_time, end_time, limit, offset
-    )
+    return await loop.run_in_executor(None, _sync_query_sqlite_audit, db_path, start_time, end_time, limit, offset)
 
 
 def _parse_jsonl_entry_timestamp(entry: Dict[str, Any]) -> Optional[datetime]:
     """Parse timestamp from JSONL entry."""
-    entry_time_str = entry.get('timestamp') or entry.get('event_timestamp')
+    entry_time_str = entry.get("timestamp") or entry.get("event_timestamp")
     if entry_time_str:
         try:
-            return datetime.fromisoformat(entry_time_str.replace('Z', UTC_TIMEZONE_SUFFIX))
+            return datetime.fromisoformat(entry_time_str.replace("Z", UTC_TIMEZONE_SUFFIX))
         except ValueError:
             return None
     return None
 
 
-def _entry_matches_time_filter(entry: Dict[str, Any], start_time: Optional[datetime], end_time: Optional[datetime]) -> bool:
+def _entry_matches_time_filter(
+    entry: Dict[str, Any], start_time: Optional[datetime], end_time: Optional[datetime]
+) -> bool:
     """Check if entry matches time filter criteria."""
     if not (start_time or end_time):
         return True
-    
+
     entry_time = _parse_jsonl_entry_timestamp(entry)
     if not entry_time:
         return True  # Include entries without valid timestamps
-    
+
     if start_time and entry_time < start_time:
         return False
     if end_time and entry_time > end_time:
         return False
-    
+
     return True
 
 
@@ -209,15 +210,15 @@ def _sync_query_jsonl_audit(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
     """Query JSONL audit file directly (synchronous version)."""
     if not Path(jsonl_path).exists():
         return []
-    
+
     try:
         entries = []
-        with open(jsonl_path, 'r', encoding='utf-8') as f:
+        with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     try:
@@ -226,10 +227,10 @@ def _sync_query_jsonl_audit(
                             entries.append(entry)
                     except json.JSONDecodeError:
                         continue
-        
+
         # Sort by timestamp (newest first) and apply pagination
-        entries.sort(key=lambda x: x.get('timestamp') or x.get('event_timestamp') or '', reverse=True)
-        return entries[offset:offset+limit]
+        entries.sort(key=lambda x: x.get("timestamp") or x.get("event_timestamp") or "", reverse=True)
+        return entries[offset : offset + limit]
     except Exception:
         return []
 
@@ -239,13 +240,11 @@ async def _query_jsonl_audit(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
     """Query JSONL audit file directly using async thread pool."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset
-    )
+    return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
 
 
 def _process_graph_entries(merged: Dict[str, Dict], graph_entries: List[AuditEntry]) -> None:
@@ -253,10 +252,7 @@ def _process_graph_entries(merged: Dict[str, Dict], graph_entries: List[AuditEnt
     for entry in graph_entries:
         entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
         if entry_id not in merged:
-            merged[entry_id] = {
-                "entry": _convert_audit_entry(entry),
-                "sources": ["graph"]
-            }
+            merged[entry_id] = {"entry": _convert_audit_entry(entry), "sources": ["graph"]}
         else:
             merged[entry_id]["sources"].append("graph")
 
@@ -264,16 +260,17 @@ def _process_graph_entries(merged: Dict[str, Dict], graph_entries: List[AuditEnt
 def _process_sqlite_entries(merged: Dict[str, Dict], sqlite_entries: List[Dict[str, Any]]) -> None:
     """Process SQLite entries and add them to merged results."""
     for sqlite_entry in sqlite_entries:
-        entry_id = sqlite_entry.get("event_id") or f"audit_{sqlite_entry['event_timestamp']}_{sqlite_entry['originator_id']}"
-        
+        entry_id = (
+            sqlite_entry.get("event_id") or f"audit_{sqlite_entry['event_timestamp']}_{sqlite_entry['originator_id']}"
+        )
+
         if entry_id not in merged:
             # Convert SQLite entry to AuditEntryResponse format
-            timestamp = datetime.fromisoformat(sqlite_entry["event_timestamp"].replace('Z', UTC_TIMEZONE_SUFFIX))
+            timestamp = datetime.fromisoformat(sqlite_entry["event_timestamp"].replace("Z", UTC_TIMEZONE_SUFFIX))
             context = AuditContext(
-                description=sqlite_entry.get("event_payload"),
-                entity_id=sqlite_entry.get("originator_id")
+                description=sqlite_entry.get("event_payload"), entity_id=sqlite_entry.get("originator_id")
             )
-            
+
             merged[entry_id] = {
                 "entry": AuditEntryResponse(
                     id=entry_id,
@@ -283,9 +280,9 @@ def _process_sqlite_entries(merged: Dict[str, Dict], sqlite_entries: List[Dict[s
                     context=context,
                     signature=sqlite_entry.get("signature"),
                     hash_chain=sqlite_entry.get("previous_hash"),
-                    storage_sources=["sqlite"]
+                    storage_sources=["sqlite"],
                 ),
-                "sources": ["sqlite"]
+                "sources": ["sqlite"],
             }
         else:
             merged[entry_id]["sources"].append("sqlite")
@@ -295,20 +292,18 @@ def _process_jsonl_entries(merged: Dict[str, Dict], jsonl_entries: List[Dict[str
     """Process JSONL entries and add them to merged results."""
     for jsonl_entry in jsonl_entries:
         entry_id = jsonl_entry.get("id") or f"audit_{jsonl_entry.get('timestamp', '')}_{jsonl_entry.get('actor', '')}"
-        
+
         if entry_id not in merged:
             # Convert JSONL entry to AuditEntryResponse format
             timestamp_str = jsonl_entry.get("timestamp") or jsonl_entry.get("event_timestamp")
             timestamp = (
-                datetime.fromisoformat(timestamp_str.replace('Z', UTC_TIMEZONE_SUFFIX)) 
-                if timestamp_str 
+                datetime.fromisoformat(timestamp_str.replace("Z", UTC_TIMEZONE_SUFFIX))
+                if timestamp_str
                 else datetime.now(timezone.utc)
             )
-            
-            context = AuditContext(
-                description=jsonl_entry.get("description") or jsonl_entry.get("event_payload")
-            )
-            
+
+            context = AuditContext(description=jsonl_entry.get("description") or jsonl_entry.get("event_payload"))
+
             merged[entry_id] = {
                 "entry": AuditEntryResponse(
                     id=entry_id,
@@ -318,33 +313,31 @@ def _process_jsonl_entries(merged: Dict[str, Dict], jsonl_entries: List[Dict[str
                     context=context,
                     signature=jsonl_entry.get("signature"),
                     hash_chain=jsonl_entry.get("hash_chain") or jsonl_entry.get("previous_hash"),
-                    storage_sources=["jsonl"]
+                    storage_sources=["jsonl"],
                 ),
-                "sources": ["jsonl"]
+                "sources": ["jsonl"],
             }
         else:
             merged[entry_id]["sources"].append("jsonl")
 
 
 async def _merge_audit_sources(
-    graph_entries: List[AuditEntry],
-    sqlite_entries: List[Dict[str, Any]],
-    jsonl_entries: List[Dict[str, Any]]
+    graph_entries: List[AuditEntry], sqlite_entries: List[Dict[str, Any]], jsonl_entries: List[Dict[str, Any]]
 ) -> List[AuditEntryResponse]:
     """Merge audit entries from all sources and track storage locations."""
     merged = {}  # Dict[str, Dict] to track entries by ID
-    
+
     # Process entries from all sources
     _process_graph_entries(merged, graph_entries)
     _process_sqlite_entries(merged, sqlite_entries)
     _process_jsonl_entries(merged, jsonl_entries)
-    
+
     # Update storage_sources for all merged entries and build result
     result = []
     for entry_data in merged.values():
         entry_data["entry"].storage_sources = sorted(entry_data["sources"])
         result.append(entry_data["entry"])
-    
+
     # Sort by timestamp (newest first)
     result.sort(key=lambda x: x.timestamp, reverse=True)
     return result
@@ -400,36 +393,36 @@ async def query_audit_entries(
 
     try:
         # Query all 3 audit sources concurrently
-        
+
         # Query graph memory (existing functionality)
         graph_entries = await audit_service.query_audit_trail(query)
-        
+
         # Query SQLite database directly (hardcoded paths for now - should be configurable)
         sqlite_task = _query_sqlite_audit(
             "data/ciris_audit.db",  # Default SQLite path
             start_time=start_time,
             end_time=end_time,
             limit=limit * 3,  # Get more to account for merging
-            offset=0  # We'll handle pagination after merging
+            offset=0,  # We'll handle pagination after merging
         )
-        
+
         # Query JSONL file directly
         jsonl_task = _query_jsonl_audit(
             "audit_logs.jsonl",  # Default JSONL path
             start_time=start_time,
             end_time=end_time,
             limit=limit * 3,  # Get more to account for merging
-            offset=0  # We'll handle pagination after merging
+            offset=0,  # We'll handle pagination after merging
         )
-        
+
         # Execute SQLite and JSONL queries concurrently
         sqlite_entries, jsonl_entries = await asyncio.gather(sqlite_task, jsonl_task)
-        
+
         # Merge all sources and track storage locations
         response_entries = await _merge_audit_sources(graph_entries, sqlite_entries, jsonl_entries)
-        
+
         # Apply final pagination after merging
-        paginated_entries = response_entries[offset:offset+limit]
+        paginated_entries = response_entries[offset : offset + limit]
         total = len(response_entries)
 
         return SuccessResponse(
@@ -470,13 +463,13 @@ def _build_verification_info(target_entry: Any) -> EntryVerification:
 def _add_chain_navigation(response: AuditEntryDetailResponse, entries: List, entry_index: int) -> None:
     """Add chain position and navigation links to response."""
     response.chain_position = entry_index
-    
+
     if entry_index > 0:
         prev_entry = entries[entry_index - 1]
         response.previous_entry_id = getattr(
             prev_entry, "id", f"audit_{prev_entry.timestamp.strftime('%Y%m%d_%H%M%S')}_{prev_entry.actor}"
         )
-    
+
     if entry_index < len(entries) - 1:
         next_entry = entries[entry_index + 1]
         response.next_entry_id = getattr(

@@ -500,37 +500,31 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
         """Calculate average duration of completed observation cycles."""
         if not self._adaptation_history:
             return 0.0
-        
-        completed_cycles = [
-            cycle for cycle in self._adaptation_history 
-            if cycle.completed_at is not None
-        ]
-        
+
+        completed_cycles = [cycle for cycle in self._adaptation_history if cycle.completed_at is not None]
+
         if not completed_cycles:
             return 0.0
-        
+
         total_duration = 0.0
         for cycle in completed_cycles:
             if cycle.completed_at and cycle.started_at:
                 duration = (cycle.completed_at - cycle.started_at).total_seconds()
                 total_duration += duration
-        
+
         return total_duration / len(completed_cycles)
 
     def _calculate_rollback_rate(self) -> float:
         """Calculate rollback rate from adaptation history."""
         if not self._adaptation_history:
             return 0.0
-        
+
         total_changes = sum(cycle.changes_applied for cycle in self._adaptation_history)
-        total_rollbacks = sum(
-            getattr(cycle, 'rollbacks_performed', 0) 
-            for cycle in self._adaptation_history
-        )
-        
+        total_rollbacks = sum(getattr(cycle, "rollbacks_performed", 0) for cycle in self._adaptation_history)
+
         if total_changes == 0:
             return 0.0
-        
+
         return total_rollbacks / total_changes
 
     async def _on_start(self) -> None:

@@ -25,7 +25,7 @@ from ..runtime.enums import HandlerActionType
 
 class EthicalDMAResult(BaseModel):
     """Result from Principled Decision Making Algorithm (PDMA).
-    
+
     Note: alignment_check changed from Dict[str, Any] to str in v1.0.6
     for better LLM compatibility and type safety.
     """

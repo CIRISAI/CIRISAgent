@@ -1,10 +1,11 @@
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # Import the module we are testing
 from ciris_engine.logic.utils import initialization_manager
+
 
 # Since the module uses a global variable, we need to reset it for each test
 @pytest.fixture(autouse=True)
@@ -15,8 +16,8 @@ def reset_global_service():
     initialization_manager._global_initialization_service = None
 
 
-@patch('ciris_engine.logic.utils.initialization_manager.InitializationService')
-@patch('ciris_engine.logic.services.lifecycle.time.TimeService') # Corrected path
+@patch("ciris_engine.logic.utils.initialization_manager.InitializationService")
+@patch("ciris_engine.logic.services.lifecycle.time.TimeService")  # Corrected path
 def test_get_initialization_manager_creates_once(mock_time_service, mock_init_service):
     """Test that get_initialization_manager creates the service only on the first call."""
 
@@ -47,7 +48,7 @@ def test_register_initialization_callback_logs_warning(caplog):
 
 
 @pytest.mark.asyncio
-@patch('ciris_engine.logic.utils.initialization_manager.InitializationService')
+@patch("ciris_engine.logic.utils.initialization_manager.InitializationService")
 async def test_initialize_components_calls_service(mock_init_service):
     """Test that initialize_components awaits the service's initialize method."""
     # Arrange
@@ -62,7 +63,7 @@ async def test_initialize_components_calls_service(mock_init_service):
     mock_service_instance.initialize.assert_awaited_once()
 
 
-@patch('ciris_engine.logic.utils.initialization_manager.InitializationService')
+@patch("ciris_engine.logic.utils.initialization_manager.InitializationService")
 def test_is_initialized_checks_service_attribute(mock_init_service):
     """Test that is_initialized returns the correct state from the service."""
     # Arrange
@@ -78,7 +79,7 @@ def test_is_initialized_checks_service_attribute(mock_init_service):
     assert initialization_manager.is_initialized()
 
 
-@patch('ciris_engine.logic.utils.initialization_manager.InitializationService')
+@patch("ciris_engine.logic.utils.initialization_manager.InitializationService")
 def test_reset_initialization_resets_service_state(mock_init_service):
     """Test that reset_initialization correctly resets the service's internal state."""
     # Arrange

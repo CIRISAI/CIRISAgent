@@ -11,11 +11,7 @@ The agent can modify its own observation algorithms through graph configuration,
 enabling meta-learning and self-directed analytical evolution.
 """
 
-from .service import (
-    SelfObservationService,
-    ObservationState,
-    ObservationCycle,
-)
+from .service import ObservationCycle, ObservationState, SelfObservationService
 
 __all__ = [
     "SelfObservationService",

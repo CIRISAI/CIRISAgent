@@ -10,12 +10,7 @@ from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 from ciris_engine.schemas.adapters.tool_execution import ToolExecutionArgs, ToolHandlerContext
-from ciris_engine.schemas.adapters.tools import (
-    ToolExecutionResult,
-    ToolExecutionStatus,
-    ToolInfo,
-    ToolParameterSchema,
-)
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,

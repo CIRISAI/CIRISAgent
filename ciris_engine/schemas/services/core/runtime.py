@@ -165,7 +165,7 @@ class ProcessorControlResponse(BaseModel):
     operation: str = Field(..., description="Operation performed")
     new_status: ProcessorStatus = Field(..., description="New processor status")
     error: Optional[str] = Field(None, description="Error message if failed")
-    
+
     # H3ERE step data for single-step operations
     step_point: Optional[str] = Field(None, description="H3ERE step point executed")
     step_results: Optional[List[Dict[str, Any]]] = Field(None, description="Step results organized by round and task")
@@ -196,7 +196,9 @@ class RuntimeStatusResponse(BaseModel):
     adapter_count: int = Field(..., description="Number of adapters")
     total_messages_processed: int = Field(..., description="Total messages processed")
     current_load: float = Field(..., description="Current system load")
-    processor_status: ProcessorStatus = Field(ProcessorStatus.RUNNING, description="Current processor operational status")
+    processor_status: ProcessorStatus = Field(
+        ProcessorStatus.RUNNING, description="Current processor operational status"
+    )
     cognitive_state: Optional[str] = Field(None, description="Current cognitive state (AgentState)")
     queue_depth: int = Field(0, description="Number of items in processing queue")
 

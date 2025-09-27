@@ -22,7 +22,9 @@ class RuntimeStats(BaseModel):
     errors_last_hour: int = Field(0, description="Errors in last hour")
     warnings_last_hour: int = Field(0, description="Warnings in last hour")
     agent_state: str = Field(..., description="Current agent state")
-    additional_stats: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional runtime stats")
+    additional_stats: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional runtime stats"
+    )
 
 
 class HealthCheckResult(BaseModel):
@@ -68,7 +70,9 @@ class BusMetrics(BaseModel):
     queue_depth: int = Field(0, description="Current queue depth")
     errors_last_hour: int = Field(0, description="Bus errors in last hour")
     busiest_service: Optional[str] = Field(None, description="Service with most traffic")
-    additional_metrics: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional bus metrics")
+    additional_metrics: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional bus metrics"
+    )
 
 
 class DreamConsolidationResult(BaseModel):
@@ -105,7 +109,9 @@ class DreamInsight(BaseModel):
     description: str = Field(..., description="Insight description")
     supporting_memories: List[str] = Field(default_factory=list, description="Memory IDs supporting this insight")
     timestamp: datetime = Field(..., description="When insight was discovered")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional insight metadata")
+    metadata: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional insight metadata"
+    )
 
 
 class IdentityBaseline(BaseModel):
@@ -118,7 +124,9 @@ class IdentityBaseline(BaseModel):
     decision_weights: Dict[str, float] = Field(..., description="Decision making weights")
     memory_priorities: List[str] = Field(..., description="Memory priority types")
     baseline_hash: str = Field(..., description="Hash of baseline for integrity")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional baseline data")
+    metadata: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional baseline data"
+    )
 
 
 class IdentityVarianceMetric(BaseModel):
@@ -143,7 +151,9 @@ class ConfigurationFeedback(BaseModel):
     error_rate: float = Field(..., description="Error rate percentage")
     user_satisfaction: Optional[float] = Field(None, description="User satisfaction score")
     suggested_adjustment: Optional[str] = Field(None, description="Suggested configuration adjustment")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional feedback data")
+    metadata: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional feedback data"
+    )
 
 
 class ConfigurationPattern(BaseModel):
@@ -180,7 +190,9 @@ class ActiveAdapter(BaseModel):
     started_at: datetime = Field(..., description="When adapter was started")
     messages_handled: int = Field(0, description="Messages handled by adapter")
     last_activity: Optional[datetime] = Field(None, description="Last activity time")
-    configuration: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Adapter configuration")
+    configuration: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Adapter configuration"
+    )
 
 
 class CheckpointInfo(BaseModel):
@@ -193,7 +205,9 @@ class CheckpointInfo(BaseModel):
     agent_state: str = Field(..., description="Agent state at checkpoint")
     includes_memory: bool = Field(True, description="Whether memory is included")
     includes_config: bool = Field(True, description="Whether config is included")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional checkpoint metadata")
+    metadata: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional checkpoint metadata"
+    )
 
 
 class ServiceRegistration(BaseModel):
@@ -207,7 +221,9 @@ class ServiceRegistration(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="Service capabilities")
     dependencies: List[str] = Field(default_factory=list, description="Service dependencies")
     health_check_url: Optional[str] = Field(None, description="Health check endpoint")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(default_factory=dict, description="Additional service metadata")
+    metadata: Dict[str, Union[str, int, float, bool]] = Field(
+        default_factory=dict, description="Additional service metadata"
+    )
 
 
 class ServiceRegistrySnapshot(BaseModel):

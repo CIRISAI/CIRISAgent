@@ -28,7 +28,6 @@ class MockResponse(BaseModel):
     status: str = "ok"
 
 
-
 class TestOpenAICompatibleClient:
     """Test suite for OpenAICompatibleClient."""
 
@@ -457,7 +456,7 @@ class TestOpenAICompatibleClient:
         mock_env = {}
         if "MOCK_LLM" in os.environ:
             mock_env = {k: v for k, v in os.environ.items() if k != "MOCK_LLM"}
-        
+
         with patch.dict(os.environ, mock_env, clear=True):
             with patch("sys.argv", []):
                 with patch("ciris_engine.logic.services.runtime.llm_service.service.AsyncOpenAI"):
@@ -480,7 +479,7 @@ class TestOpenAICompatibleClient:
         mock_env = {}
         if "MOCK_LLM" in os.environ:
             mock_env = {k: v for k, v in os.environ.items() if k != "MOCK_LLM"}
-        
+
         with patch.dict(os.environ, mock_env, clear=True):
             with patch("sys.argv", []):
                 with patch("ciris_engine.logic.services.runtime.llm_service.service.AsyncOpenAI") as mock_openai:
@@ -524,7 +523,9 @@ class TestOpenAICompatibleClient:
 class TestInstructorRetryExceptionHandling:
     """Test suite for InstructorRetryException handling and circuit breaker integration."""
 
-    @pytest.mark.skip(reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue")
+    @pytest.mark.skip(
+        reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue"
+    )
     async def test_instructor_timeout_exception_triggers_circuit_breaker(self, llm_service_with_exceptions):
         """Test that InstructorRetryException with 'timed out' triggers circuit breaker."""
         # Use the centralized fixture that has proper instructor exceptions setup
@@ -547,8 +548,7 @@ class TestInstructorRetryExceptionHandling:
         # The service should transform the instructor exception or just propagate it
         with pytest.raises((TimeoutError, RuntimeError, Exception)) as exc_info:
             await service.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}],
-                response_model=MockResponse
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
             )
 
         # Verify error message contains relevant info
@@ -567,7 +567,9 @@ class TestInstructorRetryExceptionHandling:
         status = service.get_status()
         assert status.metrics["error_count"] >= 1
 
-    @pytest.mark.skip(reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue")
+    @pytest.mark.skip(
+        reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue"
+    )
     async def test_instructor_503_exception_triggers_circuit_breaker(self, llm_service_with_exceptions):
         """Test that InstructorRetryException with '503' or 'service unavailable' triggers circuit breaker."""
         # Use the centralized fixture that has proper instructor exceptions setup
@@ -590,8 +592,7 @@ class TestInstructorRetryExceptionHandling:
         # The service should transform the instructor exception or just propagate it
         with pytest.raises((RuntimeError, Exception)) as exc_info:
             await service.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}],
-                response_model=MockResponse
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
             )
 
         # Verify error message indicates service unavailable or other error
@@ -610,8 +611,12 @@ class TestInstructorRetryExceptionHandling:
         status = service.get_status()
         assert status.metrics["error_count"] >= 1
 
-    @pytest.mark.skip(reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue")
-    async def test_instructor_generic_exception_triggers_circuit_breaker(self, llm_service_with_exceptions, mock_time_service, mock_telemetry_service):
+    @pytest.mark.skip(
+        reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue"
+    )
+    async def test_instructor_generic_exception_triggers_circuit_breaker(
+        self, llm_service_with_exceptions, mock_time_service, mock_telemetry_service
+    ):
         """Test that any InstructorRetryException triggers circuit breaker regardless of message."""
         # Use the centralized fixture that has proper instructor exceptions setup
         service = llm_service_with_exceptions
@@ -652,7 +657,9 @@ class TestInstructorRetryExceptionHandling:
                         mock_instruct_client.chat = MagicMock()
                         mock_instruct_client.chat.completions = MagicMock()
                         # Setup the instruct client to raise the real exception
-                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=generic_exception)
+                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(
+                            side_effect=generic_exception
+                        )
 
                         # Ensure instructor module has proper exceptions
                         mock_instructor.from_openai.return_value = mock_instruct_client
@@ -675,8 +682,7 @@ class TestInstructorRetryExceptionHandling:
                         # Call should fail and trigger circuit breaker
                         with pytest.raises(RuntimeError) as exc_info:
                             await service.call_llm_structured(
-                                messages=[{"role": "user", "content": "Test"}],
-                                response_model=MockResponse
+                                messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
                             )
 
                         # Verify error message
@@ -694,7 +700,9 @@ class TestInstructorRetryExceptionHandling:
                         status = service.get_status()
                         assert status.metrics["error_count"] == 1
 
-    @pytest.mark.skip(reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue")
+    @pytest.mark.skip(
+        reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue"
+    )
     async def test_circuit_breaker_recovery_after_503_failure(self, mock_time_service, mock_telemetry_service):
         """Test that circuit breaker can recover after 503 failures."""
         # Import the actual instructor module to get the real exception class
@@ -754,12 +762,13 @@ class TestInstructorRetryExceptionHandling:
                         service.circuit_breaker.reset()
 
                         # First call fails with 503
-                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=service_exception)
+                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(
+                            side_effect=service_exception
+                        )
 
                         with pytest.raises(RuntimeError):
                             await service.call_llm_structured(
-                                messages=[{"role": "user", "content": "Test"}],
-                                response_model=MockResponse
+                                messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
                             )
 
                         # Manually record failure if the exception path didn't trigger it (mock issue)
@@ -781,15 +790,16 @@ class TestInstructorRetryExceptionHandling:
 
                             return MockResponse(message="Success", status="ok"), mock_completion
 
-                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=successful_create)
+                        mock_instruct_client.chat.completions.create_with_completion = AsyncMock(
+                            side_effect=successful_create
+                        )
 
                         # Circuit breaker should be closed initially
                         service.circuit_breaker.reset()  # Reset for testing recovery
 
                         # Next call should succeed
                         result, usage = await service.call_llm_structured(
-                            messages=[{"role": "user", "content": "Test recovery"}],
-                            response_model=MockResponse
+                            messages=[{"role": "user", "content": "Test recovery"}], response_model=MockResponse
                         )
 
                         assert result.message == "Success"
@@ -799,7 +809,9 @@ class TestInstructorRetryExceptionHandling:
                         cb_stats = service.circuit_breaker.get_stats()
                         assert cb_stats["total_successes"] >= 1
 
-    @pytest.mark.skip(reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue")
+    @pytest.mark.skip(
+        reason="Mock InstructorRetryException not recognized by isinstance() check in LLM service - complex instructor module mocking issue"
+    )
     async def test_different_instructor_exception_error_messages(self, mock_time_service, mock_telemetry_service):
         """Test that different InstructorRetryException messages get appropriate error responses."""
         # Use centralized fixtures instead of importing instructor directly
@@ -809,7 +821,7 @@ class TestInstructorRetryExceptionHandling:
             ("Request timed out after 30 seconds", RuntimeError, "circuit breaker activated"),
             ("Error code: 503 - Service unavailable", RuntimeError, "circuit breaker activated"),
             ("Rate limit exceeded", RuntimeError, "circuit breaker activated"),
-            ("Generic failure", RuntimeError, "circuit breaker activated")
+            ("Generic failure", RuntimeError, "circuit breaker activated"),
         ]
 
         for message, expected_exception, expected_message in test_cases:
@@ -840,7 +852,9 @@ class TestInstructorRetryExceptionHandling:
                             mock_instruct_client = MagicMock()
                             mock_instruct_client.chat = MagicMock()
                             mock_instruct_client.chat.completions = MagicMock()
-                            mock_instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=exception)
+                            mock_instruct_client.chat.completions.create_with_completion = AsyncMock(
+                                side_effect=exception
+                            )
 
                             # Ensure instructor module has proper exceptions
                             mock_instructor.from_openai.return_value = mock_instruct_client
@@ -865,8 +879,7 @@ class TestInstructorRetryExceptionHandling:
                             # Test the exception handling
                             with pytest.raises(expected_exception) as exc_info:
                                 await service.call_llm_structured(
-                                    messages=[{"role": "user", "content": "Test"}],
-                                    response_model=MockResponse
+                                    messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
                                 )
 
                             # Verify error message contains expected text
@@ -878,7 +891,9 @@ class TestInstructorRetryExceptionHandling:
 
                             # Verify circuit breaker was triggered
                             cb_stats = service.circuit_breaker.get_stats()
-                            assert cb_stats["failure_count"] >= 1  # At least 1 failure recorded (current count, not total)
+                            assert (
+                                cb_stats["failure_count"] >= 1
+                            )  # At least 1 failure recorded (current count, not total)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import Dict, List, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Protocol
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.services.graph.telemetry import TelemetryData, AggregatedTelemetryResponse

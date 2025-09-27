@@ -363,13 +363,10 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
 
         # Generate stable hash for anonymous tracking
         user_hash = self._hash_user_id(user_id)
-        
+
         if user_id not in self._config.user_profiles:
             self._config.user_profiles[user_id] = UserTrustProfile(
-                user_id=user_id,
-                user_hash=user_hash,
-                first_seen=self._now(),
-                last_seen=self._now()
+                user_id=user_id, user_hash=user_hash, first_seen=self._now(), last_seen=self._now()
             )
 
         profile = self._config.user_profiles[user_id]
@@ -464,74 +461,74 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
     def _hash_user_id(self, user_id: str) -> str:
         """
         Generate stable hash for user tracking.
-        
+
         This enables anonymous user moderation without storing identity.
         """
         return hashlib.sha256(f"user_{user_id}".encode()).hexdigest()[:16]
-    
+
     async def handle_consent_transition(self, user_id: str, from_stream: str, to_stream: str) -> bool:
         """
         Handle consent stream transitions and detect gaming attempts.
-        
+
         Returns True if gaming behavior detected.
         """
         if self._config is None:
             return False
-        
+
         # Get or create user profile
         if user_id not in self._config.user_profiles:
             user_hash = self._hash_user_id(user_id)
             self._config.user_profiles[user_id] = UserTrustProfile(
-                user_id=user_id,
-                user_hash=user_hash,
-                first_seen=self._now(),
-                last_seen=self._now()
+                user_id=user_id, user_hash=user_hash, first_seen=self._now(), last_seen=self._now()
             )
-        
+
         profile = self._config.user_profiles[user_id]
         profile.consent_stream = to_stream
-        
+
         # Track transitions in 24-hour window
         profile.consent_transitions_24h += 1
-        
+
         # Detect gaming patterns
         gaming_detected = False
-        
+
         # Pattern 1: Rapid switching (>3 in 24 hours)
         if profile.consent_transitions_24h > 3:
             profile.rapid_switching_flag = True
             profile.evasion_score = min(1.0, profile.evasion_score + 0.2)
             gaming_detected = True
             logger.warning(f"Gaming detected: User {user_id} has {profile.consent_transitions_24h} transitions in 24h")
-        
+
         # Pattern 2: Switch to anonymous right after moderation
-        if (to_stream == "anonymous" and profile.last_moderation and 
-            (self._now() - profile.last_moderation).total_seconds() < 3600):
+        if (
+            to_stream == "anonymous"
+            and profile.last_moderation
+            and (self._now() - profile.last_moderation).total_seconds() < 3600
+        ):
             profile.evasion_score = min(1.0, profile.evasion_score + 0.3)
             gaming_detected = True
             logger.warning(f"Evasion detected: User {user_id} switched to anonymous within 1h of moderation")
-        
+
         # If switching to anonymous, mark profile appropriately
         if to_stream == "anonymous":
             profile.is_anonymous = True
-        
+
         await self._save_config(f"Consent transition: {from_stream} -> {to_stream}")
         return gaming_detected
-    
+
     async def anonymize_user_profile(self, user_id: str) -> None:
         """
         Anonymize user profile while preserving safety data.
-        
+
         Removes PII but keeps trust score and safety patterns.
         """
         if self._config is None or user_id not in self._config.user_profiles:
             return
-        
+
         profile = self._config.user_profiles[user_id]
-        
+
         # Generate anonymous ID
         anon_id = f"anon_{profile.user_hash}"
-        
+
         # Create anonymized profile preserving safety data
         anon_profile = UserTrustProfile(
             user_id=anon_id,
@@ -554,35 +551,37 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             evasion_score=profile.evasion_score,
             last_moderation=profile.last_moderation,
             safety_patterns=profile.safety_patterns,
-            pattern_score=profile.pattern_score
+            pattern_score=profile.pattern_score,
         )
-        
+
         # Replace profile with anonymous version
         del self._config.user_profiles[user_id]
         self._config.user_profiles[anon_id] = anon_profile
-        
+
         await self._save_config(f"User {user_id} anonymized")
-        logger.info(f"User profile anonymized: {user_id} -> {anon_id}, trust score preserved: {anon_profile.trust_score:.2f}")
-    
+        logger.info(
+            f"User profile anonymized: {user_id} -> {anon_id}, trust score preserved: {anon_profile.trust_score:.2f}"
+        )
+
     def get_filter_decision_for_anonymous(self, user_id: str) -> FilterPriority:
         """
         Get appropriate filter priority for anonymous users based on trust.
-        
+
         Works even without full context.
         """
         if self._config is None:
             return FilterPriority.MEDIUM
-        
+
         # Check if this is an anonymous user
         profile = None
         for uid, p in self._config.user_profiles.items():
             if p.user_hash == self._hash_user_id(user_id) or uid == user_id:
                 profile = p
                 break
-        
+
         if not profile:
             return FilterPriority.MEDIUM
-        
+
         # Adjust priority based on trust and evasion scores
         if profile.trust_score < 0.2 or profile.evasion_score > 0.7:
             return FilterPriority.CRITICAL  # High risk
@@ -592,7 +591,7 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
             return FilterPriority.HIGH  # Gaming behavior
         else:
             return FilterPriority.MEDIUM
-    
+
     def _generate_reasoning(self, triggered: List[str], priority: FilterPriority, is_llm_response: bool) -> str:
         """Generate human-readable reasoning for filter decision"""
         if not triggered:

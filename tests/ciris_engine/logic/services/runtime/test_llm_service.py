@@ -10,7 +10,6 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 
-
 # Remove the old llm_service fixture - use the centralized one from conftest.py
 
 
@@ -72,8 +71,9 @@ async def test_llm_service_retry_logic(llm_service):
         call_count += 1
         if call_count < 3:
             # Simulate an API connection error (which is retryable)
-            from openai import APIConnectionError
             import httpx
+            from openai import APIConnectionError
+
             # APIConnectionError requires a request parameter
             mock_request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
             raise APIConnectionError(request=mock_request)

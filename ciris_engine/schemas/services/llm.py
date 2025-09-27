@@ -57,13 +57,13 @@ class LLMResponse(BaseModel):
 
 class ExtractedJSONData(BaseModel):
     """Structured data extracted from LLM JSON response."""
-    
+
     # Common fields that appear in LLM JSON responses
     message: Optional[str] = Field(None, description="Message content")
     content: Optional[str] = Field(None, description="Content text")
     result: Optional[str] = Field(None, description="Result value")
     status: Optional[str] = Field(None, description="Status indicator")
-    
+
     class Config:
         extra = "allow"  # Allow additional fields
 
@@ -110,11 +110,11 @@ class LLMCallParams(BaseModel):
 
 class CachedResponseData(BaseModel):
     """Serialized response data for cached LLM responses."""
-    
+
     content: str = Field(..., description="Response content")
     model: str = Field(..., description="Model used")
     finish_reason: Optional[str] = Field(None, description="Finish reason")
-    
+
     class Config:
         extra = "allow"  # Allow additional fields for different response types
 

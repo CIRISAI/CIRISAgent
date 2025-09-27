@@ -6,7 +6,7 @@ the thought processing pipeline.
 """
 
 import asyncio
-from typing import Optional, Protocol, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Protocol, Union
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.telemetry.collector import SingleStepResult
@@ -191,7 +191,7 @@ class PipelineController:
         """Update thought with step-specific data."""
         if step_data is None:
             return
-        
+
         if step_point == StepPoint.GATHER_CONTEXT:
             thought.context_built = step_data.get("context")
         elif step_point == StepPoint.PERFORM_DMAS:
@@ -210,7 +210,7 @@ class PipelineController:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
         if step_data is None:
             step_data = {}
-            
+
         # Import only the 9 real H3ERE step result schemas
         from ciris_engine.schemas.services.runtime_control import (
             StepResultActionComplete,
@@ -256,12 +256,13 @@ class PipelineController:
     def _calculate_processing_time(self, start_time) -> float:
         """Calculate processing time in milliseconds."""
         import asyncio
+
         return (asyncio.get_event_loop().time() - start_time) * 1000
 
     async def _handle_paused_thoughts(self, start_time) -> "SingleStepResult":
         """Handle execution of paused thoughts."""
         from ciris_engine.logic.processors.core.step_decorators import execute_all_steps
-        
+
         result = await execute_all_steps()
         processing_time_ms = self._calculate_processing_time(start_time)
 
@@ -329,7 +330,7 @@ class PipelineController:
         """Initiate processing for a pending thought."""
         if not (self.main_processor and self.main_processor.thought_processor):
             return self._handle_no_processor(start_time)
-            
+
         try:
             # Start processing this thought - it will pause at the first decorated step
             # For now, we'll simulate this by just indicating that processing was initiated
@@ -355,10 +356,7 @@ class PipelineController:
         """
         import asyncio
 
-        from ciris_engine.logic.processors.core.step_decorators import (
-            enable_single_step_mode,
-            get_paused_thoughts,
-        )
+        from ciris_engine.logic.processors.core.step_decorators import enable_single_step_mode, get_paused_thoughts
 
         start_time = asyncio.get_event_loop().time()
 

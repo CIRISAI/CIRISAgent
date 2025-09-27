@@ -38,7 +38,7 @@ class LLMPricingCalculator:
         prompt_tokens: int,
         completion_tokens: int,
         provider_name: Optional[str] = None,
-        region: Optional[str] = None
+        region: Optional[str] = None,
     ) -> ResourceUsage:
         """
         Calculate comprehensive resource usage for an LLM call.
@@ -86,7 +86,7 @@ class LLMPricingCalculator:
             cost_cents=total_cost_cents,
             carbon_grams=carbon_grams,
             energy_kwh=energy_kwh,
-            model_used=model_name
+            model_used=model_name,
         )
 
     def _get_model_config(self, model_name: str, provider_name: Optional[str]):
@@ -225,7 +225,7 @@ class LLMPricingCalculator:
             "description": model_config.description,
             "provider_specific": model_config.provider_specific,
             "energy_per_1k_tokens": self.pricing_config.get_energy_estimate(model_name),
-            "carbon_intensity_global": self.pricing_config.get_carbon_intensity()
+            "carbon_intensity_global": self.pricing_config.get_carbon_intensity(),
         }
 
     def list_available_models(self, provider_name: Optional[str] = None, active_only: bool = True) -> list:
@@ -244,7 +244,11 @@ class LLMPricingCalculator:
         else:
             # Get all models regardless of status
             models = []
-            providers = {provider_name: self.pricing_config.providers[provider_name]} if provider_name else self.pricing_config.providers
+            providers = (
+                {provider_name: self.pricing_config.providers[provider_name]}
+                if provider_name
+                else self.pricing_config.providers
+            )
 
             for prov_name, provider in providers.items():
                 for model_name, model_config in provider.models.items():
@@ -259,7 +263,7 @@ class LLMPricingCalculator:
                 "context_window": config.context_window,
                 "active": config.active,
                 "deprecated": config.deprecated,
-                "description": config.description
+                "description": config.description,
             }
             for prov_name, model_name, config in models
         ]

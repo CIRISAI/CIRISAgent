@@ -68,9 +68,7 @@ class TestDiscordToolHandler:
     @pytest.fixture
     def handler(self, mock_client, mock_tool_registry, mock_time_service):
         """Create DiscordToolHandler instance."""
-        return DiscordToolHandler(
-            tool_registry=mock_tool_registry, client=mock_client, time_service=mock_time_service
-        )
+        return DiscordToolHandler(tool_registry=mock_tool_registry, client=mock_client, time_service=mock_time_service)
 
     def test_initialization_without_dependencies(self):
         """Test handler initialization without dependencies."""
@@ -109,7 +107,9 @@ class TestDiscordToolHandler:
         """Test successful tool execution."""
         mock_add_corr, mock_update_corr = mock_persistence_functions
 
-        tool_args = create_tool_execution_args(correlation_id="test-corr-001", tool_specific_params={"message": "hello"})
+        tool_args = create_tool_execution_args(
+            correlation_id="test-corr-001", tool_specific_params={"message": "hello"}
+        )
 
         result = await handler.execute_tool("echo", tool_args)
 

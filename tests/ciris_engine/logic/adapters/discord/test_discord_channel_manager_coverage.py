@@ -9,10 +9,11 @@ Targets high-impact areas for reaching 80% coverage:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
-from discord.errors import Forbidden, NotFound
+
 import discord
+import pytest
+from discord.errors import Forbidden, NotFound
 
 from ciris_engine.logic.adapters.discord.discord_channel_manager import DiscordChannelManager
 from ciris_engine.schemas.runtime.messages import DiscordMessage
@@ -32,7 +33,7 @@ class TestDiscordChannelManagerCoverage:
             token=self.token,
             client=self.mock_client,
             on_message_callback=self.mock_callback,
-            monitored_channel_ids=self.monitored_channels
+            monitored_channel_ids=self.monitored_channels,
         )
 
     def test_initialization_basic(self):
@@ -57,7 +58,7 @@ class TestDiscordChannelManagerCoverage:
             on_message_callback=self.mock_callback,
             monitored_channel_ids=self.monitored_channels,
             filter_service=mock_filter,
-            consent_service=mock_consent
+            consent_service=mock_consent,
         )
 
         assert manager.token == self.token
@@ -363,11 +364,7 @@ class TestDiscordChannelManagerCoverage:
     @pytest.mark.asyncio
     async def test_sanitize_message_parameters_basic(self):
         """Test _sanitize_message_parameters method - targets lines 302-319."""
-        params = {
-            "content": "Hello world",
-            "user_id": "123456789",
-            "some_other_field": "value"
-        }
+        params = {"content": "Hello world", "user_id": "123456789", "some_other_field": "value"}
 
         result = await self.manager._sanitize_message_parameters(params, "123456789")
 
@@ -470,11 +467,7 @@ class TestDiscordChannelManagerEdgeCases:
         manager.set_client(mock_client)
 
         # Test concurrent channel resolutions
-        tasks = [
-            manager.resolve_channel("123"),
-            manager.resolve_channel("456"),
-            manager.validate_channel_access("789")
-        ]
+        tasks = [manager.resolve_channel("123"), manager.resolve_channel("456"), manager.validate_channel_access("789")]
 
         results = await asyncio.gather(*tasks)
         assert len(results) == 3
@@ -482,15 +475,9 @@ class TestDiscordChannelManagerEdgeCases:
     def test_initialization_edge_cases(self):
         """Test initialization with edge case parameters."""
         # Test with empty monitored channels list
-        manager1 = DiscordChannelManager(
-            token="test",
-            monitored_channel_ids=[]
-        )
+        manager1 = DiscordChannelManager(token="test", monitored_channel_ids=[])
         assert manager1.monitored_channel_ids == []
 
         # Test with None monitored channels (should default to empty list)
-        manager2 = DiscordChannelManager(
-            token="test",
-            monitored_channel_ids=None
-        )
+        manager2 = DiscordChannelManager(token="test", monitored_channel_ids=None)
         assert manager2.monitored_channel_ids == []

@@ -203,7 +203,7 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 "reasoning_transparency": 0.9,  # Very transparent about why
                 "replacement_action": defer_action.model_dump(),  # Include the DEFER action for conscience execution
             }
-            
+
             return ConscienceCheckResult(
                 status=ConscienceStatus.FAILED,
                 passed=False,

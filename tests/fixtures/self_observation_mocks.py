@@ -16,7 +16,7 @@ from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
-from ciris_engine.schemas.services.operations import MemoryQuery, MemoryOpResult
+from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryQuery
 from ciris_engine.schemas.services.special.self_observation import (
     AnalysisStatus,
     ConfigurationChange,
@@ -63,10 +63,12 @@ class MockMemoryBus:
     def __init__(self):
         self.stored_nodes = []
         self.queries = []
+
         # Create a custom side effect for memorize
         async def memorize_side_effect(node, *args, **kwargs):
             self.stored_nodes.append(node)
             return MagicMock(success=True)
+
         self.memorize = AsyncMock(side_effect=memorize_side_effect)
         self.query = AsyncMock(return_value=[])
         self.recall = AsyncMock(return_value=[])
@@ -87,7 +89,7 @@ class MockIdentityVarianceMonitor:
 
     def __init__(self):
         from ciris_engine.schemas.infrastructure.identity_variance import VarianceReport
-        
+
         self.baseline_established = False
         self.current_variance = 0.0
         self.variance_history = []
@@ -100,24 +102,26 @@ class MockIdentityVarianceMonitor:
         self.stop = AsyncMock()
         self.is_healthy = AsyncMock(return_value=True)
         self.is_healthy = AsyncMock(return_value=True)
-        
+
         # Mock check_variance to return a VarianceReport
-        self.check_variance = AsyncMock(return_value=VarianceReport(
-            timestamp=datetime.now(timezone.utc),
-            baseline_snapshot_id="baseline_123",
-            current_snapshot_id="current_123",
-            total_variance=0.05,
-            differences=[],
-            requires_wa_review=False,
-            recommendations=[]
-        ))
+        self.check_variance = AsyncMock(
+            return_value=VarianceReport(
+                timestamp=datetime.now(timezone.utc),
+                baseline_snapshot_id="baseline_123",
+                current_snapshot_id="current_123",
+                total_variance=0.05,
+                differences=[],
+                requires_wa_review=False,
+                recommendations=[],
+            )
+        )
 
     async def establish_baseline(self, identity: AgentIdentityRoot) -> str:
         """Establish identity baseline."""
         self.baseline_established = True
         self._baseline_snapshot_id = "baseline_123"
         return "baseline_123"
-    
+
     async def initialize_baseline(self, identity: AgentIdentityRoot) -> str:
         """Initialize identity baseline."""
         self.baseline_established = True
@@ -142,20 +146,24 @@ class MockPatternAnalysisLoop:
         self.insights = []
         self.is_running = False
         self._detected_patterns = {}  # Service expects dict, not list
-        self.analyze = AsyncMock(return_value=AnalysisResult(
-            status="completed",
-            patterns_detected=2,
-            insights_stored=1,
-            timestamp=datetime.now(timezone.utc),
-            next_analysis_in=3600.0
-        ))
-        self.analyze_and_adapt = AsyncMock(return_value=AnalysisResult(
-            status="completed",
-            patterns_detected=2,
-            insights_stored=1,
-            timestamp=datetime.now(timezone.utc),
-            next_analysis_in=3600.0
-        ))
+        self.analyze = AsyncMock(
+            return_value=AnalysisResult(
+                status="completed",
+                patterns_detected=2,
+                insights_stored=1,
+                timestamp=datetime.now(timezone.utc),
+                next_analysis_in=3600.0,
+            )
+        )
+        self.analyze_and_adapt = AsyncMock(
+            return_value=AnalysisResult(
+                status="completed",
+                patterns_detected=2,
+                insights_stored=1,
+                timestamp=datetime.now(timezone.utc),
+                next_analysis_in=3600.0,
+            )
+        )
         self.get_patterns = AsyncMock(return_value=[])
         self.get_insights = AsyncMock(return_value=[])
         self.start = AsyncMock()
@@ -222,10 +230,10 @@ def create_agent_identity(
 ) -> AgentIdentityRoot:
     """Create an agent identity for testing."""
     from ciris_engine.schemas.runtime.core import CoreProfile, IdentityMetadata
-    
+
     now = datetime.now(timezone.utc)
     agent_id = agent_id or str(uuid.uuid4())
-    
+
     return AgentIdentityRoot(
         agent_id=agent_id,
         identity_hash=f"hash_{agent_id}",
@@ -348,7 +356,7 @@ def create_detected_pattern(
 ) -> DetectedPattern:
     """Create a detected pattern for testing."""
     from ciris_engine.schemas.infrastructure.feedback_loop import PatternMetrics
-    
+
     return DetectedPattern(
         pattern_id=str(uuid.uuid4()),
         pattern_type=pattern_type,
@@ -369,7 +377,7 @@ def create_detected_pattern(
 def create_system_snapshot() -> SystemSnapshot:
     """Create a system snapshot for testing."""
     from ciris_engine.schemas.runtime.system_context import ChannelContext
-    
+
     return SystemSnapshot(
         channel_id="test_channel",
         channel_context=ChannelContext(

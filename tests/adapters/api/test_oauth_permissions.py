@@ -36,9 +36,10 @@ async def test_runtime(random_api_port, mock_runtime_db_setup):
         config = EssentialConfig()
         config.services.llm_endpoint = "mock://localhost"
         config.services.llm_model = "mock"
-        
+
         # Use the randomized API port to avoid conflicts
         import os
+
         os.environ["CIRIS_API_PORT"] = str(random_api_port)
 
         runtime = CIRISRuntime(
@@ -78,7 +79,7 @@ def oauth_test_app(test_runtime):
     return app
 
 
-@pytest.fixture  
+@pytest.fixture
 async def oauth_client(oauth_test_app):
     """Create async test client."""
     transport = ASGITransport(app=oauth_test_app)

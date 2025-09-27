@@ -266,7 +266,7 @@ def _update_uptime(overview: SystemOverview, time_service):
     """Update overview with system uptime."""
     if not time_service:
         return
-        
+
     try:
         uptime = time_service.get_uptime()
         overview.uptime_seconds = uptime
@@ -287,7 +287,7 @@ def _update_resource_usage(overview: SystemOverview, resource_monitor):
     """Update overview with resource usage metrics."""
     if not resource_monitor:
         return
-        
+
     try:
         # Access the snapshot directly
         if hasattr(resource_monitor, "snapshot"):
@@ -302,12 +302,25 @@ def _update_resource_usage(overview: SystemOverview, resource_monitor):
 def _get_service_health_counts(request: Request) -> tuple[int, int]:
     """Count healthy and degraded services."""
     services = [
-        "memory_service", "llm_service", "audit_service", "telemetry_service",
-        "config_service", "visibility_service", "time_service", "secrets_service",
-        "resource_monitor", "authentication_service", "wise_authority", 
-        "incident_management_service", "tsdb_consolidation_service",
-        "self_observation_service", "adaptive_filter_service", "task_scheduler",
-        "initialization_service", "shutdown_service", "runtime_control",
+        "memory_service",
+        "llm_service",
+        "audit_service",
+        "telemetry_service",
+        "config_service",
+        "visibility_service",
+        "time_service",
+        "secrets_service",
+        "resource_monitor",
+        "authentication_service",
+        "wise_authority",
+        "incident_management_service",
+        "tsdb_consolidation_service",
+        "self_observation_service",
+        "adaptive_filter_service",
+        "task_scheduler",
+        "initialization_service",
+        "shutdown_service",
+        "runtime_control",
     ]
 
     healthy = 0
@@ -317,7 +330,7 @@ def _get_service_health_counts(request: Request) -> tuple[int, int]:
             healthy += 1
         else:
             degraded += 1
-            
+
     return healthy, degraded
 
 
@@ -325,7 +338,7 @@ async def _update_incident_count(overview: SystemOverview, incident_service):
     """Update overview with recent incident count."""
     if not incident_service:
         return
-        
+
     try:
         # Get count of incidents from the last hour
         overview.recent_incidents = await incident_service.get_incident_count(hours=1)
@@ -339,7 +352,7 @@ async def _update_deferral_count(overview: SystemOverview, wise_authority):
     """Update overview with active deferral count."""
     if not wise_authority:
         return
-        
+
     try:
         deferrals = await wise_authority.get_pending_deferrals()
         overview.active_deferrals = len(deferrals) if deferrals else 0
@@ -353,7 +366,7 @@ async def _update_metrics_count(overview: SystemOverview, telemetry_service, hea
     """Update overview with telemetry metrics count."""
     if not telemetry_service:
         return
-        
+
     try:
         # Count total metrics collected
         if hasattr(telemetry_service, "get_metric_count"):
@@ -380,21 +393,19 @@ async def _estimate_metrics_count(telemetry_service) -> int:
         "handler_invoked_total",  # Total handler invocations
         "action_selected_memorize",  # Memory operations
     ]
-    
+
     total = 0
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
-    
+
     for metric in metric_names:
         try:
-            data = await telemetry_service.query_metrics(
-                metric_name=metric, start_time=day_ago, end_time=now
-            )
+            data = await telemetry_service.query_metrics(metric_name=metric, start_time=day_ago, end_time=now)
             if data:
                 total += len(data)
         except (AttributeError, TypeError, ValueError, RuntimeError) as e:
             logger.debug(f"Failed to query metric '{metric}': {type(e).__name__}: {str(e)}")
-            
+
     return total
 
 
@@ -420,12 +431,12 @@ async def _get_system_overview(request: Request) -> SystemOverview:
     _update_cognitive_state(overview, request)
     await _update_visibility_state(overview, visibility_service)
     _update_resource_usage(overview, resource_monitor)
-    
+
     # Update service health counts
     healthy, degraded = _get_service_health_counts(request)
     overview.healthy_services = healthy
     overview.degraded_services = degraded
-    
+
     # Update incident and deferral counts
     await _update_incident_count(overview, incident_service)
     await _update_deferral_count(overview, wise_authority)
@@ -467,30 +478,16 @@ async def _export_otlp_metrics(telemetry_service):
 def _extract_basic_trace_fields(correlation):
     """Extract basic trace fields from correlation object."""
     return {
-        "trace_id": (
-            correlation.trace_context.trace_id
-            if correlation.trace_context
-            else correlation.correlation_id
-        ),
-        "span_id": (
-            correlation.trace_context.span_id if correlation.trace_context else str(uuid.uuid4())
-        ),
-        "parent_span_id": (
-            correlation.trace_context.parent_span_id if correlation.trace_context else None
-        ),
+        "trace_id": (correlation.trace_context.trace_id if correlation.trace_context else correlation.correlation_id),
+        "span_id": (correlation.trace_context.span_id if correlation.trace_context else str(uuid.uuid4())),
+        "parent_span_id": (correlation.trace_context.parent_span_id if correlation.trace_context else None),
         "timestamp": (
-            correlation.timestamp.isoformat()
-            if correlation.timestamp
-            else datetime.now(timezone.utc).isoformat()
+            correlation.timestamp.isoformat() if correlation.timestamp else datetime.now(timezone.utc).isoformat()
         ),
         "operation": correlation.action_type or "unknown",
         "service": correlation.service_type,
         "handler": correlation.handler_name,
-        "status": (
-            correlation.status.value
-            if hasattr(correlation.status, "value")
-            else str(correlation.status)
-        ),
+        "status": (correlation.status.value if hasattr(correlation.status, "value") else str(correlation.status)),
     }
 
 
@@ -498,7 +495,7 @@ def _extract_request_data_fields(correlation, trace_data):
     """Extract task/thought linkage from request data."""
     if not correlation.request_data:
         return
-        
+
     if hasattr(correlation.request_data, "task_id") and correlation.request_data.task_id:
         trace_data["task_id"] = correlation.request_data.task_id
     if hasattr(correlation.request_data, "thought_id") and correlation.request_data.thought_id:
@@ -509,7 +506,7 @@ def _extract_response_data_fields(correlation, trace_data):
     """Extract performance data from response data."""
     if not correlation.response_data:
         return
-        
+
     if hasattr(correlation.response_data, "execution_time_ms"):
         trace_data["duration_ms"] = correlation.response_data.execution_time_ms
     if hasattr(correlation.response_data, "success"):
@@ -522,16 +519,14 @@ def _extract_span_attributes(correlation, trace_data):
     """Extract span attributes from trace context."""
     if not correlation.trace_context:
         return
-        
+
     trace_data["span_name"] = (
         correlation.trace_context.span_name
         if hasattr(correlation.trace_context, "span_name")
         else correlation.action_type
     )
     trace_data["span_kind"] = (
-        correlation.trace_context.span_kind
-        if hasattr(correlation.trace_context, "span_kind")
-        else "internal"
+        correlation.trace_context.span_kind if hasattr(correlation.trace_context, "span_kind") else "internal"
     )
 
 
@@ -561,6 +556,7 @@ async def _export_otlp_traces(visibility_service, limit):
     except Exception as e:
         print(f"ERROR in get_otlp_telemetry traces: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
 
     return convert_traces_to_otlp_json(traces)
@@ -849,14 +845,10 @@ def _calculate_trend(values: List[float]) -> str:
     """Calculate trend from a list of values."""
     if len(values) <= 1:
         return "stable"
-        
+
     recent_avg = sum(values[-5:]) / len(values[-5:])
-    older_avg = (
-        sum(values[:-5]) / len(values[:-5])
-        if len(values) > 5
-        else values[0]
-    )
-    
+    older_avg = sum(values[:-5]) / len(values[:-5]) if len(values) > 5 else values[0]
+
     if recent_avg > older_avg * 1.1:
         return "up"
     elif recent_avg < older_avg * 0.9:
@@ -868,23 +860,19 @@ async def _process_metric_data(telemetry_service, metric_name: str, now: datetim
     """Process metric data for a single metric name."""
     if not hasattr(telemetry_service, "query_metrics"):
         return None
-        
+
     day_ago = now - timedelta(hours=24)
     hour_ago = now - timedelta(hours=1)
 
     # Get hourly data
-    hourly_data = await telemetry_service.query_metrics(
-        metric_name=metric_name, start_time=hour_ago, end_time=now
-    )
+    hourly_data = await telemetry_service.query_metrics(metric_name=metric_name, start_time=hour_ago, end_time=now)
 
     # Get daily data
-    daily_data = await telemetry_service.query_metrics(
-        metric_name=metric_name, start_time=day_ago, end_time=now
-    )
+    daily_data = await telemetry_service.query_metrics(metric_name=metric_name, start_time=day_ago, end_time=now)
 
     if not (hourly_data or daily_data):
         return None
-        
+
     # Calculate averages and trends
     hourly_values = [dp.get("value", 0.0) for dp in hourly_data] if hourly_data else [0.0]
     daily_values = [dp.get("value", 0.0) for dp in daily_data] if daily_data else [0.0]
@@ -921,11 +909,11 @@ def _get_legacy_metrics(telemetry_service) -> List[DetailedMetric]:
     metrics = []
     if not (hasattr(telemetry_service, "get_metrics") and not hasattr(telemetry_service, "query_metrics")):
         return metrics
-        
+
     legacy_metrics = telemetry_service.get_metrics()
     if not legacy_metrics:
         return metrics
-        
+
     for metric_name, value in legacy_metrics.items():
         unit = _get_metric_unit(metric_name)
         metrics.append(
@@ -1031,20 +1019,16 @@ async def _get_trace_from_task(task, visibility_service):
     """Extract a reasoning trace from a task via visibility service."""
     if not hasattr(visibility_service, "get_reasoning_trace"):
         return None
-        
+
     trace = await visibility_service.get_reasoning_trace(task.task_id)
     if not trace:
         return None
-        
+
     return ReasoningTraceData(
         trace_id=f"trace_{task.task_id}",
         task_id=task.task_id,
         task_description=task.description,
-        start_time=(
-            datetime.fromisoformat(task.created_at)
-            if isinstance(task.created_at, str)
-            else task.created_at
-        ),
+        start_time=(datetime.fromisoformat(task.created_at) if isinstance(task.created_at, str) else task.created_at),
         duration_ms=0,  # TaskOutcome doesn't have completion timestamp
         thought_count=len(trace.thought_steps),
         decision_count=len(trace.decisions) if hasattr(trace, "decisions") else 0,
@@ -1069,14 +1053,14 @@ async def _get_traces_from_task_history(visibility_service, limit):
     traces = []
     if not hasattr(visibility_service, "get_task_history"):
         return traces
-        
+
     task_history = await visibility_service.get_task_history(limit=limit)
-    
+
     for task in task_history:
         trace_data = await _get_trace_from_task(task, visibility_service)
         if trace_data:
             traces.append(trace_data)
-            
+
     return traces
 
 
@@ -1084,11 +1068,11 @@ async def _get_current_reasoning_trace(visibility_service):
     """Get current reasoning trace via visibility service."""
     if not hasattr(visibility_service, "get_current_reasoning"):
         return None
-        
+
     current = await visibility_service.get_current_reasoning()
     if not current:
         return None
-        
+
     return ReasoningTraceData(
         trace_id="trace_current",
         task_id=current.get("task_id"),
@@ -1098,10 +1082,7 @@ async def _get_current_reasoning_trace(visibility_service):
         thought_count=len(current.get("thoughts", [])),
         decision_count=0,
         reasoning_depth=current.get("depth", 0),
-        thoughts=[
-            _convert_thought_to_api_response(i, t)
-            for i, t in enumerate(current.get("thoughts", []))
-        ],
+        thoughts=[_convert_thought_to_api_response(i, t) for i, t in enumerate(current.get("thoughts", []))],
         outcome=None,
     )
 
@@ -1120,9 +1101,7 @@ def _extract_timestamp_from_thought_data(thought_data):
     if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "timestamp"):
         return thought_data.thought.timestamp
     if isinstance(thought_data, dict):
-        return datetime.fromisoformat(
-            thought_data.get("timestamp", datetime.now(timezone.utc).isoformat())
-        )
+        return datetime.fromisoformat(thought_data.get("timestamp", datetime.now(timezone.utc).isoformat()))
     return datetime.now(timezone.utc)
 
 
@@ -1168,13 +1147,13 @@ def _convert_thought_to_api_response(step_index, thought_data):
 async def _get_traces_from_visibility_service(visibility_service, limit):
     """Get reasoning traces from visibility service."""
     traces = await _get_traces_from_task_history(visibility_service, limit)
-    
+
     # If no task history, try current reasoning
     if not traces:
         current_trace = await _get_current_reasoning_trace(visibility_service)
         if current_trace:
             traces.append(current_trace)
-            
+
     return traces
 
 
@@ -1208,7 +1187,7 @@ async def _get_traces_from_audit_service(audit_service, start_time, end_time, li
         if entries:
             trace_data = _build_trace_from_audit_entries(trace_id, entries)
             traces.append(trace_data)
-            
+
     return traces
 
 
@@ -1216,10 +1195,10 @@ def _build_trace_from_audit_entries(trace_id, entries):
     """Build a ReasoningTraceData from audit entries."""
     # Sort entries by timestamp
     entries.sort(key=lambda e: _parse_timestamp(e.get("timestamp")))
-    
+
     start_timestamp = _parse_timestamp(entries[0].get("timestamp"))
     end_timestamp = _parse_timestamp(entries[-1].get("timestamp"))
-    
+
     return ReasoningTraceData(
         trace_id=f"trace_{trace_id}",
         task_id=trace_id if trace_id != start_timestamp.strftime("%Y%m%d%H%M") else None,
@@ -1228,9 +1207,7 @@ def _build_trace_from_audit_entries(trace_id, entries):
         duration_ms=(end_timestamp - start_timestamp).total_seconds() * 1000,
         thought_count=len(entries),
         decision_count=sum(1 for e in entries if "decision" in e.get("event_type", "").lower()),
-        reasoning_depth=(
-            max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0
-        ),
+        reasoning_depth=(max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0),
         thoughts=[
             APIResponseThoughtStep(
                 step=i,
@@ -1320,7 +1297,9 @@ def _extract_service_name(actor: str) -> str:
     return actor.split(".")[0] if "." in actor else actor
 
 
-def _should_include_log(log_level: str, log_service: str, level_filter: Optional[str], service_filter: Optional[str]) -> bool:
+def _should_include_log(
+    log_level: str, log_service: str, level_filter: Optional[str], service_filter: Optional[str]
+) -> bool:
     """Check if log entry should be included based on filters."""
     if level_filter and log_level != level_filter.upper():
         return False
@@ -1349,8 +1328,12 @@ def _build_log_entry(entry, log_level: str, log_service: str) -> LogEntry:
 
 
 async def _get_logs_from_audit_service(
-    audit_service, start_time: Optional[datetime], end_time: Optional[datetime], 
-    level: Optional[str], service: Optional[str], limit: int
+    audit_service,
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],
+    level: Optional[str],
+    service: Optional[str],
+    limit: int,
 ) -> List[LogEntry]:
     """Get logs from audit service with filtering."""
     logs = []
@@ -1362,7 +1345,7 @@ async def _get_logs_from_audit_service(
         for entry in entries:
             log_level = _determine_log_level(entry.action)
             log_service = _extract_service_name(entry.actor)
-            
+
             if not _should_include_log(log_level, log_service, level, service):
                 continue
 
@@ -1373,17 +1356,21 @@ async def _get_logs_from_audit_service(
                 break
     except Exception:
         pass
-    
+
     return logs
 
 
 async def _get_logs_from_file_reader(
-    level: Optional[str], service: Optional[str], limit: int,
-    start_time: Optional[datetime], end_time: Optional[datetime]
+    level: Optional[str],
+    service: Optional[str],
+    limit: int,
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],
 ) -> List[LogEntry]:
     """Get logs from file reader if available."""
     try:
         from .telemetry_logs_reader import log_reader
+
         return log_reader.read_logs(
             level=level,
             service=service,
@@ -1420,12 +1407,10 @@ async def get_system_logs(
 
     # Get logs from audit service
     logs = await _get_logs_from_audit_service(audit_service, start_time, end_time, level, service, limit)
-    
+
     # Add file logs if we haven't reached the limit
     if len(logs) < limit:
-        file_logs = await _get_logs_from_file_reader(
-            level, service, limit - len(logs), start_time, end_time
-        )
+        file_logs = await _get_logs_from_file_reader(level, service, limit - len(logs), start_time, end_time)
         logs.extend(file_logs)
 
     response = LogsResponse(logs=logs[:limit], total=len(logs), has_more=len(logs) > limit)
@@ -1441,7 +1426,7 @@ async def _query_metrics(telemetry_service, query) -> List[QueryResult]:
     results = []
     if not (telemetry_service and hasattr(telemetry_service, "query_metrics")):
         return results
-        
+
     metric_names = query.filters.metric_names or []
     for metric_name in metric_names:
         data_points = await telemetry_service.query_metrics(
@@ -1468,7 +1453,7 @@ async def _query_traces(visibility_service, query) -> List[QueryResult]:
     results = []
     if not visibility_service:
         return results
-        
+
     trace_limit = query.filters.limit or query.limit
     traces = []
 
@@ -1498,15 +1483,15 @@ def _should_include_log_entry(entry, filters):
     """Check if log entry should be included based on filters."""
     if not filters:
         return True
-        
+
     if filters.services and entry.actor not in filters.services:
         return False
-        
+
     if filters.severity:
         # Infer level from action
         if "error" in entry.action.lower() and filters.severity.upper() != "ERROR":
             return False
-            
+
     return True
 
 
@@ -1515,7 +1500,7 @@ async def _query_logs(audit_service, query) -> List[QueryResult]:
     results = []
     if not audit_service:
         return results
-        
+
     log_entries = await audit_service.query_entries(
         start_time=query.start_time, end_time=query.end_time, limit=query.limit
     )
@@ -1523,7 +1508,7 @@ async def _query_logs(audit_service, query) -> List[QueryResult]:
     for entry in log_entries:
         if not _should_include_log_entry(entry, query.filters):
             continue
-            
+
         results.append(
             QueryResult(
                 id=f"log_{entry.timestamp.timestamp()}_{entry.actor}",
@@ -1545,7 +1530,7 @@ async def _query_incidents(incident_service, query) -> List[QueryResult]:
     results = []
     if not incident_service:
         return results
-        
+
     incidents = await incident_service.query_incidents(
         start_time=query.start_time,
         end_time=query.end_time,
@@ -1576,7 +1561,7 @@ async def _query_insights(incident_service, query) -> List[QueryResult]:
     results = []
     if not (incident_service and hasattr(incident_service, "get_insights")):
         return results
-        
+
     insights = await incident_service.get_insights(
         start_time=query.start_time, end_time=query.end_time, limit=query.limit
     )
@@ -1603,7 +1588,7 @@ def _apply_aggregations(results: List[QueryResult], aggregations: List[str], que
     """Apply aggregations to query results."""
     if not aggregations:
         return results
-        
+
     for agg in aggregations:
         if agg == "count":
             # Return count as a QueryResult
@@ -1665,7 +1650,9 @@ async def _route_query_to_handler(
     return []
 
 
-def _build_query_response(query: TelemetryQuery, results: List[QueryResult], execution_time_ms: float) -> SuccessResponse[QueryResponse]:
+def _build_query_response(
+    query: TelemetryQuery, results: List[QueryResult], execution_time_ms: float
+) -> SuccessResponse[QueryResponse]:
     """Build the final query response."""
     response = QueryResponse(
         query_type=query.query_type,
@@ -1676,9 +1663,7 @@ def _build_query_response(query: TelemetryQuery, results: List[QueryResult], exe
 
     return SuccessResponse(
         data=response,
-        metadata=ResponseMetadata(
-            timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0
-        ),
+        metadata=ResponseMetadata(timestamp=datetime.now(timezone.utc), request_id=str(uuid.uuid4()), duration_ms=0),
     )
 
 
@@ -1699,7 +1684,7 @@ async def query_telemetry(
     visibility_service = request.app.state.visibility_service
     audit_service = request.app.state.audit_service
     incident_service = request.app.state.incident_management_service
-    
+
     _validate_query_services(telemetry_service, visibility_service, audit_service, incident_service)
 
     try:

@@ -976,19 +976,19 @@ class CIRISRuntime:
                 if hasattr(config, "bot_token") and config.bot_token:
                     logger.info(f"    Bot token: ...{config.bot_token[-10:]}")
 
-        # Create a dummy agent task that represents the future agent processor
-        # This allows adapters to start their lifecycle properly
-        self._agent_placeholder = asyncio.Event()
-        agent_placeholder_task = asyncio.create_task(self._agent_placeholder.wait(), name="AgentPlaceholderTask")
+        # Create the real agent task upfront instead of using placeholders
+        # This eliminates race conditions and simplifies the architecture
+        logger.info("Creating agent processor task...")
+        agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
 
-        # Start adapter lifecycles
+        # Start adapter lifecycles with the real agent task
         self._adapter_tasks = []
         for adapter in self.adapters:
             adapter_name = adapter.__class__.__name__
 
             if hasattr(adapter, "run_lifecycle"):
                 lifecycle_task = asyncio.create_task(
-                    adapter.run_lifecycle(agent_placeholder_task), name=f"{adapter_name}LifecycleTask"
+                    adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask"
                 )
                 self._adapter_tasks.append(lifecycle_task)
                 logger.info(f"  → Starting {adapter_name} lifecycle...")
@@ -1053,6 +1053,34 @@ class CIRISRuntime:
         # Final verification with the existing wait method
         await self._wait_for_critical_services(timeout=5.0)
 
+    async def _create_agent_processor_when_ready(self) -> None:
+        """Create and start agent processor once all services are ready.
+
+        This replaces the placeholder task pattern with proper dependency injection.
+        """
+        logger.info("Waiting for services to be ready before starting agent processor...")
+
+        # Wait for all critical services to be available
+        await self._wait_for_critical_services(timeout=30.0)
+
+        # Ensure agent processor is built
+        if not self.agent_processor:
+            raise RuntimeError("Agent processor not initialized - build components first")
+
+        # Start the multi-service sink if available
+        if self.bus_manager:
+            _sink_task = asyncio.create_task(self.bus_manager.start())
+            logger.info("Started multi-service sink as background task")
+
+        # Start agent processing with default rounds
+        effective_num_rounds = DEFAULT_NUM_ROUNDS
+        logger.info(
+            f"Starting agent processor (num_rounds={effective_num_rounds if effective_num_rounds != -1 else 'infinite'})..."
+        )
+
+        # Start the actual agent processing
+        await self.agent_processor.start_processing(effective_num_rounds)
+
     def _register_core_services(self) -> None:
         """Register core services in the service registry."""
         self.service_initializer.register_core_services()
@@ -1099,35 +1127,23 @@ class CIRISRuntime:
             await self.initialize()
 
         try:
-            # Start multi-service sink processing as background task
-            if self.bus_manager:
-                _sink_task = asyncio.create_task(self.bus_manager.start())
-                logger.info("Started multi-service sink as background task")
-
-            if not self.agent_processor:
-                raise RuntimeError("Agent processor not initialized")
-
-            effective_num_rounds = num_rounds if num_rounds is not None else DEFAULT_NUM_ROUNDS
-            logger.info(
-                f"Starting agent processing (num_rounds={effective_num_rounds if effective_num_rounds != -1 else 'infinite'})..."
-            )
-
-            # Services are already initialized and adapters are connected from initialization phase
-            # Now start the agent processor
-            logger.info("Starting agent processor...")
-            agent_task = asyncio.create_task(
-                self.agent_processor.start_processing(effective_num_rounds), name="AgentProcessorTask"
-            )
-
-            # Use existing adapter tasks from initialization
+            # Agent task is already running from initialization, just monitor it
             adapter_tasks = getattr(self, "_adapter_tasks", [])
-            if adapter_tasks:
-                logger.info(f"Using {len(adapter_tasks)} existing adapter lifecycle tasks from initialization")
+            if not adapter_tasks:
+                logger.warning("No adapter tasks found - this may indicate a problem with initialization")
+                return
 
-                # Signal the placeholder to complete, transitioning adapters to monitor the real agent task
-                if hasattr(self, "_agent_placeholder"):
-                    logger.info("Transitioning adapters from placeholder to real agent task...")
-                    self._agent_placeholder.set()
+            logger.info(f"Monitoring {len(adapter_tasks)} adapter lifecycle tasks...")
+
+            # Find the agent task that was created during initialization
+            agent_task = None
+            for task in asyncio.all_tasks():
+                if task.get_name() == "AgentProcessorTask":
+                    agent_task = task
+                    break
+
+            if not agent_task:
+                raise RuntimeError("Agent processor task not found - initialization may have failed")
 
             # Monitor agent_task, all adapter_tasks, and shutdown events
             self._ensure_shutdown_event()

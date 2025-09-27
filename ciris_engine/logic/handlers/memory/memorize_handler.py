@@ -203,10 +203,10 @@ class MemorizeHandler(BaseActionHandler):
         if node.type == NodeType.CONFIG and scope == GraphScope.LOCAL:
             # CONFIG nodes need special structure for the config service
             # Extract key and value from node attributes or id
-            
+
             # Try to parse key from node id (e.g., "filter/caps_threshold" -> "filter.caps_threshold")
             config_key = node.id.replace("/", ".")
-            
+
             # Check if attributes contain the required data
             node_attrs = node.attributes if hasattr(node, "attributes") else {}
             if isinstance(node_attrs, dict):
@@ -214,7 +214,7 @@ class MemorizeHandler(BaseActionHandler):
             else:
                 # For non-dict attributes, try to extract value
                 config_value = getattr(node_attrs, "value", None) if node_attrs else None
-            
+
             # Validate we have the minimum required data
             if config_value is None:
                 # Provide detailed error message with examples
@@ -237,20 +237,20 @@ class MemorizeHandler(BaseActionHandler):
                     "Note: The mock LLM currently only supports simple node creation. "
                     "For actual configuration updates, you may need to use the config service directly."
                 )
-                
+
                 logger.warning(f"CONFIG node missing value: key={config_key}")
-                
+
                 return self.complete_thought_and_create_followup(
                     thought=thought,
                     follow_up_content=error_msg,
                     action_result=result,
                     status=ThoughtStatus.FAILED,
                 )
-            
+
             # Try to create a proper ConfigNode
             try:
                 from ciris_engine.schemas.services.nodes import ConfigNode, ConfigValue
-                
+
                 # Determine value type and create ConfigValue
                 config_val = ConfigValue()
                 if isinstance(config_value, bool):
@@ -266,7 +266,7 @@ class MemorizeHandler(BaseActionHandler):
                 else:
                     # Default to string
                     config_val.string_value = str(config_value)
-                
+
                 # Create ConfigNode with proper structure
                 config_node = ConfigNode(
                     id=node.id,  # Use the original node id
@@ -278,12 +278,12 @@ class MemorizeHandler(BaseActionHandler):
                     version=1,  # Start at version 1
                     updated_by="agent",  # Default to agent
                 )
-                
+
                 # Convert to GraphNode for storage
                 node = config_node.to_graph_node()
-                
+
                 logger.info(f"Created proper ConfigNode for key={config_key}, value={config_value}")
-                
+
             except Exception as e:
                 # Provide detailed error about what went wrong
                 error_msg = (
@@ -296,9 +296,9 @@ class MemorizeHandler(BaseActionHandler):
                     f"Attempted to set: key='{config_key}', value='{config_value}' (type: {type(config_value).__name__})\n\n"
                     "Please ensure your value is properly formatted and try again."
                 )
-                
+
                 logger.error(f"Failed to create ConfigNode: {e}")
-                
+
                 return self.complete_thought_and_create_followup(
                     thought=thought,
                     follow_up_content=error_msg,

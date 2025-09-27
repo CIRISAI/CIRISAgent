@@ -10,7 +10,7 @@ import shutil
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.config.essential import EssentialConfig
@@ -73,40 +73,40 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
         DatabaseAccessError: If database is already in use by another agent
     """
     db_path_obj = Path(db_path)
-    
+
     # Create database parent directory if needed
     db_path_obj.parent.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         # Quick connectivity test with minimal timeout
         # Using timeout=0.1 to fail fast if database is locked
         conn = sqlite3.connect(db_path, timeout=0.1)
-        
+
         # Enable WAL mode for better concurrency detection
         conn.execute("PRAGMA journal_mode=WAL")
-        
+
         # Attempt exclusive lock - this will fail immediately if another agent is running
         conn.execute("BEGIN IMMEDIATE")  # Exclusive lock attempt
         conn.rollback()  # Release the lock immediately
         conn.close()
-        
+
         print(f"✓ Database exclusive access confirmed: {db_path}")
-        
+
     except sqlite3.OperationalError as e:
         error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
         print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
         print(f"  SQLite Error: {e}", file=sys.stderr)
         print(f"  Only one CIRIS agent can run per database file", file=sys.stderr)
         print(f"  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
-        
+
         if fail_fast:
             sys.exit(1)
         raise DatabaseAccessError(error_msg)
-        
+
     except Exception as e:
         error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
         print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        
+
         if fail_fast:
             sys.exit(1)
         raise DatabaseAccessError(error_msg)
@@ -252,6 +252,7 @@ def setup_application_directories(
             # Try to get config from service registry
             try:
                 from ciris_engine.logic.config import get_sqlite_db_full_path
+
                 main_db_path = get_sqlite_db_full_path()
                 ensure_database_exclusive_access(main_db_path, fail_fast)
             except (ImportError, RuntimeError):

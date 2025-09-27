@@ -14,7 +14,7 @@ class ComprehensiveAPITestModule:
     def get_extended_system_tests() -> List[QATestCase]:
         """Get extended system management tests."""
         return [
-            # Processor state tests  
+            # Processor state tests
             QATestCase(
                 name="Get processor states",
                 module=QAModule.SYSTEM,

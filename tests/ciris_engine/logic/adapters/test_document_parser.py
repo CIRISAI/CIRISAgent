@@ -3,8 +3,8 @@
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any, List
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,13 +14,7 @@ from ciris_engine.logic.adapters.document_parser import DocumentParser
 class MockAttachment:
     """Mock attachment for testing."""
 
-    def __init__(
-        self,
-        filename: str,
-        size: int,
-        content_type: str,
-        url: str = "https://example.com/file"
-    ):
+    def __init__(self, filename: str, size: int, content_type: str, url: str = "https://example.com/file"):
         if filename is not None:
             self.filename = filename
         if size is not None:
@@ -43,7 +37,7 @@ class TestDocumentParserInitialization:
 
     def test_init_with_no_dependencies(self):
         """Test initialization when dependencies are missing."""
-        with patch('builtins.__import__', side_effect=ImportError):
+        with patch("builtins.__import__", side_effect=ImportError):
             parser = DocumentParser()
             assert parser._pdf_available is False
             assert parser._docx_available is False
@@ -51,12 +45,13 @@ class TestDocumentParserInitialization:
 
     def test_init_with_partial_dependencies(self):
         """Test initialization with only PDF support."""
+
         def mock_import(module_name, *args, **kwargs):
-            if module_name == 'docx2txt':
+            if module_name == "docx2txt":
                 raise ImportError("docx2txt not available")
             return MagicMock()
 
-        with patch('builtins.__import__', side_effect=mock_import):
+        with patch("builtins.__import__", side_effect=mock_import):
             parser = DocumentParser()
             assert parser._pdf_available is True
             assert parser._docx_available is False
@@ -69,8 +64,8 @@ class TestDocumentParserInitialization:
         assert parser.MAX_ATTACHMENTS == 3
         assert parser.PROCESSING_TIMEOUT == 30.0
         assert parser.MAX_TEXT_LENGTH == 50000
-        assert '.pdf' in parser.ALLOWED_EXTENSIONS
-        assert '.docx' in parser.ALLOWED_EXTENSIONS
+        assert ".pdf" in parser.ALLOWED_EXTENSIONS
+        assert ".docx" in parser.ALLOWED_EXTENSIONS
         assert len(parser.ALLOWED_EXTENSIONS) == 2  # Only these two
 
     def test_get_status(self):
@@ -79,18 +74,18 @@ class TestDocumentParserInitialization:
         status = parser.get_status()
 
         assert isinstance(status, dict)
-        assert 'available' in status
-        assert 'pdf_support' in status
-        assert 'docx_support' in status
-        assert 'max_file_size_mb' in status
-        assert 'max_attachments' in status
-        assert 'processing_timeout_sec' in status
-        assert 'allowed_extensions' in status
+        assert "available" in status
+        assert "pdf_support" in status
+        assert "docx_support" in status
+        assert "max_file_size_mb" in status
+        assert "max_attachments" in status
+        assert "processing_timeout_sec" in status
+        assert "allowed_extensions" in status
 
-        assert status['max_file_size_mb'] == 1.0
-        assert status['max_attachments'] == 3
-        assert status['processing_timeout_sec'] == 30.0
-        assert isinstance(status['allowed_extensions'], list)
+        assert status["max_file_size_mb"] == 1.0
+        assert status["max_attachments"] == 3
+        assert status["processing_timeout_sec"] == 30.0
+        assert isinstance(status["allowed_extensions"], list)
 
 
 class TestAttachmentFiltering:
@@ -108,9 +103,7 @@ class TestAttachmentFiltering:
     def test_valid_docx_attachment(self):
         """Test valid DOCX attachment passes filtering."""
         attachment = MockAttachment(
-            "test.docx",
-            800000,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "test.docx", 800000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         assert self.parser._is_document_attachment(attachment) is True
 
@@ -175,7 +168,9 @@ class TestAttachmentFiltering:
         parser._docx_available = False
 
         pdf_attachment = MockAttachment("test.pdf", 1000, "application/pdf")
-        docx_attachment = MockAttachment("test.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        docx_attachment = MockAttachment(
+            "test.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
 
         assert parser._is_document_attachment(pdf_attachment) is False
         assert parser._is_document_attachment(docx_attachment) is False
@@ -187,7 +182,9 @@ class TestAttachmentFiltering:
         parser._docx_available = False
 
         pdf_attachment = MockAttachment("test.pdf", 1000, "application/pdf")
-        docx_attachment = MockAttachment("test.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        docx_attachment = MockAttachment(
+            "test.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
 
         assert parser._is_document_attachment(pdf_attachment) is True
         assert parser._is_document_attachment(docx_attachment) is False
@@ -231,11 +228,10 @@ class TestDocumentProcessing:
     async def test_process_attachments_too_many(self):
         """Test processing more than max allowed attachments."""
         attachments = [
-            MockAttachment(f"test{i}.pdf", 1000, "application/pdf")
-            for i in range(5)  # More than MAX_ATTACHMENTS (3)
+            MockAttachment(f"test{i}.pdf", 1000, "application/pdf") for i in range(5)  # More than MAX_ATTACHMENTS (3)
         ]
 
-        with patch.object(self.parser, '_process_single_document') as mock_process:
+        with patch.object(self.parser, "_process_single_document") as mock_process:
             mock_process.return_value = "Test content"
             result = await self.parser.process_attachments(attachments)
 
@@ -247,10 +243,12 @@ class TestDocumentProcessing:
         """Test successful processing of multiple attachments."""
         attachments = [
             MockAttachment("doc1.pdf", 1000, "application/pdf"),
-            MockAttachment("doc2.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            MockAttachment(
+                "doc2.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
         ]
 
-        with patch.object(self.parser, '_process_single_document') as mock_process:
+        with patch.object(self.parser, "_process_single_document") as mock_process:
             mock_process.side_effect = ["PDF content", "DOCX content"]
             result = await self.parser.process_attachments(attachments)
 
@@ -272,7 +270,7 @@ class TestDocumentProcessing:
                 raise Exception("Processing failed")
             return "Good content"
 
-        with patch.object(self.parser, '_process_single_document', side_effect=mock_process):
+        with patch.object(self.parser, "_process_single_document", side_effect=mock_process):
             result = await self.parser.process_attachments(attachments)
 
             assert result is not None
@@ -287,18 +285,17 @@ class TestDocumentProcessing:
         # Create text longer than MAX_TEXT_LENGTH
         long_text = "x" * (self.parser.MAX_TEXT_LENGTH + 1000)
 
-        with patch.object(self.parser, '_process_single_document', return_value=long_text):
+        with patch.object(self.parser, "_process_single_document", return_value=long_text):
             result = await self.parser.process_attachments(attachments)
 
             assert result is not None
             assert len(result) <= self.parser.MAX_TEXT_LENGTH + 100  # Account for metadata
             assert "[Text truncated due to length limit]" in result
 
-
     @pytest.mark.asyncio
     async def test_download_file_http_error(self):
         """Test download with HTTP error."""
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch("aiohttp.ClientSession") as mock_session:
             mock_response = AsyncMock()
             mock_response.status = 404
 
@@ -310,10 +307,10 @@ class TestDocumentProcessing:
     @pytest.mark.asyncio
     async def test_download_file_too_large(self):
         """Test download rejection for oversized content."""
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch("aiohttp.ClientSession") as mock_session:
             mock_response = AsyncMock()
             mock_response.status = 200
-            mock_response.headers = {'content-length': str(2 * 1024 * 1024)}  # 2MB
+            mock_response.headers = {"content-length": str(2 * 1024 * 1024)}  # 2MB
 
             mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
 
@@ -327,7 +324,7 @@ class TestDocumentProcessing:
         large_chunk = b"x" * (1024 * 1024)  # 1MB chunks
         chunks = [large_chunk, large_chunk]  # 2MB total
 
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch("aiohttp.ClientSession") as mock_session:
             mock_response = AsyncMock()
             mock_response.status = 200
             mock_response.headers = {}  # No content-length header
@@ -341,7 +338,7 @@ class TestDocumentProcessing:
     @pytest.mark.asyncio
     async def test_download_file_exception(self):
         """Test download with network exception."""
-        with patch('aiohttp.ClientSession', side_effect=Exception("Network error")):
+        with patch("aiohttp.ClientSession", side_effect=Exception("Network error")):
             result = await self.parser._download_file("https://example.com/file.pdf")
             assert result is None
 
@@ -360,7 +357,7 @@ class TestTextExtraction:
 
     def test_extract_text_sync_exception(self):
         """Test extraction with processing exception."""
-        with patch.object(self.parser, '_extract_pdf_text', side_effect=Exception("Test error")):
+        with patch.object(self.parser, "_extract_pdf_text", side_effect=Exception("Test error")):
             result = self.parser._extract_text_sync(b"test data", ".pdf")
             assert "Extraction error: Test error" in result
 
@@ -382,14 +379,14 @@ class TestTextExtraction:
 
     def test_extract_pdf_text_too_many_pages(self):
         """Test PDF extraction with too many pages."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_pypdf = MagicMock()
             mock_reader = MagicMock()
             mock_reader.pages = [MagicMock()] * 60  # More than 50 pages
             mock_pypdf.PdfReader.return_value = mock_reader
 
             def side_effect(name, *args, **kwargs):
-                if name == 'pypdf':
+                if name == "pypdf":
                     return mock_pypdf
                 return MagicMock()
 
@@ -400,7 +397,7 @@ class TestTextExtraction:
 
     def test_extract_pdf_text_success(self):
         """Test successful PDF text extraction."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_pypdf = MagicMock()
 
             # Mock PDF with pages containing text
@@ -414,7 +411,7 @@ class TestTextExtraction:
             mock_pypdf.PdfReader.return_value = mock_reader
 
             def side_effect(name, *args, **kwargs):
-                if name == 'pypdf':
+                if name == "pypdf":
                     return mock_pypdf
                 return MagicMock()
 
@@ -426,7 +423,7 @@ class TestTextExtraction:
 
     def test_extract_pdf_text_with_page_errors(self):
         """Test PDF extraction with some page errors."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_pypdf = MagicMock()
 
             # Mock PDF with one good page and one error page
@@ -440,7 +437,7 @@ class TestTextExtraction:
             mock_pypdf.PdfReader.return_value = mock_reader
 
             def side_effect(name, *args, **kwargs):
-                if name == 'pypdf':
+                if name == "pypdf":
                     return mock_pypdf
                 return MagicMock()
 
@@ -452,7 +449,7 @@ class TestTextExtraction:
 
     def test_extract_pdf_text_no_text(self):
         """Test PDF extraction with no text content."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_pypdf = MagicMock()
 
             # Mock PDF with empty pages
@@ -464,7 +461,7 @@ class TestTextExtraction:
             mock_pypdf.PdfReader.return_value = mock_reader
 
             def side_effect(name, *args, **kwargs):
-                if name == 'pypdf':
+                if name == "pypdf":
                     return mock_pypdf
                 return MagicMock()
 
@@ -475,12 +472,12 @@ class TestTextExtraction:
 
     def test_extract_docx_text_success(self):
         """Test successful DOCX text extraction."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_docx2txt = MagicMock()
             mock_docx2txt.process.return_value = "DOCX content here"
 
             def side_effect(name, *args, **kwargs):
-                if name == 'docx2txt':
+                if name == "docx2txt":
                     return mock_docx2txt
                 return MagicMock()
 
@@ -491,12 +488,12 @@ class TestTextExtraction:
 
     def test_extract_docx_text_empty(self):
         """Test DOCX extraction with empty content."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_docx2txt = MagicMock()
             mock_docx2txt.process.return_value = "   "  # Whitespace only
 
             def side_effect(name, *args, **kwargs):
-                if name == 'docx2txt':
+                if name == "docx2txt":
                     return mock_docx2txt
                 return MagicMock()
 
@@ -507,12 +504,12 @@ class TestTextExtraction:
 
     def test_extract_docx_text_exception(self):
         """Test DOCX extraction with processing error."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_docx2txt = MagicMock()
             mock_docx2txt.process.side_effect = Exception("DOCX error")
 
             def side_effect(name, *args, **kwargs):
-                if name == 'docx2txt':
+                if name == "docx2txt":
                     return mock_docx2txt
                 return MagicMock()
 
@@ -534,8 +531,8 @@ class TestAsyncProcessing:
         """Test processing timeout."""
         attachment = MockAttachment("test.pdf", 1000, "application/pdf")
 
-        with patch.object(self.parser, '_download_file', return_value=b"test data"):
-            with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError):
+        with patch.object(self.parser, "_download_file", return_value=b"test data"):
+            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
                 result = await self.parser._process_single_document(attachment)
                 assert "Processing timeout - file too complex or large" in result
 
@@ -563,7 +560,7 @@ class TestAsyncProcessing:
         """Test processing with download failure."""
         attachment = MockAttachment("test.pdf", 1000, "application/pdf")
 
-        with patch.object(self.parser, '_download_file', return_value=None):
+        with patch.object(self.parser, "_download_file", return_value=None):
             result = await self.parser._process_single_document(attachment)
             assert result == "Failed to download file"
 
@@ -572,8 +569,8 @@ class TestAsyncProcessing:
         """Test processing with extraction exception."""
         attachment = MockAttachment("test.pdf", 1000, "application/pdf")
 
-        with patch.object(self.parser, '_download_file', return_value=b"test data"):
-            with patch.object(self.parser, '_extract_text_sync', side_effect=Exception("Extraction failed")):
+        with patch.object(self.parser, "_download_file", return_value=b"test data"):
+            with patch.object(self.parser, "_extract_text_sync", side_effect=Exception("Extraction failed")):
                 result = await self.parser._process_single_document(attachment)
                 assert "Error: Extraction failed" in result
 
@@ -584,7 +581,6 @@ class TestEdgeCasesAndCoverage:
     def setup_method(self):
         """Set up test fixtures."""
         self.parser = DocumentParser()
-
 
     def test_is_document_attachment_edge_cases(self):
         """Test edge cases in attachment filtering."""
@@ -603,14 +599,15 @@ class TestEdgeCasesAndCoverage:
 
     def test_extract_pdf_text_file_operations(self):
         """Test PDF extraction file operation edge cases."""
-        with patch('builtins.__import__') as mock_import, \
-             patch('builtins.open', side_effect=IOError("File error")):
+        with patch("builtins.__import__") as mock_import, patch("builtins.open", side_effect=IOError("File error")):
 
             mock_pypdf = MagicMock()
+
             def side_effect(name, *args, **kwargs):
-                if name == 'pypdf':
+                if name == "pypdf":
                     return mock_pypdf
                 return MagicMock()
+
             mock_import.side_effect = side_effect
 
             result = self.parser._extract_pdf_text(b"test data")
@@ -618,14 +615,17 @@ class TestEdgeCasesAndCoverage:
 
     def test_extract_docx_text_file_operations(self):
         """Test DOCX extraction file operation edge cases."""
-        with patch('builtins.__import__') as mock_import, \
-             patch('tempfile.NamedTemporaryFile', side_effect=IOError("Temp file error")):
+        with patch("builtins.__import__") as mock_import, patch(
+            "tempfile.NamedTemporaryFile", side_effect=IOError("Temp file error")
+        ):
 
             mock_docx2txt = MagicMock()
+
             def side_effect(name, *args, **kwargs):
-                if name == 'docx2txt':
+                if name == "docx2txt":
                     return mock_docx2txt
                 return MagicMock()
+
             mock_import.side_effect = side_effect
 
             result = self.parser._extract_docx_text(b"test data")
@@ -633,12 +633,12 @@ class TestEdgeCasesAndCoverage:
 
     def test_extract_docx_text_none_return(self):
         """Test DOCX extraction returning None."""
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
             mock_docx2txt = MagicMock()
             mock_docx2txt.process.return_value = None
 
             def side_effect(name, *args, **kwargs):
-                if name == 'docx2txt':
+                if name == "docx2txt":
                     return mock_docx2txt
                 return MagicMock()
 
@@ -652,8 +652,9 @@ class TestEdgeCasesAndCoverage:
         """Test complete successful document processing flow."""
         attachment = MockAttachment("test.pdf", 1000, "application/pdf")
 
-        with patch.object(self.parser, '_download_file', return_value=b"pdf data") as mock_download, \
-             patch.object(self.parser, '_extract_text_sync', return_value="Extracted text") as mock_extract:
+        with patch.object(self.parser, "_download_file", return_value=b"pdf data") as mock_download, patch.object(
+            self.parser, "_extract_text_sync", return_value="Extracted text"
+        ) as mock_extract:
 
             result = await self.parser._process_single_document(attachment)
             assert result == "Extracted text"
@@ -665,10 +666,12 @@ class TestEdgeCasesAndCoverage:
         """Test processing where all documents fail to extract text."""
         attachments = [
             MockAttachment("fail1.pdf", 1000, "application/pdf"),
-            MockAttachment("fail2.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            MockAttachment(
+                "fail2.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
         ]
 
-        with patch.object(self.parser, '_process_single_document', return_value=None):
+        with patch.object(self.parser, "_process_single_document", return_value=None):
             result = await self.parser.process_attachments(attachments)
             # Should return None since no text was extracted
             assert result is None
@@ -681,14 +684,10 @@ class TestEdgeCasesAndCoverage:
 
         # Test DOCX content type
         attachment2 = MockAttachment(
-            "test.docx",
-            1000,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "test.docx", 1000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         assert self.parser._is_document_attachment(attachment2) is True
 
         # Test wrong content type for PDF
         attachment3 = MockAttachment("test.pdf", 1000, "application/msword")
         assert self.parser._is_document_attachment(attachment3) is False
-
-

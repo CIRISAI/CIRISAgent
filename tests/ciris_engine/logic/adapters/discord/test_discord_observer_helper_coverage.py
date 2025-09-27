@@ -10,9 +10,10 @@ Targets helper functions extracted from high-complexity methods:
 - _process_document_attachments
 """
 
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
 import discord
+import pytest
 
 from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver
 
@@ -29,8 +30,7 @@ class TestDiscordObserverHelperCoverage:
         self.mock_document_parser._is_document_attachment.return_value = True
 
         self.observer = DiscordObserver(
-            filter_service=self.mock_filter_service,
-            communication_service=self.mock_communication_service
+            filter_service=self.mock_filter_service, communication_service=self.mock_communication_service
         )
         self.observer._document_parser = self.mock_document_parser
 
@@ -204,12 +204,7 @@ class TestDiscordObserverHelperCoverage:
         mock_message.embeds = [Mock(), Mock()]  # 2 embeds
 
         messages_to_process = [("reply", mock_message)]
-        result = {
-            "images": [],
-            "documents": [],
-            "embeds": [],
-            "reply_context": None
-        }
+        result = {"images": [], "documents": [], "embeds": [], "reply_context": None}
 
         # Mock helper methods - make sure only the doc attachment is treated as document
         def mock_is_image(attachment):
@@ -231,12 +226,7 @@ class TestDiscordObserverHelperCoverage:
     def test_process_message_attachments_skip_none_message(self):
         """Test _process_message_attachments skips None messages."""
         messages_to_process = [("reply", None), ("original", None)]
-        result = {
-            "images": [],
-            "documents": [],
-            "embeds": [],
-            "reply_context": None
-        }
+        result = {"images": [], "documents": [], "embeds": [], "reply_context": None}
 
         self.observer._process_message_attachments(messages_to_process, result)
 
@@ -255,16 +245,8 @@ class TestDiscordObserverHelperCoverage:
         mock_original_message.attachments = []
         mock_original_message.embeds = [Mock(), Mock()]  # Should be ignored
 
-        messages_to_process = [
-            ("reply", mock_reply_message),
-            ("original", mock_original_message)
-        ]
-        result = {
-            "images": [],
-            "documents": [],
-            "embeds": [],
-            "reply_context": None
-        }
+        messages_to_process = [("reply", mock_reply_message), ("original", mock_original_message)]
+        result = {"images": [], "documents": [], "embeds": [], "reply_context": None}
 
         self.observer._process_message_attachments(messages_to_process, result)
 
@@ -414,10 +396,7 @@ class TestDiscordObserverHelperIntegration:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.observer = DiscordObserver(
-            filter_service=Mock(),
-            communication_service=Mock()
-        )
+        self.observer = DiscordObserver(filter_service=Mock(), communication_service=Mock())
         self.observer._document_parser = Mock()
         self.observer._document_parser.is_available.return_value = True
         self.observer._document_parser._is_document_attachment.return_value = True

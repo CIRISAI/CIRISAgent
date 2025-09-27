@@ -74,7 +74,7 @@ class CircuitBreakerStatus(BaseModel):
 
 class TraceContext(BaseModel):
     """OTLP-compatible trace context for step correlation."""
-    
+
     trace_id: str = Field(..., description="Unique trace identifier")
     span_id: str = Field(..., description="Unique span identifier")
     parent_span_id: Optional[str] = Field(None, description="Parent span identifier")
@@ -88,7 +88,7 @@ class TraceContext(BaseModel):
 
 class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
-    
+
     key: str = Field(..., description="Attribute key")
     value: Dict[str, Any] = Field(..., description="Attribute value in OTLP format")
 

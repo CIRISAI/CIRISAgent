@@ -158,7 +158,9 @@ class TestActionSelectionPDMAEvaluator:
             }
         )
 
-        pdma_result = EthicalDMAResult(decision="approve", reasoning="OK", alignment_check="Basic ethical approval without detailed analysis.")
+        pdma_result = EthicalDMAResult(
+            decision="approve", reasoning="OK", alignment_check="Basic ethical approval without detailed analysis."
+        )
 
         # Need a valid CSDMA result even for this test
         csdma_result = CSDMAResult(plausibility_score=0.5, flags=[], reasoning="Test")

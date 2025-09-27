@@ -9,15 +9,21 @@ import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
 
 import pytest
 from pydantic import ValidationError
 
 from ciris_engine.config.pricing_models import (
-    PricingConfig, ProviderConfig, ModelConfig, PricingMetadata,
-    EnvironmentalFactors, EnergyEstimates, CarbonIntensity, FallbackPricing,
-    get_pricing_config
+    CarbonIntensity,
+    EnergyEstimates,
+    EnvironmentalFactors,
+    FallbackPricing,
+    ModelConfig,
+    PricingConfig,
+    PricingMetadata,
+    ProviderConfig,
+    get_pricing_config,
 )
 
 
@@ -33,7 +39,7 @@ class TestModelConfig:
             active=True,
             deprecated=False,
             effective_date="2024-07-18",
-            description="Test model"
+            description="Test model",
         )
 
         assert config.input_cost == 15.0
@@ -55,10 +61,7 @@ class TestModelConfig:
             deprecated=False,
             effective_date="2024-09-01",
             description="Llama model",
-            provider_specific={
-                "precision": "fp8",
-                "optimization": "inference"
-            }
+            provider_specific={"precision": "fp8", "optimization": "inference"},
         )
 
         assert config.provider_specific["precision"] == "fp8"
@@ -73,7 +76,7 @@ class TestModelConfig:
                 context_window=128000,
                 active=True,
                 deprecated=False,
-                effective_date="2024-07-18"
+                effective_date="2024-07-18",
             )
 
         assert "greater than or equal to 0" in str(exc_info.value)
@@ -87,7 +90,7 @@ class TestModelConfig:
                 context_window=0,
                 active=True,
                 deprecated=False,
-                effective_date="2024-07-18"
+                effective_date="2024-07-18",
             )
 
         assert "greater than 0" in str(exc_info.value)
@@ -101,7 +104,7 @@ class TestModelConfig:
                 context_window=128000,
                 active=True,
                 deprecated=False,
-                effective_date="2024/07/18"  # Wrong format
+                effective_date="2024/07/18",  # Wrong format
             )
 
         assert "Date must be in YYYY-MM-DD format" in str(exc_info.value)
@@ -117,7 +120,7 @@ class TestModelConfig:
                 context_window=128000,
                 active=True,
                 deprecated=False,
-                effective_date=date
+                effective_date=date,
             )
             assert config.effective_date == date
 
@@ -144,7 +147,7 @@ class TestPricingConfig:
                     metadata=mock_pricing_config.metadata,
                     providers=mock_pricing_config.providers,
                     environmental_factors=mock_pricing_config.environmental_factors,
-                    fallback_pricing=mock_pricing_config.fallback_pricing
+                    fallback_pricing=mock_pricing_config.fallback_pricing,
                 )
 
     def test_get_model_config_success(self, mock_pricing_config):
@@ -265,7 +268,7 @@ class TestPricingConfigLoading:
                 "currency": "USD",
                 "units": "per_million_tokens",
                 "sources": ["Test API"],
-                "schema_version": "1.0.0"
+                "schema_version": "1.0.0",
             },
             "providers": {
                 "test_provider": {
@@ -278,19 +281,14 @@ class TestPricingConfigLoading:
                             "active": True,
                             "deprecated": False,
                             "effective_date": "2024-01-01",
-                            "description": "Test model"
+                            "description": "Test model",
                         }
-                    }
+                    },
                 }
             },
             "environmental_factors": {
-                "energy_estimates": {
-                    "model_patterns": {"default": {"kwh_per_1k_tokens": 0.0003}}
-                },
-                "carbon_intensity": {
-                    "global_average_g_co2_per_kwh": 500.0,
-                    "regions": {}
-                }
+                "energy_estimates": {"model_patterns": {"default": {"kwh_per_1k_tokens": 0.0003}}},
+                "carbon_intensity": {"global_average_g_co2_per_kwh": 500.0, "regions": {}},
             },
             "fallback_pricing": {
                 "unknown_model": {
@@ -300,12 +298,12 @@ class TestPricingConfigLoading:
                     "active": True,
                     "deprecated": False,
                     "effective_date": "2024-01-01",
-                    "description": "Default pricing"
+                    "description": "Default pricing",
                 }
-            }
+            },
         }
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(config_data, f)
             temp_path = f.name
 
@@ -325,7 +323,7 @@ class TestPricingConfigLoading:
 
     def test_load_from_file_invalid_json(self):
         """Test loading from file with invalid JSON."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             f.write("{ invalid json }")
             temp_path = f.name
 
@@ -339,12 +337,9 @@ class TestPricingConfigLoading:
 
     def test_load_from_file_validation_error(self):
         """Test loading from file with validation errors."""
-        invalid_config = {
-            "version": "invalid_version",  # Should be semver
-            "providers": {}  # Missing required fields
-        }
+        invalid_config = {"version": "invalid_version", "providers": {}}  # Should be semver  # Missing required fields
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(invalid_config, f)
             temp_path = f.name
 
@@ -356,34 +351,40 @@ class TestPricingConfigLoading:
         finally:
             Path(temp_path).unlink()
 
-    @patch('ciris_engine.config.pricing_models.Path.exists')
-    @patch('builtins.open', new_callable=mock_open)
+    @patch("ciris_engine.config.pricing_models.Path.exists")
+    @patch("builtins.open", new_callable=mock_open)
     def test_load_from_default_path(self, mock_file, mock_exists):
         """Test loading from default path when no path specified."""
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = json.dumps({
-            "version": "1.0.0",
-            "last_updated": "2025-01-15T10:30:00Z",
-            "metadata": {
-                "update_frequency": "weekly",
-                "currency": "USD",
-                "units": "per_million_tokens",
-                "sources": ["Test"],
-                "schema_version": "1.0.0"
-            },
-            "providers": {},
-            "environmental_factors": {
-                "energy_estimates": {"model_patterns": {"default": {"kwh_per_1k_tokens": 0.0003}}},
-                "carbon_intensity": {"global_average_g_co2_per_kwh": 500.0, "regions": {}}
-            },
-            "fallback_pricing": {
-                "unknown_model": {
-                    "input_cost": 20.0, "output_cost": 20.0, "context_window": 4096,
-                    "active": True, "deprecated": False, "effective_date": "2024-01-01",
-                    "description": "Default"
-                }
+        mock_file.return_value.read.return_value = json.dumps(
+            {
+                "version": "1.0.0",
+                "last_updated": "2025-01-15T10:30:00Z",
+                "metadata": {
+                    "update_frequency": "weekly",
+                    "currency": "USD",
+                    "units": "per_million_tokens",
+                    "sources": ["Test"],
+                    "schema_version": "1.0.0",
+                },
+                "providers": {},
+                "environmental_factors": {
+                    "energy_estimates": {"model_patterns": {"default": {"kwh_per_1k_tokens": 0.0003}}},
+                    "carbon_intensity": {"global_average_g_co2_per_kwh": 500.0, "regions": {}},
+                },
+                "fallback_pricing": {
+                    "unknown_model": {
+                        "input_cost": 20.0,
+                        "output_cost": 20.0,
+                        "context_window": 4096,
+                        "active": True,
+                        "deprecated": False,
+                        "effective_date": "2024-01-01",
+                        "description": "Default",
+                    }
+                },
             }
-        })
+        )
 
         # This should not raise an exception
         config = PricingConfig.load_from_file()
@@ -393,7 +394,7 @@ class TestPricingConfigLoading:
 class TestGetPricingConfig:
     """Test suite for global pricing configuration management."""
 
-    @patch('ciris_engine.config.pricing_models.PricingConfig.load_from_file')
+    @patch("ciris_engine.config.pricing_models.PricingConfig.load_from_file")
     def test_get_pricing_config_first_call(self, mock_load):
         """Test first call to get_pricing_config loads from file."""
         mock_config = MagicMock()
@@ -401,6 +402,7 @@ class TestGetPricingConfig:
 
         # Clear the global state
         import ciris_engine.config.pricing_models
+
         ciris_engine.config.pricing_models._pricing_config = None
 
         result = get_pricing_config()
@@ -408,7 +410,7 @@ class TestGetPricingConfig:
         mock_load.assert_called_once()
         assert result == mock_config
 
-    @patch('ciris_engine.config.pricing_models.PricingConfig.load_from_file')
+    @patch("ciris_engine.config.pricing_models.PricingConfig.load_from_file")
     def test_get_pricing_config_cached(self, mock_load):
         """Test subsequent calls use cached configuration."""
         mock_config = MagicMock()
@@ -416,6 +418,7 @@ class TestGetPricingConfig:
 
         # Clear and set global state
         import ciris_engine.config.pricing_models
+
         ciris_engine.config.pricing_models._pricing_config = mock_config
 
         result = get_pricing_config()
@@ -424,7 +427,7 @@ class TestGetPricingConfig:
         mock_load.assert_not_called()
         assert result == mock_config
 
-    @patch('ciris_engine.config.pricing_models.PricingConfig.load_from_file')
+    @patch("ciris_engine.config.pricing_models.PricingConfig.load_from_file")
     def test_get_pricing_config_reload(self, mock_load):
         """Test reload=True forces reload from file."""
         mock_config = MagicMock()
@@ -432,6 +435,7 @@ class TestGetPricingConfig:
 
         # Set existing config
         import ciris_engine.config.pricing_models
+
         ciris_engine.config.pricing_models._pricing_config = MagicMock()
 
         result = get_pricing_config(reload=True)
@@ -454,9 +458,9 @@ class TestProviderConfig:
                     context_window=4096,
                     active=True,
                     deprecated=False,
-                    effective_date="2024-01-01"
+                    effective_date="2024-01-01",
                 )
-            }
+            },
         )
 
         assert config.display_name == "Test Provider"
@@ -477,13 +481,11 @@ class TestProviderConfig:
                     context_window=4096,
                     active=True,
                     deprecated=False,
-                    effective_date="2024-01-01"
+                    effective_date="2024-01-01",
                 )
             },
-            rate_limits={
-                "tier_1": RateLimits(rpm=500, tpm=30000)
-            },
-            base_url="https://api.example.com/v1"
+            rate_limits={"tier_1": RateLimits(rpm=500, tpm=30000)},
+            base_url="https://api.example.com/v1",
         )
 
         assert config.display_name == "Full Provider"

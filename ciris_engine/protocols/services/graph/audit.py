@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import List, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Protocol
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry

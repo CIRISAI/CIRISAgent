@@ -278,7 +278,12 @@ def convert_to_otlp_json(
 
 
 def _create_gauge_metric(
-    name: str, description: str, unit: str, value: float, time_ns: int, attributes: Optional[List[Dict[str, Any]]] = None
+    name: str,
+    description: str,
+    unit: str,
+    value: float,
+    time_ns: int,
+    attributes: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Create a gauge metric in OTLP format."""
     data_point = {"asDouble": value, "timeUnixNano": str(time_ns)}
@@ -460,7 +465,7 @@ def convert_traces_to_otlp_json(
         # Enhanced: Use trace context if available from step streaming
         trace_context = trace.get("trace_context", {})
         span_name = trace.get("span_name", trace.get("operation", "unknown_operation"))
-        
+
         if trace_context and isinstance(trace_context, dict):
             # Override IDs with those from step streaming for consistency
             if "trace_id" in trace_context:

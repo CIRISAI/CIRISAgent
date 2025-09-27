@@ -2042,6 +2042,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             avg_thought_depth = 0.0
             try:
                 from ciris_engine.logic.persistence import get_db_connection
+
                 # Get the memory service to access its db_path
                 memory_service = await self._memory_bus.get_service(handler_name="telemetry_service")
                 if memory_service:
@@ -2049,11 +2050,13 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                     with get_db_connection(db_path=db_path) as conn:
                         cursor = conn.cursor()
                         # Query thoughts from the last 24 hours and calculate average thought_depth
-                        cursor.execute("""
-                            SELECT AVG(thought_depth) as avg_depth 
-                            FROM thoughts 
+                        cursor.execute(
+                            """
+                            SELECT AVG(thought_depth) as avg_depth
+                            FROM thoughts
                             WHERE created_at >= datetime('now', '-24 hours')
-                        """)
+                        """
+                        )
                         result = cursor.fetchone()
                         if result and result[0] is not None:
                             avg_thought_depth = float(result[0])
@@ -2074,7 +2077,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                         if processor_queue_status and processor_queue_status.max_size > 0:
                             queue_saturation = processor_queue_status.queue_size / processor_queue_status.max_size
                             queue_saturation = min(1.0, max(0.0, queue_saturation))  # Clamp to 0-1 range
-                            logger.debug(f"Calculated queue saturation: {queue_saturation:.3f} ({processor_queue_status.queue_size}/{processor_queue_status.max_size})")
+                            logger.debug(
+                                f"Calculated queue saturation: {queue_saturation:.3f} ({processor_queue_status.queue_size}/{processor_queue_status.max_size})"
+                            )
                         else:
                             logger.debug("Processor queue status not available or max_size is 0")
                     else:

@@ -5,103 +5,188 @@ This file contains code that Vulture incorrectly identifies as unused,
 but is actually used by frameworks, decorators, or other dynamic means.
 """
 
-# API routes are used by FastAPI via decorators - false positives
-from ciris_engine.logic.adapters.api.routes import *
-
 # Configuration variables used by adapters at runtime
 from ciris_engine.logic.adapters.api.config import *
-from ciris_engine.logic.adapters.cli.config import *
-from ciris_engine.logic.adapters.discord.config import *
 
 # Constants used in API responses and error messages
 from ciris_engine.logic.adapters.api.constants import *
+
+# API routes are used by FastAPI via decorators - false positives
+from ciris_engine.logic.adapters.api.routes import *
+from ciris_engine.logic.adapters.cli.config import *
+from ciris_engine.logic.adapters.discord.config import *
 from ciris_engine.logic.adapters.discord.constants import *
+
 
 # Pydantic model fields accessed dynamically
 class _WhitelistModels:
     # Memory visualization constants
     NODE_RADIUS = None
-    HOVER_RADIUS = None  
+    HOVER_RADIUS = None
     TIMELINE_TRACK_HEIGHT = None
-    
+
     # Telemetry model fields
     degraded_services = None
     active_deferrals = None
     recent_incidents = None
     total_metrics = None
     active_services = None
-    
+
     # Auth response fields
     authorization_url = None
-    
-    # System health fields  
+
+    # System health fields
     initialization_complete = None
     available = None
     shutdown_initiated = None
-    
+
     # Memory query fields
     total_nodes = None
     nodes_by_scope = None
     recent_nodes_24h = None
-    
+
     # Resource metrics
     cpu = None
     disk = None
     network_in_mbps = None
     network_out_mbps = None
-    
+
+
 # Serializer methods called by Pydantic
-def serialize_datetime(): pass
-def serialize_ts(): pass  
-def serialize_times(): pass
-def serialize_updated_at(): pass
-def serialize_last_seen(): pass
-def serialize_start_time(): pass
+def serialize_datetime():
+    pass
+
+
+def serialize_ts():
+    pass
+
+
+def serialize_times():
+    pass
+
+
+def serialize_updated_at():
+    pass
+
+
+def serialize_last_seen():
+    pass
+
+
+def serialize_start_time():
+    pass
+
 
 # Validator methods called by Pydantic
-def validate_query_params(): pass
+def validate_query_params():
+    pass
+
 
 # Calculation methods that may be used in future
-def calculate_percentile(): pass
-def calculate_trend(): pass
-def calculate_range_from_days(): pass
+def calculate_percentile():
+    pass
+
+
+def calculate_trend():
+    pass
+
+
+def calculate_range_from_days():
+    pass
+
 
 # OAuth methods used by authentication flow
-def _create_wa_email(): pass
+def _create_wa_email():
+    pass
+
 
 # Discord event handlers used by discord.py
-def on_ready(): pass
-def on_disconnect(): pass
-def on_thread_join(): pass
-def on_thread_delete(): pass
+def on_ready():
+    pass
+
+
+def on_disconnect():
+    pass
+
+
+def on_thread_join():
+    pass
+
+
+def on_thread_delete():
+    pass
+
 
 # Base classes for inheritance
-class BaseAdapter: pass
-class CLIToolService: pass
-class CLIWiseAuthorityService: pass
+class BaseAdapter:
+    pass
+
+
+class CLIToolService:
+    pass
+
+
+class CLIWiseAuthorityService:
+    pass
+
 
 # Exception/response classes for FastAPI
-class OAuthLoginResponse: pass
-class MetricSeries: pass
-class ServiceHealthOverview: pass  
-class TraceSpan: pass
+class OAuthLoginResponse:
+    pass
+
+
+class MetricSeries:
+    pass
+
+
+class ServiceHealthOverview:
+    pass
+
+
+class TraceSpan:
+    pass
+
 
 # Methods that may be called by framework
-def _handle_auth_service(): pass
-def rate_limit_wrapper(): pass
-def _create_histogram_metric(): pass
-def validate_otlp_json(): pass
+def _handle_auth_service():
+    pass
+
+
+def rate_limit_wrapper():
+    pass
+
+
+def _create_histogram_metric():
+    pass
+
+
+def validate_otlp_json():
+    pass
+
 
 # Future/planned functionality
-def run_chaos_tests(): pass
-def run_wa_service(): pass
-def fetch_benchmark_prompts(): pass
-def submit_benchmark_answers(): pass
+def run_chaos_tests():
+    pass
+
+
+def run_wa_service():
+    pass
+
+
+def fetch_benchmark_prompts():
+    pass
+
+
+def submit_benchmark_answers():
+    pass
+
 
 # Testing utilities
-def test_emergency_endpoint(): pass
+def test_emergency_endpoint():
+    pass
 
-# Attributes accessed dynamically  
+
+# Attributes accessed dynamically
 should_exit = None
 database_maintenance_service = None
 secrets_tool_service = None
@@ -122,7 +207,7 @@ SERVICE_UNAVAILABLE_TEMPLATE = None
 require_system_admin = None
 require_service_account = None
 
-# Emergency status attributes  
+# Emergency status attributes
 services_stopped = None
 data_persisted = None
 final_message_sent = None
@@ -153,7 +238,7 @@ daily_total = None
 
 # Transparency variables
 deferrals_to_human = None
-deferrals_uncertainty = None  
+deferrals_uncertainty = None
 deferrals_ethical = None
 harmful_requests_blocked = None
 rate_limit_triggers = None

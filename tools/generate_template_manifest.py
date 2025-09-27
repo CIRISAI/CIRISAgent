@@ -26,7 +26,7 @@ from nacl.signing import SigningKey
 # Pre-approved templates and their descriptions
 TEMPLATES = {
     "default": "Datum - baseline agent template",
-    "sage": "Sage - wise questioning agent", 
+    "sage": "Sage - wise questioning agent",
     "scout": "Scout - direct action demonstrator",
     "echo": "Echo - base moderation template",
     "echo-core": "Echo-Core - general community moderation",
@@ -64,7 +64,7 @@ def load_root_private_key() -> SigningKey:
 
 def update_template_stewardship(template_path: Path, signing_key: SigningKey) -> bool:
     """Update stewardship fields in a template."""
-    with open(template_path, "r", encoding='utf-8') as f:
+    with open(template_path, "r", encoding="utf-8") as f:
         template = yaml.safe_load(f)
 
     if "stewardship" not in template:
@@ -73,7 +73,7 @@ def update_template_stewardship(template_path: Path, signing_key: SigningKey) ->
 
     stewardship = template["stewardship"]
     creator_ledger = stewardship.get("creator_ledger_entry", {})
-    
+
     # Calculate public key fingerprint
     public_key = signing_key.verify_key
     public_key_bytes = public_key.encode()
@@ -87,17 +87,21 @@ def update_template_stewardship(template_path: Path, signing_key: SigningKey) ->
 
     # Re-sign the creator intent statement
     intent = stewardship.get("creator_intent_statement", {})
-    sign_message = json.dumps({
-        "creator_id": creator_ledger.get("creator_id"),
-        "creation_timestamp": creator_ledger.get("creation_timestamp"),
-        "covenant_version": creator_ledger.get("covenant_version"),
-        "book_vi_compliance_check": creator_ledger.get("book_vi_compliance_check"),
-        "stewardship_tier_calculation": creator_ledger.get("stewardship_tier_calculation"),
-        "purpose_and_functionalities": intent.get("purpose_and_functionalities"),
-        "limitations_and_design_choices": intent.get("limitations_and_design_choices"),
-        "anticipated_benefits": intent.get("anticipated_benefits"),
-        "anticipated_risks": intent.get("anticipated_risks"),
-    }, sort_keys=True, separators=(",", ":"))
+    sign_message = json.dumps(
+        {
+            "creator_id": creator_ledger.get("creator_id"),
+            "creation_timestamp": creator_ledger.get("creation_timestamp"),
+            "covenant_version": creator_ledger.get("covenant_version"),
+            "book_vi_compliance_check": creator_ledger.get("book_vi_compliance_check"),
+            "stewardship_tier_calculation": creator_ledger.get("stewardship_tier_calculation"),
+            "purpose_and_functionalities": intent.get("purpose_and_functionalities"),
+            "limitations_and_design_choices": intent.get("limitations_and_design_choices"),
+            "anticipated_benefits": intent.get("anticipated_benefits"),
+            "anticipated_risks": intent.get("anticipated_risks"),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
     # Sign with Ed25519
     signed = signing_key.sign(sign_message.encode("utf-8"))
@@ -106,7 +110,7 @@ def update_template_stewardship(template_path: Path, signing_key: SigningKey) ->
     print(f"  Re-signed {template_path.name}")
 
     # Write back the updated template
-    with open(template_path, "w", encoding='utf-8') as f:
+    with open(template_path, "w", encoding="utf-8") as f:
         yaml.dump(template, f, default_flow_style=False, sort_keys=False, width=120, allow_unicode=True)
 
     return True
@@ -121,7 +125,7 @@ def main():
     else:
         # Assume we're in project root or tools/
         project_root = Path.cwd()
-        
+
     os.chdir(project_root)
     print(f"Working in project root: {project_root}")
 
@@ -135,7 +139,7 @@ def main():
     # Load signing key
     print("Loading root private key...")
     signing_key = load_root_private_key()
-    
+
     # Get public key for verification
     public_key = signing_key.verify_key
     public_key_b64 = base64.b64encode(public_key.encode()).decode("utf-8")
@@ -153,7 +157,7 @@ def main():
     # Second pass: Calculate checksums after updates
     print("\nCalculating template checksums...")
     templates_data = {}
-    
+
     for template_name, description in TEMPLATES.items():
         template_path = templates_dir / f"{template_name}.yaml"
         if not template_path.exists():
@@ -161,10 +165,7 @@ def main():
             continue
 
         checksum = calculate_file_checksum(template_path)
-        templates_data[template_name] = {
-            "checksum": f"sha256:{checksum}", 
-            "description": description
-        }
+        templates_data[template_name] = {"checksum": f"sha256:{checksum}", "description": description}
         print(f"✓ {template_name}: {checksum}")
 
     # Create manifest structure
@@ -172,27 +173,27 @@ def main():
         "version": "1.0",
         "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "root_public_key": public_key_b64,
-        "templates": templates_data
+        "templates": templates_data,
     }
 
     # Sign the templates object
     print("\nSigning manifest...")
     templates_json = json.dumps(templates_data, sort_keys=True, separators=(",", ":"))
     templates_bytes = templates_json.encode("utf-8")
-    
+
     signed = signing_key.sign(templates_bytes)
     signature = base64.b64encode(signed.signature).decode("ascii")
     manifest["root_signature"] = signature
 
     # Write manifest
     output_path = Path("pre-approved-templates.json")
-    with open(output_path, "w", encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
     print(f"\n✓ Manifest signed with root private key")
     print(f"✓ Manifest written to {output_path}")
     print(f"✓ Total templates: {len(templates_data)}")
-    
+
     # Verify against expected key
     expected_public_key = "7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk"
     public_key_url_safe = public_key_b64.replace("+", "-").replace("/", "_").rstrip("=")

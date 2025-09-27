@@ -18,7 +18,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 @pytest.mark.asyncio
 async def test_dual_llm_service_real_initialization():
     """Test real initialization with dual LLM services from environment."""
-    
+
     # Ensure environment variables are set
     assert os.environ.get("OPENAI_API_KEY"), "Primary API key not found"
 
@@ -44,10 +44,12 @@ async def test_dual_llm_service_real_initialization():
 
         # Should have at least 1 LLM provider (may be mock or real depending on environment)
         assert len(llm_providers) >= 1, f"Expected at least 1 LLM provider, got {len(llm_providers)}"
-        
+
         # If secondary key is available, expect 2 providers; otherwise expect 1
         expected_count = 2 if os.environ.get("CIRIS_OPENAI_API_KEY_2") else 1
-        assert len(llm_providers) == expected_count, f"Expected {expected_count} LLM providers, got {len(llm_providers)}"
+        assert (
+            len(llm_providers) == expected_count
+        ), f"Expected {expected_count} LLM providers, got {len(llm_providers)}"
 
         # For this test, we just check that we have two services
         # The service instances themselves don't have provider metadata exposed directly

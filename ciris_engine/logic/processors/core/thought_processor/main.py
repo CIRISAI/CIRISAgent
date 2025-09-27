@@ -104,7 +104,7 @@ class ThoughtProcessor(
 
         # Initialize correlation for tracking
         correlation = self._initialize_correlation(thought_item, start_time)
-        
+
         # Fetch and validate thought
         thought = await self._fetch_and_validate_thought(thought_item)
         if not thought:
@@ -112,11 +112,11 @@ class ThoughtProcessor(
 
         # Execute pipeline phases
         pipeline_result = await self._execute_pipeline_phases(thought_item, thought, context, correlation, start_time)
-        
+
         # Record completion and finalize
         await self._record_processing_completion(thought, pipeline_result)
         await self._finalize_correlation(correlation, pipeline_result, start_time)
-        
+
         # Complete the round
         final_result = await self._round_complete_step(thought_item, pipeline_result)
         return final_result
@@ -157,10 +157,12 @@ class ThoughtProcessor(
 
         # Phase 2: DMA analysis
         dma_results = await self._perform_dmas_step(thought_item, thought_context)
-        
+
         # Check for early DMA result return
         if isinstance(dma_results, ActionSelectionDMAResult):
-            logger.info(f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}")
+            logger.info(
+                f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
+            )
             return dma_results
 
         # Check for critical failures
@@ -168,13 +170,13 @@ class ThoughtProcessor(
             await self._handle_critical_failure(correlation, start_time)
             return self._create_deferral_result(dma_results, thought)
 
-        # Phase 3: Action selection  
+        # Phase 3: Action selection
         action_result = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)
-        
+
         # Phase 4: Finalize action
         action_from_conscience = self._handle_special_cases(action_result["conscience_result"])
         final_result = await self._finalize_action_step(thought_item, action_from_conscience)
-        
+
         return final_result
 
     async def _perform_action_selection_phase(self, thought_item, thought, thought_context, dma_results):
@@ -182,7 +184,7 @@ class ThoughtProcessor(
         # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
         action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
         profile_name = self._get_profile_name(thought)
-        
+
         self._log_action_selection_result(action_result, thought)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
@@ -197,7 +199,7 @@ class ThoughtProcessor(
             )
 
         self._log_final_action_results(action_result, conscience_result, thought)
-        
+
         return {"action_result": action_result, "conscience_result": conscience_result}
 
     def _log_action_selection_result(self, action_result, thought):
@@ -207,7 +209,9 @@ class ThoughtProcessor(
             logger.info(f"ThoughtProcessor: Action selection result for {thought.thought_id}: {selected_action}")
 
             if selected_action == HandlerActionType.OBSERVE:
-                logger.warning(f"OBSERVE ACTION DEBUG: ThoughtProcessor received OBSERVE action for thought {thought.thought_id}")
+                logger.warning(
+                    f"OBSERVE ACTION DEBUG: ThoughtProcessor received OBSERVE action for thought {thought.thought_id}"
+                )
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
 
@@ -219,13 +223,17 @@ class ThoughtProcessor(
             and conscience_result.final_action.selected_action == HandlerActionType.PONDER
         )
 
-    async def _handle_conscience_retry(self, thought_item, thought, thought_context, dma_results, conscience_result, profile_name):
+    async def _handle_conscience_retry(
+        self, thought_item, thought, thought_context, dma_results, conscience_result, profile_name
+    ):
         """Handle conscience retry logic when PONDER override occurs."""
-        logger.info(f"ThoughtProcessor: conscience override to PONDER for {thought.thought_id}. Attempting re-run with guidance.")
+        logger.info(
+            f"ThoughtProcessor: conscience override to PONDER for {thought.thought_id}. Attempting re-run with guidance."
+        )
 
         # Prepare retry context
         retry_context = self._prepare_conscience_retry_context(thought_item, thought_context, conscience_result)
-        
+
         try:
             # Attempt retry
             retry_result = await self.dma_orchestrator.run_action_selection(
@@ -242,7 +250,7 @@ class ThoughtProcessor(
                 )
             else:
                 logger.info("ThoughtProcessor: Retry failed to produce a result, proceeding with PONDER")
-                
+
         except Exception as e:
             logger.error(f"Error during action selection retry: {e}", exc_info=True)
 
@@ -276,13 +284,15 @@ class ThoughtProcessor(
                 ),
             },
         )
-        
+
         return retry_context
 
-    async def _process_conscience_retry_result(self, thought_item, thought, dma_results, retry_context, retry_result, original_conscience_result):
+    async def _process_conscience_retry_result(
+        self, thought_item, thought, dma_results, retry_context, retry_result, original_conscience_result
+    ):
         """Process the result of a conscience retry."""
         logger.info(f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}")
-        
+
         retry_conscience_result = await self._conscience_execution_step(
             thought_item, retry_result, thought, dma_results, retry_context
         )
@@ -309,7 +319,9 @@ class ThoughtProcessor(
         if conscience_result:
             if hasattr(conscience_result, "final_action") and conscience_result.final_action:
                 final_action = getattr(conscience_result.final_action, "selected_action", "UNKNOWN")
-                logger.info(f"ThoughtProcessor: conscience result for {thought.thought_id}: final_action={final_action}")
+                logger.info(
+                    f"ThoughtProcessor: conscience result for {thought.thought_id}: final_action={final_action}"
+                )
 
     async def _handle_critical_failure(self, correlation, start_time):
         """Handle critical DMA failure."""
@@ -334,13 +346,13 @@ class ThoughtProcessor(
         """Record telemetry for successful processing completion."""
         if not self.telemetry_service:
             return
-            
+
         await self.telemetry_service.record_metric(
             "thought_processing_completed",
             value=1.0,
             tags={"thought_id": thought.thought_id, "path_type": "hot", "source_module": "thought_processor"},
         )
-        
+
         if final_result:
             action_metric = f"action_selected_{final_result.selected_action.value}"
             await self.telemetry_service.record_metric(
@@ -496,7 +508,7 @@ class ThoughtProcessor(
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
         is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
-        
+
         if self._is_exempt_from_conscience_checks(action_result):
             return ConscienceApplicationResult(
                 original_action=action_result, final_action=action_result, overridden=False, override_reason=None
@@ -504,7 +516,7 @@ class ThoughtProcessor(
 
         context = {"thought": thought, "dma_results": dma_results_dict}
         conscience_result = await self._run_conscience_checks(action_result, context)
-        
+
         if is_conscience_retry and not conscience_result["overridden"]:
             conscience_result = self._handle_conscience_retry_without_override(conscience_result, action_result)
 
@@ -517,10 +529,10 @@ class ThoughtProcessor(
             and hasattr(processing_context, "is_conscience_retry")
             and processing_context.is_conscience_retry
         )
-        
+
         if is_conscience_retry and processing_context is not None:
             processing_context.is_conscience_retry = False
-            
+
         return is_conscience_retry
 
     def _is_exempt_from_conscience_checks(self, action_result: ActionSelectionDMAResult) -> bool:
@@ -541,10 +553,10 @@ class ThoughtProcessor(
 
         for entry in self.conscience_registry.get_consciences():
             conscience_result = await self._check_single_conscience(entry, final_action, context)
-            
+
             if conscience_result["skip"]:
                 continue
-                
+
             if conscience_result["epistemic_data"]:
                 epistemic_data[entry.name] = conscience_result["epistemic_data"]
 
@@ -616,7 +628,7 @@ class ThoughtProcessor(
         ]
 
         ponder_params = PonderParams(questions=questions)
-        
+
         return ActionSelectionDMAResult(
             selected_action=HandlerActionType.PONDER,
             action_parameters=ponder_params,
@@ -645,18 +657,20 @@ class ThoughtProcessor(
                 evaluation_time_ms=None,
                 resource_usage=None,
             )
-            conscience_result.update({
-                "final_action": final_action,
-                "overridden": True,
-                "override_reason": "Conscience retry - forcing PONDER to prevent loops",
-            })
+            conscience_result.update(
+                {
+                    "final_action": final_action,
+                    "overridden": True,
+                    "override_reason": "Conscience retry - forcing PONDER to prevent loops",
+                }
+            )
 
         return conscience_result
 
     def _create_conscience_application_result(self, action_result, conscience_result):
         """Create the final ConscienceApplicationResult."""
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
-        
+
         result = ConscienceApplicationResult(
             original_action=action_result,
             final_action=conscience_result["final_action"],
@@ -671,7 +685,7 @@ class ThoughtProcessor(
         """Format description for SPEAK action parameters."""
         if not hasattr(params, "content"):
             return "speak"
-        
+
         content_str = str(params.content)
         if len(content_str) > 50:
             return f"speak: '{content_str[:50]}...'"

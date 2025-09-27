@@ -53,6 +53,19 @@ from ciris_engine.schemas.config.essential import (
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import ServiceType
 
+# Import fixtures from the runtime fixtures file
+from tests.fixtures.runtime import (
+    mock_agent_task,
+    real_runtime_with_mock,
+    runtime_initialization_patcher,
+    runtime_with_adapter_mocks,
+    runtime_with_full_initialization_mocks,
+    runtime_with_integration_test_setup,
+    runtime_with_mocked_agent_processor,
+    runtime_with_mocked_bus_manager,
+    runtime_without_bus_manager,
+)
+
 
 def _diagnose_ciris_runtime():
     """Diagnostic function to understand CIRISRuntime state."""
@@ -839,3 +852,166 @@ class TestCIRISRuntimeIntegration:
         assert "mock_llm" in runtime.modules_to_load
 
         os.environ.pop("CIRIS_MOCK_LLM", None)
+
+
+# ============================================================================
+# AGENT PROCESSOR INITIALIZATION TESTS (New architecture without placeholders)
+# ============================================================================
+
+
+class TestAgentProcessorInitialization:
+    """Test the new agent processor initialization logic without placeholder tasks."""
+
+    @pytest.mark.asyncio
+    async def test_create_agent_processor_when_ready_success(self, runtime_with_mocked_bus_manager):
+        """Test successful agent processor creation when services are ready."""
+        runtime = runtime_with_mocked_bus_manager
+
+        # Test the method
+        await runtime._create_agent_processor_when_ready()
+
+        # Verify services were waited for
+        runtime._wait_for_critical_services.assert_called_once_with(timeout=30.0)
+
+        # Verify agent processor was started
+        runtime.agent_processor.start_processing.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_processor_when_ready_no_agent_processor(self, runtime_with_mocked_agent_processor):
+        """Test error when agent processor is not initialized."""
+        runtime = runtime_with_mocked_agent_processor
+
+        # Ensure agent processor is None
+        runtime.agent_processor = None
+
+        # Should raise RuntimeError
+        with pytest.raises(RuntimeError, match="Agent processor not initialized"):
+            await runtime._create_agent_processor_when_ready()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_processor_when_ready_service_timeout(self, runtime_with_mocked_agent_processor):
+        """Test behavior when critical services timeout."""
+        runtime = runtime_with_mocked_agent_processor
+
+        # Mock the critical services wait to raise timeout
+        runtime._wait_for_critical_services.side_effect = asyncio.TimeoutError("Services not ready")
+
+        # Should propagate the timeout error
+        with pytest.raises(asyncio.TimeoutError, match="Services not ready"):
+            await runtime._create_agent_processor_when_ready()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_processor_when_ready_with_bus_manager(self, runtime_with_mocked_bus_manager):
+        """Test agent processor creation with bus manager setup."""
+        runtime = runtime_with_mocked_bus_manager
+
+        # Mock asyncio.create_task to verify bus manager task creation
+        with patch("asyncio.create_task") as mock_create_task:
+            await runtime._create_agent_processor_when_ready()
+
+            # Verify bus manager task was created (just check that create_task was called)
+            mock_create_task.assert_called_once()
+            # Verify bus manager start was called
+            runtime.service_initializer.bus_manager.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_agent_processor_when_ready_without_bus_manager(self, runtime_without_bus_manager):
+        """Test agent processor creation without bus manager."""
+        runtime = runtime_without_bus_manager
+
+        # Should work without bus manager
+        await runtime._create_agent_processor_when_ready()
+
+        # Verify agent processor was still started
+        runtime.agent_processor.start_processing.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_initialize_adapters_creates_real_agent_task(self, runtime_with_integration_test_setup):
+        """Test that adapter initialization creates a real agent task instead of placeholder."""
+        runtime, patcher, mock_init_adapters = runtime_with_integration_test_setup
+        mock_adapter = runtime.adapters[0]
+
+        # Execute the mocked initialization
+        await mock_init_adapters()
+
+        # Verify that an AgentProcessorTask was created
+        created_tasks = mock_init_adapters.created_tasks
+        task_names = [name for name, _ in created_tasks]
+
+        assert "AgentProcessorTask" in task_names, f"AgentProcessorTask should have been created. Found: {task_names}"
+        assert (
+            "TestAdapterLifecycleTask" in task_names
+        ), f"TestAdapterLifecycleTask should have been created. Found: {task_names}"
+
+        # Verify adapter lifecycle was called with the real task
+        mock_adapter.run_lifecycle.assert_called_once()
+        called_task = mock_adapter.run_lifecycle.call_args[0][0]
+        assert called_task.get_name() == "AgentProcessorTask"
+
+        # Verify that adapter tasks were stored
+        assert len(runtime._adapter_tasks) == 1
+        assert runtime._adapter_tasks[0].get_name() == "TestAdapterLifecycleTask"
+
+    @pytest.mark.asyncio
+    async def test_run_method_finds_existing_agent_task(self, runtime_with_mocked_agent_processor, mock_agent_task):
+        """Test that run() method finds and monitors the existing agent task."""
+        runtime = runtime_with_mocked_agent_processor
+
+        # Mock initialization state
+        runtime._initialized = True
+        runtime._adapter_tasks = [MagicMock()]
+
+        # Mock shutdown event setup
+        runtime._shutdown_event = MagicMock()
+        runtime._shutdown_event.is_set.return_value = False
+        runtime._shutdown_event.wait = AsyncMock()
+
+        # Mock asyncio.all_tasks to return our mock task
+        with patch("asyncio.all_tasks", return_value=[mock_agent_task]):
+            # Mock global shutdown functions
+            with patch(
+                "ciris_engine.logic.runtime.ciris_runtime.wait_for_global_shutdown_async", new_callable=AsyncMock
+            ):
+                with patch("ciris_engine.logic.runtime.ciris_runtime.is_global_shutdown_requested", return_value=False):
+                    # Mock asyncio.wait to immediately return the agent task as done
+                    with patch("asyncio.wait") as mock_wait:
+                        mock_wait.return_value = ({mock_agent_task}, set())
+
+                        # Run should complete without error
+                        await runtime.run()
+
+                        # Verify the agent task was found and monitored
+                        mock_wait.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_method_no_agent_task_found(self, runtime_with_mocked_agent_processor, caplog):
+        """Test run() method error when no agent task is found."""
+        runtime = runtime_with_mocked_agent_processor
+
+        # Mock initialization state
+        runtime._initialized = True
+        runtime._adapter_tasks = [MagicMock()]
+
+        # Mock the shutdown method to avoid complex shutdown logic
+        runtime.shutdown = AsyncMock()
+
+        # Mock asyncio.all_tasks to return no matching task
+        with patch("asyncio.all_tasks", return_value=[]):
+            # The RuntimeError gets caught and logged, but doesn't propagate
+            await runtime.run()
+
+            # Verify the error was logged (covers our specific error handling logic)
+            assert "Agent processor task not found" in caplog.text
+            assert "Runtime error:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_run_method_no_adapter_tasks(self, runtime_with_mocked_agent_processor):
+        """Test run() method when no adapter tasks are found."""
+        runtime = runtime_with_mocked_agent_processor
+
+        # Mock initialization state
+        runtime._initialized = True
+        runtime._adapter_tasks = []  # No adapter tasks - should trigger early return
+
+        # Should return early with warning (covers the early return logic we added)
+        await runtime.run()  # Should not raise, just return

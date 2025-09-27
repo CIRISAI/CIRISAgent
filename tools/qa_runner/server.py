@@ -124,12 +124,12 @@ class APIServerManager:
         """Kill any process using the configured port."""
         import signal
         from contextlib import contextmanager
-        
+
         @contextmanager
         def timeout(seconds):
             def timeout_handler(signum, frame):
                 raise TimeoutError()
-            
+
             # Set the timeout handler
             old_handler = signal.signal(signal.SIGALRM, timeout_handler)
             signal.alarm(seconds)
@@ -138,7 +138,7 @@ class APIServerManager:
             finally:
                 signal.alarm(0)
                 signal.signal(signal.SIGALRM, old_handler)
-        
+
         try:
             with timeout(2):  # 2 second timeout for port cleanup
                 for conn in psutil.net_connections():
@@ -146,7 +146,9 @@ class APIServerManager:
                         try:
                             process = psutil.Process(conn.pid)
                             process.terminate()
-                            self.console.print(f"[yellow]Killed process {conn.pid} on port {self.config.api_port}[/yellow]")
+                            self.console.print(
+                                f"[yellow]Killed process {conn.pid} on port {self.config.api_port}[/yellow]"
+                            )
                         except:
                             pass
         except TimeoutError:

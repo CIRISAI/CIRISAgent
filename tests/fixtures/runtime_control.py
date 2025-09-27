@@ -1,16 +1,16 @@
 """Runtime control fixtures for API testing."""
 
+import inspect
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
-import inspect
 
 import pytest
 
 from ciris_engine.schemas.services.core.runtime import (
-    RuntimeStatusResponse,
     ProcessorControlResponse,
-    ProcessorStatus,
     ProcessorQueueStatus,
+    ProcessorStatus,
+    RuntimeStatusResponse,
 )
 
 
@@ -104,7 +104,7 @@ def resume_control_response():
 def mock_main_runtime_control_service():
     """Create a fully-featured mock main runtime control service with proper schemas."""
     mock = AsyncMock()
-    
+
     # Create proper schema objects directly
     running_status = RuntimeStatusResponse(
         is_running=True,
@@ -117,35 +117,35 @@ def mock_main_runtime_control_service():
         cognitive_state="WORK",
         queue_depth=3,
     )
-    
+
     pause_response = ProcessorControlResponse(
         success=True,
         processor_name="main_processor",
         operation="pause",
         new_status=ProcessorStatus.PAUSED,
     )
-    
+
     resume_response = ProcessorControlResponse(
         success=True,
         processor_name="main_processor",
         operation="resume",
         new_status=ProcessorStatus.RUNNING,
     )
-    
+
     # Configure mock methods
     mock.get_runtime_status = AsyncMock(return_value=running_status)
-    
+
     # Create AsyncMock with empty signature for main service
     # Use spec=[] to ensure no parameters are expected
     pause_mock = AsyncMock(return_value=pause_response, spec=[])
     # Explicitly set the signature to ensure parameter detection works
     pause_mock.__signature__ = inspect.Signature([])
     mock.pause_processing = pause_mock
-    
+
     resume_mock = AsyncMock(return_value=resume_response, spec=[])
     resume_mock.__signature__ = inspect.Signature([])
     mock.resume_processing = resume_mock
-    
+
     # Add queue status mock
     queue_status = ProcessorQueueStatus(
         processor_name="main_processor",
@@ -156,7 +156,7 @@ def mock_main_runtime_control_service():
         oldest_message_age_seconds=30.0,
     )
     mock.get_processor_queue_status = AsyncMock(return_value=queue_status)
-    
+
     return mock
 
 
@@ -164,7 +164,7 @@ def mock_main_runtime_control_service():
 def mock_api_runtime_control_service():
     """Create a parameter-based mock API runtime control service with proper schemas."""
     mock = AsyncMock()
-    
+
     # Create paused status directly
     paused_status = RuntimeStatusResponse(
         is_running=True,
@@ -177,14 +177,14 @@ def mock_api_runtime_control_service():
         cognitive_state="PAUSED",
         queue_depth=0,
     )
-    
+
     # API service uses different interface (takes parameters, returns booleans)
     mock.pause_processing = AsyncMock(return_value=True)
     mock.resume_processing = AsyncMock(return_value=True)
-    
+
     # Status method returns proper schema
     mock.get_runtime_status = AsyncMock(return_value=paused_status)
-    
+
     # Add queue status mock for API service - realistic queue with thoughts
     api_queue_status = ProcessorQueueStatus(
         processor_name="main_processor",
@@ -195,9 +195,10 @@ def mock_api_runtime_control_service():
         oldest_message_age_seconds=45.0,  # Some thoughts have been waiting
     )
     mock.get_processor_queue_status = AsyncMock(return_value=api_queue_status)
-    
+
     # Add single step functionality for single step endpoint tests
     from ciris_engine.schemas.services.runtime_control import StepPoint
+
     single_step_response = ProcessorControlResponse(
         success=True,
         processor_name="agent",
@@ -205,23 +206,17 @@ def mock_api_runtime_control_service():
         new_status=ProcessorStatus.PAUSED,
         error=None,
         step_point=StepPoint.PERFORM_DMAS.value,  # Use enum value
-        step_results=[{
-            "round_number": 2, 
-            "task_id": "task_001", 
-            "step_data": {"dmas_executed": ["ethical", "common_sense"]}
-        }],
+        step_results=[
+            {"round_number": 2, "task_id": "task_001", "step_data": {"dmas_executed": ["ethical", "common_sense"]}}
+        ],
         thoughts_processed=1,
         processing_time_ms=850.0,
-        pipeline_state={
-            "current_round": 2, 
-            "thoughts_in_pipeline": 1, 
-            "is_paused": True
-        },
+        pipeline_state={"current_round": 2, "thoughts_in_pipeline": 1, "is_paused": True},
         current_round=2,
         pipeline_empty=False,
     )
     mock.single_step = AsyncMock(return_value=single_step_response)
-    
+
     return mock
 
 
@@ -229,7 +224,7 @@ def mock_api_runtime_control_service():
 def single_step_control_response():
     """Create a ProcessorControlResponse for single step operation with H3ERE data."""
     from ciris_engine.schemas.services.runtime_control import StepPoint
-    
+
     return ProcessorControlResponse(
         success=True,
         processor_name="agent",
@@ -246,19 +241,14 @@ def single_step_control_response():
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "processing_time_ms": 150.0,
                 "ethical_dma": {"decision": "PROCEED", "confidence": 0.85},
-                "round_number": 1
+                "round_number": 1,
             }
         ],
         thoughts_processed=1,
         processing_time_ms=150.0,
-        pipeline_state={
-            "current_round": 1,
-            "thoughts_in_flight": 1,
-            "total_thoughts_processed": 1,
-            "is_paused": True
-        },
+        pipeline_state={"current_round": 1, "thoughts_in_flight": 1, "total_thoughts_processed": 1, "is_paused": True},
         current_round=1,
-        pipeline_empty=False
+        pipeline_empty=False,
     )
 
 
@@ -266,8 +256,9 @@ def single_step_control_response():
 def mock_step_result_perform_dmas():
     """Create a mock step result for PERFORM_DMAS step - reusable across tests."""
     from unittest.mock import MagicMock
+
     from ciris_engine.schemas.services.runtime_control import StepPoint
-    
+
     mock_result = MagicMock()
     mock_result.step_point = StepPoint.PERFORM_DMAS
     mock_result.success = True
@@ -276,25 +267,25 @@ def mock_step_result_perform_dmas():
     mock_result.context = "test context"
     mock_result.processing_time_ms = 800.0
     mock_result.error = None
-    
+
     # Add DMA results as mock attributes
     mock_result.ethical_dma = MagicMock()
     mock_result.ethical_dma.decision = "approve"
     mock_result.ethical_dma.reasoning = "Analyzed ethical implications thoroughly"
-    
+
     mock_result.common_sense_dma = MagicMock()
     mock_result.common_sense_dma.plausibility_score = 0.90
     mock_result.common_sense_dma.reasoning = "Applied common sense principles"
-    
+
     mock_result.domain_dma = MagicMock()
     mock_result.domain_dma.domain = "api_development"
     mock_result.domain_dma.reasoning = "Domain expertise applied"
-    
+
     mock_result.dmas_executed = ["ethical", "common_sense", "domain"]
     mock_result.dma_failures = []
     mock_result.longest_dma_time_ms = 300.0
     mock_result.total_time_ms = 800.0
-    
+
     return mock_result
 
 
@@ -302,8 +293,9 @@ def mock_step_result_perform_dmas():
 def mock_step_result_gather_context():
     """Create a mock step result for GATHER_CONTEXT step - reusable across tests."""
     from unittest.mock import MagicMock
+
     from ciris_engine.schemas.services.runtime_control import StepPoint
-    
+
     mock_result = MagicMock()
     mock_result.step_point = StepPoint.GATHER_CONTEXT
     mock_result.success = True
@@ -312,7 +304,7 @@ def mock_step_result_gather_context():
     mock_result.context = "gather context test"
     mock_result.processing_time_ms = 200.0
     mock_result.error = None
-    
+
     # Context building specific fields
     mock_result.system_snapshot = {"agent_state": "active", "services": 25}
     mock_result.agent_identity = {"agent_id": "test_agent", "role": "assistant"}
@@ -323,5 +315,5 @@ def mock_step_result_gather_context():
     mock_result.constraints = ["no_harmful_content"]
     mock_result.context_size_bytes = 2048
     mock_result.memory_queries_performed = 2
-    
+
     return mock_result

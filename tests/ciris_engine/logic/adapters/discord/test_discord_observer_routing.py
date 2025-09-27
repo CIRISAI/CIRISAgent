@@ -11,10 +11,10 @@ import pytest
 
 from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 from ciris_engine.schemas.runtime.models import Task, Thought
-from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
-from ciris_engine.schemas.services.filters_core import FilterResult, FilterPriority
+from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 
 
 class TestDiscordObserverRouting:
@@ -72,12 +72,12 @@ class TestDiscordObserverRouting:
             priority=FilterPriority.CRITICAL,
             triggered_filters=["at_mention"],
             should_process=True,
-            reasoning="Message triggered filters: at_mention -> critical priority"
+            reasoning="Message triggered filters: at_mention -> critical priority",
         )
 
-        with patch.object(observer, '_create_priority_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_create_priority_observation_result", new_callable=AsyncMock) as mock_create:
             await observer._handle_priority_observation(msg, filter_result)
-            
+
             # Should create task despite author being in WA list
             mock_create.assert_called_once_with(msg, filter_result)
 
@@ -99,12 +99,12 @@ class TestDiscordObserverRouting:
             priority=FilterPriority.CRITICAL,
             triggered_filters=["at_mention"],
             should_process=True,
-            reasoning="Message triggered filters: at_mention -> critical priority"
+            reasoning="Message triggered filters: at_mention -> critical priority",
         )
 
-        with patch.object(observer, '_create_priority_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_create_priority_observation_result", new_callable=AsyncMock) as mock_create:
             await observer._handle_priority_observation(msg, filter_result)
-            
+
             # Should create task
             mock_create.assert_called_once_with(msg, filter_result)
 
@@ -126,12 +126,12 @@ class TestDiscordObserverRouting:
             priority=FilterPriority.CRITICAL,
             triggered_filters=["name_mention"],
             should_process=True,
-            reasoning="Message triggered filters: name_mention -> critical priority"
+            reasoning="Message triggered filters: name_mention -> critical priority",
         )
 
-        with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
+        with patch.object(observer, "_add_to_feedback_queue", new_callable=AsyncMock) as mock_feedback:
             await observer._handle_priority_observation(msg, filter_result)
-            
+
             # Should route to WA feedback queue
             mock_feedback.assert_called_once_with(msg)
 
@@ -153,13 +153,13 @@ class TestDiscordObserverRouting:
             priority=FilterPriority.CRITICAL,
             triggered_filters=["caps_abuse"],
             should_process=True,
-            reasoning="Message triggered filters: caps_abuse -> critical priority"
+            reasoning="Message triggered filters: caps_abuse -> critical priority",
         )
 
-        with patch.object(observer, '_create_priority_observation_result', new_callable=AsyncMock) as mock_create:
-            with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
+        with patch.object(observer, "_create_priority_observation_result", new_callable=AsyncMock) as mock_create:
+            with patch.object(observer, "_add_to_feedback_queue", new_callable=AsyncMock) as mock_feedback:
                 await observer._handle_priority_observation(msg, filter_result)
-                
+
                 # Should NOT create task or route to feedback
                 mock_create.assert_not_called()
                 mock_feedback.assert_not_called()
@@ -177,9 +177,9 @@ class TestDiscordObserverRouting:
             is_dm=False,
         )
 
-        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock) as mock_create:
             await observer._handle_passive_observation(msg)
-            
+
             # Should create task despite author being in WA list
             mock_create.assert_called_once_with(msg)
 
@@ -197,9 +197,9 @@ class TestDiscordObserverRouting:
         )
 
         # Mock the feedback queue to avoid actual task creation
-        with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
+        with patch.object(observer, "_add_to_feedback_queue", new_callable=AsyncMock) as mock_feedback:
             await observer._handle_passive_observation(msg)
-            
+
             # Should route to WA feedback queue
             mock_feedback.assert_called_once_with(msg)
 
@@ -216,10 +216,10 @@ class TestDiscordObserverRouting:
             is_dm=False,
         )
 
-        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
-            with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
+        with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock) as mock_create:
+            with patch.object(observer, "_add_to_feedback_queue", new_callable=AsyncMock) as mock_feedback:
                 await observer._handle_passive_observation(msg)
-                
+
                 # Should NOT create task or route to feedback
                 mock_create.assert_not_called()
                 mock_feedback.assert_not_called()
@@ -237,9 +237,9 @@ class TestDiscordObserverRouting:
             is_dm=False,
         )
 
-        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock) as mock_create:
             await observer._handle_passive_observation(msg)
-            
+
             # Should create task - the extraction should handle the prefix
             mock_create.assert_called_once_with(msg)
 
@@ -256,9 +256,9 @@ class TestDiscordObserverRouting:
             is_dm=False,
         )
 
-        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock) as mock_create:
             await observer._handle_passive_observation(msg)
-            
+
             # Should create task - the extraction should handle the prefix
             mock_create.assert_called_once_with(msg)
 
@@ -276,8 +276,8 @@ class TestDiscordObserverRouting:
         )
 
         # Test security - only numeric IDs are checked, not usernames
-        with patch.object(observer, '_add_to_feedback_queue', new_callable=AsyncMock) as mock_feedback:
-            with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_add_to_feedback_queue", new_callable=AsyncMock) as mock_feedback:
+            with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock) as mock_create:
                 await observer._handle_passive_observation(msg)
 
                 # Should NOT route to feedback because only numeric IDs are checked for security
@@ -298,9 +298,9 @@ class TestDiscordObserverRouting:
             is_dm=False,
         )
 
-        with patch.object(observer, '_send_deferral_message', new_callable=AsyncMock) as mock_send:
+        with patch.object(observer, "_send_deferral_message", new_callable=AsyncMock) as mock_send:
             await observer._add_to_feedback_queue(msg)
-            
+
             # Should send error message about unauthorized user
             mock_send.assert_called_once()
             call_args = mock_send.call_args[0][0]
@@ -332,10 +332,10 @@ class TestDiscordObserverRouting:
             is_dm=False,
         )
 
-        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock) as mock_create:
+        with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock) as mock_create:
             await observer._handle_passive_observation(msg1)
             await observer._handle_passive_observation(msg2)
-            
+
             # Both should create tasks
             assert mock_create.call_count == 2
             assert mock_create.call_args_list[0][0][0] == msg1
@@ -369,17 +369,18 @@ class TestDiscordObserverLogging:
             is_dm=False,
         )
 
-        with patch.object(observer, '_create_passive_observation_result', new_callable=AsyncMock):
+        with patch.object(observer, "_create_passive_observation_result", new_callable=AsyncMock):
             import logging
+
             with caplog.at_level(logging.INFO):
                 await observer._handle_passive_observation(msg)
-                
+
                 # Check for routing log
-                assert any("[DISCORD-PASSIVE] Routing message test_msg_log1" in record.message 
-                          for record in caplog.records)
+                assert any(
+                    "[DISCORD-PASSIVE] Routing message test_msg_log1" in record.message for record in caplog.records
+                )
                 # Check for task creation log
-                assert any("IS MONITORED - CREATING PASSIVE TASK" in record.message 
-                          for record in caplog.records)
+                assert any("IS MONITORED - CREATING PASSIVE TASK" in record.message for record in caplog.records)
 
     @pytest.mark.asyncio
     async def test_unmonitored_channel_rejection_logged(self, observer, caplog):
@@ -395,15 +396,16 @@ class TestDiscordObserverLogging:
         )
 
         import logging
+
         with caplog.at_level(logging.WARNING):
             await observer._handle_passive_observation(msg)
-            
+
             # Check for warning about no task created
-            assert any("NO TASK CREATED" in record.message and "test_msg_log2" in record.message
-                      for record in caplog.records)
+            assert any(
+                "NO TASK CREATED" in record.message and "test_msg_log2" in record.message for record in caplog.records
+            )
             # Check for reason
-            assert any("Channel not monitored" in record.message 
-                      for record in caplog.records)
+            assert any("Channel not monitored" in record.message for record in caplog.records)
 
     @pytest.mark.asyncio
     async def test_filter_rejection_logged_in_base_observer(self, observer, caplog):
@@ -425,23 +427,27 @@ class TestDiscordObserverLogging:
 
         # Mock filter service to reject the message
         mock_filter_service = AsyncMock()
-        mock_filter_service.filter_message = AsyncMock(return_value=FilterResult(
-            message_id=msg.message_id,
-            priority=FilterPriority.LOW,
-            triggered_filters=["spam_filter"],
-            should_process=False,
-            reasoning="Message identified as spam"
-        ))
+        mock_filter_service.filter_message = AsyncMock(
+            return_value=FilterResult(
+                message_id=msg.message_id,
+                priority=FilterPriority.LOW,
+                triggered_filters=["spam_filter"],
+                should_process=False,
+                reasoning="Message identified as spam",
+            )
+        )
         observer.filter_service = mock_filter_service
 
         import logging
+
         with caplog.at_level(logging.WARNING):
             await observer.handle_incoming_message(msg)
-            
+
             # Check for filter rejection log
-            assert any("FILTERED OUT by adaptive filter" in record.message 
-                      and "spam_filter" in record.message
-                      for record in caplog.records)
+            assert any(
+                "FILTERED OUT by adaptive filter" in record.message and "spam_filter" in record.message
+                for record in caplog.records
+            )
 
     @pytest.mark.asyncio
     async def test_priority_message_logging_with_filters(self, observer, caplog):
@@ -461,21 +467,24 @@ class TestDiscordObserverLogging:
             priority=FilterPriority.CRITICAL,
             triggered_filters=["at_mention", "urgent_keyword"],
             should_process=True,
-            reasoning="Critical priority due to @mention and urgent keyword"
+            reasoning="Critical priority due to @mention and urgent keyword",
         )
 
-        with patch.object(observer, '_create_priority_observation_result', new_callable=AsyncMock):
+        with patch.object(observer, "_create_priority_observation_result", new_callable=AsyncMock):
             import logging
+
             with caplog.at_level(logging.INFO):
                 await observer._handle_priority_observation(msg, filter_result)
-                
+
                 # Check for priority routing log
-                assert any("[DISCORD-PRIORITY]" in record.message 
-                          and "test_msg_priority_log" in record.message
-                          for record in caplog.records)
+                assert any(
+                    "[DISCORD-PRIORITY]" in record.message and "test_msg_priority_log" in record.message
+                    for record in caplog.records
+                )
                 # Check for filter info in log
-                assert any("at_mention" in record.message and "urgent_keyword" in record.message
-                          for record in caplog.records)
+                assert any(
+                    "at_mention" in record.message and "urgent_keyword" in record.message for record in caplog.records
+                )
 
 
 class TestDiscordObserverTaskCreation:
@@ -484,7 +493,7 @@ class TestDiscordObserverTaskCreation:
     @pytest.fixture
     def mock_persistence(self):
         """Mock persistence module."""
-        with patch('ciris_engine.logic.persistence') as mock:
+        with patch("ciris_engine.logic.persistence") as mock:
             mock.add_task = Mock()
             mock.add_thought = Mock()
             mock.get_thought_by_id = Mock(return_value=None)
@@ -502,7 +511,9 @@ class TestDiscordObserverTaskCreation:
         return observer
 
     @pytest.mark.asyncio
-    async def test_create_priority_observation_creates_task_and_thought(self, observer_with_persistence, mock_persistence):
+    async def test_create_priority_observation_creates_task_and_thought(
+        self, observer_with_persistence, mock_persistence
+    ):
         """Test that _create_priority_observation_result creates both task and thought."""
         msg = DiscordMessage(
             message_id="test_msg_13",
@@ -519,12 +530,12 @@ class TestDiscordObserverTaskCreation:
             priority=FilterPriority.CRITICAL,
             triggered_filters=["at_mention"],
             should_process=True,
-            reasoning="Message triggered filters: at_mention -> critical priority"
+            reasoning="Message triggered filters: at_mention -> critical priority",
         )
 
         # Need to patch the base class method since it's inherited
-        with patch('ciris_engine.logic.adapters.base_observer.persistence', mock_persistence):
-            with patch('uuid.uuid4', return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')):
+        with patch("ciris_engine.logic.adapters.base_observer.persistence", mock_persistence):
+            with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
                 await observer_with_persistence._create_priority_observation_result(msg, filter_result)
 
                 # Should have added a task
@@ -534,7 +545,7 @@ class TestDiscordObserverTaskCreation:
                 assert task.priority == 10  # Critical priority
                 assert "TestUser" in task.description
                 assert "123456789" in task.description
-                
+
                 # Should have added a thought
                 assert mock_persistence.add_thought.called
                 thought = mock_persistence.add_thought.call_args[0][0]
@@ -542,7 +553,9 @@ class TestDiscordObserverTaskCreation:
                 assert thought.status == ThoughtStatus.PENDING
 
     @pytest.mark.asyncio
-    async def test_create_passive_observation_creates_task_and_thought(self, observer_with_persistence, mock_persistence):
+    async def test_create_passive_observation_creates_task_and_thought(
+        self, observer_with_persistence, mock_persistence
+    ):
         """Test that _create_passive_observation_result creates both task and thought."""
         msg = DiscordMessage(
             message_id="test_msg_14",
@@ -555,8 +568,8 @@ class TestDiscordObserverTaskCreation:
         )
 
         # Need to patch the base class method since it's inherited
-        with patch('ciris_engine.logic.adapters.base_observer.persistence', mock_persistence):
-            with patch('uuid.uuid4', return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')):
+        with patch("ciris_engine.logic.adapters.base_observer.persistence", mock_persistence):
+            with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
                 await observer_with_persistence._create_passive_observation_result(msg)
 
                 # Should have added a task
@@ -565,7 +578,7 @@ class TestDiscordObserverTaskCreation:
                 assert isinstance(task, Task)
                 assert task.priority == 0  # Passive priority
                 assert "TestUser" in task.description
-                
+
                 # Should have added a thought
                 assert mock_persistence.add_thought.called
                 thought = mock_persistence.add_thought.call_args[0][0]

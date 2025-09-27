@@ -28,8 +28,8 @@ import pytest_asyncio
 
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.services.governance.self_observation import SelfObservationService
 from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
+from ciris_engine.logic.services.governance.self_observation import SelfObservationService
 from ciris_engine.logic.services.governance.visibility import VisibilityService
 
 # Import services to test

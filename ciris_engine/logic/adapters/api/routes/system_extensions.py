@@ -6,23 +6,19 @@ Adds runtime queue, service management, and processor state endpoints.
 
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.api.responses import SuccessResponse, ResponseMetadata
+from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.core.runtime import (
     ProcessorQueueStatus,
     ServiceHealthStatus,
     ServiceSelectionExplanation,
 )
-from ciris_engine.schemas.services.runtime_control import (
-    StepPoint,
-    StepResultUnion as StepResult,
-    PipelineState,
-)
+from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint
+from ciris_engine.schemas.services.runtime_control import StepResultUnion as StepResult
 
 from ..constants import (
     DESC_CURRENT_COGNITIVE_STATE,
@@ -74,7 +70,7 @@ class RuntimeControlResponse(BaseModel):
 
 class SingleStepResponse(RuntimeControlResponse):
     """Response for single-step operations with detailed step point data.
-    
+
     Extends the basic RuntimeControlResponse with comprehensive step point information,
     pipeline state, and demo-ready data for transparent AI operation visibility.
     """
@@ -82,19 +78,22 @@ class SingleStepResponse(RuntimeControlResponse):
     # Step Point Information
     step_point: Optional[StepPoint] = Field(None, description="The step point that was just executed")
     step_result: Optional[Dict[str, Any]] = Field(None, description="Complete step result data with full context")
-    
+
     # Pipeline State
     pipeline_state: Optional[PipelineState] = Field(None, description="Current pipeline state with all thoughts")
-    
+
     # Performance Metrics
     processing_time_ms: float = Field(0.0, description="Total processing time for this step in milliseconds")
     tokens_used: Optional[int] = Field(None, description="LLM tokens consumed during this step")
-    
+
     # Transparency Data
-    transparency_data: Optional[Dict[str, Any]] = Field(None, description="Detailed reasoning and system state data for transparency")
-    
+    transparency_data: Optional[Dict[str, Any]] = Field(
+        None, description="Detailed reasoning and system state data for transparency"
+    )
+
     class Config:
         """Pydantic configuration."""
+
         schema_extra = {
             "example": {
                 "success": True,
@@ -108,12 +107,12 @@ class SingleStepResponse(RuntimeControlResponse):
                     "thought_id": "thought_001",
                     "ethical_dma": {"reasoning": "Analyzed ethical implications", "confidence_level": 0.85},
                     "common_sense_dma": {"reasoning": "Applied common sense principles", "confidence_level": 0.90},
-                    "domain_dma": {"reasoning": "Domain expertise applied", "confidence_level": 0.80}
+                    "domain_dma": {"reasoning": "Domain expertise applied", "confidence_level": 0.80},
                 },
                 "pipeline_state": {
                     "is_paused": True,
                     "current_round": 5,
-                    "thoughts_by_step": {"BUILD_CONTEXT": [], "PERFORM_DMAS": []}
+                    "thoughts_by_step": {"BUILD_CONTEXT": [], "PERFORM_DMAS": []},
                 },
                 "processing_time_ms": 1250.0,
                 "tokens_used": 150,
@@ -122,9 +121,9 @@ class SingleStepResponse(RuntimeControlResponse):
                     "step_description": "Multi-perspective DMA analysis",
                     "key_insights": {
                         "ethical_confidence": 0.85,
-                        "dmas_executed": ["ethical", "common_sense", "domain"]
-                    }
-                }
+                        "dmas_executed": ["ethical", "common_sense", "domain"],
+                    },
+                },
             }
         }
 
@@ -154,7 +153,9 @@ async def _get_queue_depth(runtime_control) -> int:
         return 0
 
 
-def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, Any]], Optional[Any], float, Optional[int], Optional[Dict[str, Any]]]:
+def _extract_pipeline_data(
+    runtime,
+) -> tuple[Optional[Any], Optional[Dict[str, Any]], Optional[Any], float, Optional[int], Optional[Dict[str, Any]]]:
     """Extract pipeline state, step result, and processing metrics."""
     step_point = None
     step_result = None
@@ -162,26 +163,30 @@ def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, A
     processing_time_ms = 0.0
     tokens_used = None
     demo_data = None
-    
+
     try:
         if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
             pipeline_controller = runtime.pipeline_controller
-            
+
             # Get current pipeline state
             try:
                 pipeline_state = pipeline_controller.get_current_state()
             except Exception as e:
                 logger.debug(f"Could not get pipeline state: {e}")
-            
+
             # Get latest step result
             try:
                 latest_step_result = pipeline_controller.get_latest_step_result()
                 if latest_step_result:
                     step_point = latest_step_result.step_point
-                    step_result = latest_step_result.model_dump() if hasattr(latest_step_result, 'model_dump') else dict(latest_step_result)
+                    step_result = (
+                        latest_step_result.model_dump()
+                        if hasattr(latest_step_result, "model_dump")
+                        else dict(latest_step_result)
+                    )
             except Exception as e:
                 logger.debug(f"Could not get step result: {e}")
-            
+
             # Get processing metrics
             try:
                 metrics = pipeline_controller.get_processing_metrics()
@@ -192,13 +197,11 @@ def _extract_pipeline_data(runtime) -> tuple[Optional[Any], Optional[Dict[str, A
                     demo_data = None
             except Exception as e:
                 logger.debug(f"Could not get processing metrics: {e}")
-    
+
     except Exception as e:
         logger.debug(f"Could not extract enhanced data: {e}")
-    
+
     return step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data
-
-
 
 
 def _get_runtime_control_service_for_step(request: Request):
@@ -210,6 +213,7 @@ def _get_runtime_control_service_for_step(request: Request):
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
     return runtime_control
 
+
 def _create_basic_response_data(result, cognitive_state: str, queue_depth: int) -> dict:
     """Create basic response data for single step."""
     return {
@@ -220,34 +224,37 @@ def _create_basic_response_data(result, cognitive_state: str, queue_depth: int) 
         "queue_depth": queue_depth,
     }
 
+
 def _convert_step_point(result) -> Optional[Any]:
     """Convert step_point string to enum if needed."""
     from ciris_engine.schemas.services.runtime_control import StepPoint
-    
+
     if not result.step_point:
         return None
-        
+
     try:
         return StepPoint(result.step_point.lower()) if isinstance(result.step_point, str) else result.step_point
     except (ValueError, AttributeError):
         return None
 
+
 def _consolidate_step_results(result) -> Optional[dict]:
     """Convert step_results list to consolidated step_result dict for API response."""
     if not (result.step_results and isinstance(result.step_results, list)):
         return None
-        
+
     return {
         "steps_processed": len(result.step_results),
-        "results_by_round": {str(item.get("round_number", 0)): item for item in result.step_results if isinstance(item, dict)},
-        "summary": result.step_results[0] if result.step_results else None
+        "results_by_round": {
+            str(item.get("round_number", 0)): item for item in result.step_results if isinstance(item, dict)
+        },
+        "summary": result.step_results[0] if result.step_results else None,
     }
+
 
 @router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
 async def single_step_processor(
-    request: Request, 
-    auth: AuthContext = Depends(require_admin), 
-    body: dict = Body(default={})
+    request: Request, auth: AuthContext = Depends(require_admin), body: dict = Body(default={})
 ) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
@@ -270,7 +277,7 @@ async def single_step_processor(
         basic_response_data = _create_basic_response_data(result, cognitive_state, queue_depth)
         safe_step_point = _convert_step_point(result)
         safe_step_result = _consolidate_step_results(result)
-        
+
         # Extract other safe data
         safe_pipeline_state = result.pipeline_state
         safe_processing_time = result.processing_time_ms or 0.0
@@ -286,14 +293,12 @@ async def single_step_processor(
             tokens_used=safe_tokens_used,
             transparency_data=safe_transparency_data,
         )
-        
+
         return SuccessResponse(data=single_step_response)
-        
+
     except Exception as e:
         logger.error(f"Error in single step: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 
 # Service Management Extensions
@@ -475,16 +480,19 @@ def _get_current_state_name(runtime) -> Optional[str]:
     """Extract current state name from runtime."""
     if not hasattr(runtime.agent_processor, "state_manager") or not runtime.agent_processor.state_manager:
         return None
-        
+
     current_state = runtime.agent_processor.state_manager.get_state()
     if not current_state:
         return None
-        
+
     # Handle both enum objects and string representations like "AgentState.WORK"
     current_state_str = str(current_state)
     return current_state_str.split(".")[-1] if "." in current_state_str else current_state_str
 
-def _create_processor_state(name: str, description: str, capabilities: List[str], is_active: bool) -> ProcessorStateInfo:
+
+def _create_processor_state(
+    name: str, description: str, capabilities: List[str], is_active: bool
+) -> ProcessorStateInfo:
     """Create a ProcessorStateInfo object."""
     return ProcessorStateInfo(
         name=name,
@@ -493,27 +501,47 @@ def _create_processor_state(name: str, description: str, capabilities: List[str]
         capabilities=capabilities,
     )
 
+
 def _get_processor_state_definitions(current_state_name: Optional[str]) -> List[ProcessorStateInfo]:
     """Get all processor state definitions."""
     states = [
-        ("WAKEUP", "Initial state for identity confirmation and system initialization",
-         ["identity_confirmation", "system_checks", "initial_setup"]),
-        ("WORK", "Normal task processing and interaction state",
-         ["task_processing", "user_interaction", "tool_usage", "memory_operations"]),
-        ("DREAM", "Deep introspection and memory consolidation state",
-         ["memory_consolidation", "pattern_analysis", "self_reflection"]),
-        ("PLAY", "Creative exploration and experimentation state",
-         ["creative_tasks", "exploration", "learning", "experimentation"]),
-        ("SOLITUDE", "Quiet reflection and planning state",
-         ["planning", "reflection", "goal_setting", "strategy_development"]),
-        ("SHUTDOWN", "Graceful shutdown and cleanup state",
-         ["cleanup", "final_messages", "state_persistence", "resource_release"]),
+        (
+            "WAKEUP",
+            "Initial state for identity confirmation and system initialization",
+            ["identity_confirmation", "system_checks", "initial_setup"],
+        ),
+        (
+            "WORK",
+            "Normal task processing and interaction state",
+            ["task_processing", "user_interaction", "tool_usage", "memory_operations"],
+        ),
+        (
+            "DREAM",
+            "Deep introspection and memory consolidation state",
+            ["memory_consolidation", "pattern_analysis", "self_reflection"],
+        ),
+        (
+            "PLAY",
+            "Creative exploration and experimentation state",
+            ["creative_tasks", "exploration", "learning", "experimentation"],
+        ),
+        (
+            "SOLITUDE",
+            "Quiet reflection and planning state",
+            ["planning", "reflection", "goal_setting", "strategy_development"],
+        ),
+        (
+            "SHUTDOWN",
+            "Graceful shutdown and cleanup state",
+            ["cleanup", "final_messages", "state_persistence", "resource_release"],
+        ),
     ]
-    
+
     return [
         _create_processor_state(name, description, capabilities, current_state_name == name)
         for name, description, capabilities in states
     ]
+
 
 @router.get("/processors", response_model=SuccessResponse[List[ProcessorStateInfo]])
 async def get_processor_states(
@@ -540,21 +568,19 @@ async def get_processor_states(
 
 
 @router.get("/runtime/reasoning-stream")
-async def reasoning_stream(
-    request: Request, 
-    auth: AuthContext = Depends(require_observer)
-):
+async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)):
     """
     Stream live H3ERE reasoning steps as they occur.
-    
+
     Provides real-time streaming of step-by-step reasoning for live UI generation.
     Returns Server-Sent Events (SSE) with step data as processing happens.
     Requires OBSERVER role or higher.
     """
-    from fastapi.responses import StreamingResponse
-    import json
     import asyncio
-    
+    import json
+
+    from fastapi.responses import StreamingResponse
+
     # Get runtime control service
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
@@ -567,41 +593,41 @@ async def reasoning_stream(
         try:
             # Subscribe to the global step result stream
             from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
-            
+
             # Create a queue for this client
             stream_queue = asyncio.Queue(maxsize=100)
             step_result_stream.subscribe(stream_queue)
-            
+
             try:
                 # Send initial connection event
                 yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
-                
+
                 # Stream live step results as they occur
                 while True:
                     try:
                         # Wait for step results with timeout to send keepalive
                         step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
-                        
+
                         # Stream the step update
                         yield f"event: step_update\ndata: {json.dumps(step_update, default=str)}\n\n"
-                        
+
                     except asyncio.TimeoutError:
                         # Send keepalive every 30 seconds
                         yield f"event: keepalive\ndata: {json.dumps({'timestamp': datetime.now().isoformat()})}\n\n"
-                        
+
                     except Exception as step_error:
                         logger.error(f"Error processing step result in stream: {step_error}")
                         yield f"event: error\ndata: {json.dumps({'error': str(step_error)})}\n\n"
                         break
-                        
+
             finally:
                 # Clean up subscription
                 step_result_stream.unsubscribe(stream_queue)
-                
+
         except Exception as e:
             logger.error(f"Error in reasoning stream: {e}")
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-    
+
     return StreamingResponse(
         stream_reasoning_steps(),
         media_type="text/event-stream",
@@ -609,6 +635,6 @@ async def reasoning_stream(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Cache-Control"
-        }
+            "Access-Control-Allow-Headers": "Cache-Control",
+        },
     )

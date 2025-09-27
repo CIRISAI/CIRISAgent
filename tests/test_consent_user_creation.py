@@ -152,26 +152,26 @@ class TestConsentUserCreation:
 def test_consent_metadata_definitions():
     """Test that consent metadata dictionaries are properly defined."""
     from ciris_engine.logic.adapters.api.routes.consent import (
-        STREAM_METADATA,
         CATEGORY_METADATA,
+        STREAM_METADATA,
+        ConsentCategory,
         ConsentStream,
-        ConsentCategory
     )
-    
+
     # Test all streams have metadata
     for stream in ConsentStream:
         assert stream in STREAM_METADATA
         metadata = STREAM_METADATA[stream]
         assert "name" in metadata
         assert "description" in metadata
-    
+
     # Test all categories have metadata
     for category in ConsentCategory:
         assert category in CATEGORY_METADATA
         metadata = CATEGORY_METADATA[category]
         assert "name" in metadata
         assert "description" in metadata
-    
+
     # Test specific metadata values
     assert STREAM_METADATA[ConsentStream.TEMPORARY]["duration_days"] == 14
     assert STREAM_METADATA[ConsentStream.PARTNERED].get("requires_categories") is True

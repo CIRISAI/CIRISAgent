@@ -74,10 +74,7 @@ async def get_deferrals(
             deferral_dict["timeout_at"] = (d.created_at + timedelta(days=7)).isoformat()  # Default 7 day timeout
             transformed_deferrals.append(deferral_dict)
 
-        response = DeferralListResponse(
-            deferrals=transformed_deferrals,
-            total=len(transformed_deferrals)
-        )
+        response = DeferralListResponse(deferrals=transformed_deferrals, total=len(transformed_deferrals))
 
         return SuccessResponse(
             data=response,

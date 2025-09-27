@@ -7,9 +7,10 @@ Targets audit edge cases and error handling for improved coverage:
 - Security event logging variations
 """
 
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from ciris_engine.logic.adapters.discord.discord_audit import DiscordAuditLogger
 
@@ -31,8 +32,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.connection_connected'
-        assert call_args['event_data']['outcome'] == 'success'
+        assert call_args["event_type"] == "discord.connection_connected"
+        assert call_args["event_data"]["outcome"] == "success"
 
     @pytest.mark.asyncio
     async def test_log_connection_event_no_audit_service(self):
@@ -49,8 +50,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.connection_disconnected.failed'
-        assert call_args['event_data']['outcome'] == 'failure'
+        assert call_args["event_type"] == "discord.connection_disconnected.failed"
+        assert call_args["event_data"]["outcome"] == "failure"
 
     @pytest.mark.asyncio
     async def test_log_message_sent_success(self):
@@ -59,9 +60,9 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.send_message'
-        assert call_args['event_data']['details']['channel_id'] == 'channel123'
-        assert call_args['event_data']['details']['correlation_id'] == 'corr-123'
+        assert call_args["event_type"] == "discord.send_message"
+        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
+        assert call_args["event_data"]["details"]["correlation_id"] == "corr-123"
 
     @pytest.mark.asyncio
     async def test_log_message_sent_truncation(self):
@@ -72,8 +73,8 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         # Message logging doesn't expose content in audit trail - verify call happened
-        assert call_args['event_type'] == 'discord.send_message'
-        assert call_args['event_data']['actor'] == 'user456'
+        assert call_args["event_type"] == "discord.send_message"
+        assert call_args["event_data"]["actor"] == "user456"
 
     @pytest.mark.asyncio
     async def test_log_message_received_success(self):
@@ -82,8 +83,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.receive_message'
-        assert call_args['event_data']['details']['channel_id'] == 'channel123'
+        assert call_args["event_type"] == "discord.receive_message"
+        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
 
     @pytest.mark.asyncio
     async def test_log_guidance_request_success(self):
@@ -93,8 +94,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.request_guidance'
-        assert call_args['event_data']['details']['channel_id'] == 'channel123'
+        assert call_args["event_type"] == "discord.request_guidance"
+        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
 
     @pytest.mark.asyncio
     async def test_log_guidance_request_no_guidance(self):
@@ -104,8 +105,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.request_guidance'
-        assert call_args['event_data']['actor'] == 'user456'
+        assert call_args["event_type"] == "discord.request_guidance"
+        assert call_args["event_data"]["actor"] == "user456"
 
     @pytest.mark.asyncio
     async def test_log_approval_request_success(self):
@@ -114,8 +115,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.request_approval'
-        assert call_args['event_data']['details']['channel_id'] == 'channel123'
+        assert call_args["event_type"] == "discord.request_approval"
+        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
 
     @pytest.mark.asyncio
     async def test_log_permission_change_success(self):
@@ -124,8 +125,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.grant_permission'
-        assert call_args['event_data']['actor'] == 'admin123'
+        assert call_args["event_type"] == "discord.grant_permission"
+        assert call_args["event_data"]["actor"] == "admin123"
 
     @pytest.mark.asyncio
     async def test_log_tool_execution_success(self):
@@ -135,8 +136,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.execute_tool'
-        assert call_args['event_data']['actor'] == 'user123'
+        assert call_args["event_type"] == "discord.execute_tool"
+        assert call_args["event_data"]["actor"] == "user123"
 
     @pytest.mark.asyncio
     async def test_log_tool_execution_failure(self):
@@ -146,8 +147,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.execute_tool.failed'
-        assert call_args['event_data']['outcome'] == 'failure'
+        assert call_args["event_type"] == "discord.execute_tool.failed"
+        assert call_args["event_data"]["outcome"] == "failure"
 
     @pytest.mark.asyncio
     async def test_audit_service_exception_handling(self):
@@ -174,14 +175,14 @@ class TestDiscordAuditCoverage:
             "guild_id": "guild456",
             "correlation_id": "corr-789",
             "nested_data": {"key1": "value1", "key2": 123},
-            "list_data": [1, 2, 3, 4, 5]
+            "list_data": [1, 2, 3, 4, 5],
         }
 
         await self.audit.log_operation("complex_test", "user123", complex_context, True)
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_data']['details']['correlation_id'] == 'corr-789'
+        assert call_args["event_data"]["details"]["correlation_id"] == "corr-789"
 
     @pytest.mark.asyncio
     async def test_empty_parameters_handling(self):
@@ -190,8 +191,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.execute_tool'
-        assert call_args['event_data']['actor'] == 'user123'
+        assert call_args["event_type"] == "discord.execute_tool"
+        assert call_args["event_data"]["actor"] == "user123"
 
     @pytest.mark.asyncio
     async def test_none_parameters_handling(self):
@@ -200,8 +201,8 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args['event_type'] == 'discord.execute_tool'
-        assert call_args['event_data']['actor'] == 'user123'
+        assert call_args["event_type"] == "discord.execute_tool"
+        assert call_args["event_data"]["actor"] == "user123"
 
     def test_set_audit_service_method(self):
         """Test setting audit service after initialization."""

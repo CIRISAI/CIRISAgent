@@ -29,7 +29,7 @@ class SimpleSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Test basic processor pause functionality"
+                description="Test basic processor pause functionality",
             ),
             # Test 2: Single step when paused (should work)
             QATestCase(
@@ -40,7 +40,7 @@ class SimpleSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Test single step execution when processor is paused"
+                description="Test single step execution when processor is paused",
             ),
             # Test 3: Resume functionality
             QATestCase(
@@ -51,7 +51,7 @@ class SimpleSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Test processor resume functionality"
+                description="Test processor resume functionality",
             ),
             # Test 4: Single step when NOT paused (should fail gracefully)
             QATestCase(
@@ -62,6 +62,6 @@ class SimpleSingleStepTestModule:
                 payload={},
                 expected_status=200,  # Returns 200 but with success=false in data
                 requires_auth=True,
-                description="Test single step fails gracefully when processor is active"
-            )
+                description="Test single step fails gracefully when processor is active",
+            ),
         ]

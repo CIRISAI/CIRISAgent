@@ -6,7 +6,7 @@ Adapters are the interfaces between CIRIS and external platforms.
 """
 
 from abc import abstractmethod
-from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
     from ciris_engine.logic.adapters.discord.config import DiscordAdapterConfig

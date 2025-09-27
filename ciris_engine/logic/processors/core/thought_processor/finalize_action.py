@@ -8,12 +8,12 @@ handling special cases and ensuring a valid action result.
 import logging
 from typing import Any
 
+from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.processors.core.step_decorators import streaming_step, step_point
-from ciris_engine.schemas.services.runtime_control import StepPoint
 from ciris_engine.schemas.actions.parameters import PonderParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.services.runtime_control import StepPoint
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class ActionFinalizationPhase:
     """
     Phase 6: Action Finalization
-    
+
     Determines the final action to execute:
     - Handles edge cases and special processing
     - Ensures a valid action result exists
@@ -45,5 +45,5 @@ class ActionFinalizationPhase:
                 confidence_score=0.1,
                 resource_usage=None,
             )
-        
+
         return final_result

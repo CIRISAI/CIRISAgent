@@ -6,15 +6,22 @@ Covers cost calculation, environmental impact, model patterns, and configuration
 """
 
 import logging
-from unittest.mock import Mock, patch
 from datetime import datetime
+from unittest.mock import Mock, patch
+
 import pytest
 
-from ciris_engine.logic.services.runtime.llm_service.pricing_calculator import LLMPricingCalculator
 from ciris_engine.config.pricing_models import (
-    PricingConfig, ProviderConfig, ModelConfig, EnvironmentalFactors,
-    EnergyEstimates, CarbonIntensity, FallbackPricing, PricingMetadata
+    CarbonIntensity,
+    EnergyEstimates,
+    EnvironmentalFactors,
+    FallbackPricing,
+    ModelConfig,
+    PricingConfig,
+    PricingMetadata,
+    ProviderConfig,
 )
+from ciris_engine.logic.services.runtime.llm_service.pricing_calculator import LLMPricingCalculator
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 
 
@@ -31,7 +38,7 @@ class TestLLMPricingCalculatorComprehensive:
             active=True,
             deprecated=False,
             effective_date="2024-07-18",
-            description="GPT-4o model"
+            description="GPT-4o model",
         )
 
         self.mock_anthropic_config = ModelConfig(
@@ -41,7 +48,7 @@ class TestLLMPricingCalculatorComprehensive:
             active=True,
             deprecated=False,
             effective_date="2024-06-20",
-            description="Claude-3 Opus"
+            description="Claude-3 Opus",
         )
 
         self.mock_fallback_config = ModelConfig(
@@ -51,7 +58,7 @@ class TestLLMPricingCalculatorComprehensive:
             active=True,
             deprecated=False,
             effective_date="2024-01-01",
-            description="Unknown model fallback"
+            description="Unknown model fallback",
         )
 
         # Create mock providers
@@ -67,7 +74,7 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-07-18",
-                    description="GPT-4o mini"
+                    description="GPT-4o mini",
                 ),
                 "gpt-4-turbo": ModelConfig(
                     input_cost=100.0,
@@ -76,7 +83,7 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-04-09",
-                    description="GPT-4 Turbo"
+                    description="GPT-4 Turbo",
                 ),
                 "gpt-3.5-turbo": ModelConfig(
                     input_cost=5.0,
@@ -85,9 +92,9 @@ class TestLLMPricingCalculatorComprehensive:
                     active=False,
                     deprecated=True,
                     effective_date="2023-06-13",
-                    description="GPT-3.5 Turbo (deprecated)"
-                )
-            }
+                    description="GPT-3.5 Turbo (deprecated)",
+                ),
+            },
         )
 
         self.mock_anthropic_provider = ProviderConfig(
@@ -102,7 +109,7 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-02-29",
-                    description="Claude-3 Sonnet"
+                    description="Claude-3 Sonnet",
                 ),
                 "claude-3-haiku": ModelConfig(
                     input_cost=25.0,
@@ -111,9 +118,9 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-03-07",
-                    description="Claude-3 Haiku"
-                )
-            }
+                    description="Claude-3 Haiku",
+                ),
+            },
         )
 
         self.mock_together_provider = ProviderConfig(
@@ -127,7 +134,7 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-07-23",
-                    description="Llama 3.1 405B Instruct"
+                    description="Llama 3.1 405B Instruct",
                 ),
                 "llama-3.1-70b-instruct": ModelConfig(
                     input_cost=88.0,
@@ -136,9 +143,9 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-07-23",
-                    description="Llama 3.1 70B Instruct"
-                )
-            }
+                    description="Llama 3.1 70B Instruct",
+                ),
+            },
         )
 
         self.mock_lambda_provider = ProviderConfig(
@@ -152,9 +159,9 @@ class TestLLMPricingCalculatorComprehensive:
                     active=True,
                     deprecated=False,
                     effective_date="2024-09-01",
-                    description="Llama 4 Maverick 17B"
+                    description="Llama 4 Maverick 17B",
                 )
-            }
+            },
         )
 
         # Create mock environmental factors
@@ -165,16 +172,10 @@ class TestLLMPricingCalculatorComprehensive:
                     "claude-3": {"kwh_per_1k_tokens": 0.0051},
                     "llama": {"kwh_per_1k_tokens": 0.0032},
                     "unknown": {"kwh_per_1k_tokens": 0.005},
-                    "default": {"kwh_per_1k_tokens": 0.005}
+                    "default": {"kwh_per_1k_tokens": 0.005},
                 }
             ),
-            carbon_intensity=CarbonIntensity(
-                global_average_g_co2_per_kwh=429.0,
-                regions={
-                    "us": 386.0,
-                    "eu": 296.0
-                }
-            )
+            carbon_intensity=CarbonIntensity(global_average_g_co2_per_kwh=429.0, regions={"us": 386.0, "eu": 296.0}),
         )
 
         # Create mock pricing config
@@ -186,19 +187,18 @@ class TestLLMPricingCalculatorComprehensive:
                 currency="USD",
                 units="per_million_tokens",
                 sources=["OpenAI", "Anthropic", "Together"],
-                schema_version="1.0"
+                schema_version="1.0",
             ),
             providers={
                 "openai": self.mock_openai_provider,
                 "anthropic": self.mock_anthropic_provider,
                 "together": self.mock_together_provider,
-                "lambda_labs": self.mock_lambda_provider
+                "lambda_labs": self.mock_lambda_provider,
             },
             environmental_factors=self.mock_env_factors,
             fallback_pricing=FallbackPricing(
-                unknown_model=self.mock_fallback_config,
-                deprecated_model=self.mock_fallback_config
-            )
+                unknown_model=self.mock_fallback_config, deprecated_model=self.mock_fallback_config
+            ),
         )
 
     def test_initialization_with_config(self):
@@ -209,7 +209,9 @@ class TestLLMPricingCalculatorComprehensive:
 
     def test_initialization_without_config(self):
         """Test initialization without pricing configuration (loads from file)."""
-        with patch('ciris_engine.logic.services.runtime.llm_service.pricing_calculator.get_pricing_config') as mock_get_config:
+        with patch(
+            "ciris_engine.logic.services.runtime.llm_service.pricing_calculator.get_pricing_config"
+        ) as mock_get_config:
             mock_get_config.return_value = self.mock_pricing_config
 
             calculator = LLMPricingCalculator()
@@ -222,10 +224,7 @@ class TestLLMPricingCalculatorComprehensive:
         calculator = LLMPricingCalculator(pricing_config=self.mock_pricing_config)
 
         result = calculator.calculate_cost_and_impact(
-            model_name="gpt-4o",
-            prompt_tokens=1000,
-            completion_tokens=500,
-            provider_name="openai"
+            model_name="gpt-4o", prompt_tokens=1000, completion_tokens=500, provider_name="openai"
         )
 
         # Verify ResourceUsage structure
@@ -247,11 +246,7 @@ class TestLLMPricingCalculatorComprehensive:
         """Test cost calculation when provider name is not specified."""
         calculator = LLMPricingCalculator(pricing_config=self.mock_pricing_config)
 
-        result = calculator.calculate_cost_and_impact(
-            model_name="gpt-4o",
-            prompt_tokens=1000,
-            completion_tokens=500
-        )
+        result = calculator.calculate_cost_and_impact(model_name="gpt-4o", prompt_tokens=1000, completion_tokens=500)
 
         assert isinstance(result, ResourceUsage)
         assert result.tokens_used == 1500
@@ -265,10 +260,7 @@ class TestLLMPricingCalculatorComprehensive:
         calculator = LLMPricingCalculator(pricing_config=self.mock_pricing_config)
 
         result = calculator.calculate_cost_and_impact(
-            model_name="gpt-4o",
-            prompt_tokens=1000,
-            completion_tokens=500,
-            region="us"
+            model_name="gpt-4o", prompt_tokens=1000, completion_tokens=500, region="us"
         )
 
         assert isinstance(result, ResourceUsage)
@@ -475,7 +467,9 @@ class TestLLMPricingCalculatorComprehensive:
         new_config = Mock()
         new_config.version = "2.0.0"
 
-        with patch('ciris_engine.logic.services.runtime.llm_service.pricing_calculator.get_pricing_config') as mock_get_config:
+        with patch(
+            "ciris_engine.logic.services.runtime.llm_service.pricing_calculator.get_pricing_config"
+        ) as mock_get_config:
             mock_get_config.return_value = new_config
 
             calculator.reload_pricing_config()

@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryOpResult
+from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
 
 
 class MockTimeService:
     """Mock time service for testing."""
-    
+
     def __init__(self, now_time=None):
         self._now = now_time or datetime(2025, 9, 7, 18, 0, 0)
 
@@ -84,16 +84,16 @@ def clean_logger_config():
     for name in ["ciris_engine.logic.utils.incident_capture_handler"]:
         logger = logging.getLogger(name)
         loggers_to_restore[name] = {
-            'handlers': logger.handlers[:],
-            'level': logger.level,
-            'propagate': logger.propagate
+            "handlers": logger.handlers[:],
+            "level": logger.level,
+            "propagate": logger.propagate,
         }
-    
+
     yield
-    
+
     # Restore original configuration
     for name, config in loggers_to_restore.items():
         logger = logging.getLogger(name)
-        logger.handlers = config['handlers']
-        logger.setLevel(config['level'])
-        logger.propagate = config['propagate']
+        logger.handlers = config["handlers"]
+        logger.setLevel(config["level"])
+        logger.propagate = config["propagate"]

@@ -450,14 +450,14 @@ class TestAgentProcessor:
         """Test pausing the processor."""
         # Initially not paused
         assert not main_processor.is_paused()
-        
+
         # Pause should succeed
         result = await main_processor.pause_processing()
         assert result is True
         assert main_processor.is_paused()
         assert main_processor._pause_event is not None
         assert main_processor._pipeline_controller is not None
-        
+
         # Pause again should still return True
         result = await main_processor.pause_processing()
         assert result is True
@@ -469,11 +469,11 @@ class TestAgentProcessor:
         # Initially not paused, resume should return False
         result = await main_processor.resume_processing()
         assert result is False
-        
+
         # Pause first
         await main_processor.pause_processing()
         assert main_processor.is_paused()
-        
+
         # Resume should succeed
         result = await main_processor.resume_processing()
         assert result is True
@@ -485,7 +485,7 @@ class TestAgentProcessor:
         """Test single_step raises error when not paused."""
         # Ensure not paused
         assert not main_processor.is_paused()
-        
+
         # Single step should raise RuntimeError
         with pytest.raises(RuntimeError, match="Cannot single-step unless processor is paused"):
             await main_processor.single_step()
@@ -496,16 +496,16 @@ class TestAgentProcessor:
         # Properly pause processor (pipeline controller is always initialized now)
         await main_processor.pause_processing()
         assert main_processor.is_paused()
-        
+
         # Make pipeline controller's execute method raise an error
         main_processor._pipeline_controller.execute_single_step_point = AsyncMock(
             side_effect=Exception("Pipeline error")
         )
-        
+
         # Single step should propagate the error (FAIL FAST principle)
         with pytest.raises(Exception, match="Pipeline error"):
             await main_processor.single_step()
-        
+
         # Verify single-step mode is properly disabled in finally block
         assert not main_processor._single_step_mode
 
@@ -515,17 +515,17 @@ class TestAgentProcessor:
         # Properly pause processor
         await main_processor.pause_processing()
         assert main_processor.is_paused()
-        
+
         # Mock pipeline controller without execute_single_step_point method
         # Use spec to create a controller that explicitly doesn't have the method
         class MockPipelineController:
             def __init__(self):
                 self.is_paused = True
                 self._single_step_mode = False
-        
+
         mock_controller = MockPipelineController()
         main_processor._pipeline_controller = mock_controller
-        
+
         # Single step should raise NotImplementedError (FAIL FAST principle)
         with pytest.raises(NotImplementedError, match="missing execute_single_step_point method"):
             await main_processor.single_step()
@@ -536,29 +536,19 @@ class TestAgentProcessor:
         # Properly pause processor
         await main_processor.pause_processing()
         assert main_processor.is_paused()
-        
+
         # Mock pipeline controller with execute_single_step_point method
         mock_controller = AsyncMock()
         mock_step_result = {
             "step_point": "GATHER_CONTEXT",
-            "step_results": [
-                {
-                    "thought_id": "test-thought-1",
-                    "success": True,
-                    "step_data": {"context": "test"}
-                }
-            ],
-            "pipeline_state": {
-                "current_round": 1,
-                "pipeline_empty": False,
-                "thoughts_by_step": {}
-            },
+            "step_results": [{"thought_id": "test-thought-1", "success": True, "step_data": {"context": "test"}}],
+            "pipeline_state": {"current_round": 1, "pipeline_empty": False, "thoughts_by_step": {}},
             "current_round": 1,
-            "pipeline_empty": False
+            "pipeline_empty": False,
         }
         mock_controller.execute_single_step_point.return_value = mock_step_result
         main_processor._pipeline_controller = mock_controller
-        
+
         # Single step should succeed
         result = await main_processor.single_step()
         assert result["success"] is True
@@ -566,7 +556,7 @@ class TestAgentProcessor:
         assert result["thoughts_processed"] == 1
         assert "processing_time_ms" in result
         assert "pipeline_state" in result
-        
+
         # Verify controller was called
         mock_controller.execute_single_step_point.assert_called_once()
 
@@ -575,16 +565,16 @@ class TestAgentProcessor:
         """Test single_step propagates errors (FAIL FAST principle)."""
         # Properly pause processor
         await main_processor.pause_processing()
-        
+
         # Mock pipeline controller to raise error
         mock_controller = AsyncMock()
         mock_controller.execute_single_step_point.side_effect = Exception("Step failed")
         main_processor._pipeline_controller = mock_controller
-        
+
         # Single step should propagate the error (FAIL FAST)
         with pytest.raises(Exception, match="Step failed"):
             await main_processor.single_step()
-        
+
         # Single step mode should be disabled after error (via finally block)
         assert not main_processor._single_step_mode
 
@@ -595,26 +585,26 @@ class TestAgentProcessor:
         pause_event = AsyncMock()
         main_processor._pause_event = pause_event
         main_processor._is_paused = True
-        
+
         # Mock other required components
         main_processor.state_manager.get_state = Mock(return_value=AgentState.WORK)
         main_processor.work_processor = Mock()
         main_processor.work_processor.process = AsyncMock(return_value={"state": "work", "round_number": 1})
         main_processor._process_pending_thoughts_async = AsyncMock(return_value=0)
-        
+
         # Start processing loop with limited rounds
         process_task = asyncio.create_task(main_processor._processing_loop(1))
-        
+
         # Give a moment for the loop to hit the pause check
         await asyncio.sleep(0.01)
-        
+
         # Verify pause event wait was called
         pause_event.wait.assert_called()
-        
+
         # Resume to let the loop complete
         main_processor._is_paused = False
         pause_event.wait = AsyncMock()  # Reset to not block
-        
+
         # Cancel the task to avoid hanging
         process_task.cancel()
         try:
@@ -634,22 +624,22 @@ class TestAgentProcessor:
         """Test single_step raises NotImplementedError when pipeline controller lacks method."""
         # Properly pause processor
         await main_processor.pause_processing()
-        
+
         # Mock pipeline controller without execute_single_step_point
         class MockPipelineController:
             def __init__(self):
                 self.is_paused = True
                 self._single_step_mode = False
-                
+
             def get_pipeline_state(self):
                 # Return empty pipeline state to trigger pending thoughts check
                 mock_state = Mock()
                 mock_state.thoughts_by_step = {}
                 return mock_state
-        
+
         mock_controller = MockPipelineController()
         main_processor._pipeline_controller = mock_controller
-        
+
         # Single step should raise NotImplementedError (FAIL FAST principle)
         with pytest.raises(NotImplementedError, match="missing execute_single_step_point method"):
             await main_processor.single_step()
@@ -659,16 +649,16 @@ class TestAgentProcessor:
         """Test single_step raises NotImplementedError (no fallback, FAIL FAST principle)."""
         # Properly pause processor
         await main_processor.pause_processing()
-        
+
         # Mock pipeline controller without execute_single_step_point
         class MockPipelineController:
             def __init__(self):
                 self.is_paused = True
                 self._single_step_mode = False
-        
+
         mock_controller = MockPipelineController()
         main_processor._pipeline_controller = mock_controller
-        
+
         # Single step should raise NotImplementedError before any fallback logic
         with pytest.raises(NotImplementedError, match="missing execute_single_step_point method"):
             await main_processor.single_step()

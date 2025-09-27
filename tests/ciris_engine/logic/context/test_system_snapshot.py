@@ -11,14 +11,14 @@ from ciris_engine.schemas.runtime.enums import TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from tests.fixtures.mocks import (
-    MockTelemetryService,
-    MockResourceMonitor,
     MockMemoryService,
+    MockResourceMonitor,
     MockRuntime,
     MockSecretsService,
     MockServiceRegistry,
+    MockTelemetryService,
+    create_mock_task,
     create_mock_thought,
-    create_mock_task
 )
 
 

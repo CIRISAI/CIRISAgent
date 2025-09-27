@@ -6,7 +6,7 @@ including real-time streaming integration and all 11 step points.
 
 Test Phases:
 1. Initial system state check
-2. Pause processor  
+2. Pause processor
 3. Test reasoning stream connectivity
 4. Single step execution with step point validation
 5. Create task for processing
@@ -44,7 +44,7 @@ class ComprehensiveSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Check initial system processor state"
+                description="Check initial system processor state",
             ),
             # Phase 2: Pause processor
             QATestCase(
@@ -55,9 +55,9 @@ class ComprehensiveSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Pause the processor for single-step testing"
+                description="Pause the processor for single-step testing",
             ),
-            # Phase 3: Test reasoning stream connectivity  
+            # Phase 3: Test reasoning stream connectivity
             QATestCase(
                 name="Reasoning Stream Connectivity",
                 module=QAModule.SYSTEM,
@@ -66,9 +66,9 @@ class ComprehensiveSingleStepTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test Server-Sent Events stream for live reasoning data",
-                timeout=10  # Quick connectivity test
+                timeout=10,  # Quick connectivity test
             ),
-            # Phase 4: Test single step functionality  
+            # Phase 4: Test single step functionality
             QATestCase(
                 name="Single Step Execution",
                 module=QAModule.SYSTEM,
@@ -77,7 +77,7 @@ class ComprehensiveSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Execute a single processing step"
+                description="Execute a single processing step",
             ),
             # Phase 4: Test single step with details
             QATestCase(
@@ -88,7 +88,7 @@ class ComprehensiveSingleStepTestModule:
                 payload={"include_details": True},
                 expected_status=200,
                 requires_auth=True,
-                description="Execute single step with detailed response data"
+                description="Execute single step with detailed response data",
             ),
             # Phase 5: Create a task to test with actual work
             QATestCase(
@@ -100,7 +100,7 @@ class ComprehensiveSingleStepTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Create a task for single-step processing testing",
-                timeout=60  # This will timeout due to paused processor
+                timeout=60,  # This will timeout due to paused processor
             ),
             # Phase 6: Step through processing with work in queue
             QATestCase(
@@ -111,7 +111,7 @@ class ComprehensiveSingleStepTestModule:
                 payload={"include_details": True},
                 expected_status=200,
                 requires_auth=True,
-                description="Single step execution with work in the queue"
+                description="Single step execution with work in the queue",
             ),
             # Phase 7: Multiple single steps
             QATestCase(
@@ -122,7 +122,7 @@ class ComprehensiveSingleStepTestModule:
                 payload={"include_details": True},
                 expected_status=200,
                 requires_auth=True,
-                description="Execute multiple single steps to process through pipeline"
+                description="Execute multiple single steps to process through pipeline",
             ),
             # Phase 8: Check queue status during stepping
             QATestCase(
@@ -132,7 +132,7 @@ class ComprehensiveSingleStepTestModule:
                 method="GET",
                 expected_status=200,
                 requires_auth=True,
-                description="Check processing queue status during single-step mode"
+                description="Check processing queue status during single-step mode",
             ),
             # Phase 9: Resume processor
             QATestCase(
@@ -143,7 +143,7 @@ class ComprehensiveSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Resume normal processor operation"
+                description="Resume normal processor operation",
             ),
             # Phase 10: Verify system returns to normal
             QATestCase(
@@ -154,7 +154,6 @@ class ComprehensiveSingleStepTestModule:
                 payload={},
                 expected_status=200,
                 requires_auth=True,
-                description="Verify system returned to normal active state"
-            )
+                description="Verify system returned to normal active state",
+            ),
         ]
-

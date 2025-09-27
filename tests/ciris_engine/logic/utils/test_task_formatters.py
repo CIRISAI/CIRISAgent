@@ -1,5 +1,7 @@
 import pytest
+
 from ciris_engine.logic.utils.task_formatters import format_task_context
+
 
 @pytest.fixture
 def current_task_data():
@@ -10,6 +12,7 @@ def current_task_data():
         "priority": "High",
     }
 
+
 @pytest.fixture
 def recent_actions_data():
     return [
@@ -17,11 +20,11 @@ def recent_actions_data():
         {"description": "Checked logs", "outcome": "Found errors", "updated_at": "2025-09-07T18:05:00Z"},
     ]
 
+
 @pytest.fixture
 def completed_tasks_data():
-    return [
-        {"description": "Rebooted the server", "outcome": "Completed", "updated_at": "2025-09-07T17:55:00Z"}
-    ]
+    return [{"description": "Rebooted the server", "outcome": "Completed", "updated_at": "2025-09-07T17:55:00Z"}]
+
 
 class TestFormatTaskContext:
     def test_full_context_format(self, current_task_data, recent_actions_data, completed_tasks_data):
@@ -51,7 +54,7 @@ class TestFormatTaskContext:
         assert "Priority: N/A" in output
 
     def test_max_actions_limit(self, current_task_data, recent_actions_data):
-        actions = recent_actions_data * 4 # 8 actions
+        actions = recent_actions_data * 4  # 8 actions
         output = format_task_context(current_task_data, actions, max_actions=3)
 
         assert "1. Ran diagnostics" in output

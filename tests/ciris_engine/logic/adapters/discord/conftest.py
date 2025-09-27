@@ -1,7 +1,8 @@
 """Centralized fixtures for Discord adapter tests."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver
 
@@ -9,13 +10,7 @@ from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver
 class MockDiscordAttachment:
     """Mock Discord attachment for testing."""
 
-    def __init__(
-        self,
-        filename: str,
-        content_type: str,
-        size: int = 1000,
-        url: str = "https://example.com/file"
-    ):
+    def __init__(self, filename: str, content_type: str, size: int = 1000, url: str = "https://example.com/file"):
         self.filename = filename
         self.content_type = content_type
         self.size = size
@@ -33,7 +28,7 @@ class MockDiscordMessage:
         attachments: list = None,
         embeds: list = None,
         reference: object = None,
-        channel: object = None
+        channel: object = None,
     ):
         self.id = message_id
         self.content = content
@@ -79,7 +74,7 @@ def discord_observer():
         agent_id="test_agent",
         monitored_channel_ids=["test_channel"],
         wa_user_ids=["wa_user"],
-        deferral_channel_id="deferral_channel"
+        deferral_channel_id="deferral_channel",
     )
 
     # Mock the vision helper and document parser
@@ -94,11 +89,11 @@ def discord_observer():
 
     # Mock document attachment detection to only accept PDF/DOCX
     def mock_is_document_attachment(attachment):
-        return (hasattr(attachment, 'content_type') and
-                attachment.content_type in [
-                    "application/pdf",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                ])
+        return hasattr(attachment, "content_type") and attachment.content_type in [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ]
+
     observer._document_parser._is_document_attachment.side_effect = mock_is_document_attachment
 
     # Mock additional services for comprehensive testing
@@ -119,30 +114,17 @@ def discord_observer():
 @pytest.fixture
 def sample_discord_message(mock_message):
     """Create a sample Discord message for testing."""
-    return mock_message(
-        message_id="msg123",
-        content="Sample message content",
-        author_name="TestUser"
-    )
+    return mock_message(message_id="msg123", content="Sample message content", author_name="TestUser")
 
 
 @pytest.fixture
 def sample_discord_message_with_reply(mock_message, mock_reference):
     """Create a Discord message that's a reply for testing."""
-    original = mock_message(
-        message_id="original123",
-        content="Original message",
-        author_name="OriginalUser"
-    )
+    original = mock_message(message_id="original123", content="Original message", author_name="OriginalUser")
 
     reference = mock_reference("original123", resolved=original)
 
-    return mock_message(
-        message_id="reply123",
-        content="Reply message",
-        author_name="ReplyUser",
-        reference=reference
-    )
+    return mock_message(message_id="reply123", content="Reply message", author_name="ReplyUser", reference=reference)
 
 
 @pytest.fixture
@@ -222,11 +204,11 @@ def mock_document_parser():
     parser.process_attachments = AsyncMock(return_value="Test document content")
 
     def mock_is_document_attachment(attachment):
-        return (hasattr(attachment, 'content_type') and
-                attachment.content_type in [
-                    "application/pdf",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                ])
+        return hasattr(attachment, "content_type") and attachment.content_type in [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ]
+
     parser._is_document_attachment.side_effect = mock_is_document_attachment
     return parser
 
@@ -254,7 +236,7 @@ def mock_service_registry():
     registry.get_service.side_effect = lambda name: {
         "communication": comm_service,
         "adaptive_filter": filter_service,
-        "memory": memory_service
+        "memory": memory_service,
     }.get(name)
 
     return registry
@@ -264,10 +246,7 @@ def mock_service_registry():
 def sample_image_attachment(mock_attachment):
     """Create a sample image attachment for testing."""
     return mock_attachment(
-        filename="test_image.png",
-        content_type="image/png",
-        size=500000,
-        url="https://example.com/test_image.png"
+        filename="test_image.png", content_type="image/png", size=500000, url="https://example.com/test_image.png"
     )
 
 
@@ -278,7 +257,7 @@ def sample_document_attachment(mock_attachment):
         filename="test_document.pdf",
         content_type="application/pdf",
         size=1000000,
-        url="https://example.com/test_document.pdf"
+        url="https://example.com/test_document.pdf",
     )
 
 
@@ -345,10 +324,16 @@ def mock_discord_adapter():
 @pytest.fixture
 def mock_discord_tool_service():
     """Create a comprehensive mock Discord tool service based on ToolService protocol."""
-    from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
-    from ciris_engine.schemas.services.core import ServiceCapabilities
-    from ciris_engine.schemas.runtime.enums import ServiceType
     import uuid
+
+    from ciris_engine.schemas.adapters.tools import (
+        ToolExecutionResult,
+        ToolExecutionStatus,
+        ToolInfo,
+        ToolParameterSchema,
+    )
+    from ciris_engine.schemas.runtime.enums import ServiceType
+    from ciris_engine.schemas.services.core import ServiceCapabilities
 
     service = MagicMock()
 
@@ -410,11 +395,7 @@ def mock_discord_tool_service():
             name=tool_name,
             description=f"Mock {tool_name} description",
             category="discord",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
 
     async def mock_list_tools() -> List[str]:
@@ -431,7 +412,7 @@ def mock_discord_tool_service():
             service_name="DiscordToolService",
             actions=["execute_tool", "get_available_tools", "get_tool_info", "list_tools", "validate_parameters"],
             version="1.0.0",
-            metadata={"mock": True}
+            metadata={"mock": True},
         )
 
     def mock_get_service_type() -> ServiceType:
@@ -478,11 +459,7 @@ def mock_discord_guidance_handler():
 
 @pytest.fixture
 def comprehensive_mock_setup(
-    mock_discord_client,
-    mock_service_registry,
-    mock_vision_helper,
-    mock_document_parser,
-    mock_discord_guidance_handler
+    mock_discord_client, mock_service_registry, mock_vision_helper, mock_document_parser, mock_discord_guidance_handler
 ):
     """Comprehensive mock setup for complex Discord tests."""
     return {
@@ -490,7 +467,7 @@ def comprehensive_mock_setup(
         "service_registry": mock_service_registry,
         "vision_helper": mock_vision_helper,
         "document_parser": mock_document_parser,
-        "guidance_handler": mock_discord_guidance_handler
+        "guidance_handler": mock_discord_guidance_handler,
     }
 
 
@@ -504,7 +481,7 @@ def discord_error_scenarios():
         "not_found": discord.NotFound(MagicMock(), "Channel not found"),
         "rate_limited": discord.HTTPException(MagicMock(), "Rate limited"),
         "connection_error": ConnectionError("Connection failed"),
-        "timeout_error": TimeoutError("Request timed out")
+        "timeout_error": TimeoutError("Request timed out"),
     }
 
 
@@ -512,36 +489,21 @@ def discord_error_scenarios():
 def sample_reply_chain(mock_message, mock_reference):
     """Create a sample reply chain for testing reply processing."""
     # Original message
-    original = mock_message(
-        message_id="original123",
-        content="Original message content",
-        author_name="OriginalUser"
-    )
+    original = mock_message(message_id="original123", content="Original message content", author_name="OriginalUser")
 
     # First reply
     reply1_ref = mock_reference("original123", resolved=original)
     reply1 = mock_message(
-        message_id="reply1_123",
-        content="First reply",
-        author_name="ReplyUser1",
-        reference=reply1_ref
+        message_id="reply1_123", content="First reply", author_name="ReplyUser1", reference=reply1_ref
     )
 
     # Second reply (reply to first reply)
     reply2_ref = mock_reference("reply1_123", resolved=reply1)
     reply2 = mock_message(
-        message_id="reply2_123",
-        content="Second reply",
-        author_name="ReplyUser2",
-        reference=reply2_ref
+        message_id="reply2_123", content="Second reply", author_name="ReplyUser2", reference=reply2_ref
     )
 
-    return {
-        "original": original,
-        "reply1": reply1,
-        "reply2": reply2,
-        "chain": [original, reply1, reply2]
-    }
+    return {"original": original, "reply1": reply1, "reply2": reply2, "chain": [original, reply1, reply2]}
 
 
 @pytest.fixture
@@ -551,10 +513,12 @@ def mock_attachment_collection(mock_attachment):
         "image_png": mock_attachment("image.png", "image/png", 500000),
         "image_jpg": mock_attachment("photo.jpg", "image/jpeg", 750000),
         "document_pdf": mock_attachment("doc.pdf", "application/pdf", 1500000),
-        "document_docx": mock_attachment("text.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 800000),
+        "document_docx": mock_attachment(
+            "text.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 800000
+        ),
         "other_txt": mock_attachment("readme.txt", "text/plain", 5000),
         "large_image": mock_attachment("large.png", "image/png", 25000000),  # Too large
-        "large_doc": mock_attachment("large.pdf", "application/pdf", 50000000)  # Too large
+        "large_doc": mock_attachment("large.pdf", "application/pdf", 50000000),  # Too large
     }
 
 
@@ -562,11 +526,7 @@ def mock_attachment_collection(mock_attachment):
 def discord_config_samples():
     """Sample Discord configurations for testing."""
     return {
-        "minimal": {
-            "agent_id": "test_agent",
-            "token": "test_token",
-            "monitored_channels": ["123456"]
-        },
+        "minimal": {"agent_id": "test_agent", "token": "test_token", "monitored_channels": ["123456"]},
         "full": {
             "agent_id": "test_agent",
             "token": "test_token",
@@ -574,15 +534,16 @@ def discord_config_samples():
             "wa_user_ids": ["wa_user_1", "wa_user_2"],
             "deferral_channel_id": "deferral_123",
             "enable_vision": True,
-            "enable_document_parsing": True
-        }
+            "enable_document_parsing": True,
+        },
     }
 
 
 @pytest.fixture
 def mock_discord_platform():
     """Create a Discord platform for testing lifecycle and stop methods."""
-    from unittest.mock import Mock, AsyncMock, patch
+    from unittest.mock import AsyncMock, Mock, patch
+
     from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform
 
     mock_runtime = Mock()
@@ -591,8 +552,8 @@ def mock_discord_platform():
     mock_config.monitored_channel_ids = ["123456789"]
 
     # Mock the platform initialization to avoid real Discord setup
-    with patch('ciris_engine.logic.adapters.discord.adapter.DiscordAdapter'):
-        with patch.object(DiscordPlatform, '__init__', return_value=None):
+    with patch("ciris_engine.logic.adapters.discord.adapter.DiscordAdapter"):
+        with patch.object(DiscordPlatform, "__init__", return_value=None):
             platform = DiscordPlatform.__new__(DiscordPlatform)
 
     # Set up platform attributes for testing
@@ -627,21 +588,13 @@ def mock_audit_service():
 def sample_audit_events():
     """Sample audit events for testing different scenarios."""
     return {
-        "connection_event": {
-            "event_type": "connection",
-            "status": "connected",
-            "details": {"client_id": "bot123"}
-        },
-        "error_event": {
-            "event_type": "error",
-            "error": "Connection failed",
-            "details": {"retry_count": 3}
-        },
+        "connection_event": {"event_type": "connection", "status": "connected", "details": {"client_id": "bot123"}},
+        "error_event": {"event_type": "error", "error": "Connection failed", "details": {"retry_count": 3}},
         "security_event": {
             "event_type": "security",
             "action": "unauthorized_access",
-            "details": {"user_id": "user123", "channel_id": "channel456"}
-        }
+            "details": {"user_id": "user123", "channel_id": "channel456"},
+        },
     }
 
 
@@ -680,9 +633,4 @@ def mock_task_scenarios():
     failed_task.exception.return_value = Exception("Task failed")
     failed_task.get_name.return_value = "FailedTask"
 
-    return {
-        "healthy": healthy_task,
-        "completed": completed_task,
-        "cancelled": cancelled_task,
-        "failed": failed_task
-    }
+    return {"healthy": healthy_task, "completed": completed_task, "cancelled": cancelled_task, "failed": failed_task}

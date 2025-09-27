@@ -130,7 +130,7 @@ class DiscordErrorClassifier:
                 should_retry=reconnect_attempts < 10,
                 retry_delay=min(5.0 * (2 ** max(0, reconnect_attempts - 1)), 60.0),  # Match existing formula
                 max_retries=10,
-                description=f"Connection exception ({error_type}): {error_str}"
+                description=f"Connection exception ({error_type}): {error_str}",
             )
 
         # Check for aiohttp exceptions (like existing logic)
@@ -139,9 +139,9 @@ class DiscordErrorClassifier:
                 category=ErrorCategory.NETWORK,
                 is_transient=True,
                 should_retry=reconnect_attempts < 8,
-                retry_delay=min(2.0 ** reconnect_attempts, 45.0),
+                retry_delay=min(2.0**reconnect_attempts, 45.0),
                 max_retries=8,
-                description=f"Aiohttp error ({error_type}): {error_str}"
+                description=f"Aiohttp error ({error_type}): {error_str}",
             )
 
         # Discord.py specific exceptions that should NOT retry
@@ -152,7 +152,7 @@ class DiscordErrorClassifier:
                 should_retry=False,
                 retry_delay=0.0,
                 max_retries=0,
-                description=f"Discord auth error ({error_type}): {error_str}"
+                description=f"Discord auth error ({error_type}): {error_str}",
             )
 
         # Then check by string patterns
@@ -163,7 +163,7 @@ class DiscordErrorClassifier:
                 should_retry=reconnect_attempts < 10,
                 retry_delay=min(5.0 * (2 ** max(0, reconnect_attempts - 1)), 60.0),  # Match existing formula
                 max_retries=10,
-                description=f"Network error: {error_str}"
+                description=f"Network error: {error_str}",
             )
 
         if cls._matches_any(error_str, cls.WEBSOCKET_ERRORS):
@@ -171,9 +171,9 @@ class DiscordErrorClassifier:
                 category=ErrorCategory.WEBSOCKET,
                 is_transient=True,
                 should_retry=reconnect_attempts < 15,
-                retry_delay=min(1.5 ** reconnect_attempts, 30.0),
+                retry_delay=min(1.5**reconnect_attempts, 30.0),
                 max_retries=15,
-                description=f"WebSocket error: {error_str}"
+                description=f"WebSocket error: {error_str}",
             )
 
         if cls._matches_any(error_str, cls.SERVER_ERRORS):
@@ -183,7 +183,7 @@ class DiscordErrorClassifier:
                 should_retry=reconnect_attempts < 8,
                 retry_delay=min(3.0 * (reconnect_attempts + 1), 120.0),  # Start at 3.0, not 3^0
                 max_retries=8,
-                description=f"Server error: {error_str}"
+                description=f"Server error: {error_str}",
             )
 
         if cls._matches_any(error_str, cls.RATE_LIMIT_ERRORS):
@@ -193,7 +193,7 @@ class DiscordErrorClassifier:
                 should_retry=reconnect_attempts < 5,
                 retry_delay=60.0 + (reconnect_attempts * 30.0),  # Long delays for rate limits
                 max_retries=5,
-                description=f"Rate limit error: {error_str}"
+                description=f"Rate limit error: {error_str}",
             )
 
         if cls._matches_any(error_str, cls.SSL_TLS_ERRORS):
@@ -203,7 +203,7 @@ class DiscordErrorClassifier:
                 should_retry=reconnect_attempts < 3,
                 retry_delay=5.0 + (reconnect_attempts * 5.0),
                 max_retries=3,
-                description=f"SSL/TLS error: {error_str}"
+                description=f"SSL/TLS error: {error_str}",
             )
 
         if cls._matches_any(error_str, cls.AUTH_ERRORS):
@@ -213,7 +213,7 @@ class DiscordErrorClassifier:
                 should_retry=False,
                 retry_delay=0.0,
                 max_retries=0,
-                description=f"Authentication error: {error_str}"
+                description=f"Authentication error: {error_str}",
             )
 
         if cls._matches_any(error_str, cls.PERMISSION_ERRORS):
@@ -223,7 +223,7 @@ class DiscordErrorClassifier:
                 should_retry=False,
                 retry_delay=0.0,
                 max_retries=0,
-                description=f"Permission error: {error_str}"
+                description=f"Permission error: {error_str}",
             )
 
         # Unknown error - retry cautiously
@@ -234,7 +234,7 @@ class DiscordErrorClassifier:
             should_retry=reconnect_attempts < 3,
             retry_delay=10.0,
             max_retries=3,
-            description=f"Unknown error ({error_type}): {error_str}"
+            description=f"Unknown error ({error_type}): {error_str}",
         )
 
     @staticmethod
@@ -247,6 +247,7 @@ class DiscordErrorClassifier:
         """Check if exception is a connection-related type (matches existing logic)."""
         try:
             import discord
+
             connection_types = (
                 RuntimeError,
                 discord.ConnectionClosed,
@@ -278,6 +279,7 @@ class DiscordErrorClassifier:
         """Check if exception is a Discord non-retryable type (matches existing logic)."""
         try:
             import discord
+
             non_retryable_types = (
                 discord.LoginFailure,
                 discord.Forbidden,
@@ -296,6 +298,5 @@ class DiscordErrorClassifier:
             )
         else:
             logger.error(
-                f"Discord {classification.category.value} error (non-recoverable): "
-                f"{classification.description}"
+                f"Discord {classification.category.value} error (non-recoverable): " f"{classification.description}"
             )

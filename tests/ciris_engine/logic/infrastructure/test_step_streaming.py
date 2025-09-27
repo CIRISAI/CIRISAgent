@@ -19,7 +19,7 @@ class TestStepResultStream:
     def test_init(self):
         """Test stream initialization."""
         stream = StepResultStream()
-        
+
         assert stream._subscribers is not None
         assert stream._step_count == 0
         assert stream._is_enabled is True
@@ -31,12 +31,12 @@ class TestStepResultStream:
         """Test subscriber management."""
         stream = StepResultStream()
         queue = asyncio.Queue()
-        
+
         # Subscribe
         stream.subscribe(queue)
         assert len(stream._subscribers) == 1
         assert stream.get_stats()["subscriber_count"] == 1
-        
+
         # Unsubscribe
         stream.unsubscribe(queue)
         assert len(stream._subscribers) == 0
@@ -45,15 +45,15 @@ class TestStepResultStream:
     def test_enable_disable(self):
         """Test enabling and disabling streaming."""
         stream = StepResultStream()
-        
+
         # Initially enabled
         assert stream._is_enabled is True
-        
+
         # Disable
         stream.disable()
         assert stream._is_enabled is False
         assert stream.get_stats()["enabled"] is False
-        
+
         # Enable
         stream.enable()
         assert stream._is_enabled is True
@@ -65,19 +65,19 @@ class TestStepResultStream:
         stream = StepResultStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
-        
+
         # Disable streaming
         stream.disable()
-        
+
         step_result = {
             "thought_id": "test-thought",
             "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
-            "processing_time_ms": 100.0
+            "processing_time_ms": 100.0,
         }
-        
+
         await stream.broadcast_step_result(step_result)
-        
+
         # Queue should be empty
         assert queue.empty()
         assert stream.get_stats()["steps_broadcast"] == 0
@@ -86,16 +86,16 @@ class TestStepResultStream:
     async def test_broadcast_step_result_no_subscribers(self):
         """Test broadcasting with no subscribers does nothing."""
         stream = StepResultStream()
-        
+
         step_result = {
             "thought_id": "test-thought",
             "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
-            "processing_time_ms": 100.0
+            "processing_time_ms": 100.0,
         }
-        
+
         await stream.broadcast_step_result(step_result)
-        
+
         # Should not increment step count
         assert stream.get_stats()["steps_broadcast"] == 0
 
@@ -105,31 +105,33 @@ class TestStepResultStream:
         stream = StepResultStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
-        
+
         step_result = {
             "thought_id": "test-thought",
-            "task_id": "test-task", 
+            "task_id": "test-task",
             "round_id": 1,
             "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
             "processing_time_ms": 100.0,
-            "step_data": {"thought_content": "Test thought content"}
+            "step_data": {"thought_content": "Test thought content"},
         }
-        
-        with patch('ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results') as mock_create:
+
+        with patch(
+            "ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results"
+        ) as mock_create:
             mock_stream_update = MagicMock()
             mock_stream_update.model_dump.return_value = {"test": "stream_update"}
             mock_create.return_value = mock_stream_update
-            
+
             await stream.broadcast_step_result(step_result)
-        
+
         # Check step count incremented
         assert stream.get_stats()["steps_broadcast"] == 1
-        
+
         # Check queue received the update
         assert not queue.empty()
         broadcasted_result = await queue.get()
-        
+
         # Should contain the stream update plus metadata
         assert "test" in broadcasted_result
         assert "broadcast_timestamp" in broadcasted_result
@@ -142,21 +144,24 @@ class TestStepResultStream:
         stream = StepResultStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
-        
+
         step_result = {
             "thought_id": "test-thought",
             "step_point": StepPoint.FINALIZE_ACTION.value,
             "success": True,
-            "processing_time_ms": 100.0
+            "processing_time_ms": 100.0,
         }
-        
-        with patch('ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results', side_effect=Exception("Test error")):
+
+        with patch(
+            "ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results",
+            side_effect=Exception("Test error"),
+        ):
             await stream.broadcast_step_result(step_result)
-        
+
         # Should still broadcast raw result with metadata
         assert not queue.empty()
         broadcasted_result = await queue.get()
-        
+
         assert broadcasted_result["thought_id"] == "test-thought"
         assert broadcasted_result["step_point"] == StepPoint.FINALIZE_ACTION.value
         assert "stream_sequence" in broadcasted_result
@@ -166,25 +171,23 @@ class TestStepResultStream:
     async def test_broadcast_step_result_full_queue(self):
         """Test handling of full subscriber queues."""
         stream = StepResultStream()
-        
+
         # Create a queue with maxsize=1 and fill it
         queue = asyncio.Queue(maxsize=1)
         queue.put_nowait("blocking_item")
         stream.subscribe(queue)
-        
-        step_result = {
-            "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_ACTION.value,
-            "success": True
-        }
-        
-        with patch('ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results') as mock_create:
+
+        step_result = {"thought_id": "test-thought", "step_point": StepPoint.FINALIZE_ACTION.value, "success": True}
+
+        with patch(
+            "ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results"
+        ) as mock_create:
             mock_stream_update = MagicMock()
             mock_stream_update.model_dump.return_value = {"test": "data"}
             mock_create.return_value = mock_stream_update
-            
+
             await stream.broadcast_step_result(step_result)
-        
+
         # Should handle the QueueFull exception gracefully
         assert stream.get_stats()["steps_broadcast"] == 1
 
@@ -192,25 +195,23 @@ class TestStepResultStream:
     async def test_broadcast_multiple_subscribers(self):
         """Test broadcasting to multiple subscribers."""
         stream = StepResultStream()
-        
+
         # Create multiple queues
         queues = [asyncio.Queue() for _ in range(3)]
         for queue in queues:
             stream.subscribe(queue)
-        
-        step_result = {
-            "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_ACTION.value,
-            "success": True
-        }
-        
-        with patch('ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results') as mock_create:
+
+        step_result = {"thought_id": "test-thought", "step_point": StepPoint.FINALIZE_ACTION.value, "success": True}
+
+        with patch(
+            "ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results"
+        ) as mock_create:
             mock_stream_update = MagicMock()
             mock_stream_update.model_dump.return_value = {"test": "data"}
             mock_create.return_value = mock_stream_update
-            
+
             await stream.broadcast_step_result(step_result)
-        
+
         # All queues should receive the broadcast
         for queue in queues:
             assert not queue.empty()
@@ -239,7 +240,7 @@ class TestStepResultStreamIntegration:
         stream = fresh_stream
         client_queue = asyncio.Queue()
         stream.subscribe(client_queue)
-        
+
         # Simulate a complete step result
         step_result = {
             "thought_id": "integration-test-thought",
@@ -251,23 +252,23 @@ class TestStepResultStreamIntegration:
             "step_data": {
                 "thought_content": "Testing DMA performance analysis",
                 "dmas_executed": ["ethical", "common_sense", "domain_specific"],
-                "analysis_depth": "comprehensive"
-            }
+                "analysis_depth": "comprehensive",
+            },
         }
-        
+
         # Broadcast the result
         await stream.broadcast_step_result(step_result)
-        
+
         # Verify client receives UI-friendly data
         assert not client_queue.empty()
         ui_update = await client_queue.get()
-        
+
         # Should be a structured stream update
         assert "updated_thoughts" in ui_update
         assert "step_summaries" in ui_update
         assert "current_round" in ui_update
         assert "pipeline_active" in ui_update
-        
+
         # Should have enrichment metadata
         assert "broadcast_timestamp" in ui_update
         assert "subscriber_count" in ui_update
@@ -278,29 +279,31 @@ class TestStepResultStreamIntegration:
         """Test handling of concurrent step result broadcasts."""
         stream = fresh_stream
         queues = [asyncio.Queue() for _ in range(5)]
-        
+
         for queue in queues:
             stream.subscribe(queue)
-        
+
         # Create multiple step results to broadcast concurrently
         step_results = []
         for i in range(10):
-            step_results.append({
-                "thought_id": f"concurrent-thought-{i}",
-                "task_id": f"concurrent-task-{i}",
-                "round_id": i + 1,
-                "step_point": list(StepPoint)[i % len(StepPoint)].value,
-                "success": True,
-                "processing_time_ms": float(i * 10)
-            })
-        
+            step_results.append(
+                {
+                    "thought_id": f"concurrent-thought-{i}",
+                    "task_id": f"concurrent-task-{i}",
+                    "round_id": i + 1,
+                    "step_point": list(StepPoint)[i % len(StepPoint)].value,
+                    "success": True,
+                    "processing_time_ms": float(i * 10),
+                }
+            )
+
         # Broadcast all results concurrently
         tasks = [stream.broadcast_step_result(result) for result in step_results]
         await asyncio.gather(*tasks)
-        
+
         # Verify all broadcasts completed
         assert stream.get_stats()["steps_broadcast"] == 10
-        
+
         # Each queue should have received all broadcasts
         for queue in queues:
             received_count = 0

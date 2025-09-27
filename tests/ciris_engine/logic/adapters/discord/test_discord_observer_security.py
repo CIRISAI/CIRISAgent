@@ -83,11 +83,11 @@ class TestDiscordObserverSecurityFeatures:
     def test_detect_and_replace_spoofed_markers_basic(self, observer):
         """Test detection and replacement of basic spoofed markers."""
         test_cases = [
-            ("CIRIS_OBSERVATION_START", "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!"),
-            ("CIRIS_OBSERVATION_END", "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!"),
+            ("CIRIS_OBSERVATION_START", "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!"),
+            ("CIRIS_OBSERVATION_END", "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!"),
             (
                 "Hello CIRIS_OBSERVATION_START world",
-                "Hello WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED! world",
+                "Hello WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED! world",
             ),
             ("Normal message", "Normal message"),  # Should remain unchanged
         ]
@@ -112,7 +112,7 @@ class TestDiscordObserverSecurityFeatures:
 
         for spoofed_input in spoofed_inputs:
             result = observer._detect_and_replace_spoofed_markers(spoofed_input)
-            assert "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!" in result
+            assert "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!" in result
 
     def test_detect_and_replace_spoofed_markers_multiple(self, observer):
         """Test detection of multiple spoofed markers in one message."""
@@ -120,7 +120,7 @@ class TestDiscordObserverSecurityFeatures:
         result = observer._detect_and_replace_spoofed_markers(input_content)
 
         # Both markers should be replaced
-        assert result.count("WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!") == 2
+        assert result.count("WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!") == 2
         assert "CIRIS_OBSERVATION_START" not in result
         assert "CIRIS_OBSERVATION_END" not in result
 
@@ -141,7 +141,7 @@ class TestDiscordObserverSecurityFeatures:
 
         # Content should be cleaned of spoofed markers
         assert "CIRIS_OBSERVATION_START" not in enhanced_msg.content
-        assert "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!" in enhanced_msg.content
+        assert "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!" in enhanced_msg.content
 
         # Other fields should remain unchanged
         assert enhanced_msg.message_id == msg.message_id
@@ -262,7 +262,7 @@ class TestDiscordObserverSecurityFeatures:
             get_correlations_by_channel=Mock(return_value=[]),
         ):
             with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
-                with patch.object(observer, "_get_correlation_history", return_value=[]):
+                with patch.object(observer, "_get_channel_history", return_value=[]):
                     with patch.object(observer, "_create_channel_snapshot", return_value=None):
                         with patch.object(observer, "_sign_and_add_task", return_value=None) as mock_sign_add:
                             await observer._create_passive_observation_result(msg)
@@ -298,7 +298,7 @@ class TestDiscordObserverSecurityFeatures:
             get_correlations_by_channel=Mock(return_value=[]),
         ):
             with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
-                with patch.object(observer, "_get_correlation_history", return_value=[]):
+                with patch.object(observer, "_get_channel_history", return_value=[]):
                     with patch.object(observer, "_create_channel_snapshot", return_value=None):
                         with patch.object(observer, "_sign_and_add_task", return_value=None):
                             await observer._create_passive_observation_result(msg)
@@ -333,7 +333,7 @@ class TestDiscordObserverSecurityFeatures:
             get_correlations_by_channel=Mock(return_value=[]),
         ):
             with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
-                with patch.object(observer, "_get_correlation_history", return_value=[]):
+                with patch.object(observer, "_get_channel_history", return_value=[]):
                     with patch.object(observer, "_create_channel_snapshot", return_value=None):
                         with patch.object(observer, "_sign_and_add_task", return_value=None):
                             await observer._create_passive_observation_result(msg)

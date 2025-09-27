@@ -891,7 +891,9 @@ class TestDailyConsolidationEdgeCreation:
 
     def test_get_previous_summary_id_daily(self, edge_manager, mock_db_connection):
         """Test getting previous daily summary ID."""
-        with patch("ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection") as mock_get_conn:
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
             cursor = mock_db_connection.cursor()
 
@@ -927,7 +929,9 @@ class TestDailyConsolidationEdgeCreation:
 
     def test_get_previous_summary_id_regular(self, edge_manager, mock_db_connection):
         """Test getting previous regular (6-hour) summary ID."""
-        with patch("ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection") as mock_get_conn:
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
             cursor = mock_db_connection.cursor()
 
@@ -959,7 +963,9 @@ class TestDailyConsolidationEdgeCreation:
 
     def test_daily_temporal_edge_creation_with_previous(self, edge_manager, mock_db_connection):
         """Test creating temporal edges when previous daily summary exists."""
-        with patch("ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection") as mock_get_conn:
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
             cursor = mock_db_connection.cursor()
 
@@ -992,7 +998,9 @@ class TestDailyConsolidationEdgeCreation:
 
             # Create temporal edges
             edges_created = edge_manager.create_temporal_edges(current_node, previous_node.id)
-            assert edges_created == 3  # TEMPORAL_NEXT to self, TEMPORAL_NEXT from prev to current, TEMPORAL_PREV to prev
+            assert (
+                edges_created == 3
+            )  # TEMPORAL_NEXT to self, TEMPORAL_NEXT from prev to current, TEMPORAL_PREV to prev
 
             # Verify edges were created correctly
             cursor.execute(
@@ -1008,23 +1016,31 @@ class TestDailyConsolidationEdgeCreation:
             assert len(edges) == 3
 
             # Check TEMPORAL_NEXT from current to itself (marking as latest)
-            current_to_self = [e for e in edges if e["source_node_id"] == current_node.id and e["relationship"] == "TEMPORAL_NEXT"]
+            current_to_self = [
+                e for e in edges if e["source_node_id"] == current_node.id and e["relationship"] == "TEMPORAL_NEXT"
+            ]
             assert len(current_to_self) == 1
             assert current_to_self[0]["target_node_id"] == current_node.id
 
             # Check TEMPORAL_NEXT from previous to current
-            prev_to_current = [e for e in edges if e["source_node_id"] == previous_node.id and e["relationship"] == "TEMPORAL_NEXT"]
+            prev_to_current = [
+                e for e in edges if e["source_node_id"] == previous_node.id and e["relationship"] == "TEMPORAL_NEXT"
+            ]
             assert len(prev_to_current) == 1
             assert prev_to_current[0]["target_node_id"] == current_node.id
 
             # Check TEMPORAL_PREV from current to previous
-            current_to_prev = [e for e in edges if e["source_node_id"] == current_node.id and e["relationship"] == "TEMPORAL_PREV"]
+            current_to_prev = [
+                e for e in edges if e["source_node_id"] == current_node.id and e["relationship"] == "TEMPORAL_PREV"
+            ]
             assert len(current_to_prev) == 1
             assert current_to_prev[0]["target_node_id"] == previous_node.id
 
     def test_daily_temporal_edge_creation_first_summary(self, edge_manager, mock_db_connection):
         """Test creating temporal edges for the first daily summary (no previous)."""
-        with patch("ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection") as mock_get_conn:
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
             cursor = mock_db_connection.cursor()
 
@@ -1085,14 +1101,18 @@ class TestDailyConsolidationService:
             memory_bus=mock_memory_bus,
             time_service=mock_time_service,
             consolidation_interval_hours=6,
-            raw_retention_hours=24
+            raw_retention_hours=24,
+            db_path=":memory:",  # Use in-memory database for tests
         )
         return service
 
     def test_create_daily_summary_edges_correct_id_parsing(self, mock_tsdb_service, mock_db_connection):
         """Test that daily summary edge creation correctly parses node IDs."""
-        with patch("ciris_engine.logic.persistence.db.core.get_db_connection") as mock_get_conn:
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection") as mock_get_conn, patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_edge_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            mock_edge_conn.return_value.__enter__.return_value = mock_db_connection
             cursor = mock_db_connection.cursor()
 
             # Create multiple daily summaries for the same day
@@ -1120,7 +1140,7 @@ class TestDailyConsolidationService:
                     (
                         node.id,
                         "local",
-                        node.type.value if hasattr(node.type, 'value') else str(node.type),
+                        node.type.value if hasattr(node.type, "value") else str(node.type),
                         json.dumps(node.attributes),
                         1,
                         "test",
@@ -1131,6 +1151,7 @@ class TestDailyConsolidationService:
 
             # Test the edge creation method
             import asyncio
+
             current_summaries = [current_tsdb, current_audit]
 
             # Run the edge creation method
@@ -1181,7 +1202,9 @@ class TestDailyConsolidationService:
 
     def test_daily_summary_edge_validation(self, edge_manager, mock_db_connection):
         """Test the edge validation logic that ensures all daily summaries have temporal edges."""
-        with patch("ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection") as mock_get_conn:
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
             cursor = mock_db_connection.cursor()
 

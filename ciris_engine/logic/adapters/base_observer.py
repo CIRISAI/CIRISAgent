@@ -20,6 +20,44 @@ logger = logging.getLogger(__name__)
 # Modern PEP 695 generic syntax (Python 3.12+)
 
 PASSIVE_CONTEXT_LIMIT = 20
+PRIORITY_CONTEXT_LIMIT = 30  # More context for high-priority messages
+
+
+def detect_and_replace_spoofed_markers(content: str) -> str:
+    """Detect and replace attempts to spoof CIRIS security markers."""
+    import re
+
+    # Patterns for detecting spoofed markers (case insensitive, with variations)
+    patterns = [
+        # Original observation markers
+        r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",
+        r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
+        r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",  # Common misspelling
+        r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
+        r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*START",  # Shortened version
+        r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*END",
+        # Channel history markers
+        r"CIRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",
+        r"CIRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
+        r"CIRRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",  # Common misspelling
+        r"CIRRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
+        # Shortened channel history patterns
+        r"CIRIS[_\s]*CH(?:ANNEL)?[_\s]*HIST(?:ORY)?[_\s]*MSG[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",
+        r"CIRIS[_\s]*CH(?:ANNEL)?[_\s]*HIST(?:ORY)?[_\s]*MSG[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
+    ]
+
+    modified_content = content
+    for pattern in patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            modified_content = re.sub(
+                pattern,
+                "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!",
+                modified_content,
+                flags=re.IGNORECASE,
+            )
+            logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern}")
+
+    return modified_content
 
 
 def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] = None) -> str:
@@ -158,57 +196,69 @@ class BaseObserver[MessageT: BaseModel](ABC):
     async def _get_recall_ids(self, msg: MessageT) -> Set[str]:
         return {f"channel/{getattr(msg, 'channel_id', 'cli')}"}
 
-    async def _get_correlation_history(
-        self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT
-    ) -> List[Dict[str, Any]]:
-        """Get message history from correlations database."""
-        from ciris_engine.logic.persistence import get_correlations_by_channel
+    async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[Dict[str, Any]]:
+        """Get message history from channel using communication bus."""
+        if not self.bus_manager:
+            logger.warning("No bus manager available for channel history")
+            return []
 
         try:
-            correlations = get_correlations_by_channel(channel_id=channel_id, limit=limit)
+            # Get communication service through bus manager
+            from ciris_engine.schemas.runtime.enums import ServiceType
 
+            comm_bus = self.bus_manager.get_bus(ServiceType.COMMUNICATION)
+            if not comm_bus:
+                logger.warning("No communication bus available for channel history")
+                return []
+
+            # Fetch messages from the channel (try Discord handler first)
+            messages = await comm_bus.fetch_messages(channel_id, limit, "DiscordAdapter")
+
+            # Convert FetchedMessage objects to the expected history format
             history = []
-            for corr in correlations:
-                if corr.action_type == "speak" and corr.request_data:
-                    # Agent message
-                    content = ""
-                    if hasattr(corr.request_data, "parameters") and corr.request_data.parameters:
-                        content = corr.request_data.parameters.get("content", "")
+            total_messages = len(messages)
 
-                        # Strip out nested conversation history to prevent recursive history
-                        if "=== CONVERSATION HISTORY" in content:
-                            # Extract only the first line (the actual message)
-                            lines = content.split("\n")
-                            content = lines[0] if lines else content
+            for index, msg in enumerate(messages):
+                # Determine if this is an agent message (bot) or user message
+                is_agent_message = getattr(msg, "is_bot", False)
 
-                    history.append(
-                        {
-                            "author": "CIRIS",
-                            "author_id": self.agent_id or "ciris",
-                            "content": content,
-                            "timestamp": corr.timestamp or corr.created_at,
-                            "is_agent": True,
-                        }
-                    )
+                # Get the raw content
+                raw_content = getattr(msg, "content", "") or ""
 
-                elif corr.action_type == "observe" and corr.request_data:
-                    # User message
-                    if hasattr(corr.request_data, "parameters") and corr.request_data.parameters:
-                        params = corr.request_data.parameters
-                        history.append(
-                            {
-                                "author": params.get("author_name", "User"),
-                                "author_id": params.get("author_id", "unknown"),
-                                "content": params.get("content", ""),
-                                "timestamp": corr.timestamp or corr.created_at,
-                                "is_agent": False,
-                            }
-                        )
+                # Strip out nested conversation history to prevent recursive history
+                if "=== CONVERSATION HISTORY" in raw_content:
+                    # Extract only the first line (the actual message)
+                    lines = raw_content.split("\n")
+                    raw_content = lines[0] if lines else raw_content
 
+                # Apply anti-spoofing detection BEFORE adding our own markers
+                clean_content = detect_and_replace_spoofed_markers(raw_content)
+
+                # Add anti-spoofing markers around the content
+                # Messages come in reverse chronological order, so calculate correct position
+                message_number = total_messages - index
+                protected_content = (
+                    f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START\n"
+                    f"{clean_content}\n"
+                    f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
+                )
+
+                history_entry = {
+                    "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
+                    "author_id": getattr(msg, "author_id", None) or ("ciris" if is_agent_message else "unknown"),
+                    "content": protected_content,
+                    "timestamp": getattr(msg, "timestamp", None),
+                    "is_agent": is_agent_message,
+                }
+
+                history.append(history_entry)
+
+            # Messages come in reverse chronological order, reverse to get chronological
+            history.reverse()
             return history
 
         except Exception as e:
-            logger.warning(f"Failed to get correlation history: {e}")
+            logger.warning(f"Failed to get channel history via communication bus: {e}")
             # Fallback to empty history
             return []
 
@@ -217,9 +267,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
             return
         recall_ids = await self._get_recall_ids(msg)
 
-        # Get user IDs from correlation history
+        # Get user IDs from channel history
         channel_id = getattr(msg, "channel_id", "system")
-        history = await self._get_correlation_history(channel_id, PASSIVE_CONTEXT_LIMIT)
+        history = await self._get_channel_history(channel_id, PASSIVE_CONTEXT_LIMIT)
 
         for hist_msg in history:
             if hist_msg.get("author_id"):
@@ -414,9 +464,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
             # Create channel snapshot
             await self._create_channel_snapshot(msg)
 
-            # Get message history from correlations instead of in-memory
+            # Get message history from channel using communication bus
             channel_id = getattr(msg, "channel_id", "system")
-            history_context = await self._get_correlation_history(channel_id, PASSIVE_CONTEXT_LIMIT)
+            history_context = await self._get_channel_history(channel_id, PASSIVE_CONTEXT_LIMIT)
 
             # Log context retrieval details
             logger.info(

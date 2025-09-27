@@ -134,7 +134,7 @@ class TestBaseObserverNumericIds:
         # Patch persistence and correlation history
         with patch("ciris_engine.logic.persistence.add_task"):
             with patch("ciris_engine.logic.persistence.add_thought", side_effect=capture_thought):
-                with patch.object(observer, "_get_correlation_history", return_value=mock_history):
+                with patch.object(observer, "_get_channel_history", return_value=mock_history):
                     await observer._create_passive_observation_result(current_msg)
 
         # Verify all messages in history have numeric IDs

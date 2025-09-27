@@ -793,7 +793,30 @@ class TestHelperFunctions:
 
         # Without state manager
         runtime = MagicMock(spec=[])
-        assert agent._get_cognitive_state(runtime) == "WORK"
+        assert agent._get_cognitive_state(runtime) == "UNKNOWN"  # Updated: should return UNKNOWN, not WORK
+
+        # With None state manager
+        runtime = MagicMock()
+        runtime.state_manager = None
+        assert agent._get_cognitive_state(runtime) == "UNKNOWN"
+
+        # With state manager but no current_state attribute
+        runtime = MagicMock()
+        runtime.state_manager = MagicMock(spec=[])  # No current_state attribute
+        assert agent._get_cognitive_state(runtime) == "UNKNOWN"
+
+        # With enum-like state (has .value attribute)
+        runtime = MagicMock()
+        mock_state = MagicMock()
+        mock_state.value = "WAKEUP"
+        mock_state.__str__ = lambda self: "AgentState.WAKEUP"
+        runtime.state_manager = MagicMock(current_state=mock_state)
+        assert agent._get_cognitive_state(runtime) == "AgentState.WAKEUP"
+
+        # With simple string state (no .value attribute)
+        runtime = MagicMock()
+        runtime.state_manager = MagicMock(current_state="DREAM")
+        assert agent._get_cognitive_state(runtime) == "DREAM"
 
     def test_calculate_uptime(self):
         """Test _calculate_uptime helper."""

@@ -316,7 +316,7 @@ class TestHelperFunctions:
         assert _get_cognitive_state(runtime) == "DREAM"
 
         runtime = MagicMock(spec=[])
-        assert _get_cognitive_state(runtime) == "WORK"
+        assert _get_cognitive_state(runtime) == "UNKNOWN"  # Updated: should return UNKNOWN, not WORK
 
     def test_calculate_uptime(self):
         """Test uptime calculation."""

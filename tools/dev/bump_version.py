@@ -12,7 +12,7 @@ This tool updates version in:
     - ciris_engine/constants.py (main version source)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
-    - README.md (documentation version)
+    - README.md (automatically switches between STABLE/BETA RELEASE based on version stage)
 """
 
 import json
@@ -125,11 +125,23 @@ def bump_version(bump_type: str):
     if readme_file.exists():
         with open(readme_file, "r") as f:
             readme_content = f.read()
-        # Update the BETA RELEASE line
-        readme_content = re.sub(r"\*\*BETA RELEASE [\d\.]+-\w+\*\*", f"**BETA RELEASE {new_version}**", readme_content)
+
+        # Determine if this is a stable or beta release based on version stage
+        if stage == "rc" and build == 0:
+            # Final release version (no stage suffix)
+            release_type = "STABLE RELEASE"
+        else:
+            # Pre-release version (has stage suffix)
+            release_type = "BETA RELEASE"
+
+        # Update both STABLE RELEASE and BETA RELEASE patterns
+        readme_content = re.sub(
+            r"\*\*(STABLE|BETA) RELEASE [^\*]+\*\*", f"**{release_type} {new_version}**", readme_content
+        )
+
         with open(readme_file, "w") as f:
             f.write(readme_content)
-        print(f"  Updated README.md to {new_version}")
+        print(f"  Updated README.md to {release_type} {new_version}")
 
     print(f"Version bumped to {new_version}")
     return True

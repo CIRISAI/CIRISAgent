@@ -148,6 +148,34 @@ async def check_quality_issues() -> List[str]:
     return reminders
 
 
+async def check_remaining_changes() -> List[str]:
+    """Check what files are still modified after formatting."""
+    code, stdout, _ = await run_command_async(["git", "diff", "--name-only"])
+    return stdout.strip().split("\n") if stdout.strip() else []
+
+
+async def auto_commit_build_info() -> bool:
+    """Auto-commit BUILD_INFO.txt if it's the only remaining change."""
+    try:
+        # Stage BUILD_INFO.txt
+        await run_command_async(["git", "add", "BUILD_INFO.txt"])
+
+        # Commit with --no-verify to bypass hooks
+        code, _, _ = await run_command_async(
+            [
+                "git",
+                "commit",
+                "--no-verify",
+                "-m",
+                "chore: auto-update BUILD_INFO.txt\n\n🤖 Auto-committed by Grace Smart Gatekeeper",
+            ]
+        )
+
+        return code == 0
+    except Exception:
+        return False
+
+
 async def main():
     """Main pre-commit hook logic."""
     print("\n🌟 Grace Pre-commit Check")
@@ -158,6 +186,18 @@ async def main():
     formatted = await run_formatters()
     if formatted:
         print(f"  ✨ Auto-formatted: {', '.join(formatted)}")
+
+    # Check if only BUILD_INFO.txt remains after formatting
+    remaining_changes = await check_remaining_changes()
+    if len(remaining_changes) == 1 and remaining_changes[0] == "BUILD_INFO.txt":
+        print("  🤖 Only BUILD_INFO.txt modified, auto-committing...")
+        if await auto_commit_build_info():
+            print("  ✅ BUILD_INFO.txt auto-committed successfully")
+            print("\n🎉 All changes committed! Grace Smart Gatekeeper complete.")
+            print("=" * 50)
+            return 0
+        else:
+            print("  ❌ Failed to auto-commit BUILD_INFO.txt")
 
     # Run critical and quality checks in parallel
     critical_task = check_critical_issues()

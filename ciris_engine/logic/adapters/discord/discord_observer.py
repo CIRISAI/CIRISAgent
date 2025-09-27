@@ -128,31 +128,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         return is_from_monitored or is_from_deferral
 
     def _detect_and_replace_spoofed_markers(self, content: str) -> str:
-        """Detect and replace attempts to spoof CIRIS observation markers."""
-        import re
+        """Detect and replace attempts to spoof CIRIS security markers."""
+        from ciris_engine.logic.adapters.base_observer import detect_and_replace_spoofed_markers
 
-        # Patterns for detecting spoofed markers (case insensitive, with variations)
-        patterns = [
-            r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",
-            r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
-            r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",  # Common misspelling
-            r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
-            r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*START",  # Shortened version
-            r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*END",
-        ]
-
-        modified_content = content
-        for pattern in patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                modified_content = re.sub(
-                    pattern,
-                    "WARNING! ATTEMPT TO SPOOF CIRIS CONVERSATION MARKERS DETECTED!",
-                    modified_content,
-                    flags=re.IGNORECASE,
-                )
-                logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern}")
-
-        return modified_content
+        return detect_and_replace_spoofed_markers(content)
 
     async def _collect_message_attachments_with_reply(self, raw_message) -> dict:
         """Collect attachments from message and reply with priority rules.

@@ -1699,45 +1699,44 @@ class TSDBConsolidationService(BaseGraphService):
             for summary in summaries:
                 # Extract summary type from ID (e.g., "tsdb_summary" from "tsdb_summary_daily_20250714")
                 parts = summary.id.split("_")
-                if len(parts) >= 3 and parts[2] == "daily":
+                if len(parts) >= 4 and parts[2] == "daily":
+                    # For daily summaries: "tsdb_summary_daily_20250714"
                     summary_type = f"{parts[0]}_{parts[1]}_daily"
                     previous_date = date - timedelta(days=1)
-                    previous_id = f"{summary_type}_{previous_date.strftime('%Y%m%d')}"
 
-                    # Check if previous day's summary exists
-                    previous_exists = self._edge_manager.get_previous_summary_id(
+                    # Check if previous day's summary exists - use correct ID format
+                    previous_id = self._edge_manager.get_previous_summary_id(
                         summary_type, previous_date.strftime("%Y%m%d")
                     )
 
-                    if previous_exists:
+                    if previous_id:
                         temporal_edges = self._edge_manager.create_temporal_edges(summary, previous_id)
-                        logger.info(f"Created {temporal_edges} temporal edges for {summary.id}")
+                        logger.info(f"Created {temporal_edges} temporal edges for {summary.id} -> {previous_id}")
+                    else:
+                        # This is the first daily summary of its type, create self-referencing edge
+                        temporal_edges = self._edge_manager.create_temporal_edges(summary, None)
+                        logger.info(f"Created self-referencing edge for first daily summary {summary.id}")
 
-                # For the first daily summary, it should point to itself (marking as latest)
-                # unless there's a 6-hour summary to link to
-                first_daily_summary = summaries[0] if summaries else None
-                if first_daily_summary and "daily" in first_daily_summary.id:
-                    # Check if it already has a TEMPORAL_PREV edge
-                    from ciris_engine.logic.persistence.db.core import get_db_connection
+            # Additional check: ensure all daily summaries have temporal edges
+            from ciris_engine.logic.persistence.db.core import get_db_connection
 
-                    with get_db_connection(db_path=self.db_path) as conn:
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            """
-                            SELECT COUNT(*) as count FROM graph_edges
-                            WHERE source_node_id = ? AND relationship = 'TEMPORAL_PREV'
-                        """,
-                            (first_daily_summary.id,),
-                        )
+            with get_db_connection(db_path=self.db_path) as conn:
+                cursor = conn.cursor()
 
-                        has_prev = cursor.fetchone()["count"] > 0
+                for summary in summaries:
+                    # Check if this summary has any temporal edges
+                    cursor.execute(
+                        """
+                        SELECT COUNT(*) as count FROM graph_edges
+                        WHERE source_node_id = ? AND relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                    """,
+                        (summary.id,),
+                    )
 
-                        if not has_prev:
-                            # No previous link, so mark as latest by pointing to itself
-                            temporal_edges = self._edge_manager.create_temporal_edges(first_daily_summary, None)
-                            logger.info(
-                                f"Created self-referencing edge for first daily summary {first_daily_summary.id}"
-                            )
+                    edge_count = cursor.fetchone()["count"]
+                    if edge_count == 0:
+                        logger.warning(f"Daily summary {summary.id} has no temporal edges, creating self-reference")
+                        self._edge_manager.create_temporal_edges(summary, None)
 
         except Exception as e:
             logger.error(f"Failed to create daily summary edges: {e}", exc_info=True)

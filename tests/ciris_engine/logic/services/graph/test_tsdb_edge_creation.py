@@ -884,3 +884,376 @@ class TestCleanupOrphanedEdges:
 
             result = cursor.fetchone()
             assert result["count"] == 0
+
+
+class TestDailyConsolidationEdgeCreation:
+    """Test temporal edge creation for daily consolidation summaries."""
+
+    def test_get_previous_summary_id_daily(self, edge_manager, mock_db_connection):
+        """Test getting previous daily summary ID."""
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create a daily summary node
+            previous_date = datetime(2025, 7, 14, tzinfo=timezone.utc)
+            previous_node_id = "tsdb_summary_daily_20250714"
+
+            cursor.execute(
+                """
+                INSERT INTO graph_nodes
+                (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    previous_node_id,
+                    "local",
+                    "tsdb_summary",
+                    json.dumps({"consolidation_level": "extensive"}),
+                    1,
+                    "test",
+                    datetime.now(timezone.utc).isoformat(),
+                    previous_date.isoformat(),
+                ),
+            )
+
+            # Test finding the previous summary
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", "20250714")
+            assert result == previous_node_id
+
+            # Test non-existent summary
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", "20250713")
+            assert result is None
+
+    def test_get_previous_summary_id_regular(self, edge_manager, mock_db_connection):
+        """Test getting previous regular (6-hour) summary ID."""
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create a regular 6-hour summary node
+            previous_period_id = "20250714_06"
+            previous_node_id = f"tsdb_summary_{previous_period_id}"
+
+            cursor.execute(
+                """
+                INSERT INTO graph_nodes
+                (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    previous_node_id,
+                    "local",
+                    "tsdb_summary",
+                    json.dumps({"consolidation_level": "basic"}),
+                    1,
+                    "test",
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+
+            # Test finding the previous summary
+            result = edge_manager.get_previous_summary_id("tsdb_summary", previous_period_id)
+            assert result == previous_node_id
+
+    def test_daily_temporal_edge_creation_with_previous(self, edge_manager, mock_db_connection):
+        """Test creating temporal edges when previous daily summary exists."""
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create previous and current daily summaries
+            previous_date = datetime(2025, 7, 14, tzinfo=timezone.utc)
+            current_date = datetime(2025, 7, 15, tzinfo=timezone.utc)
+
+            previous_node = create_daily_summary_node("tsdb_summary", previous_date)
+            current_node = create_daily_summary_node("tsdb_summary", current_date)
+
+            # Insert both nodes
+            for node in [previous_node, current_node]:
+                cursor.execute(
+                    """
+                    INSERT INTO graph_nodes
+                    (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        node.id,
+                        "local",
+                        "tsdb_summary",
+                        json.dumps(node.attributes),
+                        1,
+                        "test",
+                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+
+            # Create temporal edges
+            edges_created = edge_manager.create_temporal_edges(current_node, previous_node.id)
+            assert (
+                edges_created == 3
+            )  # TEMPORAL_NEXT to self, TEMPORAL_NEXT from prev to current, TEMPORAL_PREV to prev
+
+            # Verify edges were created correctly
+            cursor.execute(
+                """
+                SELECT source_node_id, target_node_id, relationship, attributes_json
+                FROM graph_edges
+                WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                ORDER BY relationship, source_node_id
+            """
+            )
+
+            edges = cursor.fetchall()
+            assert len(edges) == 3
+
+            # Check TEMPORAL_NEXT from current to itself (marking as latest)
+            current_to_self = [
+                e for e in edges if e["source_node_id"] == current_node.id and e["relationship"] == "TEMPORAL_NEXT"
+            ]
+            assert len(current_to_self) == 1
+            assert current_to_self[0]["target_node_id"] == current_node.id
+
+            # Check TEMPORAL_NEXT from previous to current
+            prev_to_current = [
+                e for e in edges if e["source_node_id"] == previous_node.id and e["relationship"] == "TEMPORAL_NEXT"
+            ]
+            assert len(prev_to_current) == 1
+            assert prev_to_current[0]["target_node_id"] == current_node.id
+
+            # Check TEMPORAL_PREV from current to previous
+            current_to_prev = [
+                e for e in edges if e["source_node_id"] == current_node.id and e["relationship"] == "TEMPORAL_PREV"
+            ]
+            assert len(current_to_prev) == 1
+            assert current_to_prev[0]["target_node_id"] == previous_node.id
+
+    def test_daily_temporal_edge_creation_first_summary(self, edge_manager, mock_db_connection):
+        """Test creating temporal edges for the first daily summary (no previous)."""
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create first daily summary
+            current_date = datetime(2025, 7, 15, tzinfo=timezone.utc)
+            current_node = create_daily_summary_node("tsdb_summary", current_date)
+
+            # Insert the node
+            cursor.execute(
+                """
+                INSERT INTO graph_nodes
+                (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    current_node.id,
+                    "local",
+                    "tsdb_summary",
+                    json.dumps(current_node.attributes),
+                    1,
+                    "test",
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+
+            # Create temporal edges (no previous)
+            edges_created = edge_manager.create_temporal_edges(current_node, None)
+            assert edges_created == 1  # Only TEMPORAL_NEXT to self
+
+            # Verify edge was created correctly
+            cursor.execute(
+                """
+                SELECT source_node_id, target_node_id, relationship, attributes_json
+                FROM graph_edges
+                WHERE relationship = 'TEMPORAL_NEXT'
+            """
+            )
+
+            edges = cursor.fetchall()
+            assert len(edges) == 1
+            assert edges[0]["source_node_id"] == current_node.id
+            assert edges[0]["target_node_id"] == current_node.id  # Points to itself
+
+            attrs = json.loads(edges[0]["attributes_json"])
+            assert attrs["is_latest"] is True
+
+
+class TestDailyConsolidationService:
+    """Test the daily consolidation service edge creation logic."""
+
+    @pytest.fixture
+    def mock_tsdb_service(self, mock_memory_bus, mock_time_service):
+        """Create a mock TSDB consolidation service."""
+        from ciris_engine.logic.services.graph.tsdb_consolidation.service import TSDBConsolidationService
+
+        service = TSDBConsolidationService(
+            memory_bus=mock_memory_bus,
+            time_service=mock_time_service,
+            consolidation_interval_hours=6,
+            raw_retention_hours=24,
+            db_path=":memory:",  # Use in-memory database for tests
+        )
+        return service
+
+    def test_create_daily_summary_edges_correct_id_parsing(self, mock_tsdb_service, mock_db_connection):
+        """Test that daily summary edge creation correctly parses node IDs."""
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection") as mock_get_conn, patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_edge_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            mock_edge_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create multiple daily summaries for the same day
+            test_date = datetime(2025, 7, 15, tzinfo=timezone.utc)
+            previous_date = datetime(2025, 7, 14, tzinfo=timezone.utc)
+
+            # Create previous day summaries
+            prev_tsdb = create_daily_summary_node("tsdb_summary", previous_date)
+            prev_audit = create_daily_summary_node("audit_summary", previous_date)
+
+            # Create current day summaries
+            current_tsdb = create_daily_summary_node("tsdb_summary", test_date)
+            current_audit = create_daily_summary_node("audit_summary", test_date)
+
+            all_nodes = [prev_tsdb, prev_audit, current_tsdb, current_audit]
+
+            # Insert all nodes
+            for node in all_nodes:
+                cursor.execute(
+                    """
+                    INSERT INTO graph_nodes
+                    (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        node.id,
+                        "local",
+                        node.type.value if hasattr(node.type, "value") else str(node.type),
+                        json.dumps(node.attributes),
+                        1,
+                        "test",
+                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+
+            # Test the edge creation method
+            import asyncio
+
+            current_summaries = [current_tsdb, current_audit]
+
+            # Run the edge creation method
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(mock_tsdb_service._create_daily_summary_edges(current_summaries, test_date))
+            finally:
+                loop.close()
+
+            # Verify temporal edges were created between days
+            cursor.execute(
+                """
+                SELECT source_node_id, target_node_id, relationship
+                FROM graph_edges
+                WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                ORDER BY source_node_id, relationship
+            """
+            )
+
+            edges = cursor.fetchall()
+
+            # Should have temporal edges for each summary type
+            temporal_edges = [(e["source_node_id"], e["target_node_id"], e["relationship"]) for e in edges]
+
+            # Each current summary should have edges
+            assert len([e for e in temporal_edges if current_tsdb.id in (e[0], e[1])]) >= 2
+            assert len([e for e in temporal_edges if current_audit.id in (e[0], e[1])]) >= 2
+
+    def test_daily_summary_id_format_parsing(self):
+        """Test that the ID parsing logic correctly handles daily summary IDs."""
+        # Test valid daily summary ID
+        summary_id = "tsdb_summary_daily_20250715"
+        parts = summary_id.split("_")
+
+        # Should have 4 parts: [tsdb, summary, daily, 20250715]
+        assert len(parts) == 4
+        assert parts[2] == "daily"
+
+        # Test reconstruction
+        summary_type = f"{parts[0]}_{parts[1]}_daily"
+        assert summary_type == "tsdb_summary_daily"
+
+        # Test date extraction
+        date_str = parts[3]
+        assert date_str == "20250715"
+        assert len(date_str) == 8  # YYYYMMDD format
+
+    def test_daily_summary_edge_validation(self, edge_manager, mock_db_connection):
+        """Test the edge validation logic that ensures all daily summaries have temporal edges."""
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create a daily summary without any edges
+            test_date = datetime(2025, 7, 15, tzinfo=timezone.utc)
+            orphaned_node = create_daily_summary_node("tsdb_summary", test_date)
+
+            cursor.execute(
+                """
+                INSERT INTO graph_nodes
+                (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    orphaned_node.id,
+                    "local",
+                    "tsdb_summary",
+                    json.dumps(orphaned_node.attributes),
+                    1,
+                    "test",
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+
+            # Verify node has no temporal edges initially
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count FROM graph_edges
+                WHERE source_node_id = ? AND relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+            """,
+                (orphaned_node.id,),
+            )
+            result = cursor.fetchone()
+            edge_count = result["count"] if result else 0
+            assert edge_count == 0
+
+            # This simulates the validation logic from the service
+            if edge_count == 0:
+                # Create self-referencing edge as fallback
+                edges_created = edge_manager.create_temporal_edges(orphaned_node, None)
+                assert edges_created == 1
+
+            # Verify edge was created
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count FROM graph_edges
+                WHERE source_node_id = ? AND relationship = 'TEMPORAL_NEXT'
+            """,
+                (orphaned_node.id,),
+            )
+            assert cursor.fetchone()["count"] == 1

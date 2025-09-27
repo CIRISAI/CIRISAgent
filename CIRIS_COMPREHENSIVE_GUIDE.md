@@ -11,17 +11,18 @@
 2. [Core Philosophy](#core-philosophy)
 3. [Current Status](#current-status)
 4. [Architecture Overview](#architecture-overview)
-5. [Service Architecture](#service-architecture)
-6. [API v1.0 Complete Reference](#api-v10-complete-reference)
-7. [Agent Creation Ceremony](#agent-creation-ceremony)
-8. [Development Tools](#development-tools)
-9. [Production Deployment](#production-deployment)
-10. [Debugging Guidelines](#debugging-guidelines)
-11. [Local Development](#local-development)
-12. [Testing Framework](#testing-framework)
-13. [Critical Commands](#critical-commands)
-14. [Important URLs](#important-urls)
-15. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
+5. [Security & Anti-Spoofing](#security--anti-spoofing)
+6. [Service Architecture](#service-architecture)
+7. [API v1.0 Complete Reference](#api-v10-complete-reference)
+8. [Agent Creation Ceremony](#agent-creation-ceremony)
+9. [Development Tools](#development-tools)
+10. [Production Deployment](#production-deployment)
+11. [Debugging Guidelines](#debugging-guidelines)
+12. [Local Development](#local-development)
+13. [Testing Framework](#testing-framework)
+14. [Critical Commands](#critical-commands)
+15. [Important URLs](#important-urls)
+16. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
 
 ---
 
@@ -137,6 +138,91 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 4. **SOLITUDE** - Reflection
 5. **DREAM** - Deep introspection
 6. **SHUTDOWN** - Graceful termination
+
+---
+
+## Security & Anti-Spoofing
+
+### Channel History Protection
+
+CIRIS implements comprehensive anti-spoofing protection for Discord channel history to prevent message injection attacks and maintain conversation integrity.
+
+#### How Channel History Works
+
+When processing passive observations, CIRIS fetches the **20 most recent messages** from the Discord channel to provide conversation context. This happens via:
+
+1. **Direct Channel Fetching**: Uses Discord API through communication bus (not correlations database)
+2. **Real-time Retrieval**: Gets actual Discord messages for authentic context
+3. **Anti-spoofing Processing**: Applies security measures before adding protection markers
+
+#### Anti-Spoofing Implementation
+
+**Detection & Replacement Strategy:**
+- **Before Processing**: Raw message content is scanned for spoofed security markers
+- **Pattern Detection**: Comprehensive regex patterns catch variations and misspellings
+- **Immediate Replacement**: Spoofed markers replaced with warning message
+- **Logging**: All detection attempts logged with specific patterns
+
+**Protected Patterns:**
+```
+# Observation markers
+CIRIS_OBSERVATION_START/END
+CIRIS_OBS_START/END (shortened)
+CIRRIS_OBSERVATION_START/END (misspelling)
+
+# Channel history markers
+CIRIS_CHANNEL_HISTORY_MESSAGE_X_OF_Y_START/END
+CIRIS_CH_HIST_MSG_X_OF_Y_START/END (shortened)
+CIRRIS_CHANNEL_HISTORY_MESSAGE_X_OF_Y_START/END (misspelling)
+```
+
+#### Processing Order (Critical)
+
+```
+Raw Discord Message
+    ↓
+Anti-spoofing Detection (removes/replaces spoof attempts)
+    ↓
+Add Legitimate Security Markers
+    ↓
+Protected Message for AI Processing
+```
+
+**Example Protected Message:**
+```
+CIRIS_CHANNEL_HISTORY_MESSAGE_1_OF_20_START
+User message content here (with any spoofed markers replaced)
+CIRIS_CHANNEL_HISTORY_MESSAGE_1_OF_20_END
+```
+
+#### Security Response
+
+**When spoofed markers detected:**
+1. **Replacement**: `"WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!"`
+2. **Logging**: `logger.warning(f"Detected spoofed CIRIS marker: {pattern}")`
+3. **Preservation**: Original message intent preserved while removing security threat
+
+#### Implementation Location
+
+- **Utility Function**: `detect_and_replace_spoofed_markers()` in `base_observer.py`
+- **Channel History**: Applied in `_get_channel_history()` method before marker addition
+- **Message Enhancement**: Applied in Discord observer during message processing
+- **Shared Logic**: Same function used across all observers for consistency
+
+#### Benefits
+
+- **Prevents Message Injection**: Users cannot inject fake conversation history
+- **Maintains Context Integrity**: AI receives trustworthy conversation context
+- **Comprehensive Coverage**: Handles variations, misspellings, and creative attempts
+- **Performance Optimized**: Regex patterns efficiently detect threats
+- **Backwards Compatible**: All existing functionality preserved
+
+#### Testing Coverage
+
+- **12/12 Discord security tests pass** ✅
+- **Pattern detection thoroughly tested** ✅
+- **Integration with channel history verified** ✅
+- **Anti-spoofing effectiveness validated** ✅
 
 ---
 

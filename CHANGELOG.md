@@ -5,7 +5,40 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v1.1.6
+## [1.1.6] - 2025-09-27
+
+### Added
+- **🛡️ Anti-Spoofing Security System**: Comprehensive protection against security marker spoofing
+  - Channel history anti-spoofing with `CIRIS_CHANNEL_HISTORY_MESSAGE_X_OF_Y_START/END` markers
+  - Shared anti-spoofing utility function in `base_observer.py` for code reuse
+  - Pattern detection for spoofed observation markers (`CIRIS_OBSERVATION_START/END`)
+  - Proper execution order: raw content → anti-spoofing detection → legitimate marker injection
+  - Warning message replacement: "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!"
+- **🔧 Development Tools Enhancement**: Improved version management and release automation
+  - Enhanced `bump_version.py` with smart STABLE/BETA release type detection
+  - Automatic README.md release status switching based on version stage
+  - Flexible pattern matching for both "STABLE RELEASE" and "BETA RELEASE" formats
+
+### Fixed
+- **🔧 TSDB Consolidation Edge Creation**: Fixed temporal edge creation for daily telemetry nodes
+  - Resolved database connection mocking issues in `test_tsdb_edge_creation.py`
+  - Added proper `db_path=":memory:"` configuration for test isolation
+  - Fixed double database connection patching for edge manager functionality
+- **🔧 Anti-Spoofing Test Suite**: Updated security test expectations for new warning messages
+  - Fixed 6 test references from "CONVERSATION MARKERS" to "SECURITY MARKERS"
+  - Updated Discord observer security tests for enhanced anti-spoofing functionality
+  - All 12 Discord security tests now passing with proper warning message validation
+- **🔧 Discord Timeout Logging**: Reduced production log noise from Discord health checks
+  - Changed healthy timeout logs from WARNING to DEBUG level
+  - Only logs warnings when Discord client is actually unresponsive/closed
+  - Added comprehensive unit tests for all timeout scenarios (healthy, unresponsive, no client)
+- **🔧 Cognitive State Reporting**: Fixed false status reporting in API endpoints
+  - Resolved critical issue where agent status endpoint reported WORK when agent was stuck in other states
+  - Changed default return from WORK to UNKNOWN for transparency when state manager is inaccessible
+  - Added proper error handling and logging for state manager access failures
+  - Improved enum-to-string conversion for AgentState values in API responses
+
+## [1.1.5] - 2025-09-26
 
 ### Major Achievements
 - **💰 External LLM Pricing Configuration**: Complete migration from hardcoded pricing to external JSON configuration system
@@ -174,13 +207,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **🏗️ Telemetry Routes Architecture** - Completely refactored telemetry routes reducing complexity from 400+ to ~15:
   - `get_reasoning_traces` (137→15) - Extracted 8 helper functions
-  - `query_telemetry` (38→15) - Extracted 6 query type handlers  
+  - `query_telemetry` (38→15) - Extracted 6 query type handlers
   - `get_otlp_telemetry` (104→15) - Extracted 6 OTLP export helpers
   - `get_detailed_metrics` (82→15) - Extracted 5 metric processing helpers
 - **🔧 Audit Service Refactoring** - Reduced complexity from 20→15 with 6 extracted helper functions for ID extraction and processing
 - **💾 Type Safety Migration** - Replaced Dict[str, Any] with proper typed schemas across:
   - Pipeline control protocols
-  - LLM service schemas  
+  - LLM service schemas
   - Audit service operations
   - Telemetry data structures
   - API route handlers
@@ -194,11 +227,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automated dead code detection in CI/CD pipeline
 - **📊 Typed Step Results** - Enhanced reasoning stream with strongly typed step result population
 - **🔍 Enhanced H3ERE Tracing** - Rich trace data in step streaming decorators with OTLP compatibility:
-  - Added trace context with proper span/trace ID correlation 
+  - Added trace context with proper span/trace ID correlation
   - Enhanced span attributes with step-specific metadata
   - Unified data structure between step streaming and OTLP traces
   - Added processor context and thought lifecycle attributes
-- **🐛 Enhanced Debug Infrastructure** - Comprehensive tracing for step result creation and H3ERE pipeline execution flow  
+- **🐛 Enhanced Debug Infrastructure** - Comprehensive tracing for step result creation and H3ERE pipeline execution flow
 - **🧪 Test Coverage Expansion** - Added comprehensive test coverage for OAuth WA fixes and LLM service improvements
 - **⚙️ QA Runner Enhancement** - Enhanced test runner with debug log support for better troubleshooting
 

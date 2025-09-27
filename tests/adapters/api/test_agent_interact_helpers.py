@@ -442,7 +442,7 @@ class TestGetCurrentCognitiveState:
 
         state = _get_current_cognitive_state(mock_request)
 
-        assert state == "WORK"
+        assert state == "UNKNOWN"  # Updated: should return UNKNOWN, not WORK
 
     def test_get_cognitive_state_from_runtime(self):
         """Test cognitive state from runtime state manager."""
@@ -494,7 +494,113 @@ class TestGetCurrentCognitiveState:
 
         state = _get_current_cognitive_state(mock_request)
 
-        assert state == "WORK"
+        assert state == "UNKNOWN"  # Updated: should return UNKNOWN, not WORK
+
+    def test_get_cognitive_state_none_state_manager(self):
+        """Test cognitive state when runtime has None state manager."""
+
+        class MockRuntimeNoneStateManager:
+            def __init__(self):
+                self.state_manager = None
+
+        class MockAppState:
+            def __init__(self):
+                self.runtime = MockRuntimeNoneStateManager()
+
+        class MockApp:
+            def __init__(self):
+                self.state = MockAppState()
+
+        mock_request = Mock()
+        mock_request.app = MockApp()
+
+        state = _get_current_cognitive_state(mock_request)
+
+        assert state == "UNKNOWN"
+
+    def test_get_cognitive_state_no_current_state(self):
+        """Test cognitive state when state manager has no current_state attribute."""
+
+        class MockStateManagerNoCurrentState:
+            pass  # No current_state attribute
+
+        class MockRuntimeNoCurrentState:
+            def __init__(self):
+                self.state_manager = MockStateManagerNoCurrentState()
+
+        class MockAppState:
+            def __init__(self):
+                self.runtime = MockRuntimeNoCurrentState()
+
+        class MockApp:
+            def __init__(self):
+                self.state = MockAppState()
+
+        mock_request = Mock()
+        mock_request.app = MockApp()
+
+        state = _get_current_cognitive_state(mock_request)
+
+        assert state == "UNKNOWN"
+
+    def test_get_cognitive_state_enum_conversion(self):
+        """Test cognitive state conversion for enum values with .value attribute."""
+
+        class MockAgentStateEnum:
+            def __init__(self, value):
+                self.value = value
+
+            def __str__(self):
+                return f"AgentState.{self.value}"
+
+        class MockStateManagerWithEnum:
+            def __init__(self):
+                self.current_state = MockAgentStateEnum("WAKEUP")
+
+        class MockRuntimeWithEnum:
+            def __init__(self):
+                self.state_manager = MockStateManagerWithEnum()
+
+        class MockAppState:
+            def __init__(self):
+                self.runtime = MockRuntimeWithEnum()
+
+        class MockApp:
+            def __init__(self):
+                self.state = MockAppState()
+
+        mock_request = Mock()
+        mock_request.app = MockApp()
+
+        state = _get_current_cognitive_state(mock_request)
+
+        assert state == "AgentState.WAKEUP"
+
+    def test_get_cognitive_state_string_conversion(self):
+        """Test cognitive state conversion for non-enum string values."""
+
+        class MockStateManagerWithString:
+            def __init__(self):
+                self.current_state = "PLAY"
+
+        class MockRuntimeWithString:
+            def __init__(self):
+                self.state_manager = MockStateManagerWithString()
+
+        class MockAppState:
+            def __init__(self):
+                self.runtime = MockRuntimeWithString()
+
+        class MockApp:
+            def __init__(self):
+                self.state = MockAppState()
+
+        mock_request = Mock()
+        mock_request.app = MockApp()
+
+        state = _get_current_cognitive_state(mock_request)
+
+        assert state == "PLAY"
 
 
 class TestCleanupInteractionTracking:

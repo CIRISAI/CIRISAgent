@@ -515,14 +515,14 @@ class DiscordPlatform(Service):
         Returns:
             True to continue monitoring, False to force task recreation
         """
-        logger.warning("No tasks completed within 30s timeout - Discord might be hung, checking health...")
-
-        # Check if Discord client is still responsive
+        # Check if Discord client is still responsive first
         if self.client and not self.client.is_closed():
-            logger.info("Discord client appears healthy, continuing...")
+            logger.debug("No tasks completed within 30s timeout - Discord client appears healthy, continuing...")
             return True
         else:
-            logger.warning("Discord client appears closed/unresponsive - will recreate task on next iteration")
+            logger.warning(
+                "No tasks completed within 30s timeout - Discord client appears closed/unresponsive, will recreate task on next iteration"
+            )
             if self._discord_client_task and not self._discord_client_task.done():
                 self._discord_client_task.cancel()
             self._discord_client_task = None  # Force recreation

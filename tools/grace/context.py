@@ -14,30 +14,44 @@ class WorkContext:
 
     def __init__(self) -> None:
         """Initialize context manager."""
-        self.context_dir = Path.home() / ".grace"
-        self.context_dir.mkdir(exist_ok=True)
-        self.context_file = self.context_dir / "context.json"
+        try:
+            self.context_dir = Path.home() / ".grace"
+            self.context_dir.mkdir(exist_ok=True)
+            self.context_file = self.context_dir / "context.json"
+        except (PermissionError, OSError):
+            # Fallback for CI environments where home dir might not be writable
+            self.context_dir = Path("/tmp/.grace")
+            self.context_dir.mkdir(exist_ok=True)
+            self.context_file = self.context_dir / "context.json"
         # Anti-Goodhart: Removed work_log - tracking hours incentivizes wrong behavior
 
     def save(self, message: str = "") -> None:
         """Save current work context."""
-        context = {
-            "timestamp": datetime.now().isoformat(),
-            "git_branch": self._get_git_branch(),
-            "last_commit": self._get_last_commit(),
-            "uncommitted": self._has_uncommitted_changes(),
-            "message": message,
-        }
+        try:
+            context = {
+                "timestamp": datetime.now().isoformat(),
+                "git_branch": self._get_git_branch(),
+                "last_commit": self._get_last_commit(),
+                "uncommitted": self._has_uncommitted_changes(),
+                "message": message,
+            }
 
-        with open(self.context_file, "w") as f:
-            json.dump(context, f, indent=2)
+            with open(self.context_file, "w") as f:
+                json.dump(context, f, indent=2)
+        except (PermissionError, OSError):
+            # Gracefully handle file system issues in CI environments
+            pass
 
     def load(self) -> Optional[Dict[str, Any]]:
         """Load saved context."""
-        if not self.context_file.exists():
+        try:
+            if not self.context_file.exists():
+                return None
+            with open(self.context_file) as f:
+                return json.load(f)
+        except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
+            # Gracefully handle file system issues in CI environments
             return None
-        with open(self.context_file) as f:
-            return json.load(f)
 
     # Removed time tracking methods - Goodhart's Law:
     # "When a measure becomes a target, it ceases to be a good measure."

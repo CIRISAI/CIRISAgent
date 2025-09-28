@@ -932,7 +932,7 @@ async def _process_user_node_for_profile(
 ) -> UserProfile:
     """Process user node to create enriched user profile."""
     # Extract node attributes using helper
-    attrs = _extract_node_attributes(user_node, user_id)
+    attrs = _extract_node_attributes(user_node)
 
     # Collect connected nodes using helper
     connected_nodes_info = await _collect_connected_nodes(memory_service, user_id)
@@ -1126,7 +1126,7 @@ def build_user_profile_from_node(
 
 
 # Legacy function - now uses standardized extract_node_attributes
-def _extract_node_attributes(node: GraphNode, user_id: str) -> Dict[str, Any]:
+def _extract_node_attributes(node: GraphNode) -> Dict[str, Any]:
     """Extract attributes from a graph node, handling both dict and Pydantic models."""
     attrs = extract_node_attributes(node)
     return attrs if attrs is not None else {}
@@ -1174,7 +1174,7 @@ async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user
             if connected_results:
                 connected_node = connected_results[0]
                 # Extract attributes using our helper
-                connected_attrs = _extract_node_attributes(connected_node, connected_node_id)
+                connected_attrs = _extract_node_attributes(connected_node)
                 connected_nodes_info.append(
                     {
                         "node_id": connected_node.id,

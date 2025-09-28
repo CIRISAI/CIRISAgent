@@ -215,6 +215,7 @@ class ComponentBuilder:
             service_registry=self.runtime.service_registry,
             secrets_service=self.runtime.secrets_service,
             resource_monitor=self.runtime.resource_monitor,
+            time_service=self.runtime.time_service,
         )
 
         # Register core services before building action dispatcher

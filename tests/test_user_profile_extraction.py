@@ -490,6 +490,7 @@ class TestUserProfileExtraction:
 
             # Verify complex objects are stringified in memorized_attributes
             import json
+
             preferences = json.loads(user_profile.memorized_attributes["preferences"])
             assert preferences["theme"] == "dark"
             assert preferences["language"] == "en"

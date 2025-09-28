@@ -146,7 +146,9 @@ class ConnectedNodeInfo(BaseModel):
     relationship: str = Field(..., description="Relationship type to the source node")
     attributes: Dict[str, Any] = Field(default_factory=dict, description="Connected node attributes")
     source_service: str = Field(default="MemoryService", description="Service that provided connection info")
-    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When connection was retrieved")
+    retrieved_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When connection was retrieved"
+    )
     edge_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional edge metadata from future sources")
 
 
@@ -156,9 +158,15 @@ class SecretsData(BaseModel):
     secrets_count: int = Field(0, description="Number of secrets stored")
     filter_status: str = Field("unknown", description="Secrets filter status")
     last_updated: Optional[datetime] = Field(None, description="When secrets were last updated")
+    detected_secrets: List[str] = Field(default_factory=list, description="List of detected secret patterns")
+    secrets_filter_version: int = Field(0, description="Version of the secrets filter being used")
     source_service: str = Field(default="SecretsService", description="Service that provided secrets data")
-    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When secrets data was retrieved")
-    additional_data: Dict[str, Any] = Field(default_factory=dict, description="Additional secrets data from future sources")
+    retrieved_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When secrets data was retrieved"
+    )
+    additional_data: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional secrets data from future sources"
+    )
 
 
 __all__ = [

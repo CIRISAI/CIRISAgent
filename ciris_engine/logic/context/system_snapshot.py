@@ -126,7 +126,7 @@ async def build_system_snapshot(
         "channel_id": channel_id,
         "channel_context": channel_context,  # Preserve the full ChannelContext object
         # Identity graph data - loaded once per snapshot
-        "agent_identity": identity_data,
+        "agent_identity": {k: v for k, v in identity_data.model_dump().items() if v is not None},  # Convert IdentityData to dict, exclude None values
         "identity_purpose": identity_purpose,
         "identity_capabilities": identity_capabilities,
         "identity_restrictions": identity_restrictions,
@@ -134,16 +134,23 @@ async def build_system_snapshot(
         "agent_version": CIRIS_VERSION,
         "agent_codename": CIRIS_CODENAME,
         "agent_code_hash": code_hash,
+        # Secrets data mapped to SystemSnapshot field names
+        "detected_secrets": secrets_data.detected_secrets,
+        "secrets_filter_version": secrets_data.secrets_filter_version,
+        "total_secrets_stored": secrets_data.secrets_count,
         "shutdown_context": shutdown_context,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
-        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).model_dump().items() if key in ["utc", "london", "chicago", "tokyo"]},
+        **{
+            f"current_time_{key}": value
+            for key, value in _get_localized_times(time_service).model_dump().items()
+            if key in ["utc", "london", "chicago", "tokyo"]
+        },
         "service_health": service_health,
         "circuit_breaker_status": circuit_breaker_status,
         "resource_alerts": resource_alerts,  # CRITICAL mission-critical alerts
         "telemetry_summary": telemetry_summary,  # Resource usage data
         "adapter_channels": adapter_channels,  # Available channels by adapter
         "available_tools": available_tools,  # Available tools by adapter
-        **secrets_data,
     }
 
     if graphql_provider:

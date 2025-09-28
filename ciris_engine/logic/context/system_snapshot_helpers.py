@@ -73,7 +73,9 @@ def _extract_thought_summary(thought: Any) -> Optional[ThoughtSummary]:
 # =============================================================================
 
 
-def extract_node_attributes(node: Any) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def extract_node_attributes(
+    node: Any,
+) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes dictionary from any GraphNode - standardized and reusable.
 
     This function handles all the different ways GraphNode attributes can be stored
@@ -93,7 +95,9 @@ def extract_node_attributes(node: Any) -> Optional[Dict[str, Any]]:  # NOQA - Gr
         return {}
 
 
-def collect_memorized_attributes(attrs: Dict[str, Any], known_fields: Set[str]) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def collect_memorized_attributes(
+    attrs: Dict[str, Any], known_fields: Set[str]
+) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Collect arbitrary attributes as memorized_attributes - standardized and reusable.
 
     This function extracts all attributes that aren't in the known_fields set
@@ -116,7 +120,9 @@ def collect_memorized_attributes(attrs: Dict[str, Any], known_fields: Set[str]) 
     return memorized_attributes
 
 
-def get_channel_id_from_node(node: Any, attrs: Dict[str, Any]) -> str:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def get_channel_id_from_node(
+    node: Any, attrs: Dict[str, Any]
+) -> str:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract channel_id from node, with fallback to node.id."""
     return attrs.get("channel_id", node.id.split("/")[-1] if "/" in node.id else node.id)
 
@@ -233,7 +239,9 @@ def _extract_channel_from_search_results(search_results: List[Any], channel_id: 
 
 
 # Legacy function - now uses standardized extract_node_attributes
-def _extract_channel_node_attributes(node: Any) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def _extract_channel_node_attributes(
+    node: Any,
+) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes dictionary from channel GraphNode."""
     return extract_node_attributes(node)
 
@@ -255,7 +263,9 @@ def _get_known_channel_fields() -> Set[str]:
     }
 
 
-def _build_required_channel_fields(attrs: Dict[str, Any], node: Any) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
+def _build_required_channel_fields(
+    attrs: Dict[str, Any], node: Any
+) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
     """Build required ChannelContext fields with defaults."""
     return {
         "channel_id": get_channel_id_from_node(node, attrs),
@@ -264,7 +274,9 @@ def _build_required_channel_fields(attrs: Dict[str, Any], node: Any) -> Dict[str
     }
 
 
-def _build_optional_channel_fields(attrs: Dict[str, Any]) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
+def _build_optional_channel_fields(
+    attrs: Dict[str, Any],
+) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
     """Build optional ChannelContext fields with defaults."""
     return {
         "channel_name": attrs.get("channel_name", None),
@@ -279,7 +291,9 @@ def _build_optional_channel_fields(attrs: Dict[str, Any]) -> Dict[str, Any]:  # 
 
 
 # Legacy function - now uses standardized collect_memorized_attributes
-def _collect_memorized_attributes(attrs: Dict[str, Any], known_fields: Set[str]) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def _collect_memorized_attributes(
+    attrs: Dict[str, Any], known_fields: Set[str]
+) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Collect arbitrary attributes the agent memorized about this channel."""
     return collect_memorized_attributes(attrs, known_fields)
 
@@ -490,13 +504,17 @@ async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> Secret
     """Get secrets snapshot data."""
     if secrets_service:
         # Get the raw snapshot data
-        snapshot_data = await build_secrets_snapshot(secrets_service)  # NOQA - build_secrets_snapshot returns Dict[str, Any] for compatibility
+        snapshot_data = await build_secrets_snapshot(
+            secrets_service
+        )  # NOQA - build_secrets_snapshot returns Dict[str, Any] for compatibility
 
         # Convert to typed schema
         return SecretsData(
-            secrets_count=snapshot_data.get("secrets_count", 0),
-            filter_status=snapshot_data.get("filter_status", "unknown"),
-            last_updated=snapshot_data.get("last_updated"),
+            secrets_count=snapshot_data.get("total_secrets_stored", 0),
+            filter_status="active",  # Default status
+            last_updated=None,  # Not provided by build_secrets_snapshot
+            detected_secrets=snapshot_data.get("detected_secrets", []),
+            secrets_filter_version=snapshot_data.get("secrets_filter_version", 0),
             additional_data=snapshot_data,  # Store full data for backwards compatibility
         )
 
@@ -612,7 +630,10 @@ async def _process_single_service(
 
 
 async def _process_services_group(
-    services_group: Dict[str, Any], prefix: str, service_health: Dict[str, bool], circuit_breaker_status: Dict[str, str]  # NOQA - Service registry data is Dict[str, Any] by design
+    services_group: Dict[str, Any],
+    prefix: str,
+    service_health: Dict[str, bool],
+    circuit_breaker_status: Dict[str, str],  # NOQA - Service registry data is Dict[str, Any] by design
 ) -> None:
     """Process a group of services (handlers or global services)."""
     for service_type, services in services_group.items():
@@ -1150,7 +1171,9 @@ def build_user_profile_from_node(
 
 
 # Legacy function - now uses standardized extract_node_attributes
-def _extract_node_attributes(node: GraphNode) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def _extract_node_attributes(
+    node: GraphNode,
+) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes from a graph node, handling both dict and Pydantic models."""
     attrs = extract_node_attributes(node)
     return attrs if attrs is not None else {}
@@ -1226,7 +1249,9 @@ def _create_user_profile_from_node(
     return build_user_profile_from_node(user_id, attrs, connected_nodes_info, last_interaction, created_at)
 
 
-async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[Dict[str, Any]]:  # NOQA - Database query results are Dict[str, Any] by design
+async def _collect_cross_channel_messages(
+    user_id: str, channel_id: str
+) -> List[Dict[str, Any]]:  # NOQA - Database query results are Dict[str, Any] by design
     """Collect recent messages from this user in other channels."""
     recent_messages = []
     try:

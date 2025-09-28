@@ -6,7 +6,7 @@ These replace all Dict[str, Any] usage in logic/infrastructure/sub_services/iden
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 
 from pydantic import BaseModel, Field
 
@@ -103,7 +103,7 @@ class IdentityData(BaseModel):
     description: str = Field(..., description="Agent description")
     role: str = Field(..., description="Agent role description")
     trust_level: float = Field(0.5, ge=0.0, le=1.0, description="Agent trust level")
-    stewardship: Optional[str] = Field(None, description="Stewardship description if present")
+    stewardship: Optional[Union[str, Dict[str, Any]]] = Field(None, description="Stewardship description or data structure if present")
 
 
 class IdentitySummary(BaseModel):

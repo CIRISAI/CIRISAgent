@@ -510,7 +510,11 @@ class TestSystemContext:
     async def test_get_secrets_data_with_valid_service(self):
         """Test getting secrets data with valid service."""
         secrets_service = Mock()
-        expected_data = {"secrets_count": 5, "filter_version": 2}
+        expected_data = {
+            "total_secrets_stored": 5,
+            "secrets_filter_version": 2,
+            "detected_secrets": ["API_KEY_*", "TOKEN_*"]
+        }
 
         with patch("ciris_engine.logic.context.system_snapshot_helpers.build_secrets_snapshot") as mock_build:
             mock_build.return_value = expected_data
@@ -518,7 +522,9 @@ class TestSystemContext:
 
         # Should return SecretsData object with expected values
         assert result.secrets_count == 5
-        assert result.additional_data["filter_version"] == 2
+        assert result.secrets_filter_version == 2
+        assert result.detected_secrets == ["API_KEY_*", "TOKEN_*"]
+        assert result.additional_data["total_secrets_stored"] == 5
         assert result.source_service == "SecretsService"
         mock_build.assert_called_once_with(secrets_service)
 

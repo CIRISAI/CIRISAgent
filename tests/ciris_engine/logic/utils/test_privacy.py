@@ -135,14 +135,14 @@ class TestHashingUtils:
 
         # Claim matches
         proof1 = create_refutation_proof("actual", stored_hash)
-        assert proof1["matches_stored"]
+        assert proof1.matches_stored
 
         # Claim does not match
         proof2 = create_refutation_proof("claimed", stored_hash)
-        assert not proof2["matches_stored"]
+        assert not proof2.matches_stored
 
         # With actual content provided
         proof3 = create_refutation_proof("claimed", stored_hash, "actual")
-        assert not proof3["matches_stored"]
-        assert proof3["actual_matches_stored"]
-        assert not proof3["claimed_matches_actual"]
+        assert not proof3.matches_stored
+        assert proof3.actual_matches_stored
+        assert not proof3.claimed_matches_actual

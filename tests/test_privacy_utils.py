@@ -315,16 +315,16 @@ class TestPrivacyUtils:
         # Create proof with actual content
         proof = create_refutation_proof(claimed, stored_hash, actual)
 
-        assert "timestamp" in proof
-        assert proof["stored_hash"] == stored_hash
-        assert proof["matches_stored"] is False  # Claimed doesn't match stored
-        assert proof["actual_matches_stored"] is True  # Actual matches stored
-        assert proof["claimed_matches_actual"] is False  # Claimed != actual
+        assert hasattr(proof, "timestamp")
+        assert proof.stored_hash == stored_hash
+        assert proof.matches_stored is False  # Claimed doesn't match stored
+        assert proof.actual_matches_stored is True  # Actual matches stored
+        assert proof.claimed_matches_actual is False  # Claimed != actual
 
         # Create proof without actual content
         proof_no_actual = create_refutation_proof(claimed, stored_hash)
-        assert "actual_content_hash" not in proof_no_actual
-        assert proof_no_actual["matches_stored"] is False
+        assert proof_no_actual.actual_content_hash is None
+        assert proof_no_actual.matches_stored is False
 
 
 class TestPrivacyIntegration:

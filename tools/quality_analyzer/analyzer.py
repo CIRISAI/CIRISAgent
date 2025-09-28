@@ -14,10 +14,10 @@ from typing import Dict
 
 # Import our tools
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from analysis.sonar_tool.analyzer import CoverageAnalyzer
+from analysis.sonar_tool.client import SonarClient
 from ciris_mypy_toolkit.core import CIRISMypyToolkit
 from ciris_mypy_toolkit.schema_compliance import SchemaComplianceChecker
-from sonar_tool.analyzer import CoverageAnalyzer
-from sonar_tool.client import SonarClient
 
 
 @dataclass

@@ -305,10 +305,10 @@ def _create_counter_metric(
 ) -> Dict[str, Any]:
     """Create a counter/sum metric in OTLP format."""
     # Use provided start time or assume counter started 1 hour ago
-    if not start_time_ns:
-        start_time_ns = time_ns - (3600 * 1e9)  # 1 hour ago
+    if start_time_ns is None:
+        start_time_ns = int(time_ns - (3600 * 1e9))  # 1 hour ago, converted to int
 
-    data_point = {"asDouble": value, "startTimeUnixNano": str(int(start_time_ns)), "timeUnixNano": str(time_ns)}
+    data_point = {"asDouble": value, "startTimeUnixNano": str(start_time_ns), "timeUnixNano": str(time_ns)}
 
     if attributes:
         data_point["attributes"] = attributes
@@ -334,11 +334,11 @@ def _create_histogram_metric(
     start_time_ns: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Create a histogram metric in OTLP format."""
-    if not start_time_ns:
-        start_time_ns = time_ns - (3600 * 1e9)  # 1 hour ago
+    if start_time_ns is None:
+        start_time_ns = int(time_ns - (3600 * 1e9))  # 1 hour ago, converted to int
 
     data_point = {
-        "startTimeUnixNano": str(int(start_time_ns)),
+        "startTimeUnixNano": str(start_time_ns),
         "timeUnixNano": str(time_ns),
         "count": count,
         "sum": sum_value,

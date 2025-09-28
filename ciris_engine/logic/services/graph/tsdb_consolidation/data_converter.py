@@ -135,6 +135,76 @@ class RawThoughtData(BaseModel):
     depth: int = 0
 
 
+# Helper functions for safe data extraction and type conversion
+def safe_dict_get(data: Union[dict, str, int, float, list, None], key: str, default=None):
+    """Safely extract value from data that might not be a dict."""
+    if isinstance(data, dict):
+        return data.get(key, default)
+    return default
+
+
+def ensure_dict(data: Union[dict, str, int, float, list, None]) -> dict:
+    """Ensure data is a dict, return empty dict if not."""
+    return data if isinstance(data, dict) else {}
+
+
+def safe_str_dict(data: Union[dict, str, int, float, list, None]) -> Dict[str, str]:
+    """Convert data to string dictionary safely."""
+    if isinstance(data, dict):
+        return {k: str(v) for k, v in data.items()}
+    return {}
+
+
+def build_request_data_from_raw(raw_request: Union[dict, str, int, float, list, None]) -> Optional[RequestData]:
+    """Extract and build RequestData from raw request data with type safety."""
+    if not raw_request or not isinstance(raw_request, dict):
+        return None
+
+    parameters = ensure_dict(raw_request.get("parameters", {}))
+
+    return RequestData(
+        channel_id=safe_dict_get(raw_request, "channel_id"),
+        author_id=safe_dict_get(parameters, "author_id") or safe_dict_get(raw_request, "author_id"),
+        author_name=safe_dict_get(parameters, "author_name") or safe_dict_get(raw_request, "author_name"),
+        content=safe_dict_get(parameters, "content") or safe_dict_get(raw_request, "content"),
+        parameters=safe_str_dict(parameters),
+        headers=ensure_dict(safe_dict_get(raw_request, "headers", {})),
+        metadata=ensure_dict(safe_dict_get(raw_request, "metadata", {})),
+    )
+
+
+def build_response_data_from_raw(raw_response: Union[dict, str, int, float, list, None]) -> Optional[ResponseData]:
+    """Extract and build ResponseData from raw response data with type safety."""
+    if not raw_response or not isinstance(raw_response, dict):
+        return None
+
+    return ResponseData(
+        execution_time_ms=safe_dict_get(raw_response, "execution_time_ms"),
+        success=safe_dict_get(raw_response, "success"),
+        error=safe_dict_get(raw_response, "error"),
+        error_type=safe_dict_get(raw_response, "error_type"),
+        result=safe_dict_get(raw_response, "result"),
+        resource_usage=ensure_dict(safe_dict_get(raw_response, "resource_usage", {})),
+        metadata=ensure_dict(safe_dict_get(raw_response, "metadata", {})),
+    )
+
+
+def build_interaction_context_from_raw(context_data: Union[dict, str, int, float, list, None]) -> Optional[InteractionContext]:
+    """Extract and build InteractionContext from raw context data with type safety."""
+    if not context_data or not isinstance(context_data, dict):
+        return None
+
+    return InteractionContext(
+        trace_id=safe_dict_get(context_data, "trace_id"),
+        span_id=safe_dict_get(context_data, "span_id"),
+        parent_span_id=safe_dict_get(context_data, "parent_span_id"),
+        user_id=safe_dict_get(context_data, "user_id"),
+        session_id=safe_dict_get(context_data, "session_id"),
+        environment=safe_dict_get(context_data, "environment"),
+        additional_data=ensure_dict(safe_dict_get(context_data, "additional_data", {})),
+    )
+
+
 class TSDBDataConverter:
     """Converts raw dictionary data to typed schemas."""
 
@@ -145,50 +215,11 @@ class TSDBDataConverter:
             # Convert dict to typed model if needed
             if isinstance(raw_data, dict):
                 raw_data = RawCorrelationData(**raw_data)
-            # Extract raw request/response data
-            raw_request = raw_data.request_data
-            raw_response = raw_data.response_data
 
-            # Build typed request data
-            request_data = None
-            if raw_request:
-                parameters = raw_request.get("parameters", {})
-                request_data = RequestData(
-                    channel_id=raw_request.get("channel_id"),
-                    author_id=parameters.get("author_id") or raw_request.get("author_id"),
-                    author_name=parameters.get("author_name") or raw_request.get("author_name"),
-                    content=parameters.get("content") or raw_request.get("content"),
-                    parameters=parameters,
-                    headers=raw_request.get("headers", {}),
-                    metadata=raw_request.get("metadata", {}),
-                )
-
-            # Build typed response data
-            response_data = None
-            if raw_response:
-                response_data = ResponseData(
-                    execution_time_ms=raw_response.get("execution_time_ms"),
-                    success=raw_response.get("success"),
-                    error=raw_response.get("error"),
-                    error_type=raw_response.get("error_type"),
-                    result=raw_response.get("result"),
-                    resource_usage=raw_response.get("resource_usage", {}),
-                    metadata=raw_response.get("metadata", {}),
-                )
-
-            # Build interaction context if available
-            context = None
-            context_data = raw_data.context
-            if context_data:
-                context = InteractionContext(
-                    trace_id=context_data.get("trace_id"),
-                    span_id=context_data.get("span_id"),
-                    parent_span_id=context_data.get("parent_span_id"),
-                    user_id=context_data.get("user_id"),
-                    session_id=context_data.get("session_id"),
-                    environment=context_data.get("environment"),
-                    additional_data=context_data.get("additional_data", {}),
-                )
+            # Build typed data using helper functions
+            request_data = build_request_data_from_raw(raw_data.request_data)
+            response_data = build_response_data_from_raw(raw_data.response_data)
+            context = build_interaction_context_from_raw(raw_data.context)
 
             # Create ServiceInteractionData
             return ServiceInteractionData(
@@ -196,7 +227,7 @@ class TSDBDataConverter:
                 action_type=raw_data.action_type,
                 service_type=raw_data.service_type,
                 timestamp=raw_data.timestamp,
-                channel_id=raw_request.get("channel_id", "unknown") if raw_request else "unknown",
+                channel_id=request_data.channel_id if request_data else "unknown",
                 request_data=request_data,
                 author_id=request_data.author_id if request_data else None,
                 author_name=request_data.author_name if request_data else None,

@@ -123,17 +123,22 @@ class PricingConfig(BaseModel):
             FileNotFoundError: If pricing file doesn't exist
             ValueError: If JSON is invalid or doesn't match schema
         """
+        # Ensure we have a valid path string first
+        path_str: str
         if path is None:
             # Default path relative to this module
             config_dir = Path(__file__).parent
-            path = config_dir / "PRICING_DATA.json"
+            path_str = str(config_dir / "PRICING_DATA.json")
+        else:
+            path_str = path
 
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"Pricing configuration file not found: {path}")
+        # Convert to Path object for file operations
+        path_obj = Path(path_str)
+        if not path_obj.exists():
+            raise FileNotFoundError(f"Pricing configuration file not found: {path_obj}")
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path_obj, "r", encoding="utf-8") as f:
                 data = json.load(f)
             return cls(**data)
         except json.JSONDecodeError as e:

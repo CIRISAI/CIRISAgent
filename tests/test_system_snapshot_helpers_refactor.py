@@ -5,28 +5,37 @@ Tests cover the complex functions before and after refactoring to ensure
 behavioral compatibility and regression prevention.
 """
 
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock, MagicMock, Mock
+
 import pytest
-from unittest.mock import AsyncMock, Mock, MagicMock
-from typing import List, Dict, Any, Optional
 
 from ciris_engine.logic.context.system_snapshot_helpers import (
-    _collect_available_tools,
-    _validate_runtime_capabilities,
-    _get_tool_services,
     _call_async_or_sync_method,
-    _get_tool_info_safely,
-    _extract_adapter_type,
-    _validate_tool_infos,
+    _collect_available_tools,
     _collect_service_health,
-    _safe_get_health_status,
-    _safe_get_circuit_breaker_status,
-    _process_single_service,
-    _process_services_group,
-    _resolve_channel_context,
+    _convert_graph_node_to_channel_context,
+    _create_user_memory_query,
+    _extract_adapter_type,
+    _extract_channel_from_search_results,
+    _extract_user_from_task_context,
+    _extract_user_from_thought_context,
+    _extract_user_ids_from_context,
+    _extract_users_from_correlation_history,
+    _extract_users_from_thought_content,
     _get_initial_channel_info,
-    _perform_direct_channel_lookup,
+    _get_tool_info_safely,
+    _get_tool_services,
     _perform_channel_search,
-    _extract_channel_from_search_results
+    _perform_direct_channel_lookup,
+    _process_services_group,
+    _process_single_service,
+    _resolve_channel_context,
+    _safe_get_circuit_breaker_status,
+    _safe_get_health_status,
+    _should_skip_user_enrichment,
+    _validate_runtime_capabilities,
+    _validate_tool_infos,
 )
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
@@ -46,8 +55,9 @@ class TestCollectAvailableToolsBeforeRefactor:
             return ToolInfo(
                 name=tool_name,
                 description=f"Mock {tool_name} tool",
-                parameters=ToolParameterSchema(type="object", properties={})
+                parameters=ToolParameterSchema(type="object", properties={}),
             )
+
         mock_tool_service.get_tool_info = Mock(side_effect=mock_get_tool_info)
 
         # Create mock service registry
@@ -81,8 +91,9 @@ class TestCollectAvailableToolsBeforeRefactor:
             return ToolInfo(
                 name=tool_name,
                 description=f"Async {tool_name} tool",
-                parameters=ToolParameterSchema(type="object", properties={"param": {"type": "string"}})
+                parameters=ToolParameterSchema(type="object", properties={"param": {"type": "string"}}),
             )
+
         mock_tool_service.get_tool_info = AsyncMock(side_effect=mock_get_tool_info)
 
         # Create mock service registry
@@ -162,21 +173,21 @@ class TestCollectAvailableToolsBeforeRefactor:
         sync_service = Mock()
         sync_service.adapter_id = "sync_adapter"
         sync_service.get_available_tools = Mock(return_value=["sync_tool"])
-        sync_service.get_tool_info = Mock(return_value=ToolInfo(
-            name="sync_tool",
-            description="Sync",
-            parameters=ToolParameterSchema(type="object", properties={})
-        ))
+        sync_service.get_tool_info = Mock(
+            return_value=ToolInfo(
+                name="sync_tool", description="Sync", parameters=ToolParameterSchema(type="object", properties={})
+            )
+        )
 
         # Create async tool service
         async_service = Mock()
         async_service.adapter_id = "async_adapter"
         async_service.get_available_tools = AsyncMock(return_value=["async_tool"])
-        async_service.get_tool_info = AsyncMock(return_value=ToolInfo(
-            name="async_tool",
-            description="Async",
-            parameters=ToolParameterSchema(type="object", properties={})
-        ))
+        async_service.get_tool_info = AsyncMock(
+            return_value=ToolInfo(
+                name="async_tool", description="Async", parameters=ToolParameterSchema(type="object", properties={})
+            )
+        )
 
         # Create mock service registry
         mock_service_registry = Mock()
@@ -214,7 +225,7 @@ class TestHelperFunctions:
 
     def test_validate_runtime_capabilities_missing_attrs(self):
         """Test runtime capabilities validation with missing attributes."""
-        mock_runtime = Mock(spec=['service_registry'])  # Only has service_registry
+        mock_runtime = Mock(spec=["service_registry"])  # Only has service_registry
         mock_runtime.service_registry = Mock()
 
         assert _validate_runtime_capabilities(mock_runtime) is False
@@ -286,9 +297,7 @@ class TestHelperFunctions:
         """Test getting tool info successfully."""
         mock_service = Mock()
         mock_tool_info = ToolInfo(
-            name="test_tool",
-            description="Test",
-            parameters=ToolParameterSchema(type="object", properties={})
+            name="test_tool", description="Test", parameters=ToolParameterSchema(type="object", properties={})
         )
         mock_service.get_tool_info = Mock(return_value=mock_tool_info)
 
@@ -325,16 +334,8 @@ class TestHelperFunctions:
     def test_validate_tool_infos_success(self):
         """Test validating tool infos successfully."""
         tool_infos = [
-            ToolInfo(
-                name="tool1",
-                description="Test 1",
-                parameters=ToolParameterSchema(type="object", properties={})
-            ),
-            ToolInfo(
-                name="tool2",
-                description="Test 2",
-                parameters=ToolParameterSchema(type="object", properties={})
-            )
+            ToolInfo(name="tool1", description="Test 1", parameters=ToolParameterSchema(type="object", properties={})),
+            ToolInfo(name="tool2", description="Test 2", parameters=ToolParameterSchema(type="object", properties={})),
         ]
 
         # Should not raise exception
@@ -343,12 +344,8 @@ class TestHelperFunctions:
     def test_validate_tool_infos_failure(self):
         """Test validating tool infos with wrong type."""
         tool_infos = [
-            ToolInfo(
-                name="tool1",
-                description="Test 1",
-                parameters=ToolParameterSchema(type="object", properties={})
-            ),
-            {"wrong": "type"}  # Wrong type
+            ToolInfo(name="tool1", description="Test 1", parameters=ToolParameterSchema(type="object", properties={})),
+            {"wrong": "type"},  # Wrong type
         ]
 
         with pytest.raises(TypeError, match="Non-ToolInfo object"):
@@ -360,22 +357,24 @@ class TestServiceHealthHelperFunctions:
 
     @pytest.mark.asyncio
     async def test_safe_get_health_status_success(self):
-        """Test getting health status successfully."""
-        mock_service = Mock()
+        """Test getting health status successfully using legacy get_health_status method."""
+        mock_service = Mock(spec=["get_health_status"])  # Only has get_health_status, not is_healthy
         mock_health_status = Mock()
         mock_health_status.is_healthy = True
         mock_service.get_health_status = AsyncMock(return_value=mock_health_status)
 
-        result = await _safe_get_health_status(mock_service)
-        assert result is True
+        has_method, is_healthy = await _safe_get_health_status(mock_service)
+        assert has_method is True
+        assert is_healthy is True
 
     @pytest.mark.asyncio
     async def test_safe_get_health_status_no_method(self):
         """Test getting health status when method doesn't exist."""
         mock_service = Mock(spec=[])  # No methods
 
-        result = await _safe_get_health_status(mock_service)
-        assert result is False
+        has_method, is_healthy = await _safe_get_health_status(mock_service)
+        assert has_method is False
+        assert is_healthy is False
 
     @pytest.mark.asyncio
     async def test_safe_get_health_status_exception(self):
@@ -383,8 +382,9 @@ class TestServiceHealthHelperFunctions:
         mock_service = Mock()
         mock_service.get_health_status = AsyncMock(side_effect=Exception("Health check failed"))
 
-        result = await _safe_get_health_status(mock_service)
-        assert result is False
+        has_method, is_healthy = await _safe_get_health_status(mock_service)
+        assert has_method is True  # Has method but failed
+        assert is_healthy is False
 
     @pytest.mark.asyncio
     async def test_safe_get_health_status_no_is_healthy_attr(self):
@@ -395,47 +395,61 @@ class TestServiceHealthHelperFunctions:
         del mock_health_status.is_healthy
         mock_service.get_health_status = AsyncMock(return_value=mock_health_status)
 
-        result = await _safe_get_health_status(mock_service)
-        assert result is False
+        has_method, is_healthy = await _safe_get_health_status(mock_service)
+        assert has_method is True
+        assert is_healthy is False
+
+    @pytest.mark.asyncio
+    async def test_safe_get_health_status_with_is_healthy_method(self):
+        """Test getting health status using ServiceProtocol is_healthy method."""
+        mock_service = Mock()
+        mock_service.is_healthy = AsyncMock(return_value=True)
+
+        has_method, is_healthy = await _safe_get_health_status(mock_service)
+        assert has_method is True
+        assert is_healthy is True
 
     def test_safe_get_circuit_breaker_status_success(self):
         """Test getting circuit breaker status successfully."""
         mock_service = Mock()
         mock_service.get_circuit_breaker_status = Mock(return_value="CLOSED")
 
-        result = _safe_get_circuit_breaker_status(mock_service)
-        assert result == "CLOSED"
+        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        assert has_method is True
+        assert status == "CLOSED"
 
     def test_safe_get_circuit_breaker_status_no_method(self):
         """Test getting circuit breaker status when method doesn't exist."""
         mock_service = Mock(spec=[])  # No methods
 
-        result = _safe_get_circuit_breaker_status(mock_service)
-        assert result == "UNKNOWN"
+        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        assert has_method is False
+        assert status == "UNKNOWN"
 
     def test_safe_get_circuit_breaker_status_none_result(self):
         """Test getting circuit breaker status when method returns None."""
         mock_service = Mock()
         mock_service.get_circuit_breaker_status = Mock(return_value=None)
 
-        result = _safe_get_circuit_breaker_status(mock_service)
-        assert result == "UNKNOWN"
+        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        assert has_method is True
+        assert status == "UNKNOWN"
 
     def test_safe_get_circuit_breaker_status_exception(self):
         """Test getting circuit breaker status when method raises exception."""
         mock_service = Mock()
         mock_service.get_circuit_breaker_status = Mock(side_effect=Exception("CB check failed"))
 
-        result = _safe_get_circuit_breaker_status(mock_service)
-        assert result == "UNKNOWN"
+        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        assert has_method is True  # Has method but failed
+        assert status == "UNKNOWN"
 
     @pytest.mark.asyncio
     async def test_process_single_service(self):
         """Test processing a single service."""
         mock_service = Mock()
-        mock_health_status = Mock()
-        mock_health_status.is_healthy = True
-        mock_service.get_health_status = AsyncMock(return_value=mock_health_status)
+        # Use ServiceProtocol is_healthy method
+        mock_service.is_healthy = AsyncMock(return_value=True)
         mock_service.get_circuit_breaker_status = Mock(return_value="OPEN")
 
         service_health = {}
@@ -449,23 +463,16 @@ class TestServiceHealthHelperFunctions:
     @pytest.mark.asyncio
     async def test_process_services_group(self):
         """Test processing a group of services."""
-        # Create mock services
+        # Create mock services with ServiceProtocol is_healthy methods
         mock_service1 = Mock()
-        mock_health1 = Mock()
-        mock_health1.is_healthy = True
-        mock_service1.get_health_status = AsyncMock(return_value=mock_health1)
+        mock_service1.is_healthy = AsyncMock(return_value=True)
         mock_service1.get_circuit_breaker_status = Mock(return_value="CLOSED")
 
         mock_service2 = Mock()
-        mock_health2 = Mock()
-        mock_health2.is_healthy = False
-        mock_service2.get_health_status = AsyncMock(return_value=mock_health2)
+        mock_service2.is_healthy = AsyncMock(return_value=False)
         mock_service2.get_circuit_breaker_status = Mock(return_value="OPEN")
 
-        services_group = {
-            "llm": [mock_service1],
-            "memory": [mock_service2]
-        }
+        services_group = {"llm": [mock_service1], "memory": [mock_service2]}
 
         service_health = {}
         circuit_breaker_status = {}
@@ -483,29 +490,19 @@ class TestServiceHealthHelperFunctions:
         # Create mock service registry
         mock_registry = Mock()
 
-        # Create mock services
+        # Create mock services with ServiceProtocol is_healthy methods
         mock_service1 = Mock()
-        mock_health1 = Mock()
-        mock_health1.is_healthy = True
-        mock_service1.get_health_status = AsyncMock(return_value=mock_health1)
+        mock_service1.is_healthy = AsyncMock(return_value=True)
         mock_service1.get_circuit_breaker_status = Mock(return_value="CLOSED")
 
         mock_service2 = Mock()
-        mock_health2 = Mock()
-        mock_health2.is_healthy = False
-        mock_service2.get_health_status = AsyncMock(return_value=mock_health2)
+        mock_service2.is_healthy = AsyncMock(return_value=False)
         mock_service2.get_circuit_breaker_status = Mock(return_value="OPEN")
 
         # Mock registry info
         registry_info = {
-            "handlers": {
-                "handler1": {
-                    "llm": [mock_service1]
-                }
-            },
-            "global_services": {
-                "memory": [mock_service2]
-            }
+            "handlers": {"handler1": {"llm": [mock_service1]}},
+            "global_services": {"memory": [mock_service2]},
         }
         mock_registry.get_provider_info = Mock(return_value=registry_info)
 
@@ -709,6 +706,80 @@ class TestChannelContextHelperFunctions:
 
         assert result is None
 
+    def test_convert_graph_node_to_channel_context_success(self):
+        """Test successful conversion of GraphNode to ChannelContext."""
+        mock_node = Mock()
+        mock_node.id = "channel/test_123"
+        mock_node.attributes = {
+            "channel_id": "test_123",
+            "channel_type": "discord",
+            "channel_name": "Test Channel",
+            "is_private": False,
+            "participants": ["user1", "user2"],
+        }
+
+        result = _convert_graph_node_to_channel_context(mock_node)
+
+        assert result is not None
+        assert result.channel_id == "test_123"
+        assert result.channel_type == "discord"
+        assert result.channel_name == "Test Channel"
+        assert result.is_private is False
+        assert result.participants == ["user1", "user2"]
+
+    def test_convert_graph_node_to_channel_context_minimal(self):
+        """Test conversion with minimal attributes."""
+        mock_node = Mock()
+        mock_node.id = "channel/test_456"
+        mock_node.attributes = {"channel_id": "test_456"}
+
+        result = _convert_graph_node_to_channel_context(mock_node)
+
+        assert result is not None
+        assert result.channel_id == "test_456"
+        assert result.channel_type == "unknown"  # Default value
+
+    def test_convert_graph_node_to_channel_context_no_attributes(self):
+        """Test conversion when node has no attributes."""
+        mock_node = Mock()
+        mock_node.id = "channel/test_789"
+        mock_node.attributes = None
+
+        result = _convert_graph_node_to_channel_context(mock_node)
+
+        assert result is None
+
+    def test_convert_graph_node_to_channel_context_with_memorized_attributes(self):
+        """Test conversion includes arbitrary memorized attributes."""
+        mock_node = Mock()
+        mock_node.id = "channel/test_123"
+        mock_node.attributes = {
+            "channel_id": "test_123",
+            "channel_type": "discord",
+            "channel_name": "Test Channel",
+            # Agent memorized arbitrary attributes
+            "favorite_topic": "python programming",
+            "mood": "friendly",
+            "last_joke": "Why do programmers prefer dark mode?",
+            "member_count": 42,
+            "channel_purpose": "discussing AI development",
+        }
+
+        result = _convert_graph_node_to_channel_context(mock_node)
+
+        assert result is not None
+        assert result.channel_id == "test_123"
+        assert result.channel_type == "discord"
+        assert result.channel_name == "Test Channel"
+
+        # Check memorized attributes are preserved as strings
+        assert "favorite_topic" in result.memorized_attributes
+        assert result.memorized_attributes["favorite_topic"] == "python programming"
+        assert result.memorized_attributes["mood"] == "friendly"
+        assert result.memorized_attributes["last_joke"] == "Why do programmers prefer dark mode?"
+        assert result.memorized_attributes["member_count"] == "42"  # Converted to string
+        assert result.memorized_attributes["channel_purpose"] == "discussing AI development"
+
     @pytest.mark.asyncio
     async def test_resolve_channel_context_success(self):
         """Test successful channel context resolution."""
@@ -722,13 +793,16 @@ class TestChannelContextHelperFunctions:
         # Mock memory service
         mock_memory_service = Mock()
         mock_channel_node = Mock(id="channel/test_channel_123")
+        mock_channel_node.attributes = {"channel_id": "test_channel_123", "channel_type": "discord"}
         mock_nodes = [mock_channel_node]
         mock_memory_service.recall = AsyncMock(return_value=mock_nodes)
 
         channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
 
         assert channel_id == "test_channel_123"
-        assert channel_context == mock_channel_node  # Should now be set to the found node
+        assert channel_context is not None  # Should now be a ChannelContext object
+        assert hasattr(channel_context, "channel_id")
+        assert channel_context.channel_id == "test_channel_123"
 
     @pytest.mark.asyncio
     async def test_resolve_channel_context_with_search_fallback(self):
@@ -750,7 +824,9 @@ class TestChannelContextHelperFunctions:
         channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
 
         assert channel_id == "test_channel_123"
-        assert channel_context == mock_found_node  # Should now be set to the found node from search
+        assert channel_context is not None  # Should now be a ChannelContext object from search
+        assert hasattr(channel_context, "channel_id")
+        assert channel_context.channel_id == "test_channel_123"
 
     @pytest.mark.asyncio
     async def test_resolve_channel_context_no_memory_service(self):
@@ -804,3 +880,286 @@ class TestChannelContextHelperFunctions:
 
         assert channel_id == "test_channel_123"
         assert channel_context == original_context  # Should remain the original context
+
+
+class TestUserExtractionHelperFunctions:
+    """Test user extraction helper functions."""
+
+    def test_extract_user_from_task_context_with_user_id(self):
+        """Test extracting user from task context with user_id."""
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.user_id = "user_123"
+
+        user_ids = set()
+        _extract_user_from_task_context(mock_task, user_ids)
+        assert user_ids == {"user_123"}
+
+    def test_extract_user_from_task_context_no_context(self):
+        """Test extracting user from task with no context."""
+        mock_task = Mock()
+        mock_task.context = None
+
+        user_ids = set()
+        _extract_user_from_task_context(mock_task, user_ids)
+        assert user_ids == set()
+
+    def test_extract_user_from_task_context_no_user_id(self):
+        """Test extracting user from task context without user_id."""
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.user_id = None
+
+        user_ids = set()
+        _extract_user_from_task_context(mock_task, user_ids)
+        assert user_ids == set()
+
+    def test_extract_user_from_thought_context_with_user_id(self):
+        """Test extracting user from thought context with user_id."""
+        mock_thought = Mock()
+        mock_thought.context = Mock()
+        mock_thought.context.user_id = "user_456"
+
+        user_ids = set()
+        _extract_user_from_thought_context(mock_thought, user_ids)
+        assert user_ids == {"user_456"}
+
+    def test_extract_user_from_thought_context_no_context(self):
+        """Test extracting user from thought with no context."""
+        mock_thought = Mock()
+        mock_thought.context = None
+
+        user_ids = set()
+        _extract_user_from_thought_context(mock_thought, user_ids)
+        assert user_ids == set()
+
+    def test_extract_user_from_thought_context_no_user_id(self):
+        """Test extracting user from thought context without user_id."""
+        mock_thought = Mock()
+        mock_thought.context = Mock()
+        mock_thought.context.user_id = None
+
+        user_ids = set()
+        _extract_user_from_thought_context(mock_thought, user_ids)
+        assert user_ids == set()
+
+    def test_extract_users_from_correlation_history_success(self):
+        """Test extracting users from correlation history."""
+        # Mock task with correlation ID
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.correlation_id = "corr_123"
+
+        user_ids = set()
+
+        # Mock the database connection and cursor
+        import unittest.mock
+
+        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
+            mock_conn = Mock()
+            mock_cursor = Mock()
+            mock_cursor.fetchall.return_value = [
+                {"user_id": "user_123"},
+                {"user_id": "user_456"},
+                {"user_id": "user_123"},  # Duplicate
+            ]
+            mock_conn.cursor.return_value = mock_cursor
+            mock_conn.__enter__ = Mock(return_value=mock_conn)
+            mock_conn.__exit__ = Mock(return_value=None)
+            mock_persistence.get_db_connection.return_value = mock_conn
+
+            _extract_users_from_correlation_history(mock_task, user_ids)
+
+        # Should have extracted unique user IDs
+        assert user_ids == {"user_123", "user_456"}
+
+    def test_extract_users_from_correlation_history_no_correlation_id(self):
+        """Test extracting users from correlation history without correlation_id."""
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.correlation_id = None
+
+        user_ids = set()
+        _extract_users_from_correlation_history(mock_task, user_ids)
+        assert user_ids == set()
+
+    def test_extract_users_from_correlation_history_exception(self):
+        """Test extracting users from correlation history when exception occurs."""
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.correlation_id = "corr_123"
+
+        user_ids = set()
+
+        # Mock database connection to raise exception
+        import unittest.mock
+
+        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
+            mock_persistence.get_db_connection.side_effect = Exception("Database error")
+
+            _extract_users_from_correlation_history(mock_task, user_ids)
+
+        # Should handle exception gracefully
+        assert user_ids == set()
+
+    def test_extract_users_from_thought_content_with_discord_mentions(self):
+        """Test extracting users from thought content with Discord mentions."""
+        mock_thought = Mock()
+        mock_thought.content = "Hello <@123456789> and <@987654321>, please review this."
+
+        user_ids = set()
+        _extract_users_from_thought_content(mock_thought, user_ids)
+        assert user_ids == {"123456789", "987654321"}
+
+    def test_extract_users_from_thought_content_with_id_patterns(self):
+        """Test extracting users from thought content with ID: patterns."""
+        mock_thought = Mock()
+        mock_thought.content = "User ID: 123456 and another ID:  789012 found."
+
+        user_ids = set()
+        _extract_users_from_thought_content(mock_thought, user_ids)
+        assert user_ids == {"123456", "789012"}
+
+    def test_extract_users_from_thought_content_mixed_patterns(self):
+        """Test extracting users from thought content with mixed patterns."""
+        mock_thought = Mock()
+        mock_thought.content = "Hello <@123456789> and user ID: 555666 are mentioned."
+
+        user_ids = set()
+        _extract_users_from_thought_content(mock_thought, user_ids)
+        assert user_ids == {"123456789", "555666"}
+
+    def test_extract_users_from_thought_content_no_mentions(self):
+        """Test extracting users from thought content without mentions."""
+        mock_thought = Mock()
+        mock_thought.content = "This is a regular message without mentions."
+
+        user_ids = set()
+        _extract_users_from_thought_content(mock_thought, user_ids)
+        assert user_ids == set()
+
+    def test_extract_users_from_thought_content_no_content(self):
+        """Test extracting users from thought with no content."""
+        mock_thought = Mock()
+        mock_thought.content = None
+
+        user_ids = set()
+        _extract_users_from_thought_content(mock_thought, user_ids)
+        assert user_ids == set()
+
+    def test_extract_users_from_thought_content_empty_content(self):
+        """Test extracting users from thought with empty content."""
+        mock_thought = Mock()
+        mock_thought.content = ""
+
+        user_ids = set()
+        _extract_users_from_thought_content(mock_thought, user_ids)
+        assert user_ids == set()
+
+    def test_extract_user_ids_from_context_combined(self):
+        """Test extracting user IDs from combined context sources."""
+        # Mock task with user and correlation ID
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.user_id = "user_from_task"
+        mock_task.context.correlation_id = "corr_123"
+
+        # Mock thought with user and mentions
+        mock_thought = Mock()
+        mock_thought.context = Mock()
+        mock_thought.context.user_id = "user_from_thought"
+        mock_thought.content = "Hello <@999888777>, check this out. ID: 111222333"
+
+        # Mock database for correlation history
+        import unittest.mock
+
+        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
+            mock_conn = Mock()
+            mock_cursor = Mock()
+            mock_cursor.fetchall.return_value = [{"user_id": "user_from_correlation"}]
+            mock_conn.cursor.return_value = mock_cursor
+            mock_conn.__enter__ = Mock(return_value=mock_conn)
+            mock_conn.__exit__ = Mock(return_value=None)
+            mock_persistence.get_db_connection.return_value = mock_conn
+
+            result = _extract_user_ids_from_context(mock_task, mock_thought)
+
+        # Should return all unique user IDs from all sources
+        expected_users = {"user_from_task", "user_from_thought", "999888777", "111222333", "user_from_correlation"}
+        assert result == expected_users
+
+    def test_extract_user_ids_from_context_no_sources(self):
+        """Test extracting user IDs when no sources provide users."""
+        # Mock task and thought with no user info
+        mock_task = Mock()
+        mock_task.context = None
+
+        mock_thought = Mock()
+        mock_thought.context = None
+        mock_thought.content = "No mentions here."
+
+        result = _extract_user_ids_from_context(mock_task, mock_thought)
+        assert result == set()
+
+    def test_extract_user_ids_from_context_duplicate_removal(self):
+        """Test that duplicate user IDs are removed."""
+        # Mock task with user ID
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.user_id = "duplicate_user"
+        mock_task.context.correlation_id = "corr_123"
+
+        # Mock thought with same user and mention
+        mock_thought = Mock()
+        mock_thought.context = Mock()
+        mock_thought.context.user_id = "duplicate_user"
+        mock_thought.content = "Hello <@duplicate_user>, self-mention."
+
+        # Mock database for correlation history with same user
+        import unittest.mock
+
+        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
+            mock_conn = Mock()
+            mock_cursor = Mock()
+            mock_cursor.fetchall.return_value = [{"user_id": "duplicate_user"}]
+            mock_conn.cursor.return_value = mock_cursor
+            mock_conn.__enter__ = Mock(return_value=mock_conn)
+            mock_conn.__exit__ = Mock(return_value=None)
+            mock_persistence.get_db_connection.return_value = mock_conn
+
+            result = _extract_user_ids_from_context(mock_task, mock_thought)
+
+        # Should only appear once despite being in all sources
+        assert result == {"duplicate_user"}
+
+
+class TestUserProfileEnrichmentHelperFunctions:
+    """Test user profile enrichment helper functions."""
+
+    def test_should_skip_user_enrichment_existing_user(self):
+        """Test skipping user that already exists."""
+        existing_user_ids = {"user_123", "user_456"}
+
+        result = _should_skip_user_enrichment("user_123", existing_user_ids)
+        assert result is True
+
+    def test_should_skip_user_enrichment_new_user(self):
+        """Test not skipping user that doesn't exist."""
+        existing_user_ids = {"user_123", "user_456"}
+
+        result = _should_skip_user_enrichment("user_789", existing_user_ids)
+        assert result is False
+
+    def test_create_user_memory_query(self):
+        """Test creating memory query for user enrichment."""
+        from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+        from ciris_engine.schemas.services.operations import MemoryQuery
+
+        result = _create_user_memory_query("user_123")
+
+        assert isinstance(result, MemoryQuery)
+        assert result.node_id == "user/user_123"
+        assert result.scope == GraphScope.LOCAL
+        assert result.type == NodeType.USER
+        assert result.include_edges is True
+        assert result.depth == 2

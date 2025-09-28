@@ -217,6 +217,11 @@ class UserProfile(BaseModel):
     partnership_requested_at: Optional[datetime] = Field(None, description="When partnership was requested")
     partnership_approved: bool = Field(False, description="Whether partnership was approved by agent")
 
+    # Agent memorized data - arbitrary attributes the agent chose to store about this user
+    memorized_attributes: Dict[str, str] = Field(
+        default_factory=dict, description="Additional attributes the agent memorized about this user"
+    )
+
     # Additional context
     notes: Optional[str] = Field(None, description="Additional notes or context about the user")
 
@@ -243,6 +248,11 @@ class ChannelContext(BaseModel):
     # Configuration
     allowed_actions: List[str] = Field(default_factory=list, description="Allowed actions in channel")
     moderation_level: str = Field("standard", description="Moderation level")
+
+    # Agent memorized data - arbitrary attributes the agent chose to store about this channel
+    memorized_attributes: Dict[str, str] = Field(
+        default_factory=dict, description="Additional attributes the agent memorized about this channel"
+    )
 
     @field_serializer("created_at", "last_activity")
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:

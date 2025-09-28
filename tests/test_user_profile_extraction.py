@@ -251,12 +251,12 @@ class TestUserProfileExtraction:
             assert snapshot.user_profiles
             assert any(p.user_id == "123456789" for p in snapshot.user_profiles)
 
-            # Verify ALL attributes were captured in notes
+            # Verify ALL custom attributes were captured in memorized_attributes
             user_profile = next(p for p in snapshot.user_profiles if p.user_id == "123456789")
-            assert "custom_field" in user_profile.notes
-            assert "custom_value_123456789" in user_profile.notes
-            assert "preferences" in user_profile.notes
-            assert "tags" in user_profile.notes
+            assert "custom_field" in user_profile.memorized_attributes
+            assert user_profile.memorized_attributes["custom_field"] == "custom_value_123456789"
+            assert "preferences" in user_profile.memorized_attributes
+            assert "tags" in user_profile.memorized_attributes
 
     @pytest.mark.asyncio
     async def test_extract_users_from_thought_content(
@@ -481,24 +481,26 @@ class TestUserProfileExtraction:
             # Get the user profile
             user_profile = next(p for p in snapshot.user_profiles if p.user_id == "123456789")
 
-            # Verify ALL attributes are in notes as JSON
-            assert user_profile.notes is not None
-            assert "All attributes:" in user_profile.notes
+            # Verify ALL custom attributes are in memorized_attributes
+            assert user_profile.memorized_attributes is not None
 
-            # Parse the attributes from notes
+            # Verify all custom fields are captured in memorized_attributes
+            assert user_profile.memorized_attributes["custom_field"] == "custom_value_123456789"
+            assert user_profile.memorized_attributes["email"] == "user_123456789@example.com"
+
+            # Verify complex objects are stringified in memorized_attributes
             import json
+            preferences = json.loads(user_profile.memorized_attributes["preferences"])
+            assert preferences["theme"] == "dark"
+            assert preferences["language"] == "en"
 
-            attrs_json = user_profile.notes.split("All attributes: ")[1].split("\n")[0]
-            captured_attrs = json.loads(attrs_json)
+            tags = json.loads(user_profile.memorized_attributes["tags"])
+            assert "active" in tags
+            assert "verified" in tags
 
-            # Verify all custom fields are captured
-            assert captured_attrs["custom_field"] == "custom_value_123456789"
-            assert captured_attrs["preferences"]["theme"] == "dark"
-            assert captured_attrs["preferences"]["language"] == "en"
-            assert "active" in captured_attrs["tags"]
-            assert "verified" in captured_attrs["tags"]
-            assert captured_attrs["email"] == "user_123456789@example.com"
-            assert captured_attrs["trust_level"] == 0.8
+            # Verify known fields are properly extracted to UserProfile fields, not memorized_attributes
+            assert user_profile.trust_level == 0.8
+            assert "trust_level" not in user_profile.memorized_attributes  # Should be in proper field
 
 
 if __name__ == "__main__":

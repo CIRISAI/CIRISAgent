@@ -319,6 +319,9 @@ python -m tools.test_tool test tests/
 python -m tools.test_tool status
 python -m tools.test_tool results
 
+# Direct pytest (ALWAYS use -n 16 for parallel execution with 5+ minute timeout)
+pytest -n 16 tests/ --timeout=300
+
 # Coverage analysis
 python -m tools.quality_analyzer       # Find gaps
 python -m tools.sonar_tool analyze     # SonarCloud metrics
@@ -331,7 +334,7 @@ The CIRIS QA Runner provides comprehensive API testing:
 ```bash
 # Quick module testing
 python -m tools.qa_runner auth          # Authentication tests
-python -m tools.qa_runner agent         # Agent interaction tests  
+python -m tools.qa_runner agent         # Agent interaction tests
 python -m tools.qa_runner memory        # Memory system tests
 python -m tools.qa_runner telemetry     # Telemetry & metrics tests
 python -m tools.qa_runner system        # System management tests
@@ -414,17 +417,17 @@ python tools/bump_version.py major     # Breaking changes
   ```bash
   # Find agent containers
   cd /opt/ciris/agents && ls -la
-  
+
   # Check specific agent status
   cd /opt/ciris/agents/echo-speculative-4fc6ru
   docker-compose ps
-  
+
   # View agent logs
   docker-compose logs --tail=50 echo-speculative-4fc6ru
-  
+
   # Execute commands in container
   docker-compose exec echo-speculative-4fc6ru python -c "print('hello')"
-  
+
   # Check database files
   docker-compose exec echo-speculative-4fc6ru find /app -name '*.db'
   ```

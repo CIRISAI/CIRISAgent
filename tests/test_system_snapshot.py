@@ -261,10 +261,8 @@ class TestBuildSystemSnapshot:
         for handler_info in mock_registry.get_provider_info()["handlers"].values():
             for services in handler_info.values():
                 for service in services:
-                    # get_health_status should return an object with is_healthy attribute
-                    health_status = MagicMock()
-                    health_status.is_healthy = True
-                    service.get_health_status = AsyncMock(return_value=health_status)
+                    # Use ServiceProtocol is_healthy method
+                    service.is_healthy = AsyncMock(return_value=True)
                     service.get_circuit_breaker_status = MagicMock(return_value="CLOSED")
 
         snapshot = await build_system_snapshot(
@@ -863,11 +861,9 @@ class TestServiceHealthCollection:
         """Test collecting health from global services."""
         mock_registry = MagicMock()
 
-        # Create mock global service
-        mock_global_service = MagicMock()  # Use MagicMock not AsyncMock
-        mock_health = MagicMock()
-        mock_health.is_healthy = True
-        mock_global_service.get_health_status = AsyncMock(return_value=mock_health)
+        # Create mock global service with ServiceProtocol is_healthy method
+        mock_global_service = MagicMock()
+        mock_global_service.is_healthy = AsyncMock(return_value=True)
         mock_global_service.get_circuit_breaker_status = MagicMock(return_value="CLOSED")
 
         mock_registry.get_provider_info.return_value = {

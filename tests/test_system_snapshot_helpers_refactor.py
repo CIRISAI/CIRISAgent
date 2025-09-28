@@ -21,7 +21,12 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
     _safe_get_health_status,
     _safe_get_circuit_breaker_status,
     _process_single_service,
-    _process_services_group
+    _process_services_group,
+    _resolve_channel_context,
+    _get_initial_channel_info,
+    _perform_direct_channel_lookup,
+    _perform_channel_search,
+    _extract_channel_from_search_results
 )
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
@@ -529,3 +534,248 @@ class TestServiceHealthHelperFunctions:
 
         assert service_health == {}
         assert circuit_breaker_status == {}
+
+
+class TestChannelContextHelperFunctions:
+    """Test the channel context helper functions."""
+
+    def test_get_initial_channel_info_from_task(self):
+        """Test getting channel info from task context."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "test_channel_123"
+
+        channel_id, channel_context = _get_initial_channel_info(mock_task, None)
+
+        assert channel_id == "test_channel_123"
+
+    def test_get_initial_channel_info_from_thought(self):
+        """Test getting channel info from thought context when task has no context."""
+        # Mock thought with channel context - use proper structure
+        mock_thought = Mock()
+        mock_thought.context = Mock()
+        mock_thought.context.system_snapshot = Mock()
+        mock_thought.context.system_snapshot.channel_context = Mock()
+        mock_thought.context.system_snapshot.channel_context.channel_id = "thought_channel_456"
+
+        # Task with no context
+        mock_task = Mock()
+        mock_task.context = None
+
+        channel_id, channel_context = _get_initial_channel_info(mock_task, mock_thought)
+
+        assert channel_id == "thought_channel_456"
+
+    def test_get_initial_channel_info_no_sources(self):
+        """Test getting channel info when no sources have context."""
+        channel_id, channel_context = _get_initial_channel_info(None, None)
+
+        assert channel_id is None
+        assert channel_context is None
+
+    def test_get_initial_channel_info_task_takes_precedence(self):
+        """Test that task context takes precedence over thought context."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "task_channel_123"
+
+        # Mock thought with different channel context - use proper structure
+        mock_thought = Mock()
+        mock_thought.context = Mock()
+        mock_thought.context.system_snapshot = Mock()
+        mock_thought.context.system_snapshot.channel_context = Mock()
+        mock_thought.context.system_snapshot.channel_context.channel_id = "thought_channel_456"
+
+        channel_id, channel_context = _get_initial_channel_info(mock_task, mock_thought)
+
+        assert channel_id == "task_channel_123"  # Task takes precedence
+
+    @pytest.mark.asyncio
+    async def test_perform_direct_channel_lookup_success(self):
+        """Test successful direct channel lookup."""
+        mock_memory_service = Mock()
+        mock_nodes = [Mock(id="channel/test_123")]
+        mock_memory_service.recall = AsyncMock(return_value=mock_nodes)
+
+        result = await _perform_direct_channel_lookup(mock_memory_service, "test_123")
+
+        assert result == mock_nodes
+        mock_memory_service.recall.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_perform_direct_channel_lookup_empty(self):
+        """Test direct channel lookup with no results."""
+        mock_memory_service = Mock()
+        mock_memory_service.recall = AsyncMock(return_value=[])
+
+        result = await _perform_direct_channel_lookup(mock_memory_service, "test_123")
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_perform_channel_search_success(self):
+        """Test successful channel search."""
+        mock_memory_service = Mock()
+        mock_results = [Mock(id="channel/test_123")]
+        mock_memory_service.search = AsyncMock(return_value=mock_results)
+
+        result = await _perform_channel_search(mock_memory_service, "test_123")
+
+        assert result == mock_results
+        mock_memory_service.search.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_perform_channel_search_empty(self):
+        """Test channel search with no results."""
+        mock_memory_service = Mock()
+        mock_memory_service.search = AsyncMock(return_value=[])
+
+        result = await _perform_channel_search(mock_memory_service, "test_123")
+
+        assert result == []
+
+    def test_extract_channel_from_search_results_by_id(self):
+        """Test extracting channel from search results by node ID."""
+        mock_node1 = Mock()
+        mock_node1.id = "channel/test_123"
+        mock_node1.attributes = {"channel_id": "test_123"}
+
+        mock_node2 = Mock()
+        mock_node2.id = "other/node"
+        mock_node2.attributes = {"channel_id": "other"}
+
+        search_results = [mock_node1, mock_node2]
+
+        result = _extract_channel_from_search_results(search_results, "test_123")
+
+        assert result == mock_node1
+
+    def test_extract_channel_from_search_results_by_attribute(self):
+        """Test extracting channel from search results by channel_id attribute."""
+        mock_node1 = Mock()
+        mock_node1.id = "some/other/id"
+        mock_node1.attributes = {"channel_id": "test_123", "name": "Test Channel"}
+
+        search_results = [mock_node1]
+
+        result = _extract_channel_from_search_results(search_results, "test_123")
+
+        assert result == mock_node1
+
+    def test_extract_channel_from_search_results_model_dump(self):
+        """Test extracting channel when attributes is a model with model_dump()."""
+        mock_node = Mock()
+        mock_node.id = "some/other/id"
+
+        # Mock attributes that has model_dump method
+        mock_attributes = Mock()
+        mock_attributes.model_dump.return_value = {"channel_id": "test_123"}
+        mock_node.attributes = mock_attributes
+
+        search_results = [mock_node]
+
+        result = _extract_channel_from_search_results(search_results, "test_123")
+
+        assert result == mock_node
+        mock_attributes.model_dump.assert_called_once()
+
+    def test_extract_channel_from_search_results_not_found(self):
+        """Test extracting channel when no matching results."""
+        mock_node = Mock()
+        mock_node.id = "other/node"
+        mock_node.attributes = {"channel_id": "other_channel"}
+
+        search_results = [mock_node]
+
+        result = _extract_channel_from_search_results(search_results, "test_123")
+
+        assert result is None
+
+    def test_extract_channel_from_search_results_no_attributes(self):
+        """Test extracting channel when node has no attributes."""
+        mock_node = Mock()
+        mock_node.id = "other/node"
+        mock_node.attributes = None
+
+        search_results = [mock_node]
+
+        result = _extract_channel_from_search_results(search_results, "test_123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_resolve_channel_context_success(self):
+        """Test successful channel context resolution."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "test_channel_123"
+
+        # Mock memory service
+        mock_memory_service = Mock()
+        mock_nodes = [Mock(id="channel/test_channel_123")]
+        mock_memory_service.recall = AsyncMock(return_value=mock_nodes)
+
+        channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
+
+        assert channel_id == "test_channel_123"
+
+    @pytest.mark.asyncio
+    async def test_resolve_channel_context_with_search_fallback(self):
+        """Test channel context resolution with search fallback."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "test_channel_123"
+
+        # Mock memory service - direct lookup fails, search succeeds
+        mock_memory_service = Mock()
+        mock_memory_service.recall = AsyncMock(return_value=[])  # Direct lookup fails
+        mock_search_results = [Mock(id="channel/test_channel_123", attributes={"channel_id": "test_channel_123"})]
+        mock_memory_service.search = AsyncMock(return_value=mock_search_results)
+
+        channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
+
+        assert channel_id == "test_channel_123"
+
+    @pytest.mark.asyncio
+    async def test_resolve_channel_context_no_memory_service(self):
+        """Test channel context resolution without memory service."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "test_channel_123"
+
+        channel_id, channel_context = await _resolve_channel_context(mock_task, None, None)
+
+        assert channel_id == "test_channel_123"
+
+    @pytest.mark.asyncio
+    async def test_resolve_channel_context_memory_exception(self):
+        """Test channel context resolution when memory service raises exception."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "test_channel_123"
+
+        # Mock memory service that raises exception
+        mock_memory_service = Mock()
+        mock_memory_service.recall = AsyncMock(side_effect=Exception("Memory error"))
+
+        channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
+
+        assert channel_id == "test_channel_123"

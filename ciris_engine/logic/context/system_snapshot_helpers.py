@@ -105,10 +105,8 @@ def _safe_extract_channel_info(context: Any, source_name: str) -> Tuple[Optional
         raise  # FAIL FAST AND LOUD - configuration/programming error
 
 
-async def _resolve_channel_context(
-    task: Optional[Task], thought: Any, memory_service: Optional[LocalGraphMemoryService]
-) -> Tuple[Optional[str], Optional[Any]]:
-    """Resolve channel ID and context from task/thought with memory lookup."""
+def _get_initial_channel_info(task: Optional[Task], thought: Any) -> Tuple[Optional[str], Optional[Any]]:
+    """Extract initial channel ID and context from task/thought."""
     channel_id = None
     channel_context = None
 
@@ -117,38 +115,65 @@ async def _resolve_channel_context(
     if not channel_id and thought and thought.context:
         channel_id, channel_context = _safe_extract_channel_info(thought.context, "thought.context")
 
+    return channel_id, channel_context
+
+
+async def _perform_direct_channel_lookup(memory_service: Any, channel_id: str) -> List[Any]:
+    """Perform direct memory lookup for channel by node_id."""
+    query = MemoryQuery(
+        node_id=f"channel/{channel_id}",
+        scope=GraphScope.LOCAL,
+        type=NodeType.CHANNEL,
+        include_edges=False,
+        depth=1,
+    )
+    logger.info(f"[DEBUG DB TIMING] About to query memory service for channel/{channel_id}")
+    channel_nodes = await memory_service.recall(query)
+    logger.info(f"[DEBUG DB TIMING] Completed memory service query for channel/{channel_id}")
+    return channel_nodes
+
+
+async def _perform_channel_search(memory_service: Any, channel_id: str) -> List[Any]:
+    """Perform search-based channel lookup."""
+    from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+
+    search_filter = MemorySearchFilter(
+        node_type=NodeType.CHANNEL.value, scope=GraphScope.LOCAL.value, limit=10
+    )
+    logger.info(f"[DEBUG DB TIMING] About to search memory service for channel {channel_id}")
+    search_results = await memory_service.search(query=channel_id, filters=search_filter)
+    logger.info(f"[DEBUG DB TIMING] Completed memory service search for channel {channel_id}")
+    return search_results
+
+
+def _extract_channel_from_search_results(search_results: List[Any], channel_id: str) -> Optional[Any]:
+    """Extract matching channel from search results."""
+    for node in search_results:
+        if node.attributes:
+            attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+            if attrs.get("channel_id") == channel_id or node.id == f"channel/{channel_id}":
+                return node
+    return None
+
+
+async def _resolve_channel_context(
+    task: Optional[Task], thought: Any, memory_service: Optional[LocalGraphMemoryService]
+) -> Tuple[Optional[str], Optional[Any]]:
+    """Resolve channel ID and context from task/thought with memory lookup."""
+    # Get initial channel info from task/thought
+    channel_id, channel_context = _get_initial_channel_info(task, thought)
+
+    # Attempt memory lookup if we have both channel_id and memory_service
     if channel_id and memory_service:
         try:
             # First try direct lookup for performance
-            query = MemoryQuery(
-                node_id=f"channel/{channel_id}",
-                scope=GraphScope.LOCAL,
-                type=NodeType.CHANNEL,
-                include_edges=False,
-                depth=1,
-            )
-            logger.info(f"[DEBUG DB TIMING] About to query memory service for channel/{channel_id}")
-            channel_nodes = await memory_service.recall(query)
-            logger.info(f"[DEBUG DB TIMING] Completed memory service query for channel/{channel_id}")
+            channel_nodes = await _perform_direct_channel_lookup(memory_service, channel_id)
 
             # If not found, try search
             if not channel_nodes:
-                from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+                search_results = await _perform_channel_search(memory_service, channel_id)
+                _extract_channel_from_search_results(search_results, channel_id)
 
-                search_filter = MemorySearchFilter(
-                    node_type=NodeType.CHANNEL.value, scope=GraphScope.LOCAL.value, limit=10
-                )
-                # Search by channel ID in attributes
-                logger.info(f"[DEBUG DB TIMING] About to search memory service for channel {channel_id}")
-                search_results = await memory_service.search(query=channel_id, filters=search_filter)
-                logger.info(f"[DEBUG DB TIMING] Completed memory service search for channel {channel_id}")
-                # Update channel_context if we found channel info
-                for node in search_results:
-                    if node.attributes:
-                        attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
-                        if attrs.get("channel_id") == channel_id or node.id == f"channel/{channel_id}":
-                            # Found the channel, could extract more context here if needed
-                            break
         except Exception as e:
             logger.debug(f"Failed to retrieve channel context for {channel_id}: {e}")
 

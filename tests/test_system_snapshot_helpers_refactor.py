@@ -721,12 +721,14 @@ class TestChannelContextHelperFunctions:
 
         # Mock memory service
         mock_memory_service = Mock()
-        mock_nodes = [Mock(id="channel/test_channel_123")]
+        mock_channel_node = Mock(id="channel/test_channel_123")
+        mock_nodes = [mock_channel_node]
         mock_memory_service.recall = AsyncMock(return_value=mock_nodes)
 
         channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
 
         assert channel_id == "test_channel_123"
+        assert channel_context == mock_channel_node  # Should now be set to the found node
 
     @pytest.mark.asyncio
     async def test_resolve_channel_context_with_search_fallback(self):
@@ -741,12 +743,14 @@ class TestChannelContextHelperFunctions:
         # Mock memory service - direct lookup fails, search succeeds
         mock_memory_service = Mock()
         mock_memory_service.recall = AsyncMock(return_value=[])  # Direct lookup fails
-        mock_search_results = [Mock(id="channel/test_channel_123", attributes={"channel_id": "test_channel_123"})]
+        mock_found_node = Mock(id="channel/test_channel_123", attributes={"channel_id": "test_channel_123"})
+        mock_search_results = [mock_found_node]
         mock_memory_service.search = AsyncMock(return_value=mock_search_results)
 
         channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
 
         assert channel_id == "test_channel_123"
+        assert channel_context == mock_found_node  # Should now be set to the found node from search
 
     @pytest.mark.asyncio
     async def test_resolve_channel_context_no_memory_service(self):
@@ -779,3 +783,24 @@ class TestChannelContextHelperFunctions:
         channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
 
         assert channel_id == "test_channel_123"
+
+    @pytest.mark.asyncio
+    async def test_resolve_channel_context_search_not_found(self):
+        """Test channel context resolution when search doesn't find anything."""
+        # Mock task with channel context - use proper structure
+        mock_task = Mock()
+        mock_task.context = Mock()
+        mock_task.context.system_snapshot = Mock()
+        mock_task.context.system_snapshot.channel_context = Mock()
+        mock_task.context.system_snapshot.channel_context.channel_id = "test_channel_123"
+        original_context = mock_task.context.system_snapshot.channel_context
+
+        # Mock memory service - both direct lookup and search fail
+        mock_memory_service = Mock()
+        mock_memory_service.recall = AsyncMock(return_value=[])  # Direct lookup fails
+        mock_memory_service.search = AsyncMock(return_value=[])  # Search also fails
+
+        channel_id, channel_context = await _resolve_channel_context(mock_task, None, mock_memory_service)
+
+        assert channel_id == "test_channel_123"
+        assert channel_context == original_context  # Should remain the original context

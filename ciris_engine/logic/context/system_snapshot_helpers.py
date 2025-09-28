@@ -169,10 +169,16 @@ async def _resolve_channel_context(
             # First try direct lookup for performance
             channel_nodes = await _perform_direct_channel_lookup(memory_service, channel_id)
 
-            # If not found, try search
-            if not channel_nodes:
+            if channel_nodes:
+                # Use the first found channel node as context
+                channel_context = channel_nodes[0]
+            else:
+                # If not found, try search
                 search_results = await _perform_channel_search(memory_service, channel_id)
-                _extract_channel_from_search_results(search_results, channel_id)
+                found_channel = _extract_channel_from_search_results(search_results, channel_id)
+                if found_channel:
+                    # Update channel_context with the found channel node
+                    channel_context = found_channel
 
         except Exception as e:
             logger.debug(f"Failed to retrieve channel context for {channel_id}: {e}")

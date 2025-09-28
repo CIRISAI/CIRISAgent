@@ -88,9 +88,9 @@ class TestOTLPMetricsConverter:
         telemetry_data = {
             "covenant_metrics": {
                 "wise_authority_deferrals": 3,
-                "ethical_decisions": 10,
-                "covenant_compliance_rate": 0.95,
-                "transparency_score": 0.88,
+                "filter_matches": 5,
+                "thoughts_processed": 10,
+                "self_observation_insights": 2,
             }
         }
 
@@ -103,9 +103,9 @@ class TestOTLPMetricsConverter:
         assert len(covenant_metrics) == 4
 
         # Check specific covenant metric
-        compliance_metric = next((m for m in metrics if m["name"] == "covenant.compliance.rate"), None)
-        assert compliance_metric is not None
-        assert compliance_metric["gauge"]["dataPoints"][0]["asDouble"] == 0.95
+        deferrals_metric = next((m for m in metrics if m["name"] == "covenant.wise_authority.deferrals"), None)
+        assert deferrals_metric is not None
+        assert deferrals_metric["sum"]["dataPoints"][0]["asDouble"] == 3.0
 
     def test_validate_metrics_otlp(self):
         """Test OTLP validation for metrics."""

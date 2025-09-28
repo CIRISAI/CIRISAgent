@@ -18,7 +18,27 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
-from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.services.runtime_control import (
+    ActionCompleteStepData,
+    AllStepsExecutionResult,
+    BaseStepData,
+    ConscienceExecutionStepData,
+    FinalizeActionStepData,
+    GatherContextStepData,
+    PerformActionStepData,
+    PerformASPDMAStepData,
+    PerformDMAsStepData,
+    RecursiveASPDMAStepData,
+    RecursiveConscienceStepData,
+    RoundCompleteStepData,
+    SpanAttribute,
+    StartRoundStepData,
+    StepDataUnion,
+    StepExecutionResult,
+    StepPoint,
+    StepResultData,
+    TraceContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,16 +85,16 @@ def streaming_step(step: StepPoint):
                 end_timestamp = time_service.now()
                 processing_time_ms = (end_timestamp - start_timestamp).total_seconds() * 1000
 
-                # Build step data from function context
-                step_data = {
+                # Build base step data from function context
+                base_step_data = {
                     "timestamp": start_timestamp.isoformat(),
                     "thought_id": thought_id,
                     "processing_time_ms": processing_time_ms,
                     "success": True,
                 }
 
-                # Add step-specific data based on step type and result
-                _add_step_specific_data(step, step_data, thought_item, result, args, kwargs)
+                # Add step-specific data and create typed step data
+                step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)
 
                 # Stream the step result
                 await _broadcast_step_result(step, step_data)
@@ -86,13 +106,15 @@ def streaming_step(step: StepPoint):
                 end_timestamp = time_service.now()
                 processing_time_ms = (end_timestamp - start_timestamp).total_seconds() * 1000
 
-                error_step_data = {
+                # Create error step data using base step data structure
+                base_error_data = {
                     "timestamp": start_timestamp.isoformat(),
                     "thought_id": thought_id,
                     "processing_time_ms": processing_time_ms,
                     "success": False,
                     "error": str(e),
                 }
+                error_step_data = BaseStepData(**base_error_data)
 
                 await _broadcast_step_result(step, error_step_data)
                 raise
@@ -171,73 +193,72 @@ async def _pause_thought_execution(thought_id: str) -> None:
     _paused_thoughts[thought_id].clear()
 
 
-def _add_step_specific_data(
-    step: StepPoint, step_data: Dict[str, Any], thought_item: Any, result: Any, args: tuple, kwargs: dict
-) -> None:
-    """Add step-specific data to step_data dict based on step type."""
-    # Add common data and debug logging
-    _add_common_step_data(step_data, thought_item, step)
-
-    # Add step-specific data based on step type
-    try:
-        if step == StepPoint.START_ROUND:
-            _add_start_round_data(step_data, args)
-        elif step == StepPoint.GATHER_CONTEXT:
-            _add_gather_context_data(step_data, result)
-        elif step == StepPoint.PERFORM_DMAS:
-            _add_perform_dmas_data(step_data, result, thought_item)
-        elif step == StepPoint.PERFORM_ASPDMA:
-            _add_perform_aspdma_data(step_data, result)
-        elif step == StepPoint.CONSCIENCE_EXECUTION:
-            _add_conscience_execution_data(step_data, result)
-        elif step == StepPoint.RECURSIVE_ASPDMA:
-            _add_recursive_aspdma_data(step_data, result, args)
-        elif step == StepPoint.RECURSIVE_CONSCIENCE:
-            _add_recursive_conscience_data(step_data, result)
-        elif step == StepPoint.FINALIZE_ACTION:
-            _add_finalize_action_data(step_data, result)
-        elif step == StepPoint.PERFORM_ACTION:
-            _add_perform_action_data(step_data, result, args, kwargs)
-        elif step == StepPoint.ACTION_COMPLETE:
-            _add_action_complete_data(step_data, result)
-        elif step == StepPoint.ROUND_COMPLETE:
-            _add_round_complete_data(step_data, args)
-    except Exception as e:
-        logger.error(f"Error adding step-specific data for {step.value}: {e}", exc_info=True)
-
-
-def _add_common_step_data(step_data: Dict[str, Any], thought_item: Any, step: StepPoint) -> None:
-    """Add common data and perform debug logging."""
+def _create_typed_step_data(
+    step: StepPoint, base_data: Dict[str, Any], thought_item: Any, result: Any, args: tuple, kwargs: dict
+) -> StepDataUnion:
+    """Create typed step data based on step type."""
+    # Add common data
     task_id = getattr(thought_item, "source_task_id", None)
-    step_data["task_id"] = task_id
+    base_data["task_id"] = task_id
 
-    thought_id = getattr(thought_item, "thought_id", "unknown")
+    # Log debug information
+    thought_id = base_data.get("thought_id", "unknown")
     logger.debug(
         f"Step {step.value} for thought {thought_id}: task_id={task_id}, thought_item type={type(thought_item).__name__}"
     )
     if not task_id:
         logger.warning(f"Missing task_id for thought {thought_id} at step {step.value}")
 
+    # Create step-specific typed data - fail fast and loud on any errors
+    if step == StepPoint.START_ROUND:
+        return _create_start_round_data(base_data, args)
+    elif step == StepPoint.GATHER_CONTEXT:
+        return _create_gather_context_data(base_data, result)
+    elif step == StepPoint.PERFORM_DMAS:
+        return _create_perform_dmas_data(base_data, result, thought_item)
+    elif step == StepPoint.PERFORM_ASPDMA:
+        return _create_perform_aspdma_data(base_data, result)
+    elif step == StepPoint.CONSCIENCE_EXECUTION:
+        return _create_conscience_execution_data(base_data, result)
+    elif step == StepPoint.RECURSIVE_ASPDMA:
+        return _create_recursive_aspdma_data(base_data, result, args)
+    elif step == StepPoint.RECURSIVE_CONSCIENCE:
+        return _create_recursive_conscience_data(base_data, result)
+    elif step == StepPoint.FINALIZE_ACTION:
+        return _create_finalize_action_data(base_data, result)
+    elif step == StepPoint.PERFORM_ACTION:
+        return _create_perform_action_data(base_data, result, args, kwargs)
+    elif step == StepPoint.ACTION_COMPLETE:
+        return _create_action_complete_data(base_data, result)
+    elif step == StepPoint.ROUND_COMPLETE:
+        return _create_round_complete_data(base_data, args)
+    else:
+        # Fail fast for unknown steps - no fallbacks
+        raise ValueError(f"Unknown step point: {step.value}. No step data creator available.")
 
-def _add_start_round_data(step_data: Dict[str, Any], args: tuple) -> None:
-    """Add START_ROUND specific data."""
+
+# This function is now integrated into _create_typed_step_data
+# Keeping for potential backward compatibility but marked as deprecated
+
+
+def _create_start_round_data(base_data: Dict[str, Any], args: tuple) -> StartRoundStepData:
+    """Create START_ROUND specific typed data."""
     if not args:
         raise ValueError("START_ROUND args is empty - thought list is required for processing")
 
-    step_data["thoughts_processed"] = len(args)
-    step_data["round_started"] = True
+    return StartRoundStepData(**base_data, thoughts_processed=len(args), round_started=True)
 
 
-def _add_gather_context_data(step_data: Dict[str, Any], result: Any) -> None:
-    """Add GATHER_CONTEXT specific data."""
+def _create_gather_context_data(base_data: Dict[str, Any], result: Any) -> GatherContextStepData:
+    """Create GATHER_CONTEXT specific typed data."""
     if result is None:
         raise ValueError("GATHER_CONTEXT step result is None - this indicates a serious pipeline issue")
 
-    step_data["context"] = str(result)
+    return GatherContextStepData(**base_data, context=str(result))
 
 
-def _add_perform_dmas_data(step_data: Dict[str, Any], result: Any, thought_item: Any) -> None:
-    """Add PERFORM_DMAS specific data."""
+def _create_perform_dmas_data(base_data: Dict[str, Any], result: Any, thought_item: Any) -> PerformDMAsStepData:
+    """Create PERFORM_DMAS specific typed data."""
     if not result:
         raise ValueError("PERFORM_DMAS step result is None - this indicates a serious pipeline issue")
 
@@ -250,10 +271,10 @@ def _add_perform_dmas_data(step_data: Dict[str, Any], result: Any, thought_item:
             dma_parts.append(f"csdma: {result.csdma}")
         if result.dsdma:
             dma_parts.append(f"dsdma: {result.dsdma}")
-        step_data["dma_results"] = "; ".join(dma_parts) if dma_parts else "No DMA results"
+        dma_results = "; ".join(dma_parts) if dma_parts else "No DMA results"
     else:
         # Non-InitialDMAResults object - validate it has expected structure
-        step_data["dma_results"] = str(result)
+        dma_results = str(result)
 
     if not thought_item:
         raise ValueError("PERFORM_DMAS thought_item is None - this indicates a serious pipeline issue")
@@ -263,11 +284,11 @@ def _add_perform_dmas_data(step_data: Dict[str, Any], result: Any, thought_item:
             f"PERFORM_DMAS thought_item missing 'initial_context' attribute. Type: {type(thought_item)}, attributes: {dir(thought_item)}"
         )
 
-    step_data["context"] = str(thought_item.initial_context)
+    return PerformDMAsStepData(**base_data, dma_results=dma_results, context=str(thought_item.initial_context))
 
 
-def _add_perform_aspdma_data(step_data: Dict[str, Any], result: Any) -> None:
-    """Add PERFORM_ASPDMA specific data."""
+def _create_perform_aspdma_data(base_data: Dict[str, Any], result: Any) -> PerformASPDMAStepData:
+    """Create PERFORM_ASPDMA specific typed data."""
     if not result:
         raise ValueError("PERFORM_ASPDMA step result is None - this indicates a serious pipeline issue")
 
@@ -281,11 +302,12 @@ def _add_perform_aspdma_data(step_data: Dict[str, Any], result: Any) -> None:
             f"PERFORM_ASPDMA result missing 'rationale' attribute. Result type: {type(result)}, available attributes: {dir(result)}"
         )
 
-    step_data["selected_action"] = str(result.selected_action)
-    step_data["action_rationale"] = str(result.rationale)
+    return PerformASPDMAStepData(
+        **base_data, selected_action=str(result.selected_action), action_rationale=str(result.rationale)
+    )
 
 
-def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any) -> None:
+def _create_conscience_execution_data(base_data: Dict[str, Any], result: Any) -> ConscienceExecutionStepData:
     """Add CONSCIENCE_EXECUTION specific data with full transparency."""
     if not result:
         raise ValueError("CONSCIENCE_EXECUTION step result is None - this indicates a serious pipeline issue")
@@ -305,22 +327,28 @@ def _add_conscience_execution_data(step_data: Dict[str, Any], result: Any) -> No
             f"CONSCIENCE_EXECUTION final_action missing 'selected_action' attribute. final_action type: {type(result.final_action)}, attributes: {dir(result.final_action)}"
         )
 
-    # Extract selected action from ConscienceApplicationResult
-    step_data["selected_action"] = str(result.final_action.selected_action)
+    # Extract data for typed step data creation
+    selected_action = str(result.final_action.selected_action)
+    conscience_passed = not result.overridden
+    action_result = str(result.final_action)
+    override_reason = str(result.override_reason) if result.overridden else None
 
-    # Extract conscience pass/fail - conscience passes if not overridden
-    step_data["conscience_passed"] = not result.overridden
-    step_data["action_result"] = str(result.final_action)
+    if result.overridden and not hasattr(result, "override_reason"):
+        raise AttributeError(
+            f"CONSCIENCE_EXECUTION result overridden but missing 'override_reason'. Result type: {type(result)}, attributes: {dir(result)}"
+        )
 
-    if result.overridden:
-        if not hasattr(result, "override_reason"):
-            raise AttributeError(
-                f"CONSCIENCE_EXECUTION result overridden but missing 'override_reason'. Result type: {type(result)}, attributes: {dir(result)}"
-            )
-        step_data["override_reason"] = str(result.override_reason)
+    # Create comprehensive conscience evaluation details for full transparency
+    conscience_result = _create_comprehensive_conscience_result(result)
 
-    # Add comprehensive conscience evaluation details for full transparency
-    step_data["conscience_result"] = _create_comprehensive_conscience_result(result)
+    return ConscienceExecutionStepData(
+        **base_data,
+        selected_action=selected_action,
+        conscience_passed=conscience_passed,
+        action_result=action_result,
+        override_reason=override_reason,
+        conscience_result=conscience_result,
+    )
 
 
 def _create_comprehensive_conscience_result(result: Any) -> Dict[str, Any]:
@@ -420,12 +448,10 @@ def _create_comprehensive_conscience_result(result: Any) -> Dict[str, Any]:
     return conscience_result.model_dump()
 
 
-def _add_recursive_aspdma_data(step_data: Dict[str, Any], result: Any, args: tuple) -> None:
-    """Add RECURSIVE_ASPDMA specific data."""
+def _create_recursive_aspdma_data(base_data: Dict[str, Any], result: Any, args: tuple) -> RecursiveASPDMAStepData:
+    """Create RECURSIVE_ASPDMA specific typed data."""
     if not args:
         raise ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")
-
-    step_data["retry_reason"] = str(args[0])
 
     if not result:
         raise ValueError("RECURSIVE_ASPDMA result is None - this indicates a serious pipeline issue")
@@ -435,11 +461,11 @@ def _add_recursive_aspdma_data(step_data: Dict[str, Any], result: Any, args: tup
             f"RECURSIVE_ASPDMA result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
         )
 
-    step_data["original_action"] = str(result.selected_action)
+    return RecursiveASPDMAStepData(**base_data, retry_reason=str(args[0]), original_action=str(result.selected_action))
 
 
-def _add_recursive_conscience_data(step_data: Dict[str, Any], result: Any) -> None:
-    """Add RECURSIVE_CONSCIENCE specific data."""
+def _create_recursive_conscience_data(base_data: Dict[str, Any], result: Any) -> RecursiveConscienceStepData:
+    """Create RECURSIVE_CONSCIENCE specific typed data."""
     if not result:
         raise ValueError("RECURSIVE_CONSCIENCE result is None - this indicates a serious pipeline issue")
 
@@ -448,12 +474,11 @@ def _add_recursive_conscience_data(step_data: Dict[str, Any], result: Any) -> No
             f"RECURSIVE_CONSCIENCE result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
         )
 
-    step_data["retry_action"] = str(result.selected_action)
-    step_data["retry_result"] = str(result)
+    return RecursiveConscienceStepData(**base_data, retry_action=str(result.selected_action), retry_result=str(result))
 
 
-def _add_finalize_action_data(step_data: Dict[str, Any], result: Any) -> None:
-    """Add FINALIZE_ACTION specific data."""
+def _create_finalize_action_data(base_data: Dict[str, Any], result: Any) -> FinalizeActionStepData:
+    """Create FINALIZE_ACTION specific typed data."""
     if not result:
         raise ValueError("FINALIZE_ACTION result is None - this indicates a serious pipeline issue")
 
@@ -467,15 +492,19 @@ def _add_finalize_action_data(step_data: Dict[str, Any], result: Any) -> None:
             f"FINALIZE_ACTION result missing 'rationale' attribute. Result type: {type(result)}, attributes: {dir(result)}"
         )
 
-    step_data["selected_action"] = str(result.selected_action)
-    step_data["selection_reasoning"] = str(result.rationale)
-    step_data["conscience_passed"] = True  # If we reach here, conscience passed
+    return FinalizeActionStepData(
+        **base_data,
+        selected_action=str(result.selected_action),
+        selection_reasoning=str(result.rationale),
+        conscience_passed=True,  # If we reach here, conscience passed
+    )
 
 
-def _add_perform_action_data(step_data: Dict[str, Any], result: Any, args: tuple, kwargs: dict) -> None:
-    """Add PERFORM_ACTION specific data."""
+def _create_perform_action_data(
+    base_data: Dict[str, Any], result: Any, args: tuple, kwargs: dict
+) -> PerformActionStepData:
+    """Create PERFORM_ACTION specific typed data."""
     # Extract selected_action - first try result, then args
-    selected_action = None
     if result and hasattr(result, "selected_action"):
         selected_action = str(result.selected_action)
     elif args:
@@ -485,24 +514,27 @@ def _add_perform_action_data(step_data: Dict[str, Any], result: Any, args: tuple
             "PERFORM_ACTION cannot determine selected_action - neither result.selected_action nor args[0] available"
         )
 
-    step_data["selected_action"] = selected_action
-
-    # Extract action_parameters - fail fast if result doesn't have it
+    # Extract action_parameters - use None string if not available
+    action_parameters = "None"
     if result and hasattr(result, "action_parameters"):
-        step_data["action_parameters"] = str(result.action_parameters)
-    else:
-        step_data["action_parameters"] = "None"  # This is acceptable as parameters can be None
+        action_parameters = str(result.action_parameters)
 
-    # Extract dispatch_context from kwargs or args - provide empty dict as reasonable default
+    # Extract dispatch_context from kwargs or args - provide empty dict as default
+    dispatch_context = "{}"
     if "context" in kwargs:
-        step_data["dispatch_context"] = str(kwargs["context"])
+        dispatch_context = str(kwargs["context"])
     elif len(args) > 1:
-        step_data["dispatch_context"] = str(args[1])
-    else:
-        step_data["dispatch_context"] = "{}"  # Empty context is valid
+        dispatch_context = str(args[1])
+
+    return PerformActionStepData(
+        **base_data,
+        selected_action=selected_action,
+        action_parameters=action_parameters,
+        dispatch_context=dispatch_context,
+    )
 
 
-def _add_action_complete_data(step_data: Dict[str, Any], result: Any) -> None:
+def _create_action_complete_data(base_data: Dict[str, Any], result: Any) -> ActionCompleteStepData:
     """Add ACTION_COMPLETE specific data."""
     if not result:
         raise ValueError("ACTION_COMPLETE step result is None - this indicates a serious pipeline issue")
@@ -520,11 +552,14 @@ def _add_action_complete_data(step_data: Dict[str, Any], result: Any) -> None:
         if "handler" not in result:
             raise KeyError(f"ACTION_COMPLETE dispatch_result missing 'handler'. Available keys: {list(result.keys())}")
 
-        step_data["action_executed"] = str(result["action_type"])
-        step_data["dispatch_success"] = result["success"]
-        step_data["handler_completed"] = result["handler"] != "Unknown"
-        step_data["follow_up_processing_pending"] = bool(result.get("follow_up_thought_id"))
-        step_data["execution_time_ms"] = 0.0  # Dict format doesn't include execution time
+        return ActionCompleteStepData(
+            **base_data,
+            action_executed=str(result["action_type"]),
+            dispatch_success=result["success"],
+            handler_completed=result["handler"] != "Unknown",
+            follow_up_processing_pending=bool(result.get("follow_up_thought_id")),
+            execution_time_ms=0.0,  # Dict format doesn't include execution time
+        )
     else:
         # Object-based results (should be rare, fail fast if wrong structure)
         if not hasattr(result, "selected_action"):
@@ -537,23 +572,25 @@ def _add_action_complete_data(step_data: Dict[str, Any], result: Any) -> None:
                 f"ACTION_COMPLETE object result missing 'success'. Result type: {type(result)}, attributes: {dir(result)}"
             )
 
-        step_data["action_executed"] = str(result.selected_action)
-        step_data["dispatch_success"] = result.success
-        step_data["handler_completed"] = getattr(result, "completed", True)
-        step_data["follow_up_processing_pending"] = getattr(result, "has_follow_up", False)
-        step_data["execution_time_ms"] = getattr(result, "execution_time_ms", 0.0)
+        return ActionCompleteStepData(
+            **base_data,
+            action_executed=str(result.selected_action),
+            dispatch_success=result.success,
+            handler_completed=getattr(result, "completed", True),
+            follow_up_processing_pending=getattr(result, "has_follow_up", False),
+            execution_time_ms=getattr(result, "execution_time_ms", 0.0),
+        )
 
 
-def _add_round_complete_data(step_data: Dict[str, Any], args: tuple) -> None:
-    """Add ROUND_COMPLETE specific data."""
+def _create_round_complete_data(base_data: Dict[str, Any], args: tuple) -> RoundCompleteStepData:
+    """Create ROUND_COMPLETE specific typed data."""
     if not args:
         raise ValueError("ROUND_COMPLETE args is empty - completed thought count is required")
 
-    step_data["round_status"] = "completed"
-    step_data["thoughts_processed"] = len(args)
+    return RoundCompleteStepData(**base_data, round_status="completed", thoughts_processed=len(args))
 
 
-def _create_step_result_schema(step: StepPoint, step_data: Dict[str, Any]):
+def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion):
     """Create appropriate step result schema based on step type."""
     # Import here to avoid circular dependency
     from ciris_engine.schemas.services.runtime_control import (
@@ -587,18 +624,16 @@ def _create_step_result_schema(step: StepPoint, step_data: Dict[str, Any]):
     result_class = step_result_map.get(step)
     if result_class:
         if step == StepPoint.GATHER_CONTEXT:
-            logger.debug(
-                f"Creating StepResultGatherContext with step_data keys: {list(step_data.keys())}, values: {step_data}"
-            )
-        return result_class(**step_data)
+            logger.debug(f"Creating StepResultGatherContext with step_data type: {type(step_data)}, data: {step_data}")
+        return result_class(**step_data.model_dump())
     return None
 
 
-def _extract_timing_data(step_data: Dict[str, Any]) -> tuple:
-    """Extract and normalize timing data from step_data."""
+def _extract_timing_data(step_data: StepDataUnion) -> tuple:
+    """Extract and normalize timing data from typed step_data."""
     from datetime import datetime, timezone
 
-    timestamp_str = step_data.get("timestamp", datetime.now().isoformat())
+    timestamp_str = step_data.timestamp if step_data.timestamp else datetime.now().isoformat()
     # Ensure both timestamps have timezone info for consistent calculation
     if timestamp_str.endswith("+00:00") or timestamp_str.endswith("Z"):
         start_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
@@ -611,27 +646,27 @@ def _extract_timing_data(step_data: Dict[str, Any]) -> tuple:
 
 def _build_step_result_data(
     step: StepPoint,
-    step_data: Dict[str, Any],
+    step_data: StepDataUnion,
     step_result,
-    trace_context: Dict[str, Any],
-    span_attributes: Dict[str, Any],
-) -> Dict[str, Any]:
+    trace_context: TraceContext,
+    span_attributes: List[SpanAttribute],
+) -> StepResultData:
     """Build the complete step result data structure."""
-    return {
-        "step_point": step.value,
-        "success": step_data.get("success", True),
-        "processing_time_ms": step_data.get("processing_time_ms", 0.0),
-        "thought_id": step_data.get("thought_id", ""),
-        "task_id": step_data.get("task_id", ""),
-        "step_data": step_result.model_dump(),  # Put the typed data in step_data field
+    return StepResultData(
+        step_point=step.value,
+        success=step_data.success,
+        processing_time_ms=step_data.processing_time_ms,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id or "",
+        step_data=step_result.model_dump(),  # Put the typed data in step_data field
         # Enhanced trace data for OTLP compatibility
-        "trace_context": trace_context,
-        "span_attributes": span_attributes,
-        "otlp_compatible": True,
-    }
+        trace_context=trace_context,
+        span_attributes=span_attributes,
+        otlp_compatible=True,
+    )
 
 
-async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> None:
+async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> None:
     """Broadcast step result to global step result stream."""
     try:
         # Import here to avoid circular dependency
@@ -646,7 +681,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> 
 
             # Build trace context using our helper function
             trace_context = _build_trace_context_dict(
-                step_data.get("thought_id", ""), step_data.get("task_id"), step, start_time, end_time
+                step_data.thought_id, step_data.task_id, step, start_time, end_time
             )
 
             # Build span attributes using our helper function
@@ -656,11 +691,11 @@ async def _broadcast_step_result(step: StepPoint, step_data: Dict[str, Any]) -> 
             step_result_data = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
 
             logger.debug(
-                f"Broadcasting step result for {step.value}: task_id={step_result_data['task_id']}, thought_id={step_result_data['thought_id']}"
+                f"Broadcasting step result for {step.value}: task_id={step_result_data.task_id}, thought_id={step_result_data.thought_id}"
             )
-            await step_result_stream.broadcast_step_result(step_result_data)
+            await step_result_stream.broadcast_step_result(step_result_data.model_dump())
         else:
-            logger.warning(f"No step result created for {step.value}, step_data keys: {list(step_data.keys())}")
+            logger.warning(f"No step result created for {step.value}, step_data type: {type(step_data)}")
 
     except Exception as e:
         logger.warning(f"Error broadcasting step result for {step.value}: {e}")
@@ -688,7 +723,7 @@ def is_single_step_mode() -> bool:
     return _single_step_mode
 
 
-async def execute_step(thought_id: str) -> Dict[str, Any]:
+async def execute_step(thought_id: str) -> StepExecutionResult:
     """
     Execute one step for a paused thought.
 
@@ -701,32 +736,32 @@ async def execute_step(thought_id: str) -> Dict[str, Any]:
     global _paused_thoughts
 
     if thought_id not in _paused_thoughts:
-        return {
-            "success": False,
-            "error": f"Thought {thought_id} is not paused or does not exist",
-            "thought_id": thought_id,
-        }
+        return StepExecutionResult(
+            success=False,
+            error=f"Thought {thought_id} is not paused or does not exist",
+            thought_id=thought_id,
+        )
 
     try:
         # Resume the thought coroutine
         _paused_thoughts[thought_id].set()
 
-        return {
-            "success": True,
-            "thought_id": thought_id,
-            "message": "Thought advanced one step",
-        }
+        return StepExecutionResult(
+            success=True,
+            thought_id=thought_id,
+            message="Thought advanced one step",
+        )
 
     except Exception as e:
         logger.error(f"Error executing step for thought {thought_id}: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "thought_id": thought_id,
-        }
+        return StepExecutionResult(
+            success=False,
+            error=str(e),
+            thought_id=thought_id,
+        )
 
 
-async def execute_all_steps() -> Dict[str, Any]:
+async def execute_all_steps() -> AllStepsExecutionResult:
     """
     Execute one step for all paused thoughts.
 
@@ -736,11 +771,11 @@ async def execute_all_steps() -> Dict[str, Any]:
     global _paused_thoughts
 
     if not _paused_thoughts:
-        return {
-            "success": True,
-            "thoughts_advanced": 0,
-            "message": "No thoughts currently paused",
-        }
+        return AllStepsExecutionResult(
+            success=True,
+            thoughts_advanced=0,
+            message="No thoughts currently paused",
+        )
 
     try:
         # Resume all paused thoughts
@@ -749,19 +784,19 @@ async def execute_all_steps() -> Dict[str, Any]:
 
         count = len(_paused_thoughts)
 
-        return {
-            "success": True,
-            "thoughts_advanced": count,
-            "message": f"Advanced {count} thoughts one step",
-        }
+        return AllStepsExecutionResult(
+            success=True,
+            thoughts_advanced=count,
+            message=f"Advanced {count} thoughts one step",
+        )
 
     except Exception as e:
         logger.error(f"Error executing steps for all thoughts: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "thoughts_advanced": 0,
-        }
+        return AllStepsExecutionResult(
+            success=False,
+            error=str(e),
+            thoughts_advanced=0,
+        )
 
 
 def get_paused_thoughts() -> Dict[str, str]:
@@ -781,7 +816,7 @@ def get_paused_thoughts() -> Dict[str, str]:
 
 def _build_trace_context_dict(
     thought_id: str, task_id: Optional[str], step: StepPoint, start_time: Any, end_time: Any
-) -> Dict[str, Any]:
+) -> TraceContext:
     """
     Build trace context compatible with OTLP format.
 
@@ -801,42 +836,42 @@ def _build_trace_context_dict(
     parent_span_base = f"{thought_id}_pipeline_{task_id or 'no_task'}"
     parent_span_id = hashlib.sha256(parent_span_base.encode()).hexdigest()[:16].upper()
 
-    return {
-        "trace_id": trace_id,
-        "span_id": span_id,
-        "parent_span_id": parent_span_id,
-        "span_name": f"h3ere.{step.value}",
-        "operation_name": f"H3ERE.{step.value}",
-        "start_time_ns": int(start_time.timestamp() * 1e9),
-        "end_time_ns": int(end_time.timestamp() * 1e9),
-        "duration_ns": int((end_time - start_time).total_seconds() * 1e9),
-        "span_kind": "internal",  # H3ERE pipeline steps are internal operations
-    }
+    return TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name=f"h3ere.{step.value}",
+        operation_name=f"H3ERE.{step.value}",
+        start_time_ns=int(start_time.timestamp() * 1e9),
+        end_time_ns=int(end_time.timestamp() * 1e9),
+        duration_ns=int((end_time - start_time).total_seconds() * 1e9),
+        span_kind="internal",  # H3ERE pipeline steps are internal operations
+    )
 
 
-def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: StepDataUnion) -> List[SpanAttribute]:
     """
     Build span attributes compatible with OTLP format.
 
     This creates rich attribute data that's consistent between streaming and OTLP traces.
     """
-    thought_id = step_data.get("thought_id", "unknown")
-    task_id = step_data.get("task_id")
+    thought_id = step_data.thought_id
+    task_id = step_data.task_id
 
     # Start with core CIRIS attributes (matching OTLP format)
     attributes = [
-        {"key": "ciris.step_point", "value": {"stringValue": step.value}},
-        {"key": "ciris.thought_id", "value": {"stringValue": thought_id}},
-        {"key": "operation.name", "value": {"stringValue": f"H3ERE.{step.value}"}},
-        {"key": "service.name", "value": {"stringValue": "ciris-h3ere-pipeline"}},
-        {"key": "service.component", "value": {"stringValue": "thought_processor"}},
-        {"key": "span.success", "value": {"boolValue": step_data.get("success", True)}},
-        {"key": "processing_time_ms", "value": {"doubleValue": step_data.get("processing_time_ms", 0.0)}},
+        SpanAttribute(key="ciris.step_point", value={"stringValue": step.value}),
+        SpanAttribute(key="ciris.thought_id", value={"stringValue": thought_id}),
+        SpanAttribute(key="operation.name", value={"stringValue": f"H3ERE.{step.value}"}),
+        SpanAttribute(key="service.name", value={"stringValue": "ciris-h3ere-pipeline"}),
+        SpanAttribute(key="service.component", value={"stringValue": "thought_processor"}),
+        SpanAttribute(key="span.success", value={"boolValue": step_data.success}),
+        SpanAttribute(key="processing_time_ms", value={"doubleValue": step_data.processing_time_ms}),
     ]
 
     # Add task_id if available - critical for correlation
     if task_id:
-        attributes.append({"key": "ciris.task_id", "value": {"stringValue": str(task_id)}})
+        attributes.append(SpanAttribute(key="ciris.task_id", value={"stringValue": str(task_id)}))
 
     # Add step-specific attributes based on the typed step result
     if step_result and hasattr(step_result, "model_dump"):
@@ -844,34 +879,34 @@ def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: Di
         _add_typed_step_attributes(attributes, step, result_data)
 
     # Add error information if present
-    error = step_data.get("error")
+    error = step_data.error
     if error:
         attributes.extend(
             [
-                {"key": "error", "value": {"boolValue": True}},
-                {"key": "error.message", "value": {"stringValue": str(error)}},
-                {"key": "error.type", "value": {"stringValue": "ProcessingError"}},
+                SpanAttribute(key="error", value={"boolValue": True}),
+                SpanAttribute(key="error.message", value={"stringValue": str(error)}),
+                SpanAttribute(key="error.type", value={"stringValue": "ProcessingError"}),
             ]
         )
     else:
-        attributes.append({"key": "error", "value": {"boolValue": False}})
+        attributes.append(SpanAttribute(key="error", value={"boolValue": False}))
 
     return attributes
 
 
-def _add_gather_context_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to GATHER_CONTEXT step."""
     if "context" in result_data and result_data["context"]:
         context_size = len(str(result_data["context"]))
         attributes.extend(
             [
-                {"key": "context.size_bytes", "value": {"intValue": context_size}},
-                {"key": "context.available", "value": {"boolValue": True}},
+                SpanAttribute(key="context.size_bytes", value={"intValue": context_size}),
+                SpanAttribute(key="context.available", value={"boolValue": True}),
             ]
         )
 
 
-def _add_perform_dmas_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to PERFORM_DMAS step."""
     if "dma_results" in result_data and result_data["dma_results"]:
         attributes.extend(
@@ -884,7 +919,7 @@ def _add_perform_dmas_attributes(attributes: List[Dict[str, Any]], result_data: 
         attributes.append({"key": "dma.context_provided", "value": {"boolValue": bool(result_data["context"])}})
 
 
-def _add_perform_aspdma_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to PERFORM_ASPDMA step."""
     if "selected_action" in result_data:
         attributes.append({"key": "action.selected", "value": {"stringValue": str(result_data["selected_action"])}})
@@ -894,7 +929,7 @@ def _add_perform_aspdma_attributes(attributes: List[Dict[str, Any]], result_data
         )
 
 
-def _add_conscience_execution_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to CONSCIENCE_EXECUTION step."""
     if "conscience_passed" in result_data:
         attributes.append({"key": "conscience.passed", "value": {"boolValue": result_data["conscience_passed"]}})
@@ -902,7 +937,7 @@ def _add_conscience_execution_attributes(attributes: List[Dict[str, Any]], resul
         attributes.append({"key": "conscience.action", "value": {"stringValue": str(result_data["selected_action"])}})
 
 
-def _add_finalize_action_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to FINALIZE_ACTION step."""
     if "selected_action" in result_data:
         attributes.append({"key": "finalized.action", "value": {"stringValue": str(result_data["selected_action"])}})
@@ -912,7 +947,7 @@ def _add_finalize_action_attributes(attributes: List[Dict[str, Any]], result_dat
         )
 
 
-def _add_perform_action_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to PERFORM_ACTION step."""
     if "action_executed" in result_data:
         attributes.append({"key": "action.executed", "value": {"stringValue": str(result_data["action_executed"])}})
@@ -920,7 +955,7 @@ def _add_perform_action_attributes(attributes: List[Dict[str, Any]], result_data
         attributes.append({"key": "action.dispatch_success", "value": {"boolValue": result_data["dispatch_success"]}})
 
 
-def _add_action_complete_attributes(attributes: List[Dict[str, Any]], result_data: Dict[str, Any]) -> None:
+def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
     """Add attributes specific to ACTION_COMPLETE step."""
     if "handler_completed" in result_data:
         attributes.append({"key": "action.handler_completed", "value": {"boolValue": result_data["handler_completed"]}})
@@ -930,7 +965,7 @@ def _add_action_complete_attributes(attributes: List[Dict[str, Any]], result_dat
         )
 
 
-def _add_typed_step_attributes(attributes: List[Dict[str, Any]], step: StepPoint, result_data: Dict[str, Any]) -> None:
+def _add_typed_step_attributes(attributes: List[SpanAttribute], step: StepPoint, result_data: Dict[str, Any]) -> None:
     """Add step-specific attributes based on typed step result data."""
 
     # Map step types to their handler functions

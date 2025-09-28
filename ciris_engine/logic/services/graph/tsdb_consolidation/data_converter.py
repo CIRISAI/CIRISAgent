@@ -157,13 +157,13 @@ def safe_str_dict(data: dict | str | int | float | list | None) -> Dict[str, str
 
 def build_request_data_from_raw(raw_request: dict | str | int | float | list | None) -> Optional[RequestData]:
     """Extract and build RequestData from raw request data with type safety."""
-    if not raw_request or not isinstance(raw_request, dict):
+    if raw_request is None or not isinstance(raw_request, dict):
         return None
 
     parameters = ensure_dict(raw_request.get("parameters", {}))
 
     return RequestData(
-        channel_id=safe_dict_get(raw_request, "channel_id"),
+        channel_id=safe_dict_get(raw_request, "channel_id", "unknown"),
         author_id=safe_dict_get(parameters, "author_id") or safe_dict_get(raw_request, "author_id"),
         author_name=safe_dict_get(parameters, "author_name") or safe_dict_get(raw_request, "author_name"),
         content=safe_dict_get(parameters, "content") or safe_dict_get(raw_request, "content"),
@@ -175,7 +175,7 @@ def build_request_data_from_raw(raw_request: dict | str | int | float | list | N
 
 def build_response_data_from_raw(raw_response: dict | str | int | float | list | None) -> Optional[ResponseData]:
     """Extract and build ResponseData from raw response data with type safety."""
-    if not raw_response or not isinstance(raw_response, dict):
+    if raw_response is None or not isinstance(raw_response, dict):
         return None
 
     return ResponseData(
@@ -193,7 +193,7 @@ def build_interaction_context_from_raw(
     context_data: dict | str | int | float | list | None,
 ) -> Optional[InteractionContext]:
     """Extract and build InteractionContext from raw context data with type safety."""
-    if not context_data or not isinstance(context_data, dict):
+    if context_data is None or not isinstance(context_data, dict):
         return None
 
     return InteractionContext(

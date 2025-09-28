@@ -632,6 +632,48 @@ async def _enrich_user_profiles(
 
 
 # =============================================================================
+# TIME LOCALIZATION HELPERS
+# =============================================================================
+
+
+def _get_localized_times(time_service) -> Dict[str, str]:
+    """Get current time localized to LONDON, CHICAGO, and TOKYO timezones.
+
+    FAILS FAST AND LOUD if time_service is None.
+    """
+    if time_service is None:
+        raise RuntimeError(
+            "CRITICAL: time_service is None! Cannot get localized times. "
+            "The system must be properly initialized with a time service."
+        )
+
+    from datetime import datetime
+
+    import pytz
+
+    # Get current UTC time from time service
+    utc_time = time_service.now()
+    if not isinstance(utc_time, datetime):
+        raise RuntimeError(
+            f"CRITICAL: time_service.now() returned {type(utc_time)}, expected datetime. "
+            f"Time service is not properly configured."
+        )
+
+    # Define timezone objects
+    london_tz = pytz.timezone("Europe/London")
+    chicago_tz = pytz.timezone("America/Chicago")
+    tokyo_tz = pytz.timezone("Asia/Tokyo")
+
+    # Convert to localized times
+    utc_iso = utc_time.isoformat()
+    london_time = utc_time.astimezone(london_tz).isoformat()
+    chicago_time = utc_time.astimezone(chicago_tz).isoformat()
+    tokyo_time = utc_time.astimezone(tokyo_tz).isoformat()
+
+    return {"utc": utc_iso, "london": london_time, "chicago": chicago_time, "tokyo": tokyo_time}
+
+
+# =============================================================================
 # USER PROFILE ENRICHMENT HELPERS (Reusable for other adapters)
 # =============================================================================
 

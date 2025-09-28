@@ -48,7 +48,18 @@ class MockThought:
 
 
 class TestUserProfileExtractionComprehensive:
-    """Comprehensive test for user profile extraction."""
+
+    @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        from datetime import datetime, timezone
+        from unittest.mock import Mock
+
+        time_service = Mock()
+        # Fixed time for consistent testing
+        fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+        time_service.now.return_value = fixed_time
+        return time_service
 
     def create_mock_user_node(self, user_id):
         """Create a properly structured user node."""
@@ -87,7 +98,7 @@ class TestUserProfileExtractionComprehensive:
         return node
 
     @pytest.mark.asyncio
-    async def test_full_stack_user_extraction(self):
+    async def test_full_stack_user_extraction(self, mock_time_service):
         """Test user extraction with comprehensive mocking of all dependencies."""
 
         # Create task with user
@@ -192,7 +203,7 @@ class TestUserProfileExtractionComprehensive:
 
         # Patch all external dependencies
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(
-            "ciris_engine.logic.context.system_snapshot.persistence"
+            "ciris_engine.logic.context.system_snapshot_helpers.persistence"
         ) as mock_persistence, patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node", return_value=[]):
 
             # Set up persistence mocks
@@ -251,6 +262,7 @@ class TestUserProfileExtractionComprehensive:
                     secrets_service=secrets_service,
                     runtime=runtime,
                     service_registry=service_registry,
+                    time_service=mock_time_service,
                 )
 
                 # Get captured logs
@@ -315,7 +327,7 @@ class TestUserProfileExtractionComprehensive:
                 snapshot_module.logger = original_logger
 
     @pytest.mark.asyncio
-    async def test_extraction_from_correlation_history(self):
+    async def test_extraction_from_correlation_history(self, mock_time_service):
         """Test extraction of users from correlation history."""
 
         task = Task(
@@ -401,7 +413,7 @@ class TestUserProfileExtractionComprehensive:
         service_registry.get_all = MagicMock(return_value={})
 
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(
-            "ciris_engine.logic.context.system_snapshot.persistence"
+            "ciris_engine.logic.context.system_snapshot_helpers.persistence"
         ) as mock_persistence, patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node", return_value=[]):
 
             # Set up persistence mocks
@@ -454,6 +466,7 @@ class TestUserProfileExtractionComprehensive:
                 secrets_service=secrets_service,
                 runtime=runtime,
                 service_registry=service_registry,
+                time_service=mock_time_service,
             )
 
             print(f"User profiles count: {len(snapshot.user_profiles)}")

@@ -281,8 +281,15 @@ class TestResourceUsageCalculation:
 class TestSystemSnapshotIntegration:
     """Test system snapshot integration with telemetry."""
 
+    @pytest.fixture
+    def mock_time_service(self) -> Mock:
+        """Create a mock time service."""
+        mock = Mock()
+        mock.now.return_value = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        return mock
+
     @pytest.mark.asyncio
-    async def test_system_snapshot_includes_telemetry(self) -> None:
+    async def test_system_snapshot_includes_telemetry(self, mock_time_service) -> None:
         """Test that build_system_snapshot includes telemetry summary."""
         from ciris_engine.logic.context.system_snapshot import build_system_snapshot
 
@@ -305,7 +312,11 @@ class TestSystemSnapshotIntegration:
 
         # Build snapshot
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, telemetry_service=mock_telemetry_service
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            telemetry_service=mock_telemetry_service,
+            time_service=mock_time_service,
         )
 
         # Verify telemetry is included

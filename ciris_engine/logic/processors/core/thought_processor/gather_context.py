@@ -43,6 +43,7 @@ class ContextGatheringPhase:
                 batch_data=batch_context_data,
                 memory_service=self.context_builder.memory_service if self.context_builder else None,
                 graphql_provider=None,
+                time_service=self.context_builder.time_service if self.context_builder else None,
             )
             thought_context = await self.context_builder.build_thought_context(thought, system_snapshot=system_snapshot)
         else:

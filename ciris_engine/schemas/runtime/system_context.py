@@ -101,6 +101,10 @@ class SystemSnapshot(BaseModel):
 
     # Runtime context
     shutdown_context: Optional[ShutdownContext] = Field(None, description="Shutdown context if system is shutting down")
+    current_time_utc: str = Field(default="", description="Current system time in UTC ISO format from time service")
+    current_time_london: str = Field(default="", description="Current time in London timezone (Europe/London)")
+    current_time_chicago: str = Field(default="", description="Current time in Chicago timezone (America/Chicago)")
+    current_time_tokyo: str = Field(default="", description="Current time in Tokyo timezone (Asia/Tokyo)")
 
     # Resource alerts - CRITICAL for mission-critical systems
     resource_alerts: List[str] = Field(

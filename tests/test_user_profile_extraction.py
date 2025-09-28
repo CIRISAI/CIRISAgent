@@ -44,6 +44,18 @@ class TestUserProfileExtraction:
     """Test user profile extraction from various sources."""
 
     @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        from datetime import datetime, timezone
+        from unittest.mock import Mock
+
+        time_service = Mock()
+        # Fixed time for consistent testing
+        fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+        time_service.now.return_value = fixed_time
+        return time_service
+
+    @pytest.fixture
     def mock_task_with_user(self):
         """Create a task with user in context."""
         return Task(
@@ -189,10 +201,10 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_extract_user_from_task_context(
-        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that user ID is extracted from task context."""
-        with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
+        with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
         ), patch("ciris_engine.logic.context.system_snapshot.persistence") as mock_persistence:
 
@@ -224,6 +236,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             print(f"DEBUG: Snapshot user_profiles = {snapshot.user_profiles}")
@@ -247,7 +260,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_extract_users_from_thought_content(
-        self, mock_thought_with_mentions, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_thought_with_mentions, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that user IDs are extracted from Discord mentions and ID patterns."""
         task = Task(
@@ -260,7 +273,7 @@ class TestUserProfileExtraction:
             context=TaskContext(correlation_id="test_correlation"),
         )
 
-        with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
+        with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
         ), patch("ciris_engine.logic.context.system_snapshot.persistence") as mock_persistence:
 
@@ -288,6 +301,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Check extraction logs
@@ -313,7 +327,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_extract_users_from_correlation_history(
-        self, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that user IDs are extracted from correlation history."""
         task = Task(
@@ -326,9 +340,9 @@ class TestUserProfileExtraction:
             context=TaskContext(correlation_id="test_correlation_with_history", user_id="123456789"),
         )
 
-        with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
+        with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
-        ), patch("ciris_engine.logic.context.system_snapshot.persistence") as mock_persistence:
+        ), patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
 
             # Mock correlation history with additional users
             mock_cursor = MagicMock()
@@ -362,6 +376,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Check correlation history extraction
@@ -377,7 +392,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_comprehensive_context_logging(
-        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that context building logs comprehensive statistics."""
         with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
@@ -408,6 +423,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Check comprehensive logging
@@ -428,7 +444,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_all_user_attributes_captured(
-        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that ALL user node attributes are captured in the profile."""
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(
@@ -459,6 +475,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Get the user profile

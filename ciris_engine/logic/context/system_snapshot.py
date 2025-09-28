@@ -28,6 +28,7 @@ from .system_snapshot_helpers import (
     _extract_agent_identity,
     _extract_thought_summary,
     _extract_user_ids_from_context,
+    _get_localized_times,
     _get_recent_tasks,
     _get_secrets_data,
     _get_shutdown_context,
@@ -58,6 +59,7 @@ async def build_system_snapshot(
     secrets_service: Optional[SecretsService] = None,
     runtime: Optional[Any] = None,
     service_registry: Optional[Any] = None,
+    time_service: Any = None,  # REQUIRED - will fail fast and loud if None
 ) -> SystemSnapshot:
     """Build system snapshot for the thought.
 
@@ -132,6 +134,8 @@ async def build_system_snapshot(
         "agent_codename": CIRIS_CODENAME,
         "agent_code_hash": code_hash,
         "shutdown_context": shutdown_context,
+        # Get localized times - FAILS FAST AND LOUD if time_service is None
+        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).items()},
         "service_health": service_health,
         "circuit_breaker_status": circuit_breaker_status,
         "resource_alerts": resource_alerts,  # CRITICAL mission-critical alerts
@@ -210,6 +214,11 @@ async def build_system_snapshot(
         # Update context data with enriched profiles
         if enriched_profiles:
             context_data["user_profiles"] = enriched_profiles
+            # Log user profile context size
+            profiles_bytes = len(json.dumps([p.model_dump() for p in enriched_profiles], default=json_serial))
+            logger.info(
+                f"[CONTEXT BUILD] {len(enriched_profiles)} User Profiles queried - {profiles_bytes:,} bytes added to context"
+            )
 
     # Log channel context size
     if "channel_context" in context_data and context_data["channel_context"]:

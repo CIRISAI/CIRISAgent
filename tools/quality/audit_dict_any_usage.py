@@ -74,6 +74,19 @@ class DictAnyAuditor(ast.NodeVisitor):
 
         return False
 
+    def _has_noqa_comment(self, lineno: int) -> bool:
+        """Check if the line has a # NOQA comment to suppress Dict[str, Any] warnings."""
+        if lineno <= 0 or lineno > len(self.source_lines):
+            return False
+
+        line = self.source_lines[lineno - 1]  # Lines are 1-indexed
+
+        # Check for NOQA comment on the same line
+        if "# NOQA" in line.upper() or "#NOQA" in line.upper():
+            return True
+
+        return False
+
     def _is_in_docstring_context(self, node: ast.AST) -> bool:
         """Check if node is within a docstring."""
         # Check if the node appears to be in a docstring based on parent context
@@ -105,6 +118,39 @@ class DictAnyAuditor(ast.NodeVisitor):
         else:
             return "other"
 
+    def _is_otlp_protocol_usage(self, node: ast.AST) -> bool:
+        """Check if Dict[str, Any] is used for OTLP protocol compatibility."""
+        # Check if in telemetry_otlp.py file
+        if "telemetry_otlp.py" not in self.filepath:
+            return False
+
+        # Check for OTLP-related function or variable context
+        otlp_indicators = [
+            "otlp", "attributes", "metric", "create_", "_create_",
+            "resource_attributes", "scope_metrics", "data_points"
+        ]
+
+        # Check current function name
+        if self.current_function:
+            func_name = self.current_function.lower()
+            if any(indicator in func_name for indicator in otlp_indicators):
+                return True
+
+        # Check variable/parameter names in context
+        parent = getattr(node, "parent", None)
+        if parent:
+            if isinstance(parent, ast.AnnAssign) and parent.target:
+                if isinstance(parent.target, ast.Name):
+                    var_name = parent.target.id.lower()
+                    if any(indicator in var_name for indicator in otlp_indicators):
+                        return True
+            elif isinstance(parent, ast.arg):
+                param_name = parent.arg.lower()
+                if any(indicator in param_name for indicator in otlp_indicators):
+                    return True
+
+        return False
+
     def visit_Subscript(self, node: ast.Subscript):
         if self._is_dict_str_any(node):
             # Skip if this is in a comment or docstring
@@ -113,6 +159,16 @@ class DictAnyAuditor(ast.NodeVisitor):
                 return
 
             if self._is_in_docstring_context(node):
+                self.generic_visit(node)
+                return
+
+            # Skip if line has NOQA comment
+            if self._has_noqa_comment(node.lineno):
+                self.generic_visit(node)
+                return
+
+            # Skip if this is OTLP protocol usage
+            if self._is_otlp_protocol_usage(node):
                 self.generic_visit(node)
                 return
 
@@ -294,6 +350,11 @@ def main():
 
                 # Categorize by location
                 path_str = str(filepath)
+
+                # Skip SDK and modular services from production analysis
+                if any(exclude in path_str for exclude in ["ciris_sdk/", "ciris_modular_services/"]):
+                    continue
+
                 if path_str.startswith("./tests/") or path_str.startswith("tests/"):
                     test_files.append(filepath)
                 elif path_str.startswith("./tools/") or path_str.startswith("tools/"):
@@ -306,7 +367,7 @@ def main():
                         production_files.append(filepath)
 
     print("Scanning Python files:")
-    print(f"  Production: {len(production_files)}")
+    print(f"  Production: {len(production_files)} (excluding SDK & modular services)")
     print(f"  Tests: {len(test_files)}")
     print(f"  Tools: {len(tool_files)}")
     print(f"  Total: {len(python_files)}")

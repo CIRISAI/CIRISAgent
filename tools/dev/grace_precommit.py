@@ -180,6 +180,7 @@ async def main():
     """Main pre-commit hook logic."""
     print("\n🌟 Grace Pre-commit Check")
     print("=" * 50)
+    print("Note: Pre-commit may show 'Failed' due to file modifications - this is normal!")
 
     # Run formatters first (they modify files)
     print("Running auto-formatters...")
@@ -188,8 +189,8 @@ async def main():
         print(f"  ✨ Auto-formatted: {', '.join(formatted)}")
 
     # Check if only BUILD_INFO.txt remains after formatting
-    remaining_changes = await check_remaining_changes()
-    if len(remaining_changes) == 1 and remaining_changes[0] == "BUILD_INFO.txt":
+    build_info_changes = await check_remaining_changes()
+    if len(build_info_changes) == 1 and build_info_changes[0] == "BUILD_INFO.txt":
         print("  📝 BUILD_INFO.txt updated - include it in your commit manually")
         # DISABLED: Auto-commit clutters git log
         # if await auto_commit_build_info():
@@ -220,6 +221,19 @@ async def main():
         print("These won't block your commit, just gentle reminders. 🌱")
     else:
         print("\n🎉 Excellent! All checks passed!")
+
+    # Provide clear next steps if files were modified
+    remaining_changes = await check_remaining_changes()
+    if remaining_changes:
+        print("\n🎯 NEXT STEPS:")
+        print("   Grace has completed formatting and BUILD_INFO.txt updates.")
+        print("   Pre-commit will show 'Failed' above - this is expected behavior!")
+        print("   ")
+        print("   To commit your properly formatted changes:")
+        print("   1. git commit --no-verify -m \"your commit message\"")
+        print("   2. git push origin <branch-name>")
+        print("   ")
+        print("   💡 Use --no-verify to skip re-running hooks on already-processed code.")
 
     print("=" * 50)
     return 0

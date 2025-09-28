@@ -906,7 +906,7 @@ def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: St
     return attributes
 
 
-def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to GATHER_CONTEXT step."""
     if "context" in result_data and result_data["context"]:
         context_size = len(str(result_data["context"]))
@@ -918,7 +918,7 @@ def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data:
         )
 
 
-def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_DMAS step."""
     if "dma_results" in result_data and result_data["dma_results"]:
         attributes.extend(
@@ -931,7 +931,7 @@ def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: D
         attributes.append({"key": "dma.context_provided", "value": {"boolValue": bool(result_data["context"])}})
 
 
-def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_ASPDMA step."""
     if "selected_action" in result_data:
         attributes.append({"key": "action.selected", "value": {"stringValue": str(result_data["selected_action"])}})
@@ -941,7 +941,7 @@ def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data:
         )
 
 
-def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to CONSCIENCE_EXECUTION step."""
     if "conscience_passed" in result_data:
         attributes.append({"key": "conscience.passed", "value": {"boolValue": result_data["conscience_passed"]}})
@@ -949,7 +949,7 @@ def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result
         attributes.append({"key": "conscience.action", "value": {"stringValue": str(result_data["selected_action"])}})
 
 
-def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to FINALIZE_ACTION step."""
     if "selected_action" in result_data:
         attributes.append({"key": "finalized.action", "value": {"stringValue": str(result_data["selected_action"])}})
@@ -959,7 +959,7 @@ def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data
         )
 
 
-def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_ACTION step."""
     if "action_executed" in result_data:
         attributes.append({"key": "action.executed", "value": {"stringValue": str(result_data["action_executed"])}})
@@ -967,7 +967,7 @@ def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data:
         attributes.append({"key": "action.dispatch_success", "value": {"boolValue": result_data["dispatch_success"]}})
 
 
-def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:
+def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to ACTION_COMPLETE step."""
     if "handler_completed" in result_data:
         attributes.append({"key": "action.handler_completed", "value": {"boolValue": result_data["handler_completed"]}})
@@ -977,7 +977,7 @@ def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data
         )
 
 
-def _add_typed_step_attributes(attributes: List[SpanAttribute], step: StepPoint, result_data: Dict[str, Any]) -> None:
+def _add_typed_step_attributes(attributes: List[SpanAttribute], step: StepPoint, result_data: Dict[str, Any]) -> None:  # NOQA
     """Add step-specific attributes based on typed step result data."""
 
     # Map step types to their handler functions

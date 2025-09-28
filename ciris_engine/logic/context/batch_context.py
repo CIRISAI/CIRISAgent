@@ -294,5 +294,5 @@ async def build_system_snapshot_with_batch(
         telemetry_summary=batch_data.telemetry_summary,
         user_profiles=[],  # Not using dict, it expects a list
         # Get localized times - FAILS FAST AND LOUD if time_service is None
-        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).items()},
+        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).model_dump().items() if key in ["utc", "london", "chicago", "tokyo"]},
     )

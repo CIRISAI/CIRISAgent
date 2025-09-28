@@ -4,9 +4,9 @@ Schemas for identity variance monitoring operations.
 These replace all Dict[str, Any] usage in logic/infrastructure/sub_services/identity_variance_monitor.py.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from pydantic import BaseModel, Field
 
@@ -94,6 +94,24 @@ class CurrentIdentityData(BaseModel):
     communication_style: str = Field("standard", description="Communication style")
     learning_enabled: bool = Field(True, description="Whether learning is enabled")
     adaptation_rate: float = Field(0.1, description="Rate of adaptation")
+
+
+class IdentityData(BaseModel):
+    """Identity data schema for system snapshots - sourced from local graph memory."""
+
+    agent_id: str = Field(..., description="Agent identifier")
+    description: str = Field(..., description="Agent description")
+    role: str = Field(..., description="Agent role description")
+    trust_level: float = Field(0.5, ge=0.0, le=1.0, description="Agent trust level")
+    stewardship: Optional[str] = Field(None, description="Stewardship description if present")
+
+
+class IdentitySummary(BaseModel):
+    """Summarized identity data for system contexts - sourced from local graph memory."""
+
+    identity_purpose: Optional[str] = Field(None, description="Core identity purpose")
+    identity_capabilities: List[str] = Field(default_factory=list, description="Identity capabilities")
+    identity_restrictions: List[str] = Field(default_factory=list, description="Identity restrictions")
 
 
 class ServiceStatusMetrics(BaseModel):

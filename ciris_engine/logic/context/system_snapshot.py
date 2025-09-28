@@ -80,9 +80,10 @@ async def build_system_snapshot(
     channel_id, channel_context = await _resolve_channel_context(task, thought, memory_service)
 
     # Retrieve agent identity from graph using helper function
-    identity_data, identity_purpose, identity_capabilities, identity_restrictions = await _extract_agent_identity(
-        memory_service
-    )
+    identity_data, identity_summary = await _extract_agent_identity(memory_service)
+    identity_purpose = identity_summary.identity_purpose
+    identity_capabilities = identity_summary.identity_capabilities
+    identity_restrictions = identity_summary.identity_restrictions
 
     # Get task data using helper functions
     recent_tasks_list = _get_recent_tasks(10)
@@ -135,7 +136,7 @@ async def build_system_snapshot(
         "agent_code_hash": code_hash,
         "shutdown_context": shutdown_context,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
-        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).items()},
+        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).model_dump().items() if key in ["utc", "london", "chicago", "tokyo"]},
         "service_health": service_health,
         "circuit_breaker_status": circuit_breaker_status,
         "resource_alerts": resource_alerts,  # CRITICAL mission-critical alerts

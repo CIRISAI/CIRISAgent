@@ -15,6 +15,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.constants import CIRIS_VERSION
 
+# OTLP attribute key constants
+SERVICE_NAMESPACE_KEY = "service.namespace"
+DEPLOYMENT_ENVIRONMENT_KEY = "deployment.environment"
+
 
 def safe_telemetry_get(data: Dict[str, Any], key: str, default=None):
     """Safely extract value from telemetry data with type checking."""
@@ -28,7 +32,7 @@ def create_resource_attributes(
     attributes = [
         {"key": "service.name", "value": {"stringValue": service_name}},
         {"key": "service.version", "value": {"stringValue": service_version}},
-        {"key": "service.namespace", "value": {"stringValue": "ciris"}},
+        {"key": SERVICE_NAMESPACE_KEY, "value": {"stringValue": "ciris"}},
         {"key": "telemetry.sdk.name", "value": {"stringValue": "ciris-telemetry"}},
         {"key": "telemetry.sdk.version", "value": {"stringValue": CIRIS_VERSION}},
         {"key": "telemetry.sdk.language", "value": {"stringValue": "python"}},
@@ -37,7 +41,7 @@ def create_resource_attributes(
     # Add deployment environment if available
     environment = safe_telemetry_get(telemetry_data, "environment")
     if environment:
-        attributes.append({"key": "deployment.environment", "value": {"stringValue": environment}})
+        attributes.append({"key": DEPLOYMENT_ENVIRONMENT_KEY, "value": {"stringValue": environment}})
 
     return attributes
 
@@ -142,6 +146,61 @@ def add_system_metrics(telemetry_data: Dict[str, Any], current_time_ns: int) -> 
     return metrics
 
 
+def _add_service_gauge_metric(
+    metrics: List[Dict[str, Any]],
+    service_data: Any,
+    field_name: str,
+    metric_name: str,
+    description: str,
+    unit: str,
+    current_time_ns: int,
+    service_attrs: List[Dict[str, Any]],
+    transform_value=None,
+) -> None:
+    """Helper to add a gauge metric for a service field."""
+    if hasattr(service_data, field_name):
+        value = getattr(service_data, field_name)
+        if value is not None:
+            if transform_value:
+                value = transform_value(value)
+            metrics.append(
+                _create_gauge_metric(metric_name, description, unit, value, current_time_ns, attributes=service_attrs)
+            )
+
+
+def _add_service_counter_metric(
+    metrics: List[Dict[str, Any]],
+    service_data: Any,
+    field_name: str,
+    metric_name: str,
+    description: str,
+    unit: str,
+    current_time_ns: int,
+    service_attrs: List[Dict[str, Any]],
+    safe_convert: bool = False,
+) -> None:
+    """Helper to add a counter metric for a service field."""
+    if hasattr(service_data, field_name):
+        value = getattr(service_data, field_name)
+        if value is not None:
+            if safe_convert:
+                try:
+                    value = float(value or 0)
+                    metrics.append(
+                        _create_counter_metric(
+                            metric_name, description, unit, value, current_time_ns, attributes=service_attrs
+                        )
+                    )
+                except (TypeError, ValueError):
+                    pass  # Skip invalid values
+            else:
+                metrics.append(
+                    _create_counter_metric(
+                        metric_name, description, unit, value, current_time_ns, attributes=service_attrs
+                    )
+                )
+
+
 def add_service_metrics(services_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
     """Extract and create service-level metrics from services data."""
     metrics = []
@@ -153,88 +212,79 @@ def add_service_metrics(services_data: Dict[str, Any], current_time_ns: int) -> 
         service_attrs = [{"key": "service", "value": {"stringValue": service_name}}]
 
         # Health status
-        if hasattr(service_data, "healthy"):
-            metrics.append(
-                _create_gauge_metric(
-                    "service.healthy",
-                    "Service health status",
-                    "1",
-                    1.0 if service_data.healthy else 0.0,
-                    current_time_ns,
-                    attributes=service_attrs,
-                )
-            )
+        _add_service_gauge_metric(
+            metrics,
+            service_data,
+            "healthy",
+            "service.healthy",
+            "Service health status",
+            "1",
+            current_time_ns,
+            service_attrs,
+            transform_value=lambda x: 1.0 if x else 0.0,
+        )
 
         # Uptime
-        if hasattr(service_data, "uptime_seconds") and service_data.uptime_seconds:
-            metrics.append(
-                _create_counter_metric(
-                    "service.uptime",
-                    "Service uptime in seconds",
-                    "s",
-                    service_data.uptime_seconds,
-                    current_time_ns,
-                    attributes=service_attrs,
-                )
-            )
+        _add_service_counter_metric(
+            metrics,
+            service_data,
+            "uptime_seconds",
+            "service.uptime",
+            "Service uptime in seconds",
+            "s",
+            current_time_ns,
+            service_attrs,
+        )
 
         # Error count
-        if hasattr(service_data, "error_count") and service_data.error_count is not None:
-            try:
-                metrics.append(
-                    _create_counter_metric(
-                        "service.errors",
-                        "Service error count",
-                        "1",
-                        float(service_data.error_count),
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-            except (TypeError, ValueError):
-                pass  # Skip invalid error_count values
+        _add_service_counter_metric(
+            metrics,
+            service_data,
+            "error_count",
+            "service.errors",
+            "Service error count",
+            "1",
+            current_time_ns,
+            service_attrs,
+            safe_convert=True,
+        )
 
         # Requests handled
-        if hasattr(service_data, "requests_handled") and service_data.requests_handled is not None:
-            try:
-                metrics.append(
-                    _create_counter_metric(
-                        "service.requests",
-                        "Service requests handled",
-                        "1",
-                        float(service_data.requests_handled or 0),
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-            except (TypeError, ValueError):
-                pass  # Skip invalid requests_handled values
+        _add_service_counter_metric(
+            metrics,
+            service_data,
+            "requests_handled",
+            "service.requests",
+            "Service requests handled",
+            "1",
+            current_time_ns,
+            service_attrs,
+            safe_convert=True,
+        )
 
         # Error rate
-        if hasattr(service_data, "error_rate") and service_data.error_rate is not None:
-            metrics.append(
-                _create_gauge_metric(
-                    "service.error_rate",
-                    "Service error rate",
-                    "1",
-                    service_data.error_rate,
-                    current_time_ns,
-                    attributes=service_attrs,
-                )
-            )
+        _add_service_gauge_metric(
+            metrics,
+            service_data,
+            "error_rate",
+            "service.error_rate",
+            "Service error rate",
+            "1",
+            current_time_ns,
+            service_attrs,
+        )
 
         # Memory usage
-        if hasattr(service_data, "memory_mb") and service_data.memory_mb:
-            metrics.append(
-                _create_gauge_metric(
-                    "service.memory.usage",
-                    "Service memory usage",
-                    "MB",
-                    service_data.memory_mb,
-                    current_time_ns,
-                    attributes=service_attrs,
-                )
-            )
+        _add_service_gauge_metric(
+            metrics,
+            service_data,
+            "memory_mb",
+            "service.memory.usage",
+            "Service memory usage",
+            "MB",
+            current_time_ns,
+            service_attrs,
+        )
 
     return metrics
 
@@ -467,7 +517,7 @@ def convert_traces_to_otlp_json(
     base_resource_attrs = create_resource_attributes(service_name, service_version, {})
     # Remove service.namespace and deployment.environment attributes for traces
     resource_attributes = [
-        attr for attr in base_resource_attrs if attr["key"] not in ["service.namespace", "deployment.environment"]
+        attr for attr in base_resource_attrs if attr["key"] not in [SERVICE_NAMESPACE_KEY, DEPLOYMENT_ENVIRONMENT_KEY]
     ]
 
     spans = []
@@ -653,7 +703,7 @@ def convert_logs_to_otlp_json(
     base_resource_attrs = create_resource_attributes(service_name, service_version, {})
     # Remove service.namespace and deployment.environment attributes for logs
     resource_attributes = [
-        attr for attr in base_resource_attrs if attr["key"] not in ["service.namespace", "deployment.environment"]
+        attr for attr in base_resource_attrs if attr["key"] not in [SERVICE_NAMESPACE_KEY, DEPLOYMENT_ENVIRONMENT_KEY]
     ]
 
     log_records = []

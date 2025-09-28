@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-import pytz
 
 from ciris_engine.logic.context.system_snapshot import build_system_snapshot
 
@@ -51,10 +50,12 @@ class TestSystemSnapshotLocalizedTimes:
         assert hasattr(snapshot, "current_time_chicago")
         assert hasattr(snapshot, "current_time_tokyo")
 
-        # Calculate expected localized times
-        london_tz = pytz.timezone("Europe/London")
-        chicago_tz = pytz.timezone("America/Chicago")
-        tokyo_tz = pytz.timezone("Asia/Tokyo")
+        # Calculate expected localized times using zoneinfo (Python 3.9+ standard library)
+        from zoneinfo import ZoneInfo
+
+        london_tz = ZoneInfo("Europe/London")
+        chicago_tz = ZoneInfo("America/Chicago")
+        tokyo_tz = ZoneInfo("Asia/Tokyo")
 
         expected_utc = fixed_utc_time.isoformat()
         expected_london = fixed_utc_time.astimezone(london_tz).isoformat()

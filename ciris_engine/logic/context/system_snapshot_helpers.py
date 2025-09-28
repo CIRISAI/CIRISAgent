@@ -648,8 +648,7 @@ def _get_localized_times(time_service) -> Dict[str, str]:
         )
 
     from datetime import datetime
-
-    import pytz
+    from zoneinfo import ZoneInfo
 
     # Get current UTC time from time service
     utc_time = time_service.now()
@@ -659,10 +658,10 @@ def _get_localized_times(time_service) -> Dict[str, str]:
             f"Time service is not properly configured."
         )
 
-    # Define timezone objects
-    london_tz = pytz.timezone("Europe/London")
-    chicago_tz = pytz.timezone("America/Chicago")
-    tokyo_tz = pytz.timezone("Asia/Tokyo")
+    # Define timezone objects using zoneinfo (Python 3.9+ standard library)
+    london_tz = ZoneInfo("Europe/London")
+    chicago_tz = ZoneInfo("America/Chicago")
+    tokyo_tz = ZoneInfo("Asia/Tokyo")
 
     # Convert to localized times
     utc_iso = utc_time.isoformat()

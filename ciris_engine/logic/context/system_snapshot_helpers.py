@@ -334,47 +334,78 @@ def _collect_resource_alerts(resource_monitor: Any) -> List[str]:
 # =============================================================================
 
 
+async def _safe_get_health_status(service: Any) -> bool:
+    """Safely get health status from a service."""
+    try:
+        if hasattr(service, "get_health_status"):
+            health_status = await service.get_health_status()
+            return getattr(health_status, "is_healthy", False)
+    except Exception as e:
+        logger.warning(f"Failed to get health status from service: {e}")
+    return False
+
+
+def _safe_get_circuit_breaker_status(service: Any) -> str:
+    """Safely get circuit breaker status from a service."""
+    try:
+        if hasattr(service, "get_circuit_breaker_status"):
+            cb_status = service.get_circuit_breaker_status()
+            return str(cb_status) if cb_status else "UNKNOWN"
+    except Exception as e:
+        logger.warning(f"Failed to get circuit breaker status from service: {e}")
+    return "UNKNOWN"
+
+
+async def _process_single_service(
+    service: Any,
+    service_name: str,
+    service_health: Dict[str, bool],
+    circuit_breaker_status: Dict[str, str]
+) -> None:
+    """Process health and circuit breaker status for a single service."""
+    # Get health status
+    health_status = await _safe_get_health_status(service)
+    service_health[service_name] = health_status
+
+    # Get circuit breaker status
+    cb_status = _safe_get_circuit_breaker_status(service)
+    circuit_breaker_status[service_name] = cb_status
+
+
+async def _process_services_group(
+    services_group: Dict[str, Any],
+    prefix: str,
+    service_health: Dict[str, bool],
+    circuit_breaker_status: Dict[str, str]
+) -> None:
+    """Process a group of services (handlers or global services)."""
+    for service_type, services in services_group.items():
+        for service in services:
+            service_name = f"{prefix}.{service_type}"
+            await _process_single_service(service, service_name, service_health, circuit_breaker_status)
+
+
 async def _collect_service_health(service_registry: Optional[Any]) -> Tuple[Dict[str, bool], Dict[str, str]]:
     """Collect service health and circuit breaker status."""
     service_health: Dict[str, bool] = {}
     circuit_breaker_status: Dict[str, str] = {}
 
-    if service_registry:
-        try:
-            # Get health status from all registered services
-            registry_info = service_registry.get_provider_info()
+    if not service_registry:
+        return service_health, circuit_breaker_status
 
-            # Check handler-specific services
-            for handler, service_types in registry_info.get("handlers", {}).items():
-                for service_type, services in service_types.items():
-                    for service in services:
-                        if hasattr(service, "get_health_status"):
-                            service_name = f"{handler}.{service_type}"
-                            health_status = await service.get_health_status()
-                            # Extract is_healthy boolean from the health status object
-                            service_health[service_name] = getattr(health_status, "is_healthy", False)
-                        if hasattr(service, "get_circuit_breaker_status"):
-                            service_name = f"{handler}.{service_type}"
-                            # Get circuit breaker status as string
-                            cb_status = service.get_circuit_breaker_status()
-                            circuit_breaker_status[service_name] = str(cb_status) if cb_status else "UNKNOWN"
+    try:
+        registry_info = service_registry.get_provider_info()
 
-            # Check global services
-            for service_type, services in registry_info.get("global_services", {}).items():
-                for service in services:
-                    if hasattr(service, "get_health_status"):
-                        service_name = f"global.{service_type}"
-                        health_status = await service.get_health_status()
-                        # Extract is_healthy boolean from the health status object
-                        service_health[service_name] = getattr(health_status, "is_healthy", False)
-                    if hasattr(service, "get_circuit_breaker_status"):
-                        service_name = f"global.{service_type}"
-                        # Get circuit breaker status as string
-                        cb_status = service.get_circuit_breaker_status()
-                        circuit_breaker_status[service_name] = str(cb_status) if cb_status else "UNKNOWN"
+        # Process handler-specific services
+        for handler, service_types in registry_info.get("handlers", {}).items():
+            await _process_services_group(service_types, handler, service_health, circuit_breaker_status)
 
-        except Exception as e:
-            logger.warning(f"Failed to collect service health status: {e}")
+        # Process global services
+        global_services = registry_info.get("global_services", {})
+        await _process_services_group(global_services, "global", service_health, circuit_breaker_status)
+
+    except Exception as e:
+        logger.warning(f"Failed to collect service health status: {e}")
 
     return service_health, circuit_breaker_status
 

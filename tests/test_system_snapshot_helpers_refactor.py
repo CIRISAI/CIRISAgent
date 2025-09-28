@@ -16,7 +16,12 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
     _call_async_or_sync_method,
     _get_tool_info_safely,
     _extract_adapter_type,
-    _validate_tool_infos
+    _validate_tool_infos,
+    _collect_service_health,
+    _safe_get_health_status,
+    _safe_get_circuit_breaker_status,
+    _process_single_service,
+    _process_services_group
 )
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
@@ -343,3 +348,184 @@ class TestHelperFunctions:
 
         with pytest.raises(TypeError, match="Non-ToolInfo object"):
             _validate_tool_infos(tool_infos)
+
+
+class TestServiceHealthHelperFunctions:
+    """Test the service health helper functions."""
+
+    @pytest.mark.asyncio
+    async def test_safe_get_health_status_success(self):
+        """Test getting health status successfully."""
+        mock_service = Mock()
+        mock_health_status = Mock()
+        mock_health_status.is_healthy = True
+        mock_service.get_health_status = AsyncMock(return_value=mock_health_status)
+
+        result = await _safe_get_health_status(mock_service)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_safe_get_health_status_no_method(self):
+        """Test getting health status when method doesn't exist."""
+        mock_service = Mock(spec=[])  # No methods
+
+        result = await _safe_get_health_status(mock_service)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_safe_get_health_status_exception(self):
+        """Test getting health status when method raises exception."""
+        mock_service = Mock()
+        mock_service.get_health_status = AsyncMock(side_effect=Exception("Health check failed"))
+
+        result = await _safe_get_health_status(mock_service)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_safe_get_health_status_no_is_healthy_attr(self):
+        """Test getting health status when health status object lacks is_healthy."""
+        mock_service = Mock()
+        mock_health_status = Mock()
+        # Remove is_healthy attribute
+        del mock_health_status.is_healthy
+        mock_service.get_health_status = AsyncMock(return_value=mock_health_status)
+
+        result = await _safe_get_health_status(mock_service)
+        assert result is False
+
+    def test_safe_get_circuit_breaker_status_success(self):
+        """Test getting circuit breaker status successfully."""
+        mock_service = Mock()
+        mock_service.get_circuit_breaker_status = Mock(return_value="CLOSED")
+
+        result = _safe_get_circuit_breaker_status(mock_service)
+        assert result == "CLOSED"
+
+    def test_safe_get_circuit_breaker_status_no_method(self):
+        """Test getting circuit breaker status when method doesn't exist."""
+        mock_service = Mock(spec=[])  # No methods
+
+        result = _safe_get_circuit_breaker_status(mock_service)
+        assert result == "UNKNOWN"
+
+    def test_safe_get_circuit_breaker_status_none_result(self):
+        """Test getting circuit breaker status when method returns None."""
+        mock_service = Mock()
+        mock_service.get_circuit_breaker_status = Mock(return_value=None)
+
+        result = _safe_get_circuit_breaker_status(mock_service)
+        assert result == "UNKNOWN"
+
+    def test_safe_get_circuit_breaker_status_exception(self):
+        """Test getting circuit breaker status when method raises exception."""
+        mock_service = Mock()
+        mock_service.get_circuit_breaker_status = Mock(side_effect=Exception("CB check failed"))
+
+        result = _safe_get_circuit_breaker_status(mock_service)
+        assert result == "UNKNOWN"
+
+    @pytest.mark.asyncio
+    async def test_process_single_service(self):
+        """Test processing a single service."""
+        mock_service = Mock()
+        mock_health_status = Mock()
+        mock_health_status.is_healthy = True
+        mock_service.get_health_status = AsyncMock(return_value=mock_health_status)
+        mock_service.get_circuit_breaker_status = Mock(return_value="OPEN")
+
+        service_health = {}
+        circuit_breaker_status = {}
+
+        await _process_single_service(mock_service, "test.service", service_health, circuit_breaker_status)
+
+        assert service_health["test.service"] is True
+        assert circuit_breaker_status["test.service"] == "OPEN"
+
+    @pytest.mark.asyncio
+    async def test_process_services_group(self):
+        """Test processing a group of services."""
+        # Create mock services
+        mock_service1 = Mock()
+        mock_health1 = Mock()
+        mock_health1.is_healthy = True
+        mock_service1.get_health_status = AsyncMock(return_value=mock_health1)
+        mock_service1.get_circuit_breaker_status = Mock(return_value="CLOSED")
+
+        mock_service2 = Mock()
+        mock_health2 = Mock()
+        mock_health2.is_healthy = False
+        mock_service2.get_health_status = AsyncMock(return_value=mock_health2)
+        mock_service2.get_circuit_breaker_status = Mock(return_value="OPEN")
+
+        services_group = {
+            "llm": [mock_service1],
+            "memory": [mock_service2]
+        }
+
+        service_health = {}
+        circuit_breaker_status = {}
+
+        await _process_services_group(services_group, "handler", service_health, circuit_breaker_status)
+
+        assert service_health["handler.llm"] is True
+        assert circuit_breaker_status["handler.llm"] == "CLOSED"
+        assert service_health["handler.memory"] is False
+        assert circuit_breaker_status["handler.memory"] == "OPEN"
+
+    @pytest.mark.asyncio
+    async def test_collect_service_health_success(self):
+        """Test collecting service health successfully."""
+        # Create mock service registry
+        mock_registry = Mock()
+
+        # Create mock services
+        mock_service1 = Mock()
+        mock_health1 = Mock()
+        mock_health1.is_healthy = True
+        mock_service1.get_health_status = AsyncMock(return_value=mock_health1)
+        mock_service1.get_circuit_breaker_status = Mock(return_value="CLOSED")
+
+        mock_service2 = Mock()
+        mock_health2 = Mock()
+        mock_health2.is_healthy = False
+        mock_service2.get_health_status = AsyncMock(return_value=mock_health2)
+        mock_service2.get_circuit_breaker_status = Mock(return_value="OPEN")
+
+        # Mock registry info
+        registry_info = {
+            "handlers": {
+                "handler1": {
+                    "llm": [mock_service1]
+                }
+            },
+            "global_services": {
+                "memory": [mock_service2]
+            }
+        }
+        mock_registry.get_provider_info = Mock(return_value=registry_info)
+
+        service_health, circuit_breaker_status = await _collect_service_health(mock_registry)
+
+        assert service_health["handler1.llm"] is True
+        assert circuit_breaker_status["handler1.llm"] == "CLOSED"
+        assert service_health["global.memory"] is False
+        assert circuit_breaker_status["global.memory"] == "OPEN"
+
+    @pytest.mark.asyncio
+    async def test_collect_service_health_no_registry(self):
+        """Test collecting service health with no registry."""
+        service_health, circuit_breaker_status = await _collect_service_health(None)
+
+        assert service_health == {}
+        assert circuit_breaker_status == {}
+
+    @pytest.mark.asyncio
+    async def test_collect_service_health_exception(self):
+        """Test collecting service health when registry raises exception."""
+        mock_registry = Mock()
+        mock_registry.get_provider_info = Mock(side_effect=Exception("Registry error"))
+
+        service_health, circuit_breaker_status = await _collect_service_health(mock_registry)
+
+        assert service_health == {}
+        assert circuit_breaker_status == {}

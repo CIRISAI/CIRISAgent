@@ -5,6 +5,47 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.7] - 2025-09-27
+
+### Fixed
+- **🔧 Time Service Dependency Issues (CRITICAL)**: Resolved critical time_service dependency failures across test suite
+  - Fixed missing time_service parameter in multiple test method signatures causing "time_service is None!" errors
+  - Added time_service=mock_time_service to build_system_snapshot calls implementing "fail fast and loud" architecture
+  - Enhanced time service integration with comprehensive error handling and validation
+- **🔧 Async Mock Setup Issues**: Fixed secrets service integration test async mock patching
+  - Used new_callable=AsyncMock for proper async function mocking eliminating coroutine warnings
+  - Resolved secrets_service.get_secrets_data() async boundary issues in test infrastructure
+- **🔧 Logger Patching Issues**: Fixed incorrect logger patching in user profile extraction tests
+  - Changed from system_snapshot.persistence to system_snapshot_helpers.persistence for correlation history extraction
+  - Fixed comprehensive user profile extraction test patching addressing modular architecture dependencies
+  - Added missing user profile logging to maintain robust testing of System Under Test (SUT)
+- **🔧 Test Expectation Updates**: Updated corruption fix tests to expect FIELD_FAILED_VALIDATION warnings
+  - Removed obsolete corruption fix test file (logic was replaced with field validation warnings)
+  - Fixed comprehensive user profile extraction test patching issues
+- **🔧 Cognitive State Reporting**: Fixed cognitive state context building with proper time service dependency
+  - Resolved time service dependency issues in gather_context.py affecting cognitive state transitions
+  - Enhanced thought processor context gathering with fail-fast time service validation
+
+### Added
+- **📊 Enhanced System Snapshot Functionality**: Added user profile logging for improved observability
+  - New logging: "[CONTEXT BUILD] N User Profiles queried - X bytes added to context"
+  - Added localized time fields to SystemSnapshot schema (London, Chicago, Tokyo timezones)
+  - Enhanced time service integration with fail-fast error handling
+- **🧪 New Test Infrastructure**: Comprehensive test fixtures and validation
+  - tests/test_system_snapshot_localized_times.py: Time localization validation tests
+  - tests/fixtures/system_snapshot_fixtures.py: Reusable test fixtures for system snapshot testing
+  - tests/test_system_snapshot_architecture_fix.py: Architecture validation and dependency injection tests
+
+### Removed
+- **🗑️ Obsolete Test Files**: Removed tests for functionality that no longer exists
+  - Deleted tests/test_system_snapshot_corruption_fix.py (corruption fixing logic was replaced with validation warnings)
+
+### Technical Details
+- **Test Coverage**: All 11 previously failing tests now pass with enhanced error handling
+- **Architecture**: Maintained robust testing of System Under Test while fixing modular dependency issues
+- **Performance**: Enhanced observability with comprehensive logging and fail-fast error detection
+- **Files Changed**: 17 files modified (1,076 insertions, 605 deletions) with 3 new test files created
+
 ## [1.1.6] - 2025-09-27
 
 ### Added

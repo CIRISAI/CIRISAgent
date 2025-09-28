@@ -422,74 +422,133 @@ async def _collect_adapter_channels(runtime: Optional[Any]) -> Dict[str, List[Ch
     return adapter_channels
 
 
+def _validate_runtime_capabilities(runtime: Optional[Any]) -> bool:
+    """Check if runtime has required attributes for tool collection."""
+    if runtime is None:
+        return False
+    if not hasattr(runtime, "bus_manager"):
+        return False
+    if not hasattr(runtime, "service_registry"):
+        return False
+    return True
+
+
+def _get_tool_services(service_registry: Any) -> List[Any]:
+    """Get and validate tool services from registry."""
+    tool_services = service_registry.get_services_by_type("tool")
+
+    # Validate tool_services is iterable but not a string
+    try:
+        # Check if it's truly iterable and not a mock
+        if not hasattr(tool_services, "__iter__") or isinstance(tool_services, str):
+            logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
+            return []
+
+        # Try to convert to list to ensure it's really iterable
+        return list(tool_services)
+    except (TypeError, AttributeError):
+        logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
+        return []
+
+
+async def _call_async_or_sync_method(obj: Any, method_name: str, *args) -> Any:
+    """Call a method that might be async or sync."""
+    import inspect
+
+    if not hasattr(obj, method_name):
+        return None
+
+    method = getattr(obj, method_name)
+
+    # Handle Mock objects that don't have real methods
+    if hasattr(method, '_mock_name'):
+        # This is a mock, call it and check if result is a coroutine
+        result = method(*args)
+        if inspect.iscoroutine(result):
+            return await result
+        return result
+
+    if inspect.iscoroutinefunction(method):
+        return await method(*args)
+    else:
+        return method(*args)
+
+
+async def _get_tool_info_safely(tool_service: Any, tool_name: str, adapter_id: str) -> Optional[ToolInfo]:
+    """Get tool info with error handling and type validation."""
+    if not hasattr(tool_service, "get_tool_info"):
+        return None
+
+    try:
+        tool_info = await _call_async_or_sync_method(tool_service, "get_tool_info", tool_name)
+
+        if tool_info:
+            if not isinstance(tool_info, ToolInfo):
+                raise TypeError(
+                    f"Tool service {adapter_id} returned invalid type for {tool_name}: {type(tool_info)}, expected ToolInfo"
+                )
+            return tool_info
+    except Exception as e:
+        logger.error(f"Failed to get info for tool {tool_name}: {e}")
+        raise
+
+    return None
+
+
+def _extract_adapter_type(adapter_id: str) -> str:
+    """Extract adapter type from adapter_id."""
+    return adapter_id.split("_")[0] if "_" in adapter_id else adapter_id
+
+
+def _validate_tool_infos(tool_infos: List[ToolInfo]) -> None:
+    """Validate all tools are ToolInfo instances - FAIL FAST."""
+    for ti in tool_infos:
+        if not isinstance(ti, ToolInfo):
+            raise TypeError(
+                f"Non-ToolInfo object in tool_infos: {type(ti)}, this violates type safety!"
+            )
+
+
 async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[ToolInfo]]:
     """Collect available tools from all adapters via tool bus."""
     available_tools: Dict[str, List[ToolInfo]] = {}
-    if runtime and hasattr(runtime, "bus_manager") and hasattr(runtime, "service_registry"):
-        try:
-            service_registry = runtime.service_registry
 
-            # Get all tool services from registry
-            tool_services = service_registry.get_services_by_type("tool")
+    if not _validate_runtime_capabilities(runtime):
+        return available_tools
 
-            # Validate tool_services is iterable but not a string
-            if not hasattr(tool_services, "__iter__") or isinstance(tool_services, str):
-                logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
-                tool_services = []
+    try:
+        service_registry = runtime.service_registry
+        tool_services = _get_tool_services(service_registry)
 
-            for tool_service in tool_services:
-                # Get adapter context from the tool service
-                adapter_id = getattr(tool_service, "adapter_id", "unknown")
+        for tool_service in tool_services:
+            adapter_id = getattr(tool_service, "adapter_id", "unknown")
 
-                # Get available tools from this service
-                if hasattr(tool_service, "get_available_tools"):
-                    # Check if it's a coroutine function
-                    import inspect
+            # Get available tools from this service
+            tool_names = await _call_async_or_sync_method(tool_service, "get_available_tools")
+            if not tool_names:
+                continue
 
-                    if inspect.iscoroutinefunction(tool_service.get_available_tools):
-                        tool_names = await tool_service.get_available_tools()
-                    else:
-                        tool_names = tool_service.get_available_tools()
+            # Get detailed info for each tool
+            tool_infos: List[ToolInfo] = []
+            for tool_name in tool_names:
+                tool_info = await _get_tool_info_safely(tool_service, tool_name, adapter_id)
+                if tool_info:
+                    tool_infos.append(tool_info)
 
-                    # Get detailed info for each tool
-                    tool_infos: List[ToolInfo] = []
-                    for tool_name in tool_names:
-                        # Get tool info - must return ToolInfo or None
-                        if hasattr(tool_service, "get_tool_info"):
-                            try:
-                                if inspect.iscoroutinefunction(tool_service.get_tool_info):
-                                    tool_info = await tool_service.get_tool_info(tool_name)
-                                else:
-                                    tool_info = tool_service.get_tool_info(tool_name)
+            if tool_infos:
+                _validate_tool_infos(tool_infos)
 
-                                if tool_info:
-                                    if not isinstance(tool_info, ToolInfo):
-                                        raise TypeError(
-                                            f"Tool service {adapter_id} returned invalid type for {tool_name}: {type(tool_info)}, expected ToolInfo"
-                                        )
-                                    tool_infos.append(tool_info)
-                            except Exception as e:
-                                logger.error(f"Failed to get info for tool {tool_name}: {e}")
-                                raise
+                # Group by adapter type
+                adapter_type = _extract_adapter_type(adapter_id)
+                if adapter_type not in available_tools:
+                    available_tools[adapter_type] = []
+                available_tools[adapter_type].extend(tool_infos)
+                logger.debug(f"Found {len(tool_infos)} tools for {adapter_type} adapter")
 
-                    if tool_infos:
-                        # Verify ALL tools are ToolInfo instances - FAIL FAST
-                        for ti in tool_infos:
-                            if not isinstance(ti, ToolInfo):
-                                raise TypeError(
-                                    f"Non-ToolInfo object in tool_infos: {type(ti)}, this violates type safety!"
-                                )
+    except Exception as e:
+        logger.error(f"Failed to get available tools: {e}")
+        raise  # FAIL FAST AND LOUD
 
-                        # Group by adapter type (extract from adapter_id)
-                        adapter_type = adapter_id.split("_")[0] if "_" in adapter_id else adapter_id
-                        if adapter_type not in available_tools:
-                            available_tools[adapter_type] = []
-                        available_tools[adapter_type].extend(tool_infos)
-                        logger.debug(f"Found {len(tool_infos)} tools for {adapter_type} adapter")
-
-        except Exception as e:
-            logger.error(f"Failed to get available tools: {e}")
-            raise  # FAIL FAST AND LOUD
     return available_tools
 
 

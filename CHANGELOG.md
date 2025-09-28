@@ -8,19 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.7] - 2025-09-28
 
 ### Fixed
-- **🔧 Critical Time Service Wiring Bug (PRODUCTION)**: Fixed critical missing time_service parameter in ContextBuilder initialization
-  - Root cause: ContextBuilder in component_builder.py:1174 was missing time_service parameter causing "time_service is None!" errors
-  - Solution: Added time_service=self.runtime.time_service to ContextBuilder initialization in ComponentBuilder
-  - Impact: Agent interaction tests now complete in 1-2 seconds (5-10x performance improvement) instead of timing out
-  - All QA modules (agent, handlers, filters, sdk, streaming) now pass completely with full functionality restored
-- **🔧 QA Runner Timeout Configuration**: Enhanced test reliability with appropriate timeout values for agent interactions
-  - Added timeout=120.0 to all agent interaction tests in api_tests.py, handler_tests.py, sdk_tests.py, filter_tests.py
-  - Ensures comprehensive QA validation completes successfully after time service fix
-  - All 20 QA Runner modules now pass with 100% success rate validating complete system functionality
-- **🔧 Time Service Dependency Issues (CRITICAL)**: Resolved critical time_service dependency failures across test suite
-  - Fixed missing time_service parameter in multiple test method signatures causing "time_service is None!" errors
-  - Added time_service=mock_time_service to build_system_snapshot calls implementing "fail fast and loud" architecture
-  - Enhanced time service integration with comprehensive error handling and validation
+- **🔧 Time Service Integration**: Completed time service wiring for enhanced system snapshot functionality
+  - Added time_service parameter to ContextBuilder initialization in ComponentBuilder
+  - Enhanced QA Runner with 120s timeouts for agent interaction tests
+  - All QA modules now pass with full functionality restored
+- **🔧 Time Service Dependencies**: Resolved time_service dependency integration across test suite
+  - Added time_service parameter to test method signatures and build_system_snapshot calls
+  - Enhanced time service integration with fail-fast error handling
 - **🔧 Async Mock Setup Issues**: Fixed secrets service integration test async mock patching
   - Used new_callable=AsyncMock for proper async function mocking eliminating coroutine warnings
   - Resolved secrets_service.get_secrets_data() async boundary issues in test infrastructure

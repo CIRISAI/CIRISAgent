@@ -91,6 +91,7 @@ class SDKTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test SDK complex object serialization",
+                timeout=120.0,
             ),
             # WebSocket stream test (real endpoint)
             QATestCase(

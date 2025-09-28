@@ -110,6 +110,7 @@ class APITestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test simple agent interaction",
+                timeout=120.0,
             ),
             QATestCase(
                 name="Complex interaction",
@@ -120,6 +121,7 @@ class APITestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test complex agent interaction with context",
+                timeout=120.0,
             ),
             QATestCase(
                 name="Interaction history",

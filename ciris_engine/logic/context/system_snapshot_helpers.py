@@ -578,7 +578,7 @@ async def _enrich_user_profiles(
         logger.debug(f"[USER EXTRACTION] Processing user {user_id}")
         if user_id in existing_user_ids:
             logger.debug(f"[USER EXTRACTION] User {user_id} already exists, skipping")
-            continue  # Already have profile from GraphQL
+            continue  # Already have profile
 
         try:
             # Query user node with ALL attributes
@@ -586,8 +586,8 @@ async def _enrich_user_profiles(
                 node_id=f"user/{user_id}",
                 scope=GraphScope.LOCAL,
                 type=NodeType.USER,
-                include_edges=True,  # Get edges too
-                depth=2,  # Get connected nodes
+                include_edges=True,
+                depth=2,
             )
             logger.info(f"[DEBUG] Querying memory for user/{user_id}")
             user_results = await memory_service.recall(user_query)
@@ -597,291 +597,210 @@ async def _enrich_user_profiles(
 
             if user_results:
                 user_node = user_results[0]
-                # Extract ALL attributes from the user node - handle both dict and Pydantic model
-                if not user_node.attributes:
-                    attrs = {}
-                elif isinstance(user_node.attributes, dict):
-                    attrs = user_node.attributes
-                elif hasattr(user_node.attributes, "model_dump"):
-                    attrs = user_node.attributes.model_dump()
-                else:
-                    # Log warning but continue with empty dict instead of raising
-                    logger.warning(
-                        f"Unexpected user node attributes type for user {user_id}: {type(user_node.attributes)}, using empty dict"
-                    )
-                    attrs = {}
 
-                # Get edges and connected nodes
-                connected_nodes_info = []
-                try:
-                    # Get edges for this user node
-                    from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+                # Extract node attributes using helper
+                attrs = _extract_node_attributes(user_node, user_id)
 
-                    edges = get_edges_for_node(f"user/{user_id}", GraphScope.LOCAL)
+                # Collect connected nodes using helper
+                connected_nodes_info = await _collect_connected_nodes(memory_service, user_id)
 
-                    for edge in edges:
-                        # Get the connected node
-                        connected_node_id = edge.target if edge.source == f"user/{user_id}" else edge.source
-                        connected_query = MemoryQuery(
-                            node_id=connected_node_id, scope=GraphScope.LOCAL, include_edges=False, depth=1
-                        )
-                        connected_results = await memory_service.recall(connected_query)
-                        if connected_results:
-                            connected_node = connected_results[0]
-                            # Handle different attribute types
-                            if not connected_node.attributes:
-                                connected_attrs = {}
-                            elif hasattr(connected_node.attributes, "model_dump"):
-                                # Pydantic model
-                                connected_attrs = connected_node.attributes.model_dump()
-                            elif isinstance(connected_node.attributes, dict):
-                                # Already a dict (e.g., from tsdb_summary nodes)
-                                connected_attrs = connected_node.attributes
-                            else:
-                                # Unknown type - log and skip this node
-                                logger.debug(
-                                    f"Unexpected attributes type for {connected_node_id}: {type(connected_node.attributes)}"
-                                )
-                                continue
-                            connected_nodes_info.append(
-                                {
-                                    "node_id": connected_node.id,
-                                    "node_type": connected_node.type,
-                                    "relationship": edge.relationship,
-                                    "attributes": connected_attrs,
-                                }
-                            )
-                except Exception as e:
-                    logger.warning(f"Failed to get connected nodes for user {user_id}: {e}")
+                # Parse datetime fields safely (no more LLM corruption hack!)
+                last_interaction = _parse_datetime_safely(attrs.get("last_seen"), "last_seen", user_id)
+                created_at = _parse_datetime_safely(
+                    attrs.get("first_seen") or attrs.get("created_at"), "created_at", user_id
+                )
 
-                # Create UserProfile with all available data
-                # Use json.dumps with default handler for datetime objects
-                notes_content = f"All attributes: {json.dumps(attrs, default=_json_serial_for_users)}"
-                if connected_nodes_info:
-                    notes_content += (
-                        f"\nConnected nodes: {json.dumps(connected_nodes_info, default=_json_serial_for_users)}"
-                    )
-
-                # Validate and parse last_seen - FAIL FAST AND LOUD on bad data
-                last_seen_raw = attrs.get("last_seen")
-                last_interaction = None
-                if last_seen_raw is not None:
-                    if isinstance(last_seen_raw, datetime):
-                        last_interaction = last_seen_raw
-                    elif isinstance(last_seen_raw, str):
-                        # Check for template placeholders or invalid strings
-                        if "[insert" in last_seen_raw.lower() or "placeholder" in last_seen_raw.lower():
-                            logger.error(
-                                f"INVALID DATA: User node {user_id} has template placeholder in last_seen: '{last_seen_raw}'. "
-                                f"This indicates LLM corruption of managed attributes. Setting to current time and fixing in graph."
-                            )
-                            # Set to current time instead of None
-                            last_interaction = datetime.now(timezone.utc)
-
-                            # Fix the corrupted node in the graph
-                            try:
-                                # Update the node attributes to fix the corruption
-                                attrs["last_seen"] = last_interaction.isoformat()
-
-                                # Create an update for the node
-                                update_node = GraphNode(
-                                    id=f"user/{user_id}",
-                                    type=NodeType.USER,
-                                    attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
-                                    scope=GraphScope.LOCAL,
-                                )
-
-                                # Use memorize to update the node
-                                await memory_service.memorize(update_node)
-                                logger.info(f"Successfully fixed corrupted last_seen for user {user_id}")
-                            except Exception as e:
-                                logger.error(f"Failed to fix corrupted node for user {user_id}: {e}")
-                                # Continue with the fixed value even if update fails
-                        else:
-                            try:
-                                # Try to parse as ISO datetime
-                                last_interaction = datetime.fromisoformat(last_seen_raw.replace("Z", "+00:00"))
-                            except (ValueError, AttributeError) as e:
-                                logger.error(
-                                    f"INVALID DATA: User node {user_id} has unparseable last_seen: '{last_seen_raw}'. "
-                                    f"Error: {e}. Setting to current time and fixing in graph."
-                                )
-                                # Set to current time and fix the node
-                                last_interaction = datetime.now(timezone.utc)
-                                try:
-                                    attrs["last_seen"] = last_interaction.isoformat()
-
-                                    update_node = GraphNode(
-                                        id=f"user/{user_id}",
-                                        type=NodeType.USER,
-                                        attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
-                                        scope=GraphScope.LOCAL,
-                                    )
-
-                                    await memory_service.memorize(update_node)
-                                    logger.info(f"Successfully fixed unparseable last_seen for user {user_id}")
-                                except Exception as fix_e:
-                                    logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
-                    else:
-                        logger.error(
-                            f"INVALID DATA: User node {user_id} has non-string/non-datetime last_seen: {type(last_seen_raw)}. "
-                            f"Setting to current time and fixing in graph."
-                        )
-                        # Set to current time and fix the node
-                        last_interaction = datetime.now(timezone.utc)
-                        try:
-                            attrs["last_seen"] = last_interaction.isoformat()
-
-                            update_node = GraphNode(
-                                id=f"user/{user_id}",
-                                type=NodeType.USER,
-                                attributes=attrs,  # Pass dict directly, not GraphNodeAttributes
-                                scope=GraphScope.LOCAL,
-                            )
-
-                            await memory_service.memorize(update_node)
-                            logger.info(f"Successfully fixed invalid last_seen type for user {user_id}")
-                        except Exception as fix_e:
-                            logger.error(f"Failed to fix corrupted node for user {user_id}: {fix_e}")
-
-                # Validate and parse created_at/first_seen - use first_seen if available, else created_at, else now
-                created_at_raw = attrs.get("first_seen") or attrs.get("created_at")
-                created_at = None
-                if created_at_raw is not None:
-                    if isinstance(created_at_raw, datetime):
-                        created_at = created_at_raw
-                    elif isinstance(created_at_raw, str):
-                        # Check for template placeholders
-                        if "[insert" in created_at_raw.lower() or "placeholder" in created_at_raw.lower():
-                            logger.error(
-                                f"INVALID DATA: User node {user_id} has template placeholder in created_at/first_seen: '{created_at_raw}'. "
-                                f"Using current time as fallback."
-                            )
-                            created_at = datetime.now()
-                        else:
-                            try:
-                                # Try to parse as ISO datetime
-                                created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
-                            except (ValueError, AttributeError) as e:
-                                logger.error(
-                                    f"INVALID DATA: User node {user_id} has unparseable created_at/first_seen: '{created_at_raw}'. "
-                                    f"Error: {e}. Using current time as fallback."
-                                )
-                                created_at = datetime.now()
-                    else:
-                        logger.error(
-                            f"INVALID DATA: User node {user_id} has non-string/non-datetime created_at/first_seen: {type(created_at_raw)}. "
-                            f"Using current time as fallback."
-                        )
-                        created_at = datetime.now()
-                else:
-                    # No created_at/first_seen in node, use current time
-                    created_at = datetime.now()
-
-                # Extract consent information from node attributes (v1.4.6)
-                consent_stream = attrs.get("consent_stream", "TEMPORARY")
-                consent_expires_at = None
-                if "consent_expires_at" in attrs:
-                    try:
-                        consent_expires_at = datetime.fromisoformat(attrs["consent_expires_at"])
-                    except (ValueError, TypeError):
-                        pass
-                partnership_requested_at = None
-                if "partnership_requested_at" in attrs:
-                    try:
-                        partnership_requested_at = datetime.fromisoformat(attrs["partnership_requested_at"])
-                    except (ValueError, TypeError):
-                        pass
-
-                user_profile = UserProfile(
-                    user_id=user_id,
-                    display_name=attrs.get("username", attrs.get("display_name", f"User_{user_id}")),
-                    created_at=created_at,  # Now properly validated from node data
-                    preferred_language=attrs.get("language", "en"),
-                    timezone=attrs.get("timezone", "UTC"),
-                    communication_style=attrs.get("communication_style", "formal"),
-                    trust_level=attrs.get("trust_level", 0.5),
-                    last_interaction=last_interaction,  # Now properly validated
-                    is_wa=attrs.get("is_wa", False),
-                    permissions=attrs.get("permissions", []),
-                    restrictions=attrs.get("restrictions", []),
-                    # Consent relationship state (v1.4.6)
-                    consent_stream=consent_stream,
-                    consent_expires_at=consent_expires_at,
-                    partnership_requested_at=partnership_requested_at,
-                    partnership_approved=attrs.get("partnership_approved", False),
-                    # Store ALL other attributes and connected nodes in notes for access
-                    notes=notes_content,
+                # Create user profile using helper
+                user_profile = _create_user_profile_from_node(
+                    user_id, attrs, connected_nodes_info, last_interaction, created_at
                 )
                 existing_profiles.append(user_profile)
                 logger.info(
                     f"Added user profile for {user_id} with attributes: {list(attrs.keys())} and {len(connected_nodes_info)} connected nodes"
                 )
 
-            # Get messages from other channels
-            if channel_id:
-                # Query service correlations for user's recent messages
-                with persistence.get_db_connection() as conn:
-                    cursor = conn.cursor()
-                    # Look for handler actions from this user in other channels
-                    cursor.execute(
-                        """
-                        SELECT
-                            c.correlation_id,
-                            c.handler_name,
-                            c.request_data,
-                            c.created_at,
-                            c.tags
-                        FROM service_correlations c
-                        WHERE
-                            c.tags LIKE ?
-                            AND c.tags NOT LIKE ?
-                            AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
-                        ORDER BY c.created_at DESC
-                        LIMIT 3
-                    """,
-                        (f'%"user_id":"{user_id}"%', f'%"channel_id":"{channel_id}"%'),
-                    )
-
-                    recent_messages = []
-                    for row in cursor.fetchall():
-                        try:
-                            tags = json.loads(row["tags"]) if row["tags"] else {}
-                            msg_channel = tags.get("channel_id", "unknown")
-                            msg_content = "Message in " + msg_channel
-
-                            # Try to extract content from request_data
-                            if row["request_data"]:
-                                req_data = json.loads(row["request_data"])
-                                if isinstance(req_data, dict):
-                                    msg_content = req_data.get("content", req_data.get("message", msg_content))
-
-                            recent_messages.append(
-                                {
-                                    "channel": msg_channel,
-                                    "content": msg_content,
-                                    "timestamp": (
-                                        row["created_at"].isoformat()
-                                        if hasattr(row["created_at"], "isoformat")
-                                        else str(row["created_at"])
-                                    ),
-                                }
-                            )
-                        except (json.JSONDecodeError, TypeError, AttributeError, KeyError):
-                            # JSONDecodeError: malformed JSON in tags or request_data
-                            # TypeError: row['tags'] or row['request_data'] is not a string
-                            # AttributeError: row object missing expected attributes
-                            # KeyError: row dictionary missing expected keys
-                            pass
-
-                    if recent_messages and existing_profiles:
-                        # Find the user profile we just added
-                        for profile in existing_profiles:
-                            if profile.user_id == user_id:
-                                profile.notes += f"\nRecent messages from other channels: {json.dumps(recent_messages, default=_json_serial_for_users)}"
-                                break
+                # Collect cross-channel messages and add to profile notes
+                if channel_id:
+                    recent_messages = await _collect_cross_channel_messages(user_id, channel_id)
+                    if recent_messages:
+                        user_profile.notes += f"\nRecent messages from other channels: {json.dumps(recent_messages, default=_json_serial_for_users)}"
 
         except Exception as e:
             logger.warning(f"Failed to enrich user {user_id}: {e}")
 
     return existing_profiles
+
+
+# =============================================================================
+# USER PROFILE ENRICHMENT HELPERS (Reusable for other adapters)
+# =============================================================================
+
+
+def _extract_node_attributes(node: GraphNode, user_id: str) -> Dict[str, Any]:
+    """Extract attributes from a graph node, handling both dict and Pydantic models."""
+    if not node.attributes:
+        return {}
+    elif isinstance(node.attributes, dict):
+        return node.attributes
+    elif hasattr(node.attributes, "model_dump"):
+        return node.attributes.model_dump()
+    else:
+        logger.warning(f"Unexpected node attributes type for {user_id}: {type(node.attributes)}, using empty dict")
+        return {}
+
+
+def _parse_datetime_safely(raw_value: Any, field_name: str, user_id: str) -> Optional[datetime]:
+    """Parse datetime value safely, returning None for any invalid data."""
+    if raw_value is None:
+        return None
+
+    if isinstance(raw_value, datetime):
+        return raw_value
+    elif isinstance(raw_value, str):
+        try:
+            # Try to parse as ISO datetime
+            return datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            logger.warning(
+                f"FIELD_FAILED_VALIDATION: User {user_id} has invalid {field_name}: '{raw_value}', using None"
+            )
+            return None
+    else:
+        logger.warning(
+            f"FIELD_FAILED_VALIDATION: User {user_id} has non-datetime {field_name}: {type(raw_value)}, using None"
+        )
+        return None
+
+
+async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user_id: str) -> List[Dict[str, Any]]:
+    """Collect connected nodes for a user node from the memory graph."""
+    connected_nodes_info = []
+    try:
+        # Get edges for this user node
+        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+        edges = get_edges_for_node(f"user/{user_id}", GraphScope.LOCAL)
+
+        for edge in edges:
+            # Get the connected node
+            connected_node_id = edge.target if edge.source == f"user/{user_id}" else edge.source
+            connected_query = MemoryQuery(
+                node_id=connected_node_id, scope=GraphScope.LOCAL, include_edges=False, depth=1
+            )
+            connected_results = await memory_service.recall(connected_query)
+            if connected_results:
+                connected_node = connected_results[0]
+                # Extract attributes using our helper
+                connected_attrs = _extract_node_attributes(connected_node, connected_node_id)
+                connected_nodes_info.append(
+                    {
+                        "node_id": connected_node.id,
+                        "node_type": connected_node.type,
+                        "relationship": edge.relationship,
+                        "attributes": connected_attrs,
+                    }
+                )
+    except Exception as e:
+        logger.warning(f"Failed to get connected nodes for user {user_id}: {e}")
+
+    return connected_nodes_info
+
+
+def _create_user_profile_from_node(
+    user_id: str,
+    attrs: Dict[str, Any],
+    connected_nodes_info: List[Dict[str, Any]],
+    last_interaction: Optional[datetime],
+    created_at: Optional[datetime],
+) -> UserProfile:
+    """Create a UserProfile from node attributes and connected nodes."""
+    # Use json.dumps with default handler for datetime objects
+    notes_content = f"All attributes: {json.dumps(attrs, default=_json_serial_for_users)}"
+    if connected_nodes_info:
+        notes_content += f"\nConnected nodes: {json.dumps(connected_nodes_info, default=_json_serial_for_users)}"
+
+    # Extract consent information from node attributes
+    consent_expires_at = _parse_datetime_safely(attrs.get("consent_expires_at"), "consent_expires_at", user_id)
+    partnership_requested_at = _parse_datetime_safely(
+        attrs.get("partnership_requested_at"), "partnership_requested_at", user_id
+    )
+
+    return UserProfile(
+        user_id=user_id,
+        display_name=attrs.get("username", attrs.get("display_name", f"User_{user_id}")),
+        created_at=created_at or datetime.now(),  # Use current time if no valid created_at
+        preferred_language=attrs.get("language", "en"),
+        timezone=attrs.get("timezone", "UTC"),
+        communication_style=attrs.get("communication_style", "formal"),
+        trust_level=attrs.get("trust_level", 0.5),
+        last_interaction=last_interaction,
+        is_wa=attrs.get("is_wa", False),
+        permissions=attrs.get("permissions", []),
+        restrictions=attrs.get("restrictions", []),
+        # Consent relationship state
+        consent_stream=attrs.get("consent_stream", "TEMPORARY"),
+        consent_expires_at=consent_expires_at,
+        partnership_requested_at=partnership_requested_at,
+        partnership_approved=attrs.get("partnership_approved", False),
+        # Store ALL other attributes and connected nodes in notes for access
+        notes=notes_content,
+    )
+
+
+async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[Dict[str, Any]]:
+    """Collect recent messages from this user in other channels."""
+    recent_messages = []
+    try:
+        # Query service correlations for user's recent messages
+        with persistence.get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Look for handler actions from this user in other channels
+            cursor.execute(
+                """
+                SELECT
+                    c.correlation_id,
+                    c.handler_name,
+                    c.request_data,
+                    c.created_at,
+                    c.tags
+                FROM service_correlations c
+                WHERE
+                    c.tags LIKE ?
+                    AND c.tags NOT LIKE ?
+                    AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
+                ORDER BY c.created_at DESC
+                LIMIT 3
+            """,
+                (f'%"user_id":"{user_id}"%', f'%"channel_id":"{channel_id}"%'),
+            )
+
+            for row in cursor.fetchall():
+                try:
+                    tags = json.loads(row["tags"]) if row["tags"] else {}
+                    msg_channel = tags.get("channel_id", "unknown")
+                    msg_content = "Message in " + msg_channel
+
+                    # Try to extract content from request_data
+                    if row["request_data"]:
+                        req_data = json.loads(row["request_data"])
+                        if isinstance(req_data, dict):
+                            msg_content = req_data.get("content", req_data.get("message", msg_content))
+
+                    recent_messages.append(
+                        {
+                            "channel": msg_channel,
+                            "content": msg_content,
+                            "timestamp": (
+                                row["created_at"].isoformat()
+                                if hasattr(row["created_at"], "isoformat")
+                                else str(row["created_at"])
+                            ),
+                        }
+                    )
+                except (json.JSONDecodeError, TypeError, AttributeError, KeyError):
+                    # Skip malformed entries
+                    pass
+    except Exception as e:
+        logger.warning(f"Failed to collect cross-channel messages for user {user_id}: {e}")
+
+    return recent_messages

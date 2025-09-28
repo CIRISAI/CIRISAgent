@@ -1121,8 +1121,7 @@ class TestUserManagement:
             result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
 
         assert len(result) == 1
-        assert "INVALID DATA: User node corrupted_user has template placeholder" in caplog.text
-        assert "Successfully fixed corrupted last_seen for user corrupted_user" in caplog.text
+        assert "FIELD_FAILED_VALIDATION: User corrupted_user has invalid last_seen" in caplog.text
 
     @pytest.mark.asyncio
     async def test_enrich_user_profiles_with_no_user_node(self, caplog):

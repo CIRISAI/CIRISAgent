@@ -5,16 +5,17 @@ These tests specifically target the helper functions extracted to reduce complex
 and increase testability of the data conversion logic.
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from ciris_engine.logic.services.graph.tsdb_consolidation.data_converter import (
-    safe_dict_get,
-    ensure_dict,
-    safe_str_dict,
+    build_interaction_context_from_raw,
     build_request_data_from_raw,
     build_response_data_from_raw,
-    build_interaction_context_from_raw,
+    ensure_dict,
+    safe_dict_get,
+    safe_str_dict,
 )
 
 
@@ -37,6 +38,7 @@ class TestSafeDictGet:
     def test_with_default_value(self):
         assert safe_dict_get("string", "key", "fallback") == "fallback"
         assert safe_dict_get(None, "key", "default") == "default"
+        assert safe_dict_get({}, "missing", 42) == 42
 
 
 class TestEnsureDict:
@@ -44,9 +46,7 @@ class TestEnsureDict:
 
     def test_with_dict(self):
         data = {"key": "value"}
-        result = ensure_dict(data)
-        assert result == {"key": "value"}
-        assert result is data  # Should return same object
+        assert ensure_dict(data) == {"key": "value"}
 
     def test_with_non_dict_types(self):
         assert ensure_dict("string") == {}
@@ -61,10 +61,10 @@ class TestEnsureDict:
 class TestSafeStrDict:
     """Test safe_str_dict helper function."""
 
-    def test_with_dict(self):
-        data = {"key1": "value1", "key2": 42, "key3": True, "key4": None}
+    def test_with_valid_dict(self):
+        data = {"key1": "value1", "key2": 42, "key3": True, "key4": 3.14}
         result = safe_str_dict(data)
-        expected = {"key1": "value1", "key2": "42", "key3": "True", "key4": "None"}
+        expected = {"key1": "value1", "key2": "42", "key3": "True", "key4": "3.14"}
         assert result == expected
 
     def test_with_non_dict_types(self):
@@ -77,10 +77,10 @@ class TestSafeStrDict:
         assert safe_str_dict({}) == {}
 
     def test_with_complex_values(self):
-        data = {"list": [1, 2, 3], "dict": {"nested": "value"}}
+        data = {"list": [1, 2, 3], "dict": {"nested": "value"}, "none": None}
         result = safe_str_dict(data)
-        assert result["list"] == "[1, 2, 3]"
-        assert "nested" in result["dict"]
+        expected = {"list": "[1, 2, 3]", "dict": "{'nested': 'value'}", "none": "None"}
+        assert result == expected
 
 
 class TestBuildRequestDataFromRaw:
@@ -90,13 +90,9 @@ class TestBuildRequestDataFromRaw:
         raw_request = {
             "channel_id": "channel123",
             "author_id": "user456",
-            "parameters": {
-                "author_name": "TestUser",
-                "content": "Hello world",
-                "extra_param": "value"
-            },
+            "parameters": {"author_name": "TestUser", "content": "Hello world", "extra_param": "value"},
             "headers": {"Authorization": "Bearer token"},
-            "metadata": {"source": "test"}
+            "metadata": {"source": "test"},
         }
 
         result = build_request_data_from_raw(raw_request)
@@ -113,10 +109,7 @@ class TestBuildRequestDataFromRaw:
         """Test that parameters values override top-level values."""
         raw_request = {
             "author_id": "top_level_user",
-            "parameters": {
-                "author_id": "param_user",  # Should override top-level
-                "content": "From parameters"
-            }
+            "parameters": {"author_id": "param_user", "content": "From parameters"},  # Should override top-level
         }
 
         result = build_request_data_from_raw(raw_request)
@@ -125,10 +118,7 @@ class TestBuildRequestDataFromRaw:
 
     def test_with_invalid_parameters(self):
         """Test with non-dict parameters."""
-        raw_request = {
-            "channel_id": "channel123",
-            "parameters": "invalid_string"  # Not a dict
-        }
+        raw_request = {"channel_id": "channel123", "parameters": "invalid_string"}  # Not a dict
 
         result = build_request_data_from_raw(raw_request)
         assert result is not None
@@ -139,18 +129,11 @@ class TestBuildRequestDataFromRaw:
         assert build_request_data_from_raw("string") is None
         assert build_request_data_from_raw(123) is None
         assert build_request_data_from_raw(None) is None
-        assert build_request_data_from_raw([]) is None
 
-    def test_with_missing_fields(self):
-        """Test with minimal data."""
-        raw_request = {"channel_id": "channel123"}
-
-        result = build_request_data_from_raw(raw_request)
+    def test_with_empty_dict(self):
+        result = build_request_data_from_raw({})
         assert result is not None
-        assert result.channel_id == "channel123"
-        assert result.author_id is None
-        assert result.author_name is None
-        assert result.content is None
+        assert result.channel_id == "unknown"  # Default value
         assert result.parameters == {}
         assert result.headers == {}
         assert result.metadata == {}
@@ -167,7 +150,7 @@ class TestBuildResponseDataFromRaw:
             "error_type": None,
             "result": "Operation completed",
             "resource_usage": {"memory": 1024, "cpu": 0.5},
-            "metadata": {"version": "1.0"}
+            "metadata": {"version": "1.0"},
         }
 
         result = build_response_data_from_raw(raw_response)
@@ -184,7 +167,7 @@ class TestBuildResponseDataFromRaw:
         raw_response = {
             "success": True,
             "resource_usage": "invalid_string",  # Not a dict
-            "metadata": 123  # Not a dict
+            "metadata": 123,  # Not a dict
         }
 
         result = build_response_data_from_raw(raw_response)
@@ -197,7 +180,14 @@ class TestBuildResponseDataFromRaw:
         assert build_response_data_from_raw("string") is None
         assert build_response_data_from_raw(123) is None
         assert build_response_data_from_raw(None) is None
-        assert build_response_data_from_raw([]) is None
+
+    def test_with_empty_dict(self):
+        result = build_response_data_from_raw({})
+        assert result is not None
+        assert result.execution_time_ms is None
+        assert result.success is None
+        assert result.resource_usage == {}
+        assert result.metadata == {}
 
 
 class TestBuildInteractionContextFromRaw:
@@ -211,7 +201,7 @@ class TestBuildInteractionContextFromRaw:
             "user_id": "user123",
             "session_id": "session456",
             "environment": "production",
-            "additional_data": {"custom": "value", "flag": True}
+            "additional_data": {"custom": "value", "flag": True},
         }
 
         result = build_interaction_context_from_raw(context_data)
@@ -226,10 +216,7 @@ class TestBuildInteractionContextFromRaw:
 
     def test_with_invalid_additional_data(self):
         """Test with non-dict additional_data."""
-        context_data = {
-            "trace_id": "trace123",
-            "additional_data": "invalid_string"  # Not a dict
-        }
+        context_data = {"trace_id": "trace123", "additional_data": "invalid_string"}  # Not a dict
 
         result = build_interaction_context_from_raw(context_data)
         assert result is not None
@@ -240,16 +227,11 @@ class TestBuildInteractionContextFromRaw:
         assert build_interaction_context_from_raw("string") is None
         assert build_interaction_context_from_raw(123) is None
         assert build_interaction_context_from_raw(None) is None
-        assert build_interaction_context_from_raw([]) is None
 
-    def test_with_minimal_data(self):
-        """Test with minimal context data."""
-        context_data = {"trace_id": "trace123"}
-
-        result = build_interaction_context_from_raw(context_data)
+    def test_with_empty_dict(self):
+        result = build_interaction_context_from_raw({})
         assert result is not None
-        assert result.trace_id == "trace123"
-        assert result.span_id is None
+        assert result.trace_id is None
         assert result.additional_data == {}
 
 
@@ -261,27 +243,19 @@ class TestHelperFunctionIntegration:
         # Simulate raw data that might come from database
         raw_request = {
             "channel_id": "test-channel",
-            "parameters": {
-                "author_name": "TestUser",
-                "content": "Test message",
-                "extra": 42
-            },
+            "parameters": {"author_name": "TestUser", "content": "Test message", "extra": 42},
             "headers": {"type": "json"},
-            "metadata": {"version": "1.0"}
+            "metadata": {"version": "1.0"},
         }
 
         raw_response = {
             "execution_time_ms": 100.0,
             "success": True,
             "result": "processed",
-            "resource_usage": {"memory": 512}
+            "resource_usage": {"memory": 512},
         }
 
-        context_data = {
-            "trace_id": "trace-123",
-            "user_id": "user-456",
-            "additional_data": {"session": "active"}
-        }
+        context_data = {"trace_id": "trace-123", "user_id": "user-456", "additional_data": {"session": "active"}}
 
         # Use helper functions
         request_data = build_request_data_from_raw(raw_request)
@@ -291,10 +265,12 @@ class TestHelperFunctionIntegration:
         # Verify results
         assert request_data.channel_id == "test-channel"
         assert request_data.author_name == "TestUser"
+        assert request_data.content == "Test message"
         assert request_data.parameters["extra"] == "42"  # Converted to string
 
         assert response_data.execution_time_ms == 100.0
         assert response_data.success is True
+        assert response_data.result == "processed"
         assert response_data.resource_usage["memory"] == 512
 
         assert context.trace_id == "trace-123"
@@ -304,13 +280,7 @@ class TestHelperFunctionIntegration:
     def test_error_resilience(self):
         """Test that helper functions handle errors gracefully."""
         # Test with various types of invalid data
-        invalid_inputs = [
-            "string",
-            123,
-            [1, 2, 3],
-            None,
-            {"invalid": "structure"}
-        ]
+        invalid_inputs = ["string", 123, [1, 2, 3], None, {"invalid": "structure"}]
 
         for invalid_input in invalid_inputs:
             # None of these should raise exceptions

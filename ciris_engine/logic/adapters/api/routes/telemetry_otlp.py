@@ -16,6 +16,291 @@ from typing import Any, Dict, List, Optional, Union
 from ciris_engine.constants import CIRIS_VERSION
 
 
+def safe_telemetry_get(data: Dict[str, Any], key: str, default=None):
+    """Safely extract value from telemetry data with type checking."""
+    return data.get(key, default) if isinstance(data, dict) else default
+
+
+def create_resource_attributes(
+    service_name: str, service_version: str, telemetry_data: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Create standard resource attributes for OTLP format."""
+    attributes = [
+        {"key": "service.name", "value": {"stringValue": service_name}},
+        {"key": "service.version", "value": {"stringValue": service_version}},
+        {"key": "service.namespace", "value": {"stringValue": "ciris"}},
+        {"key": "telemetry.sdk.name", "value": {"stringValue": "ciris-telemetry"}},
+        {"key": "telemetry.sdk.version", "value": {"stringValue": CIRIS_VERSION}},
+        {"key": "telemetry.sdk.language", "value": {"stringValue": "python"}},
+    ]
+
+    # Add deployment environment if available
+    environment = safe_telemetry_get(telemetry_data, "environment")
+    if environment:
+        attributes.append({"key": "deployment.environment", "value": {"stringValue": environment}})
+
+    return attributes
+
+
+def add_system_metrics(telemetry_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
+    """Extract and create system-level metrics from telemetry data."""
+    metrics = []
+
+    if not isinstance(telemetry_data, dict):
+        return metrics
+
+    # System health status
+    if "system_healthy" in telemetry_data:
+        metrics.append(
+            _create_gauge_metric(
+                "system.healthy",
+                "System health status",
+                "1",
+                1.0 if telemetry_data["system_healthy"] else 0.0,
+                current_time_ns,
+            )
+        )
+
+    # Services online count
+    services_online = safe_telemetry_get(telemetry_data, "services_online")
+    if services_online is not None:
+        metrics.append(
+            _create_gauge_metric(
+                "services.online",
+                "Number of services online",
+                "1",
+                float(services_online),
+                current_time_ns,
+            )
+        )
+
+    # Total services count
+    services_total = safe_telemetry_get(telemetry_data, "services_total")
+    if services_total is not None:
+        metrics.append(
+            _create_gauge_metric(
+                "services.total",
+                "Total number of services",
+                "1",
+                float(services_total),
+                current_time_ns,
+            )
+        )
+
+    # Error rate
+    error_rate = safe_telemetry_get(telemetry_data, "overall_error_rate")
+    if error_rate is not None:
+        metrics.append(
+            _create_gauge_metric(
+                "system.error_rate",
+                "Overall system error rate",
+                "1",
+                error_rate,
+                current_time_ns,
+            )
+        )
+
+    # Uptime
+    uptime_seconds = safe_telemetry_get(telemetry_data, "overall_uptime_seconds")
+    if uptime_seconds is not None:
+        metrics.append(
+            _create_counter_metric(
+                "system.uptime",
+                "System uptime in seconds",
+                "s",
+                uptime_seconds,
+                current_time_ns,
+            )
+        )
+
+    # Total errors
+    total_errors = safe_telemetry_get(telemetry_data, "total_errors")
+    if total_errors is not None:
+        metrics.append(
+            _create_counter_metric(
+                "errors.total",
+                "Total number of errors",
+                "1",
+                float(total_errors),
+                current_time_ns,
+            )
+        )
+
+    # Total requests
+    total_requests = safe_telemetry_get(telemetry_data, "total_requests")
+    if total_requests is not None:
+        metrics.append(
+            _create_counter_metric(
+                "requests.total",
+                "Total number of requests",
+                "1",
+                float(total_requests),
+                current_time_ns,
+            )
+        )
+
+    return metrics
+
+
+def add_service_metrics(services_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
+    """Extract and create service-level metrics from services data."""
+    metrics = []
+
+    if not isinstance(services_data, dict):
+        return metrics
+
+    for service_name, service_data in services_data.items():
+        service_attrs = [{"key": "service", "value": {"stringValue": service_name}}]
+
+        # Health status
+        if hasattr(service_data, "healthy"):
+            metrics.append(
+                _create_gauge_metric(
+                    "service.healthy",
+                    "Service health status",
+                    "1",
+                    1.0 if service_data.healthy else 0.0,
+                    current_time_ns,
+                    attributes=service_attrs,
+                )
+            )
+
+        # Uptime
+        if hasattr(service_data, "uptime_seconds") and service_data.uptime_seconds:
+            metrics.append(
+                _create_counter_metric(
+                    "service.uptime",
+                    "Service uptime in seconds",
+                    "s",
+                    service_data.uptime_seconds,
+                    current_time_ns,
+                    attributes=service_attrs,
+                )
+            )
+
+        # Error count
+        if hasattr(service_data, "error_count") and service_data.error_count is not None:
+            try:
+                metrics.append(
+                    _create_counter_metric(
+                        "service.errors",
+                        "Service error count",
+                        "1",
+                        float(service_data.error_count),
+                        current_time_ns,
+                        attributes=service_attrs,
+                    )
+                )
+            except (TypeError, ValueError):
+                pass  # Skip invalid error_count values
+
+        # Requests handled
+        if hasattr(service_data, "requests_handled") and service_data.requests_handled is not None:
+            try:
+                metrics.append(
+                    _create_counter_metric(
+                        "service.requests",
+                        "Service requests handled",
+                        "1",
+                        float(service_data.requests_handled or 0),
+                        current_time_ns,
+                        attributes=service_attrs,
+                    )
+                )
+            except (TypeError, ValueError):
+                pass  # Skip invalid requests_handled values
+
+        # Error rate
+        if hasattr(service_data, "error_rate") and service_data.error_rate is not None:
+            metrics.append(
+                _create_gauge_metric(
+                    "service.error_rate",
+                    "Service error rate",
+                    "1",
+                    service_data.error_rate,
+                    current_time_ns,
+                    attributes=service_attrs,
+                )
+            )
+
+        # Memory usage
+        if hasattr(service_data, "memory_mb") and service_data.memory_mb:
+            metrics.append(
+                _create_gauge_metric(
+                    "service.memory.usage",
+                    "Service memory usage",
+                    "MB",
+                    service_data.memory_mb,
+                    current_time_ns,
+                    attributes=service_attrs,
+                )
+            )
+
+    return metrics
+
+
+def add_covenant_metrics(covenant_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
+    """Extract and create covenant-related metrics from covenant data."""
+    metrics = []
+
+    if not isinstance(covenant_data, dict):
+        return metrics
+
+    # Wise Authority deferrals
+    deferrals = safe_telemetry_get(covenant_data, "wise_authority_deferrals")
+    if deferrals is not None:
+        metrics.append(
+            _create_counter_metric(
+                "covenant.wise_authority.deferrals",
+                "Number of decisions deferred to Wise Authority",
+                "1",
+                float(deferrals),
+                current_time_ns,
+            )
+        )
+
+    # Filter matches
+    filter_matches = safe_telemetry_get(covenant_data, "filter_matches")
+    if filter_matches is not None:
+        metrics.append(
+            _create_counter_metric(
+                "covenant.filter.matches",
+                "Number of safety filter matches",
+                "1",
+                float(filter_matches),
+                current_time_ns,
+            )
+        )
+
+    # Thoughts processed
+    thoughts_processed = safe_telemetry_get(covenant_data, "thoughts_processed")
+    if thoughts_processed is not None:
+        metrics.append(
+            _create_counter_metric(
+                "covenant.thoughts.processed",
+                "Number of thoughts processed",
+                "1",
+                float(thoughts_processed),
+                current_time_ns,
+            )
+        )
+
+    # Self-observation insights
+    insights = safe_telemetry_get(covenant_data, "self_observation_insights")
+    if insights is not None:
+        metrics.append(
+            _create_counter_metric(
+                "covenant.insights.generated",
+                "Number of self-observation insights generated",
+                "1",
+                float(insights),
+                current_time_ns,
+            )
+        )
+
+    return metrics
+
+
 def convert_to_otlp_json(
     telemetry_data: Dict[str, Any],
     service_name: str = "ciris",
@@ -39,223 +324,24 @@ def convert_to_otlp_json(
     # Get current time in nanoseconds
     current_time_ns = int(time.time() * 1e9)
 
-    # Build resource attributes
-    resource_attributes = [
-        {"key": "service.name", "value": {"stringValue": service_name}},
-        {"key": "service.version", "value": {"stringValue": service_version}},
-        {"key": "service.namespace", "value": {"stringValue": "ciris"}},
-        {"key": "telemetry.sdk.name", "value": {"stringValue": "ciris-telemetry"}},
-        {"key": "telemetry.sdk.version", "value": {"stringValue": CIRIS_VERSION}},
-        {"key": "telemetry.sdk.language", "value": {"stringValue": "python"}},
-    ]
+    # Build resource attributes using helper
+    resource_attributes = create_resource_attributes(service_name, service_version, telemetry_data)
 
-    # Add deployment environment if available
-    if "environment" in telemetry_data:
-        resource_attributes.append(
-            {"key": "deployment.environment", "value": {"stringValue": telemetry_data.get("environment", "production")}}
-        )
-
-    # Build metrics array
+    # Build metrics array using helper functions
     metrics = []
 
     # System-level metrics
-    if "system_healthy" in telemetry_data:
-        metrics.append(
-            _create_gauge_metric(
-                "system.healthy",
-                "System health status",
-                "1",
-                1.0 if telemetry_data["system_healthy"] else 0.0,
-                current_time_ns,
-            )
-        )
-
-    if "services_online" in telemetry_data:
-        metrics.append(
-            _create_gauge_metric(
-                "services.online",
-                "Number of services online",
-                "1",
-                float(telemetry_data["services_online"]),
-                current_time_ns,
-            )
-        )
-
-    if "services_total" in telemetry_data:
-        metrics.append(
-            _create_gauge_metric(
-                "services.total",
-                "Total number of services",
-                "1",
-                float(telemetry_data["services_total"]),
-                current_time_ns,
-            )
-        )
-
-    if "overall_error_rate" in telemetry_data:
-        metrics.append(
-            _create_gauge_metric(
-                "system.error_rate",
-                "Overall system error rate",
-                "1",
-                telemetry_data["overall_error_rate"],
-                current_time_ns,
-            )
-        )
-
-    if "overall_uptime_seconds" in telemetry_data:
-        metrics.append(
-            _create_counter_metric(
-                "system.uptime",
-                "System uptime in seconds",
-                "s",
-                telemetry_data["overall_uptime_seconds"],
-                current_time_ns,
-            )
-        )
-
-    if "total_errors" in telemetry_data:
-        metrics.append(
-            _create_counter_metric(
-                "errors.total", "Total number of errors", "1", float(telemetry_data["total_errors"]), current_time_ns
-            )
-        )
-
-    if "total_requests" in telemetry_data:
-        metrics.append(
-            _create_counter_metric(
-                "requests.total",
-                "Total number of requests",
-                "1",
-                float(telemetry_data["total_requests"]),
-                current_time_ns,
-            )
-        )
+    metrics.extend(add_system_metrics(telemetry_data, current_time_ns))
 
     # Service-level metrics
-    if "services" in telemetry_data and isinstance(telemetry_data["services"], dict):
-        for service_name, service_data in telemetry_data["services"].items():
-            service_attrs = [{"key": "service", "value": {"stringValue": service_name}}]
-
-            if hasattr(service_data, "healthy"):
-                metrics.append(
-                    _create_gauge_metric(
-                        "service.healthy",
-                        "Service health status",
-                        "1",
-                        1.0 if service_data.healthy else 0.0,
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-
-            if hasattr(service_data, "uptime_seconds") and service_data.uptime_seconds:
-                metrics.append(
-                    _create_counter_metric(
-                        "service.uptime",
-                        "Service uptime in seconds",
-                        "s",
-                        service_data.uptime_seconds,
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-
-            if hasattr(service_data, "error_count"):
-                metrics.append(
-                    _create_counter_metric(
-                        "service.errors",
-                        "Service error count",
-                        "1",
-                        float(service_data.error_count),
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-
-            if hasattr(service_data, "requests_handled"):
-                metrics.append(
-                    _create_counter_metric(
-                        "service.requests",
-                        "Service requests handled",
-                        "1",
-                        float(service_data.requests_handled or 0),
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-
-            if hasattr(service_data, "error_rate") and service_data.error_rate is not None:
-                metrics.append(
-                    _create_gauge_metric(
-                        "service.error_rate",
-                        "Service error rate",
-                        "1",
-                        service_data.error_rate,
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
-
-            if hasattr(service_data, "memory_mb") and service_data.memory_mb:
-                metrics.append(
-                    _create_gauge_metric(
-                        "service.memory.usage",
-                        "Service memory usage",
-                        "MB",
-                        service_data.memory_mb,
-                        current_time_ns,
-                        attributes=service_attrs,
-                    )
-                )
+    services_data = safe_telemetry_get(telemetry_data, "services")
+    if services_data:
+        metrics.extend(add_service_metrics(services_data, current_time_ns))
 
     # Covenant metrics if present
-    if "covenant_metrics" in telemetry_data:
-        covenant = telemetry_data["covenant_metrics"]
-
-        if "wise_authority_deferrals" in covenant:
-            metrics.append(
-                _create_counter_metric(
-                    "covenant.wise_authority.deferrals",
-                    "Number of decisions deferred to Wise Authority",
-                    "1",
-                    float(covenant["wise_authority_deferrals"]),
-                    current_time_ns,
-                )
-            )
-
-        if "ethical_decisions" in covenant:
-            metrics.append(
-                _create_counter_metric(
-                    "covenant.ethical.decisions",
-                    "Number of ethical decisions made",
-                    "1",
-                    float(covenant["ethical_decisions"]),
-                    current_time_ns,
-                )
-            )
-
-        if "covenant_compliance_rate" in covenant:
-            metrics.append(
-                _create_gauge_metric(
-                    "covenant.compliance.rate",
-                    "Covenant compliance rate",
-                    "1",
-                    covenant["covenant_compliance_rate"],
-                    current_time_ns,
-                )
-            )
-
-        if "transparency_score" in covenant:
-            metrics.append(
-                _create_gauge_metric(
-                    "covenant.transparency.score",
-                    "System transparency score",
-                    "1",
-                    covenant["transparency_score"],
-                    current_time_ns,
-                )
-            )
+    covenant_data = safe_telemetry_get(telemetry_data, "covenant_metrics")
+    if covenant_data:
+        metrics.extend(add_covenant_metrics(covenant_data, current_time_ns))
 
     # Build the OTLP JSON structure
     otlp_json = {
@@ -377,13 +463,11 @@ def convert_traces_to_otlp_json(
     Returns:
         OTLP JSON formatted trace data
     """
-    # Build resource attributes
+    # Build resource attributes using helper (without environment since not used for traces)
+    base_resource_attrs = create_resource_attributes(service_name, service_version, {})
+    # Remove service.namespace and deployment.environment attributes for traces
     resource_attributes = [
-        {"key": "service.name", "value": {"stringValue": service_name}},
-        {"key": "service.version", "value": {"stringValue": service_version}},
-        {"key": "telemetry.sdk.name", "value": {"stringValue": "ciris-telemetry"}},
-        {"key": "telemetry.sdk.version", "value": {"stringValue": CIRIS_VERSION}},
-        {"key": "telemetry.sdk.language", "value": {"stringValue": "python"}},
+        attr for attr in base_resource_attrs if attr["key"] not in ["service.namespace", "deployment.environment"]
     ]
 
     spans = []
@@ -565,13 +649,11 @@ def convert_logs_to_otlp_json(
     Returns:
         OTLP JSON formatted log data
     """
-    # Build resource attributes
+    # Build resource attributes using helper (without environment since not used for logs)
+    base_resource_attrs = create_resource_attributes(service_name, service_version, {})
+    # Remove service.namespace and deployment.environment attributes for logs
     resource_attributes = [
-        {"key": "service.name", "value": {"stringValue": service_name}},
-        {"key": "service.version", "value": {"stringValue": service_version}},
-        {"key": "telemetry.sdk.name", "value": {"stringValue": "ciris-telemetry"}},
-        {"key": "telemetry.sdk.version", "value": {"stringValue": CIRIS_VERSION}},
-        {"key": "telemetry.sdk.language", "value": {"stringValue": "python"}},
+        attr for attr in base_resource_attrs if attr["key"] not in ["service.namespace", "deployment.environment"]
     ]
 
     log_records = []

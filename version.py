@@ -46,6 +46,24 @@ def write_build_version(sign_key: Optional[str] = None) -> str:
         sign_key: Optional secret key to sign the code hash with HMAC
     """
     code_hash = _get_code_hash()
+    build_file = Path(__file__).resolve().parent / "BUILD_INFO.txt"
+
+    # Check if BUILD_INFO.txt exists and has the same hash
+    if build_file.exists():
+        try:
+            existing_content = build_file.read_text()
+            # Extract existing hash from the file
+            for line in existing_content.splitlines():
+                if line.startswith("Code Hash: "):
+                    existing_hash = line.split("Code Hash: ")[1].strip()
+                    if existing_hash == code_hash:
+                        # Hash hasn't changed, no need to update
+                        return code_hash
+                    break
+        except Exception:
+            pass  # If we can't read/parse, proceed with update
+
+    # Hash has changed or file doesn't exist, update it
     build_time = datetime.now().isoformat()
     git_commit = _get_git_commit()
 
@@ -67,7 +85,6 @@ This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.
 """
 
-    build_file = Path(__file__).resolve().parent / "BUILD_INFO.txt"
     build_file.write_text(build_info)
     return code_hash
 
@@ -112,10 +129,31 @@ if __name__ == "__main__":
     # Check for signing key in environment
     sign_key = os.environ.get("CIRIS_BUILD_SIGN_KEY")
 
+    # Check if build info needs updating
+    build_file = Path(__file__).resolve().parent / "BUILD_INFO.txt"
+    current_hash = _get_code_hash()
+    needs_update = True
+
+    if build_file.exists():
+        try:
+            existing_content = build_file.read_text()
+            for line in existing_content.splitlines():
+                if line.startswith("Code Hash: "):
+                    existing_hash = line.split("Code Hash: ")[1].strip()
+                    if existing_hash == current_hash:
+                        needs_update = False
+                    break
+        except Exception:
+            pass
+
     code_hash = write_build_version(sign_key)
     print(f"CIRIS Agent Code Hash: {code_hash}")
     print(f"Git Commit: {_get_git_commit()}")
     print(f"Git Branch: {_get_git_branch()}")
     if sign_key:
         print("Build signed with CIRIS_BUILD_SIGN_KEY")
-    print("BUILD_INFO.txt has been created")
+
+    if needs_update:
+        print("BUILD_INFO.txt has been updated")
+    else:
+        print("BUILD_INFO.txt is up to date")

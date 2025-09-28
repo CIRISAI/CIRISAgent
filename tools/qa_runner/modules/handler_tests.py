@@ -24,6 +24,7 @@ class HandlerTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test status request via agent interact",
+                timeout=120.0,
             ),
             QATestCase(
                 name="System health check",
@@ -34,6 +35,7 @@ class HandlerTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test system health via agent interact",
+                timeout=120.0,
             ),
             # Conversation tests
             QATestCase(
@@ -45,6 +47,7 @@ class HandlerTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test conversation via agent interact",
+                timeout=120.0,
             ),
             QATestCase(
                 name="Question answering",
@@ -55,6 +58,7 @@ class HandlerTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test question answering via agent interact",
+                timeout=120.0,
             ),
             # Mock LLM specific tests
             QATestCase(
@@ -66,6 +70,7 @@ class HandlerTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="Test mock LLM response",
+                timeout=120.0,
             ),
         ]
 

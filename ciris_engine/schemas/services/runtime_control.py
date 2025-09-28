@@ -621,3 +621,150 @@ StepResultUnion = Union[
     StepResultPerformAction,
     StepResultActionComplete,
 ]
+
+
+# Step Data Schemas for type-safe step processing
+# These replace Dict[str, Any] usage in step_decorators.py
+
+
+class BaseStepData(BaseModel):
+    """Base step data with common fields for all steps."""
+
+    timestamp: str = Field(..., description="ISO timestamp when step started")
+    thought_id: str = Field(..., description="Unique thought identifier")
+    task_id: Optional[str] = Field(None, description="Source task identifier")
+    processing_time_ms: float = Field(..., description="Step processing time in milliseconds")
+    success: bool = Field(True, description="Whether step completed successfully")
+    error: Optional[str] = Field(None, description="Error message if step failed")
+
+
+class StartRoundStepData(BaseStepData):
+    """Step data for START_ROUND step."""
+
+    thoughts_processed: int = Field(..., description="Number of thoughts to process in round")
+    round_started: bool = Field(True, description="Round initiation flag")
+
+
+class GatherContextStepData(BaseStepData):
+    """Step data for GATHER_CONTEXT step."""
+
+    context: str = Field(..., description="Built context data for DMA processing")
+
+
+class PerformDMAsStepData(BaseStepData):
+    """Step data for PERFORM_DMAS step."""
+
+    dma_results: str = Field(..., description="Results from DMA processing")
+    context: str = Field(..., description="Initial context for DMA processing")
+
+
+class PerformASPDMAStepData(BaseStepData):
+    """Step data for PERFORM_ASPDMA step."""
+
+    selected_action: str = Field(..., description="Action selected by ASPDMA")
+    action_rationale: str = Field(..., description="Rationale for action selection")
+
+
+class ConscienceExecutionStepData(BaseStepData):
+    """Step data for CONSCIENCE_EXECUTION step."""
+
+    selected_action: str = Field(..., description="Final action after conscience check")
+    conscience_passed: bool = Field(..., description="Whether conscience validation passed")
+    action_result: str = Field(..., description="Complete action result")
+    override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
+    conscience_result: Dict[str, Any] = Field(..., description="Complete conscience evaluation result")
+
+
+class RecursiveASPDMAStepData(BaseStepData):
+    """Step data for RECURSIVE_ASPDMA step."""
+
+    retry_reason: str = Field(..., description="Reason for recursive ASPDMA execution")
+    original_action: str = Field(..., description="Original action that was retried")
+
+
+class RecursiveConscienceStepData(BaseStepData):
+    """Step data for RECURSIVE_CONSCIENCE step."""
+
+    retry_action: str = Field(..., description="Action being retried through conscience")
+    retry_result: str = Field(..., description="Result of recursive conscience check")
+
+
+class FinalizeActionStepData(BaseStepData):
+    """Step data for FINALIZE_ACTION step."""
+
+    selected_action: str = Field(..., description="Final selected action")
+    selection_reasoning: str = Field(..., description="Reasoning for final action selection")
+    conscience_passed: bool = Field(True, description="Conscience passed if we reach this step")
+
+
+class PerformActionStepData(BaseStepData):
+    """Step data for PERFORM_ACTION step."""
+
+    selected_action: str = Field(..., description="Action being performed")
+    action_parameters: str = Field("None", description="Parameters for action execution")
+    dispatch_context: str = Field("{}", description="Context for action dispatch")
+
+
+class ActionCompleteStepData(BaseStepData):
+    """Step data for ACTION_COMPLETE step."""
+
+    action_executed: str = Field(..., description="Action that was executed")
+    dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
+    handler_completed: bool = Field(..., description="Whether action handler completed")
+    follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
+    execution_time_ms: float = Field(0.0, description="Action execution time")
+
+
+class RoundCompleteStepData(BaseStepData):
+    """Step data for ROUND_COMPLETE step."""
+
+    round_status: str = Field("completed", description="Status of completed round")
+    thoughts_processed: int = Field(..., description="Number of thoughts processed in round")
+
+
+# Union type for all step data
+StepDataUnion = Union[
+    StartRoundStepData,
+    GatherContextStepData,
+    PerformDMAsStepData,
+    PerformASPDMAStepData,
+    ConscienceExecutionStepData,
+    RecursiveASPDMAStepData,
+    RecursiveConscienceStepData,
+    FinalizeActionStepData,
+    PerformActionStepData,
+    ActionCompleteStepData,
+    RoundCompleteStepData,
+]
+
+
+class StepResultData(BaseModel):
+    """Complete step result data structure for streaming."""
+
+    step_point: str = Field(..., description="Step point name")
+    success: bool = Field(True, description="Whether step succeeded")
+    processing_time_ms: float = Field(0.0, description="Step processing time")
+    thought_id: str = Field("", description="Thought identifier")
+    task_id: str = Field("", description="Task identifier")
+    step_data: Dict[str, Any] = Field(..., description="Typed step data")
+    trace_context: TraceContext = Field(..., description="OTLP trace context")
+    span_attributes: List[SpanAttribute] = Field(..., description="OTLP span attributes")
+    otlp_compatible: bool = Field(True, description="OTLP compatibility flag")
+
+
+class StepExecutionResult(BaseModel):
+    """Result from executing a single step for a paused thought."""
+
+    success: bool = Field(..., description="Whether step execution succeeded")
+    thought_id: str = Field(..., description="Thought identifier")
+    message: Optional[str] = Field(None, description="Success message")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+
+class AllStepsExecutionResult(BaseModel):
+    """Result from executing steps for all paused thoughts."""
+
+    success: bool = Field(..., description="Whether execution succeeded")
+    thoughts_advanced: int = Field(0, description="Number of thoughts advanced")
+    message: Optional[str] = Field(None, description="Result message")
+    error: Optional[str] = Field(None, description="Error message if failed")

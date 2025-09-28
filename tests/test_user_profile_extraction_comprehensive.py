@@ -48,7 +48,18 @@ class MockThought:
 
 
 class TestUserProfileExtractionComprehensive:
-    """Comprehensive test for user profile extraction."""
+
+    @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        from datetime import datetime, timezone
+        from unittest.mock import Mock
+
+        time_service = Mock()
+        # Fixed time for consistent testing
+        fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+        time_service.now.return_value = fixed_time
+        return time_service
 
     def create_mock_user_node(self, user_id):
         """Create a properly structured user node."""
@@ -87,7 +98,7 @@ class TestUserProfileExtractionComprehensive:
         return node
 
     @pytest.mark.asyncio
-    async def test_full_stack_user_extraction(self):
+    async def test_full_stack_user_extraction(self, mock_time_service):
         """Test user extraction with comprehensive mocking of all dependencies."""
 
         # Create task with user
@@ -192,7 +203,7 @@ class TestUserProfileExtractionComprehensive:
 
         # Patch all external dependencies
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(
-            "ciris_engine.logic.context.system_snapshot.persistence"
+            "ciris_engine.logic.context.system_snapshot_helpers.persistence"
         ) as mock_persistence, patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node", return_value=[]):
 
             # Set up persistence mocks
@@ -251,6 +262,7 @@ class TestUserProfileExtractionComprehensive:
                     secrets_service=secrets_service,
                     runtime=runtime,
                     service_registry=service_registry,
+                    time_service=mock_time_service,
                 )
 
                 # Get captured logs
@@ -269,13 +281,13 @@ class TestUserProfileExtractionComprehensive:
                         print(f"  - User {profile.user_id}: {profile.display_name}")
                         print(f"    Trust level: {profile.trust_level}")
                         print(f"    Has notes: {bool(profile.notes)}")
-                        if profile.notes:
-                            # Check if ALL attributes were captured
-                            if "custom_field" in profile.notes:
+                        if profile.memorized_attributes:
+                            # Check if ALL attributes were captured in memorized_attributes
+                            if "custom_field" in profile.memorized_attributes:
                                 print(f"    ✓ Custom fields captured")
-                            if "preferences" in profile.notes:
+                            if "preferences" in profile.memorized_attributes:
                                 print(f"    ✓ Preferences captured")
-                            if "tags" in profile.notes:
+                            if "tags" in profile.memorized_attributes:
                                 print(f"    ✓ Tags captured")
 
                 # Assertions
@@ -292,18 +304,18 @@ class TestUserProfileExtractionComprehensive:
                 assert user_profile.trust_level == 0.8
                 assert user_profile.is_wa == False
 
-                # Verify ALL attributes were captured in notes
-                assert user_profile.notes is not None, "Notes should not be None"
-                assert "All attributes:" in user_profile.notes, "Notes should contain all attributes"
+                # Verify ALL custom attributes were captured in memorized_attributes
+                assert user_profile.memorized_attributes is not None, "memorized_attributes should not be None"
 
-                # Parse the attributes from notes
-                attrs_json = user_profile.notes.split("All attributes: ")[1].split("\n")[0]
-                captured_attrs = json.loads(attrs_json)
+                # Verify custom fields are captured in memorized_attributes
+                assert user_profile.memorized_attributes["custom_field"] == "custom_value_123456789"
 
-                # Verify custom fields are captured
-                assert captured_attrs["custom_field"] == "custom_value_123456789"
-                assert captured_attrs["preferences"]["theme"] == "dark"
-                assert "active" in captured_attrs["tags"]
+                # Verify complex objects are stringified in memorized_attributes
+                preferences = json.loads(user_profile.memorized_attributes["preferences"])
+                assert preferences["theme"] == "dark"
+
+                tags = json.loads(user_profile.memorized_attributes["tags"])
+                assert "active" in tags
 
                 print(f"\n=== TEST PASSED ===")
                 print(f"✓ User profile extracted from task context")
@@ -315,7 +327,7 @@ class TestUserProfileExtractionComprehensive:
                 snapshot_module.logger = original_logger
 
     @pytest.mark.asyncio
-    async def test_extraction_from_correlation_history(self):
+    async def test_extraction_from_correlation_history(self, mock_time_service):
         """Test extraction of users from correlation history."""
 
         task = Task(
@@ -401,7 +413,7 @@ class TestUserProfileExtractionComprehensive:
         service_registry.get_all = MagicMock(return_value={})
 
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(
-            "ciris_engine.logic.context.system_snapshot.persistence"
+            "ciris_engine.logic.context.system_snapshot_helpers.persistence"
         ) as mock_persistence, patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node", return_value=[]):
 
             # Set up persistence mocks
@@ -454,6 +466,7 @@ class TestUserProfileExtractionComprehensive:
                 secrets_service=secrets_service,
                 runtime=runtime,
                 service_registry=service_registry,
+                time_service=mock_time_service,
             )
 
             print(f"User profiles count: {len(snapshot.user_profiles)}")

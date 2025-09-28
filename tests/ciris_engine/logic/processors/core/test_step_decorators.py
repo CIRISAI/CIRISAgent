@@ -24,6 +24,7 @@ from ciris_engine.logic.processors.core.step_decorators import (  # Helper funct
     _add_typed_step_attributes,
     _build_step_result_data,
     _create_step_result_schema,
+    _create_typed_step_data,
     _extract_timing_data,
     _paused_thoughts,
     _single_step_mode,
@@ -38,7 +39,21 @@ from ciris_engine.logic.processors.core.step_decorators import (  # Helper funct
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
 from ciris_engine.schemas.runtime.enums import ThoughtType
-from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.services.runtime_control import (
+    ActionCompleteStepData,
+    AllStepsExecutionResult,
+    BaseStepData,
+    ConscienceExecutionStepData,
+    GatherContextStepData,
+    PerformASPDMAStepData,
+    PerformDMAsStepData,
+    SpanAttribute,
+    StepDataUnion,
+    StepExecutionResult,
+    StepPoint,
+    StepResultData,
+    TraceContext,
+)
 
 # Import existing fixtures
 from tests.fixtures.mocks import create_mock_thought
@@ -99,10 +114,10 @@ class TestStreamingStepDecorator:
             assert call_args[0][0] == StepPoint.GATHER_CONTEXT
 
             step_data = call_args[0][1]
-            assert step_data["thought_id"] == "test-thought-123"
-            assert step_data["success"] is True
-            assert "processing_time_ms" in step_data
-            assert "timestamp" in step_data
+            assert step_data.thought_id == "test-thought-123"
+            assert step_data.success is True
+            assert hasattr(step_data, "processing_time_ms")
+            assert hasattr(step_data, "timestamp")
 
     @pytest.mark.asyncio
     async def test_streaming_step_decorator_error(self, mock_processor, mock_thought_item):
@@ -125,8 +140,8 @@ class TestStreamingStepDecorator:
             mock_broadcast.assert_called_once()
             call_args = mock_broadcast.call_args
             step_data = call_args[0][1]
-            assert step_data["success"] is False
-            assert step_data["error"] == "Test error message"
+            assert step_data.success is False
+            assert step_data.error == "Test error message"
 
     @pytest.mark.asyncio
     async def test_streaming_step_no_time_service(self, mock_thought_item):
@@ -238,9 +253,9 @@ class TestStepControlAPI:
         """Test executing step when thought is not paused."""
         result = await execute_step("nonexistent-thought")
 
-        assert result["success"] is False
-        assert "not paused or does not exist" in result["error"]
-        assert result["thought_id"] == "nonexistent-thought"
+        assert result.success is False
+        assert "not paused or does not exist" in result.error
+        assert result.thought_id == "nonexistent-thought"
 
     @pytest.mark.asyncio
     async def test_execute_step_success(self):
@@ -252,18 +267,18 @@ class TestStepControlAPI:
 
         result = await execute_step(thought_id)
 
-        assert result["success"] is True
-        assert result["thought_id"] == thought_id
-        assert "advanced one step" in result["message"]
+        assert result.success is True
+        assert result.thought_id == thought_id
+        assert "advanced one step" in result.message
 
     @pytest.mark.asyncio
     async def test_execute_all_steps_no_thoughts(self):
         """Test executing all steps when no thoughts are paused."""
         result = await execute_all_steps()
 
-        assert result["success"] is True
-        assert result["thoughts_advanced"] == 0
-        assert "No thoughts currently paused" in result["message"]
+        assert result.success is True
+        assert result.thoughts_advanced == 0
+        assert "No thoughts currently paused" in result.message
 
     @pytest.mark.asyncio
     async def test_execute_all_steps_success(self):
@@ -275,9 +290,9 @@ class TestStepControlAPI:
 
         result = await execute_all_steps()
 
-        assert result["success"] is True
-        assert result["thoughts_advanced"] == 3
-        assert "Advanced 3 thoughts" in result["message"]
+        assert result.success is True
+        assert result.thoughts_advanced == 3
+        assert "Advanced 3 thoughts" in result.message
 
     def test_get_paused_thoughts(self):
         """Test getting list of paused thoughts."""
@@ -310,14 +325,16 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             await gather_context_step(mock_processor, mock_thought)
 
             # Verify step-specific data was added
             call_args = mock_broadcast.call_args[0][1]
-            assert call_args["task_id"] == "task-456"
-            assert call_args["context"] is not None
+            assert call_args.task_id == "task-456"
+            assert call_args.context is not None
 
     @pytest.mark.asyncio
     async def test_step_specific_data_perform_aspdma(self):
@@ -337,14 +354,16 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             await aspdma_step(mock_processor, mock_thought)
 
             # Verify ASPDMA-specific data was added
             call_args = mock_broadcast.call_args[0][1]
-            assert call_args["selected_action"] == "SPEAK"
-            assert call_args["action_rationale"] == "Test reasoning"
+            assert call_args.selected_action == "SPEAK"
+            assert call_args.action_rationale == "Test reasoning"
 
     @pytest.mark.asyncio
     async def test_step_specific_data_perform_aspdma_missing_fields(self):
@@ -364,14 +383,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            await aspdma_step(mock_processor, mock_thought)
-
-            # Should not crash due to error handling, but should log error
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for perform_aspdma" in error_msg
+            # Should fail fast with AttributeError
+            with pytest.raises(AttributeError, match="PERFORM_ASPDMA result missing 'selected_action' attribute"):
+                await aspdma_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_action_complete_dict_format(self):
@@ -393,16 +411,18 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             await action_complete_step(mock_processor, mock_thought)
 
             # Verify correct extraction from dict
             call_args = mock_broadcast.call_args[0][1]
-            assert call_args["action_executed"] == "speak"  # Fixed: was "UNKNOWN"
-            assert call_args["dispatch_success"] is True
-            assert call_args["handler_completed"] is True  # handler != "Unknown"
-            assert call_args["follow_up_processing_pending"] is True  # has follow_up_thought_id
+            assert call_args.action_executed == "speak"  # Fixed: was "UNKNOWN"
+            assert call_args.dispatch_success is True
+            assert call_args.handler_completed is True  # handler != "Unknown"
+            assert call_args.follow_up_processing_pending is True  # has follow_up_thought_id
 
     @pytest.mark.asyncio
     async def test_step_specific_data_action_complete_object_format(self):
@@ -425,16 +445,18 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             await action_complete_step(mock_processor, mock_thought)
 
             # Verify fallback object extraction
             call_args = mock_broadcast.call_args[0][1]
-            assert call_args["action_executed"] == "ponder"  # Should fall back to selected_action
-            assert call_args["dispatch_success"] is False
-            assert call_args["handler_completed"] is True
-            assert call_args["follow_up_processing_pending"] is False
+            assert call_args.action_executed == "ponder"  # Should fall back to selected_action
+            assert call_args.dispatch_success is False
+            assert call_args.handler_completed is True
+            assert call_args.follow_up_processing_pending is False
 
     @pytest.mark.asyncio
     async def test_step_specific_data_perform_dmas_initial_results(self):
@@ -455,7 +477,9 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
             mock_thought.initial_context = "test_context"
 
             await perform_dmas_step(mock_processor, mock_thought)
@@ -463,8 +487,8 @@ class TestStepDataExtraction:
             # Verify DMA results extraction
             call_args = mock_broadcast.call_args[0][1]
             expected_dma = "ethical_pdma: ethical_result; csdma: csdma_result; dsdma: dsdma_result"
-            assert call_args["dma_results"] == expected_dma
-            assert call_args["context"] == "test_context"
+            assert call_args.dma_results == expected_dma
+            assert call_args.context == "test_context"
 
     @pytest.mark.asyncio
     async def test_step_specific_data_conscience_execution_overridden(self):
@@ -487,16 +511,18 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             await conscience_step(mock_processor, mock_thought)
 
             # Verify conscience result extraction
             call_args = mock_broadcast.call_args[0][1]
-            assert call_args["selected_action"] == "reject"
-            assert call_args["conscience_passed"] is False  # not overridden
-            assert call_args["override_reason"] == "Safety violation"
-            assert "action_result" in call_args
+            assert call_args.selected_action == "reject"
+            assert call_args.conscience_passed is False  # not overridden
+            assert call_args.override_reason == "Safety violation"
+            assert hasattr(call_args, "action_result")
 
     @pytest.mark.asyncio
     async def test_step_specific_data_conscience_execution_passed(self):
@@ -517,14 +543,16 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             await conscience_step(mock_processor, mock_thought)
 
             # Verify conscience passed
             call_args = mock_broadcast.call_args[0][1]
-            assert call_args["selected_action"] == "speak"
-            assert call_args["conscience_passed"] is True  # not overridden
+            assert call_args.selected_action == "speak"
+            assert call_args.conscience_passed is True  # not overridden
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_missing_action_type(self):
@@ -547,14 +575,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            await action_complete_step(mock_processor, mock_thought)
-
-            # Should log error due to KeyError
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for action_complete" in error_msg
+            # Should fail fast with KeyError
+            with pytest.raises(KeyError, match="ACTION_COMPLETE dispatch_result missing 'action_type'"):
+                await action_complete_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_conscience_missing_overridden(self):
@@ -576,14 +603,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            await conscience_step(mock_processor, mock_thought)
-
-            # Should log error due to AttributeError
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for conscience_execution" in error_msg
+            # Should fail fast with AttributeError
+            with pytest.raises(AttributeError, match="CONSCIENCE_EXECUTION result missing 'overridden' attribute"):
+                await conscience_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_error_handling(self):
@@ -605,15 +631,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            # Should not raise exception due to error handling
-            await problematic_step(mock_processor, mock_thought)
-
-            # Verify error was logged
-            mock_logger.error.assert_called_once()
-            error_call = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for perform_aspdma" in error_call
+            # Should fail fast with Exception
+            with pytest.raises(Exception, match="Test error"):
+                await problematic_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_gather_context_none(self):
@@ -631,14 +655,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            await gather_context_step(mock_processor, mock_thought)
-
-            # Should log error due to ValueError
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for gather_context" in error_msg
+            # Should fail fast with ValueError
+            with pytest.raises(ValueError, match="GATHER_CONTEXT step result is None"):
+                await gather_context_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_perform_dmas_none(self):
@@ -656,14 +679,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            await perform_dmas_step(mock_processor, mock_thought)
-
-            # Should log error due to ValueError
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for perform_dmas" in error_msg
+            # Should fail fast with ValueError
+            with pytest.raises(ValueError, match="PERFORM_DMAS step result is None"):
+                await perform_dmas_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_perform_dmas_missing_context(self):
@@ -686,12 +708,9 @@ class TestStepDataExtraction:
             # Mock thought without initial_context attribute
             mock_thought = Mock(spec=[], thought_id="test-123")  # spec=[] prevents default attributes
 
-            await perform_dmas_step(mock_processor, mock_thought)
-
-            # Should log error due to AttributeError
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for perform_dmas" in error_msg
+            # Should fail fast with AttributeError
+            with pytest.raises(AttributeError, match="PERFORM_DMAS thought_item missing 'initial_context' attribute"):
+                await perform_dmas_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_recursive_aspdma_missing_args(self):
@@ -711,20 +730,19 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             # Mock _add_step_specific_data to call our function with empty args
             with patch(
-                "ciris_engine.logic.processors.core.step_decorators._add_recursive_aspdma_data"
+                "ciris_engine.logic.processors.core.step_decorators._create_recursive_aspdma_data"
             ) as mock_add_data:
                 mock_add_data.side_effect = ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")
 
-                await recursive_aspdma_step(mock_processor, mock_thought)
-
-                # Should log error due to ValueError
-                mock_logger.error.assert_called_once()
-                error_msg = mock_logger.error.call_args[0][0]
-                assert "Error adding step-specific data for recursive_aspdma" in error_msg
+                # Should fail fast with ValueError
+                with pytest.raises(ValueError, match="RECURSIVE_ASPDMA args is empty"):
+                    await recursive_aspdma_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_finalize_action_missing_rationale(self):
@@ -745,14 +763,13 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
-            await finalize_action_step(mock_processor, mock_thought)
-
-            # Should log error due to AttributeError
-            mock_logger.error.assert_called_once()
-            error_msg = mock_logger.error.call_args[0][0]
-            assert "Error adding step-specific data for finalize_action" in error_msg
+            # Should fail fast with AttributeError
+            with pytest.raises(AttributeError, match="FINALIZE_ACTION result missing 'rationale' attribute"):
+                await finalize_action_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_perform_action_no_action(self):
@@ -772,20 +789,21 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             # Mock _add_step_specific_data to call our function with empty args
-            with patch("ciris_engine.logic.processors.core.step_decorators._add_perform_action_data") as mock_add_data:
+            with patch(
+                "ciris_engine.logic.processors.core.step_decorators._create_perform_action_data"
+            ) as mock_add_data:
                 mock_add_data.side_effect = ValueError(
                     "PERFORM_ACTION cannot determine selected_action - neither result.selected_action nor args[0] available"
                 )
 
-                await perform_action_step(mock_processor, mock_thought)
-
-                # Should log error due to ValueError
-                mock_logger.error.assert_called_once()
-                error_msg = mock_logger.error.call_args[0][0]
-                assert "Error adding step-specific data for perform_action" in error_msg
+                # Should fail fast with ValueError
+                with pytest.raises(ValueError, match="PERFORM_ACTION cannot determine selected_action"):
+                    await perform_action_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_start_round_empty_args(self):
@@ -803,20 +821,19 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             # Mock _add_step_specific_data to call our function with empty args
-            with patch("ciris_engine.logic.processors.core.step_decorators._add_start_round_data") as mock_add_data:
+            with patch("ciris_engine.logic.processors.core.step_decorators._create_start_round_data") as mock_add_data:
                 mock_add_data.side_effect = ValueError(
                     "START_ROUND args is empty - thought list is required for processing"
                 )
 
-                await start_round_step(mock_processor, mock_thought)
-
-                # Should log error due to ValueError
-                mock_logger.error.assert_called_once()
-                error_msg = mock_logger.error.call_args[0][0]
-                assert "Error adding step-specific data for start_round" in error_msg
+                # Should fail fast with ValueError
+                with pytest.raises(ValueError, match="START_ROUND args is empty"):
+                    await start_round_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_round_complete_empty_args(self):
@@ -834,20 +851,21 @@ class TestStepDataExtraction:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="test-123", source_task_id="task-456")
+            mock_thought = Mock()
+            mock_thought.thought_id = "test-123"
+            mock_thought.source_task_id = "task-456"
 
             # Mock _add_step_specific_data to call our function with empty args
-            with patch("ciris_engine.logic.processors.core.step_decorators._add_round_complete_data") as mock_add_data:
+            with patch(
+                "ciris_engine.logic.processors.core.step_decorators._create_round_complete_data"
+            ) as mock_add_data:
                 mock_add_data.side_effect = ValueError(
                     "ROUND_COMPLETE args is empty - completed thought count is required"
                 )
 
-                await round_complete_step(mock_processor, mock_thought)
-
-                # Should log error due to ValueError
-                mock_logger.error.assert_called_once()
-                error_msg = mock_logger.error.call_args[0][0]
-                assert "Error adding step-specific data for round_complete" in error_msg
+                # Should fail fast with ValueError
+                with pytest.raises(ValueError, match="ROUND_COMPLETE args is empty"):
+                    await round_complete_step(mock_processor, mock_thought)
 
 
 class TestIntegrationFlow:
@@ -881,7 +899,10 @@ class TestIntegrationFlow:
             mock_processor._time_service = Mock()
             mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-            mock_thought = Mock(thought_id="flow-test")
+            mock_thought = Mock()
+            mock_thought.thought_id = "flow-test"
+            mock_thought.source_task_id = "task-123"
+            mock_thought.initial_context = "test_initial_context"
 
             # Execute steps in sequence
             result1 = await step1(mock_processor, mock_thought)
@@ -915,19 +936,24 @@ class TestIntegrationFlow:
                     @step_point(StepPoint.PERFORM_ASPDMA)
                     async def step_with_pause(self, thought_item):
                         execution_log.append("step_executed")
-                        return "result"
+                        result = Mock()
+                        result.selected_action = "test_action"
+                        result.rationale = "test rationale"
+                        return result
 
                     mock_processor = Mock()
                     mock_processor._time_service = Mock()
                     mock_processor._time_service.now.return_value = datetime.now(timezone.utc)
 
-                    mock_thought = Mock(thought_id="pause-test")
+                    mock_thought = Mock()
+                    mock_thought.thought_id = "pause-test"
+                    mock_thought.source_task_id = "task-123"
 
                     result = await step_with_pause(mock_processor, mock_thought)
 
                     # Verify pause occurred before execution
                     assert execution_log == ["paused_at_perform_aspdma", "step_executed"]
-                    assert result == "result"
+                    assert result.selected_action == "test_action"
         finally:
             # CRITICAL: Always disable single-step mode to prevent test order dependencies
             disable_single_step_mode()
@@ -939,13 +965,14 @@ class TestRefactoredHelperFunctions:
 
     def test_create_step_result_schema_gather_context(self):
         """Test _create_step_result_schema for GATHER_CONTEXT step."""
-        step_data = {
-            "thought_id": "test-123",
-            "task_id": "task-456",
-            "success": True,
-            "timestamp": "2025-01-15T12:00:00Z",
-            "processing_time_ms": 100,
-        }
+        step_data = GatherContextStepData(
+            thought_id="test-123",
+            task_id="task-456",
+            success=True,
+            timestamp="2025-01-15T12:00:00Z",
+            processing_time_ms=100,
+            context="test_context_data",
+        )
 
         result = _create_step_result_schema(StepPoint.GATHER_CONTEXT, step_data)
 
@@ -958,13 +985,15 @@ class TestRefactoredHelperFunctions:
 
     def test_create_step_result_schema_perform_dmas(self):
         """Test _create_step_result_schema for PERFORM_DMAS step."""
-        step_data = {
-            "thought_id": "test-123",
-            "context": "test_context",
-            "success": True,
-            "timestamp": "2025-01-15T12:00:00Z",
-            "processing_time_ms": 150,
-        }
+        step_data = PerformDMAsStepData(
+            thought_id="test-123",
+            task_id="task-456",
+            success=True,
+            timestamp="2025-01-15T12:00:00Z",
+            processing_time_ms=150,
+            context="test_context",
+            dma_results="ethical_pdma: test",
+        )
 
         result = _create_step_result_schema(StepPoint.PERFORM_DMAS, step_data)
 
@@ -987,7 +1016,7 @@ class TestRefactoredHelperFunctions:
 
     def test_extract_timing_data_with_timestamp(self):
         """Test _extract_timing_data extracts timing from timestamp."""
-        step_data = {"timestamp": "2025-01-15T12:00:00Z", "other_field": "ignored"}
+        step_data = BaseStepData(timestamp="2025-01-15T12:00:00Z", thought_id="test-123", processing_time_ms=100.0)
 
         start_time, end_time = _extract_timing_data(step_data)
 
@@ -1001,9 +1030,7 @@ class TestRefactoredHelperFunctions:
 
     def test_extract_timing_data_with_timezone(self):
         """Test _extract_timing_data handles timezone offsets."""
-        step_data = {
-            "timestamp": "2025-01-15T12:00:00+00:00",
-        }
+        step_data = BaseStepData(timestamp="2025-01-15T12:00:00+00:00", thought_id="test-123", processing_time_ms=100.0)
 
         start_time, end_time = _extract_timing_data(step_data)
 
@@ -1013,7 +1040,9 @@ class TestRefactoredHelperFunctions:
 
     def test_extract_timing_data_missing_timestamp(self):
         """Test _extract_timing_data uses current time when timestamp missing."""
-        step_data = {}
+        step_data = BaseStepData(
+            thought_id="test-123", processing_time_ms=100.0, timestamp=""  # Empty timestamp to test fallback
+        )
 
         start_time, end_time = _extract_timing_data(step_data)
 
@@ -1024,40 +1053,72 @@ class TestRefactoredHelperFunctions:
     def test_build_step_result_data_complete(self):
         """Test _build_step_result_data builds complete result data structure."""
         step = StepPoint.GATHER_CONTEXT
-        step_data = {"thought_id": "test-123", "success": True, "processing_time_ms": 100.0, "task_id": "task-456"}
+        step_data = GatherContextStepData(
+            thought_id="test-123",
+            success=True,
+            processing_time_ms=100.0,
+            task_id="task-456",
+            timestamp="2023-01-01T00:00:00",
+            context="test context",
+        )
         step_result = Mock()
         step_result.model_dump.return_value = {"serialized": "data"}
 
-        trace_context = {"trace_id": "trace-123", "span_id": "span-456"}
-        span_attributes = [{"key": "test_key", "value": "test_value"}]
+        trace_context = TraceContext(
+            trace_id="trace-123",
+            span_id="span-456",
+            span_name="test",
+            operation_name="test",
+            start_time_ns=1000,
+            end_time_ns=2000,
+            duration_ns=1000,
+        )
+        span_attributes = [SpanAttribute(key="test_key", value={"stringValue": "test_value"})]
 
         result = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
 
-        assert result["step_point"] == "gather_context"
-        assert result["thought_id"] == "test-123"
-        assert result["success"] is True
-        assert result["processing_time_ms"] == 100.0
-        assert result["task_id"] == "task-456"
-        assert result["step_data"] == {"serialized": "data"}
-        assert result["trace_context"] == trace_context
-        assert result["span_attributes"] == span_attributes
-        assert result["otlp_compatible"] is True
+        assert result.step_point == "gather_context"
+        assert result.thought_id == "test-123"
+        assert result.success is True
+        assert result.processing_time_ms == 100.0
+        assert result.task_id == "task-456"
+        assert result.step_data == {"serialized": "data"}
+        assert result.trace_context == trace_context
+        assert result.span_attributes == span_attributes
+        assert result.otlp_compatible is True
 
     def test_build_step_result_data_missing_fields(self):
         """Test _build_step_result_data handles missing optional fields."""
         step = StepPoint.PERFORM_DMAS
-        step_data = {}  # Empty step data
+        step_data = PerformDMAsStepData(
+            thought_id="",
+            success=True,
+            processing_time_ms=0.0,
+            timestamp="2023-01-01T00:00:00",
+            dma_results="test results",
+            context="test context",
+        )
         step_result = Mock()
         step_result.model_dump.return_value = {"some": "data"}
 
-        result = _build_step_result_data(step, step_data, step_result, {}, [])
+        trace_context = TraceContext(
+            trace_id="trace-123",
+            span_id="span-456",
+            span_name="test",
+            operation_name="test",
+            start_time_ns=1000,
+            end_time_ns=2000,
+            duration_ns=1000,
+        )
 
-        assert result["step_point"] == "perform_dmas"
-        assert result["thought_id"] == ""  # Default empty string
-        assert result["task_id"] == ""  # Default empty string
-        assert result["success"] is True  # Default True
-        assert result["processing_time_ms"] == 0.0  # Default 0.0
-        assert result["step_data"] == {"some": "data"}
+        result = _build_step_result_data(step, step_data, step_result, trace_context, [])
+
+        assert result.step_point == "perform_dmas"
+        assert result.thought_id == ""  # Default empty string
+        assert result.task_id == ""  # Default empty string
+        assert result.success is True  # Default True
+        assert result.processing_time_ms == 0.0  # Default 0.0
+        assert result.step_data == {"some": "data"}
 
     def test_add_gather_context_attributes_success(self):
         """Test _add_gather_context_attributes adds context data."""
@@ -1067,8 +1128,8 @@ class TestRefactoredHelperFunctions:
         _add_gather_context_attributes(attributes, result_data)
 
         expected_attrs = [
-            {"key": "context.size_bytes", "value": {"intValue": len("test_context_data")}},
-            {"key": "context.available", "value": {"boolValue": True}},
+            SpanAttribute(key="context.size_bytes", value={"intValue": len("test_context_data")}),
+            SpanAttribute(key="context.available", value={"boolValue": True}),
         ]
         assert attributes == expected_attrs
 
@@ -1188,8 +1249,8 @@ class TestRefactoredHelperFunctions:
 
         # Should have called _add_gather_context_attributes
         expected_attrs = [
-            {"key": "context.size_bytes", "value": {"intValue": len("test_context")}},
-            {"key": "context.available", "value": {"boolValue": True}},
+            SpanAttribute(key="context.size_bytes", value={"intValue": len("test_context")}),
+            SpanAttribute(key="context.available", value={"boolValue": True}),
         ]
         assert attributes == expected_attrs
 

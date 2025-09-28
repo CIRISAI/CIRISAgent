@@ -92,10 +92,10 @@ class RawCorrelationData(BaseModel):
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
     timestamp: datetime
-    request_data: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = Field(default_factory=dict)
-    response_data: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = Field(default_factory=dict)
-    tags: Optional[Dict[str, Union[str, int, float, bool]]] = Field(default_factory=dict)
-    context: Optional[Dict[str, Union[str, int, float, bool, list]]] = Field(default=None)
+    request_data: Optional[Dict[str, str | int | float | bool | list | dict | None]] = Field(default_factory=dict)
+    response_data: Optional[Dict[str, str | int | float | bool | list | dict | None]] = Field(default_factory=dict)
+    tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=dict)
+    context: Optional[Dict[str, str | int | float | bool | list]] = Field(default=None)
 
     @field_validator("request_data", "response_data", "tags", mode="before")
     @classmethod
@@ -111,15 +111,15 @@ class RawTaskData(BaseModel):
 
     task_id: str
     status: str
-    created_at: Union[str, datetime]
-    updated_at: Union[str, datetime]
+    created_at: str | datetime
+    updated_at: str | datetime
     channel_id: Optional[str] = None
     user_id: Optional[str] = None
     description: Optional[str] = None
     retry_count: int = 0
     error_message: Optional[str] = None
-    thoughts: List[Dict[str, Union[str, int, float, bool]]] = Field(default_factory=list)
-    metadata: Optional[Dict[str, Union[str, int, float, bool]]] = None
+    thoughts: List[Dict[str, str | int | float | bool]] = Field(default_factory=list)
+    metadata: Optional[Dict[str, str | int | float | bool]] = None
 
 
 class RawThoughtData(BaseModel):
@@ -130,65 +130,98 @@ class RawThoughtData(BaseModel):
     status: str = "unknown"
     created_at: str = ""
     content: Optional[str] = None
-    final_action: Optional[Union[str, Dict[str, Union[str, int, float, bool]]]] = None
+    final_action: Optional[str | Dict[str, str | int | float | bool]] = None
     round_number: int = 0
     depth: int = 0
+
+
+# Helper functions for safe data extraction and type conversion
+def safe_dict_get(data: dict | str | int | float | list | None, key: str, default=None):
+    """Safely extract value from data that might not be a dict."""
+    if isinstance(data, dict):
+        return data.get(key, default)
+    return default
+
+
+def ensure_dict(data: dict | str | int | float | list | None) -> dict:
+    """Ensure data is a dict, return empty dict if not."""
+    return data if isinstance(data, dict) else {}
+
+
+def safe_str_dict(data: dict | str | int | float | list | None) -> Dict[str, str]:
+    """Convert data to string dictionary safely."""
+    if isinstance(data, dict):
+        return {k: str(v) for k, v in data.items()}
+    return {}
+
+
+def build_request_data_from_raw(raw_request: dict | str | int | float | list | None) -> Optional[RequestData]:
+    """Extract and build RequestData from raw request data with type safety."""
+    if raw_request is None or not isinstance(raw_request, dict):
+        return None
+
+    parameters = ensure_dict(raw_request.get("parameters", {}))
+
+    return RequestData(
+        channel_id=safe_dict_get(raw_request, "channel_id", "unknown"),
+        author_id=safe_dict_get(parameters, "author_id") or safe_dict_get(raw_request, "author_id"),
+        author_name=safe_dict_get(parameters, "author_name") or safe_dict_get(raw_request, "author_name"),
+        content=safe_dict_get(parameters, "content") or safe_dict_get(raw_request, "content"),
+        parameters=safe_str_dict(parameters),
+        headers=ensure_dict(safe_dict_get(raw_request, "headers", {})),
+        metadata=ensure_dict(safe_dict_get(raw_request, "metadata", {})),
+    )
+
+
+def build_response_data_from_raw(raw_response: dict | str | int | float | list | None) -> Optional[ResponseData]:
+    """Extract and build ResponseData from raw response data with type safety."""
+    if raw_response is None or not isinstance(raw_response, dict):
+        return None
+
+    return ResponseData(
+        execution_time_ms=safe_dict_get(raw_response, "execution_time_ms"),
+        success=safe_dict_get(raw_response, "success"),
+        error=safe_dict_get(raw_response, "error"),
+        error_type=safe_dict_get(raw_response, "error_type"),
+        result=safe_dict_get(raw_response, "result"),
+        resource_usage=ensure_dict(safe_dict_get(raw_response, "resource_usage", {})),
+        metadata=ensure_dict(safe_dict_get(raw_response, "metadata", {})),
+    )
+
+
+def build_interaction_context_from_raw(
+    context_data: dict | str | int | float | list | None,
+) -> Optional[InteractionContext]:
+    """Extract and build InteractionContext from raw context data with type safety."""
+    if context_data is None or not isinstance(context_data, dict):
+        return None
+
+    return InteractionContext(
+        trace_id=safe_dict_get(context_data, "trace_id"),
+        span_id=safe_dict_get(context_data, "span_id"),
+        parent_span_id=safe_dict_get(context_data, "parent_span_id"),
+        user_id=safe_dict_get(context_data, "user_id"),
+        session_id=safe_dict_get(context_data, "session_id"),
+        environment=safe_dict_get(context_data, "environment"),
+        additional_data=ensure_dict(safe_dict_get(context_data, "additional_data", {})),
+    )
 
 
 class TSDBDataConverter:
     """Converts raw dictionary data to typed schemas."""
 
     @staticmethod
-    def convert_service_interaction(raw_data: Union[dict, RawCorrelationData]) -> Optional[ServiceInteractionData]:
+    def convert_service_interaction(raw_data: dict | RawCorrelationData) -> Optional[ServiceInteractionData]:
         """Convert raw correlation data to ServiceInteractionData."""
         try:
             # Convert dict to typed model if needed
             if isinstance(raw_data, dict):
                 raw_data = RawCorrelationData(**raw_data)
-            # Extract raw request/response data
-            raw_request = raw_data.request_data
-            raw_response = raw_data.response_data
 
-            # Build typed request data
-            request_data = None
-            if raw_request:
-                parameters = raw_request.get("parameters", {})
-                request_data = RequestData(
-                    channel_id=raw_request.get("channel_id"),
-                    author_id=parameters.get("author_id") or raw_request.get("author_id"),
-                    author_name=parameters.get("author_name") or raw_request.get("author_name"),
-                    content=parameters.get("content") or raw_request.get("content"),
-                    parameters=parameters,
-                    headers=raw_request.get("headers", {}),
-                    metadata=raw_request.get("metadata", {}),
-                )
-
-            # Build typed response data
-            response_data = None
-            if raw_response:
-                response_data = ResponseData(
-                    execution_time_ms=raw_response.get("execution_time_ms"),
-                    success=raw_response.get("success"),
-                    error=raw_response.get("error"),
-                    error_type=raw_response.get("error_type"),
-                    result=raw_response.get("result"),
-                    resource_usage=raw_response.get("resource_usage", {}),
-                    metadata=raw_response.get("metadata", {}),
-                )
-
-            # Build interaction context if available
-            context = None
-            context_data = raw_data.context
-            if context_data:
-                context = InteractionContext(
-                    trace_id=context_data.get("trace_id"),
-                    span_id=context_data.get("span_id"),
-                    parent_span_id=context_data.get("parent_span_id"),
-                    user_id=context_data.get("user_id"),
-                    session_id=context_data.get("session_id"),
-                    environment=context_data.get("environment"),
-                    additional_data=context_data.get("additional_data", {}),
-                )
+            # Build typed data using helper functions
+            request_data = build_request_data_from_raw(raw_data.request_data)
+            response_data = build_response_data_from_raw(raw_data.response_data)
+            context = build_interaction_context_from_raw(raw_data.context)
 
             # Create ServiceInteractionData
             return ServiceInteractionData(
@@ -196,7 +229,7 @@ class TSDBDataConverter:
                 action_type=raw_data.action_type,
                 service_type=raw_data.service_type,
                 timestamp=raw_data.timestamp,
-                channel_id=raw_request.get("channel_id", "unknown") if raw_request else "unknown",
+                channel_id=request_data.channel_id if request_data else "unknown",
                 request_data=request_data,
                 author_id=request_data.author_id if request_data else None,
                 author_name=request_data.author_name if request_data else None,
@@ -213,7 +246,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_metric_correlation(raw_data: Union[dict, RawCorrelationData]) -> Optional[MetricCorrelationData]:
+    def convert_metric_correlation(raw_data: dict | RawCorrelationData) -> Optional[MetricCorrelationData]:
         """Convert raw correlation data to MetricCorrelationData."""
         try:
             # Convert dict to typed model if needed
@@ -262,7 +295,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_trace_span(raw_data: Union[dict, RawCorrelationData]) -> Optional[TraceSpanData]:
+    def convert_trace_span(raw_data: dict | RawCorrelationData) -> Optional[TraceSpanData]:
         """Convert raw correlation data to TraceSpanData."""
         try:
             # Convert dict to typed model if needed
@@ -328,7 +361,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_task(raw_task: Union[dict, RawTaskData]) -> Optional[TaskCorrelationData]:
+    def convert_task(raw_task: dict | RawTaskData) -> Optional[TaskCorrelationData]:
         """Convert raw task data to TaskCorrelationData."""
         try:
             # Convert dict to typed model if needed
@@ -405,7 +438,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def _convert_thought(raw_thought: Union[dict, RawThoughtData]) -> Optional[ThoughtSummary]:
+    def _convert_thought(raw_thought: dict | RawThoughtData) -> Optional[ThoughtSummary]:
         """Convert raw thought data to ThoughtSummary."""
         try:
             # Convert dict to typed model if needed
@@ -445,7 +478,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def _parse_datetime(date_str: Optional[Union[str, datetime]]) -> datetime:
+    def _parse_datetime(date_str: Optional[str | datetime]) -> datetime:
         """Parse datetime string to datetime object."""
         if not date_str:
             return datetime.now(timezone.utc)

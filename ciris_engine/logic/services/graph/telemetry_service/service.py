@@ -1013,10 +1013,8 @@ class TelemetryAggregator:
         """
         covenant_metrics = {
             "wise_authority_deferrals": 0,
-            "filter_interventions": 0,
-            "ethical_decisions": 0,
-            "covenant_compliance_rate": 1.0,
-            "transparency_score": 0.0,
+            "filter_matches": 0,
+            "thoughts_processed": 0,
             "self_observation_insights": 0,
         }
 
@@ -1025,30 +1023,19 @@ class TelemetryAggregator:
             wa_metrics = self._extract_governance_metrics(
                 telemetry,
                 "wise_authority",
-                {"wise_authority_deferrals": "deferral_count", "ethical_decisions": "guidance_requests"},
+                {"wise_authority_deferrals": "deferral_count", "thoughts_processed": "guidance_requests"},
             )
             covenant_metrics.update(wa_metrics)
 
             filter_metrics = self._extract_governance_metrics(
-                telemetry, "adaptive_filter", {"filter_interventions": "filter_actions"}
+                telemetry, "adaptive_filter", {"filter_matches": "filter_actions"}
             )
             covenant_metrics.update(filter_metrics)
-
-            vis_metrics = self._extract_governance_metrics(
-                telemetry, "visibility", {"transparency_score": "transparency_index"}
-            )
-            covenant_metrics.update(vis_metrics)
 
             so_metrics = self._extract_governance_metrics(
                 telemetry, "self_observation", {"self_observation_insights": "insights_generated"}
             )
             covenant_metrics.update(so_metrics)
-
-            # Calculate compliance rate (simplified - ratio of deferrals to decisions)
-            if covenant_metrics["ethical_decisions"] > 0:
-                covenant_metrics["covenant_compliance_rate"] = min(
-                    1.0, 1.0 - (covenant_metrics["filter_interventions"] / covenant_metrics["ethical_decisions"])
-                )
 
         except Exception as e:
             logger.error(f"Failed to compute covenant metrics: {e}")

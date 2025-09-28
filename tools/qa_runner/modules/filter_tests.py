@@ -27,6 +27,7 @@ class FilterTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="RECALL before MEMORIZE - should indicate not found",
+                timeout=120.0,
             ),
             # Try to recall non-existent secrets filter config
             QATestCase(

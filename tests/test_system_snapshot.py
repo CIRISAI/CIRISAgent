@@ -38,6 +38,19 @@ def mock_resource_monitor():
 
 
 @pytest.fixture
+def mock_time_service():
+    """Create a mock time service with fixed time."""
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+
+    time_service = Mock()
+    # Fixed time for consistent testing
+    fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+    time_service.now.return_value = fixed_time
+    return time_service
+
+
+@pytest.fixture
 def mock_memory_service():
     """Create a mock memory service."""
     return MockMemoryService()
@@ -82,16 +95,20 @@ class TestBuildSystemSnapshot:
     """Test build_system_snapshot function."""
 
     @pytest.mark.asyncio
-    async def test_build_minimal_snapshot(self, mock_resource_monitor):
+    async def test_build_minimal_snapshot(self, mock_resource_monitor, mock_time_service):
         """Test building snapshot with minimal required inputs."""
-        snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         assert isinstance(snapshot, SystemSnapshot)
         # Resource monitor data should be captured
         assert snapshot.resource_alerts == []  # No critical alerts
 
     @pytest.mark.asyncio
-    async def test_build_with_task_and_thought(self, sample_task, sample_thought, mock_resource_monitor):
+    async def test_build_with_task_and_thought(
+        self, sample_task, sample_thought, mock_resource_monitor, mock_time_service
+    ):
         """Test building snapshot with task and thought."""
         # Ensure the sample_task doesn't have channel_context that would cause validation error
         if hasattr(sample_task.context, "system_snapshot") and hasattr(
@@ -101,7 +118,10 @@ class TestBuildSystemSnapshot:
             delattr(sample_task.context.system_snapshot, "channel_context")
 
         snapshot = await build_system_snapshot(
-            task=sample_task, thought=sample_thought, resource_monitor=mock_resource_monitor
+            task=sample_task,
+            thought=sample_thought,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
         )
 
         assert isinstance(snapshot, SystemSnapshot)
@@ -115,7 +135,7 @@ class TestBuildSystemSnapshot:
         assert snapshot.channel_id == "test_channel_123"
 
     @pytest.mark.asyncio
-    async def test_channel_id_extraction_priority(self, mock_resource_monitor):
+    async def test_channel_id_extraction_priority(self, mock_resource_monitor, mock_time_service):
         """Test channel_id extraction follows correct priority."""
         # Create task without context first (context field is optional)
         task = Task(
@@ -136,19 +156,23 @@ class TestBuildSystemSnapshot:
         context.system_snapshot = system_snapshot
         task.context = context
 
-        snapshot = await build_system_snapshot(task=task, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         # Should use system_snapshot.channel_id
         assert snapshot.channel_id == "snapshot_channel"
 
     @pytest.mark.asyncio
-    async def test_critical_resource_alerts(self, mock_resource_monitor):
+    async def test_critical_resource_alerts(self, mock_resource_monitor, mock_time_service):
         """Test critical resource alerts are properly captured."""
         # Set critical resource state
         mock_resource_monitor.snapshot.healthy = False
         mock_resource_monitor.snapshot.critical = ["Memory usage at 95%", "Disk space critically low"]
 
-        snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         # Should have critical alerts
         assert len(snapshot.resource_alerts) >= 2
@@ -156,7 +180,7 @@ class TestBuildSystemSnapshot:
         assert any("REJECT OR DEFER" in alert for alert in snapshot.resource_alerts)
 
     @pytest.mark.asyncio
-    async def test_memory_service_integration(self, mock_resource_monitor, mock_memory_service):
+    async def test_memory_service_integration(self, mock_resource_monitor, mock_time_service, mock_memory_service):
         """Test memory service queries for identity and channel context."""
         # Setup mock identity node
         identity_node = GraphNode(
@@ -182,7 +206,11 @@ class TestBuildSystemSnapshot:
         mock_memory_service.recall = AsyncMock(side_effect=mock_recall)
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, memory_service=mock_memory_service
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            memory_service=mock_memory_service,
+            time_service=mock_time_service,
         )
 
         # Check identity was retrieved
@@ -193,11 +221,13 @@ class TestBuildSystemSnapshot:
         assert "tool" in snapshot.identity_restrictions
 
     @pytest.mark.asyncio
-    async def test_secrets_service_integration(self, mock_resource_monitor):
+    async def test_secrets_service_integration(self, mock_resource_monitor, mock_time_service):
         """Test secrets service integration."""
         mock_secrets = AsyncMock()
 
-        with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot") as mock_build:
+        with patch(
+            "ciris_engine.logic.context.system_snapshot._get_secrets_data", new_callable=AsyncMock
+        ) as mock_build:
             mock_build.return_value = {
                 "detected_secrets": ["API_KEY_*", "TOKEN_*"],
                 "total_secrets_stored": 5,
@@ -205,7 +235,11 @@ class TestBuildSystemSnapshot:
             }
 
             snapshot = await build_system_snapshot(
-                task=None, thought=None, resource_monitor=mock_resource_monitor, secrets_service=mock_secrets
+                task=None,
+                thought=None,
+                resource_monitor=mock_resource_monitor,
+                secrets_service=mock_secrets,
+                time_service=mock_time_service,
             )
 
             # Check secrets snapshot was integrated
@@ -214,7 +248,7 @@ class TestBuildSystemSnapshot:
             assert snapshot.secrets_filter_version == 2
 
     @pytest.mark.asyncio
-    async def test_service_health_tracking(self, mock_resource_monitor):
+    async def test_service_health_tracking(self, mock_resource_monitor, mock_time_service):
         """Test service health and circuit breaker tracking."""
         mock_registry = MagicMock()
 
@@ -227,14 +261,16 @@ class TestBuildSystemSnapshot:
         for handler_info in mock_registry.get_provider_info()["handlers"].values():
             for services in handler_info.values():
                 for service in services:
-                    # get_health_status should return an object with is_healthy attribute
-                    health_status = MagicMock()
-                    health_status.is_healthy = True
-                    service.get_health_status = AsyncMock(return_value=health_status)
+                    # Use ServiceProtocol is_healthy method
+                    service.is_healthy = AsyncMock(return_value=True)
                     service.get_circuit_breaker_status = MagicMock(return_value="CLOSED")
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, service_registry=mock_registry
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            service_registry=mock_registry,
+            time_service=mock_time_service,
         )
 
         # Check service health was captured
@@ -244,12 +280,16 @@ class TestBuildSystemSnapshot:
         assert snapshot.circuit_breaker_status["speak.communication"] == "CLOSED"
 
     @pytest.mark.asyncio
-    async def test_telemetry_summary_integration(self, mock_resource_monitor):
+    async def test_telemetry_summary_integration(self, mock_resource_monitor, mock_time_service):
         """Test telemetry service integration."""
         mock_telemetry = MockTelemetryService()
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, telemetry_service=mock_telemetry
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            telemetry_service=mock_telemetry,
+            time_service=mock_time_service,
         )
 
         # Check telemetry was integrated
@@ -259,7 +299,7 @@ class TestBuildSystemSnapshot:
         assert snapshot.telemetry_summary.cost_last_hour_cents == 15.0
 
     @pytest.mark.asyncio
-    async def test_thought_without_id_gets_default(self, mock_resource_monitor):
+    async def test_thought_without_id_gets_default(self, mock_resource_monitor, mock_time_service):
         """Test that thought without ID gets 'unknown' default."""
         thought = MagicMock()
         thought.thought_id = None  # Missing ID
@@ -270,7 +310,9 @@ class TestBuildSystemSnapshot:
         thought.thought_depth = None  # Optional field
         thought.context = None  # No context to avoid channel extraction issues
 
-        snapshot = await build_system_snapshot(task=None, thought=thought, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=None, thought=thought, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         # Should have thought summary with default ID
         assert snapshot.current_thought_summary is not None
@@ -282,7 +324,7 @@ class TestUserProfileEnrichment:
     """Test user profile enrichment from memory graph (lines 496-686)."""
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_from_thought_content(self, mock_resource_monitor):
+    async def test_enrich_user_profiles_from_thought_content(self, mock_resource_monitor, mock_time_service):
         """Test extracting and enriching user profiles from thought content."""
         mock_memory = AsyncMock()
 
@@ -348,7 +390,11 @@ class TestUserProfileEnrichment:
             mock_edges.return_value = []
 
             snapshot = await build_system_snapshot(
-                task=None, thought=mock_thought, resource_monitor=mock_resource_monitor, memory_service=mock_memory
+                task=None,
+                thought=mock_thought,
+                resource_monitor=mock_resource_monitor,
+                memory_service=mock_memory,
+                time_service=mock_time_service,
             )
 
         # Should have enriched 3 user profiles
@@ -372,7 +418,7 @@ class TestUserProfileEnrichment:
         assert user_555555.display_name == "ContextUser"
 
     @pytest.mark.asyncio
-    async def test_user_profile_with_cross_channel_messages(self, mock_resource_monitor):
+    async def test_user_profile_with_cross_channel_messages(self, mock_resource_monitor, mock_time_service):
         """Test enriching user profiles with messages from other channels."""
         mock_memory = AsyncMock()
 
@@ -432,6 +478,7 @@ class TestUserProfileEnrichment:
                     thought=mock_thought,
                     resource_monitor=mock_resource_monitor,
                     memory_service=mock_memory,
+                    time_service=mock_time_service,
                 )
 
         # Verify user profile was enriched with cross-channel messages
@@ -445,7 +492,7 @@ class TestAdapterIntegration:
     """Test adapter channels and tools collection with FAIL FAST behavior."""
 
     @pytest.mark.asyncio
-    async def test_adapter_channels_collection_success(self, mock_resource_monitor):
+    async def test_adapter_channels_collection_success(self, mock_resource_monitor, mock_time_service):
         """Test successful collection of adapter channels."""
         mock_runtime = MagicMock()
         mock_adapter_manager = MagicMock()
@@ -474,7 +521,11 @@ class TestAdapterIntegration:
         mock_runtime.current_shutdown_context = None  # Ensure no MagicMock for shutdown_context
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            runtime=mock_runtime,
+            time_service=mock_time_service,
         )
 
         # Verify adapter channels were collected
@@ -484,7 +535,7 @@ class TestAdapterIntegration:
         assert len(snapshot.adapter_channels["api"]) == 1
 
     @pytest.mark.asyncio
-    async def test_adapter_channels_fail_fast_on_invalid_type(self, mock_resource_monitor):
+    async def test_adapter_channels_fail_fast_on_invalid_type(self, mock_resource_monitor, mock_time_service):
         """Test FAIL FAST when adapter returns invalid channel type."""
         mock_runtime = MagicMock()
         mock_adapter_manager = MagicMock()
@@ -508,7 +559,7 @@ class TestAdapterIntegration:
         assert "expected ChannelContext" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_available_tools_collection_success(self, mock_resource_monitor):
+    async def test_available_tools_collection_success(self, mock_resource_monitor, mock_time_service):
         """Test successful collection of available tools."""
         mock_runtime = MagicMock()
         mock_service_registry = MagicMock()
@@ -544,7 +595,11 @@ class TestAdapterIntegration:
         mock_runtime.current_shutdown_context = None  # Ensure no MagicMock for shutdown_context
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            runtime=mock_runtime,
+            time_service=mock_time_service,
         )
 
         # Verify tools were collected
@@ -555,7 +610,7 @@ class TestAdapterIntegration:
         assert "observe" in tool_names
 
     @pytest.mark.asyncio
-    async def test_available_tools_fail_fast_on_invalid_type(self, mock_resource_monitor):
+    async def test_available_tools_fail_fast_on_invalid_type(self, mock_resource_monitor, mock_time_service):
         """Test FAIL FAST when tool service returns invalid type."""
         mock_runtime = MagicMock()
         mock_service_registry = MagicMock()
@@ -586,7 +641,7 @@ class TestChannelContextExtraction:
     """Test channel context extraction logic and edge cases."""
 
     @pytest.mark.asyncio
-    async def test_channel_search_fallback(self, mock_resource_monitor):
+    async def test_channel_search_fallback(self, mock_resource_monitor, mock_time_service):
         """Test channel search when direct lookup fails."""
         mock_memory = AsyncMock()
 
@@ -611,7 +666,11 @@ class TestChannelContextExtraction:
         mock_task.context.system_snapshot.channel_context = None  # Avoid MagicMock validation issues
 
         snapshot = await build_system_snapshot(
-            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, memory_service=mock_memory
+            task=mock_task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            memory_service=mock_memory,
+            time_service=mock_time_service,
         )
 
         # Verify search was called as fallback
@@ -619,17 +678,19 @@ class TestChannelContextExtraction:
         assert snapshot.channel_id == "found_channel"
 
     @pytest.mark.asyncio
-    async def test_channel_extraction_from_dict_context(self, mock_resource_monitor):
+    async def test_channel_extraction_from_dict_context(self, mock_resource_monitor, mock_time_service):
         """Test channel extraction when context is a dict."""
         mock_task = MagicMock()
         mock_task.context = {"channel_id": "dict_channel"}
 
-        snapshot = await build_system_snapshot(task=mock_task, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         assert snapshot.channel_id == "dict_channel"
 
     @pytest.mark.asyncio
-    async def test_channel_extraction_handles_exception(self, mock_resource_monitor):
+    async def test_channel_extraction_handles_exception(self, mock_resource_monitor, mock_time_service):
         """Test channel extraction handles exceptions gracefully."""
         mock_task = MagicMock()
 
@@ -642,7 +703,9 @@ class TestChannelContextExtraction:
         mock_task.context = BadContext()
 
         # Should handle exception and continue
-        snapshot = await build_system_snapshot(task=mock_task, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         assert snapshot.channel_id is None
 
@@ -651,7 +714,7 @@ class TestGraphQLIntegration:
     """Test GraphQL provider integration for user profiles."""
 
     @pytest.mark.asyncio
-    async def test_graphql_user_profile_conversion(self, mock_resource_monitor):
+    async def test_graphql_user_profile_conversion(self, mock_resource_monitor, mock_time_service):
         """Test conversion of GraphQL profiles to UserProfile."""
         mock_graphql = AsyncMock()
 
@@ -681,7 +744,11 @@ class TestGraphQLIntegration:
         mock_graphql.enrich_context = AsyncMock(return_value=mock_enriched)
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, graphql_provider=mock_graphql
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            graphql_provider=mock_graphql,
+            time_service=mock_time_service,
         )
 
         # Verify GraphQL profiles were converted
@@ -697,7 +764,7 @@ class TestGraphQLIntegration:
         # They would need to be added to the schema if needed
 
     @pytest.mark.asyncio
-    async def test_graphql_consent_attributes_extraction(self, mock_resource_monitor):
+    async def test_graphql_consent_attributes_extraction(self, mock_resource_monitor, mock_time_service):
         """Test extraction of consent attributes from GraphQL profiles."""
         mock_graphql = AsyncMock()
         mock_enriched = MagicMock()
@@ -729,7 +796,11 @@ class TestGraphQLIntegration:
         mock_graphql.enrich_context = AsyncMock(return_value=mock_enriched)
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, graphql_provider=mock_graphql
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            graphql_provider=mock_graphql,
+            time_service=mock_time_service,
         )
 
         # Verify consent attributes were extracted
@@ -740,7 +811,7 @@ class TestGraphQLIntegration:
         assert profile.partnership_requested_at is not None
 
     @pytest.mark.asyncio
-    async def test_graphql_consent_invalid_dates(self, mock_resource_monitor):
+    async def test_graphql_consent_invalid_dates(self, mock_resource_monitor, mock_time_service):
         """Test handling of invalid dates in consent attributes."""
         mock_graphql = AsyncMock()
         mock_enriched = MagicMock()
@@ -768,7 +839,11 @@ class TestGraphQLIntegration:
 
         # Should handle invalid dates gracefully
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, graphql_provider=mock_graphql
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            graphql_provider=mock_graphql,
+            time_service=mock_time_service,
         )
 
         # Profile created but dates are None
@@ -782,15 +857,13 @@ class TestServiceHealthCollection:
     """Test service health and circuit breaker status collection."""
 
     @pytest.mark.asyncio
-    async def test_global_services_health_collection(self, mock_resource_monitor):
+    async def test_global_services_health_collection(self, mock_resource_monitor, mock_time_service):
         """Test collecting health from global services."""
         mock_registry = MagicMock()
 
-        # Create mock global service
-        mock_global_service = MagicMock()  # Use MagicMock not AsyncMock
-        mock_health = MagicMock()
-        mock_health.is_healthy = True
-        mock_global_service.get_health_status = AsyncMock(return_value=mock_health)
+        # Create mock global service with ServiceProtocol is_healthy method
+        mock_global_service = MagicMock()
+        mock_global_service.is_healthy = AsyncMock(return_value=True)
         mock_global_service.get_circuit_breaker_status = MagicMock(return_value="CLOSED")
 
         mock_registry.get_provider_info.return_value = {
@@ -799,7 +872,11 @@ class TestServiceHealthCollection:
         }
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, service_registry=mock_registry
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            service_registry=mock_registry,
+            time_service=mock_time_service,
         )
 
         # Verify global service health was collected
@@ -813,22 +890,26 @@ class TestResourceMonitorEdgeCases:
     """Test resource monitor unavailability and exceptions."""
 
     @pytest.mark.asyncio
-    async def test_resource_monitor_unavailable(self):
+    async def test_resource_monitor_unavailable(self, mock_time_service):
         """Test when resource monitor is None."""
         # Should handle None resource monitor
-        snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=None)  # Unavailable
+        snapshot = await build_system_snapshot(
+            task=None, thought=None, resource_monitor=None, time_service=mock_time_service
+        )  # Unavailable
 
         # Should have warning in alerts
         assert len(snapshot.resource_alerts) == 0  # No alerts when monitor unavailable
 
     @pytest.mark.asyncio
-    async def test_resource_monitor_exception(self):
+    async def test_resource_monitor_exception(self, mock_time_service):
         """Test when resource monitor throws exception."""
         mock_monitor = MagicMock()
         # Make snapshot a property that throws exception when accessed
         mock_monitor.snapshot = property(lambda self: (_ for _ in ()).throw(RuntimeError("Monitor failed")))
 
-        snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=mock_monitor)
+        snapshot = await build_system_snapshot(
+            task=None, thought=None, resource_monitor=mock_monitor, time_service=mock_time_service
+        )
 
         # Should have critical alert about failure
         assert len(snapshot.resource_alerts) > 0
@@ -839,7 +920,7 @@ class TestToolServiceValidation:
     """Test tool service validation and error handling."""
 
     @pytest.mark.asyncio
-    async def test_tool_services_non_iterable(self, mock_resource_monitor):
+    async def test_tool_services_non_iterable(self, mock_resource_monitor, mock_time_service):
         """Test handling when get_services_by_type returns non-iterable."""
         mock_runtime = MagicMock()
         mock_registry = MagicMock()
@@ -853,7 +934,11 @@ class TestToolServiceValidation:
 
         # Should handle gracefully
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            runtime=mock_runtime,
+            time_service=mock_time_service,
         )
 
         # Should have empty tools (fallback to empty list)
@@ -864,7 +949,7 @@ class TestChannelContextExtraction:
     """Test channel context extraction including system_snapshot.channel_context."""
 
     @pytest.mark.asyncio
-    async def test_channel_context_object_extraction(self, mock_resource_monitor):
+    async def test_channel_context_object_extraction(self, mock_resource_monitor, mock_time_service):
         """Test extracting channel_context object from system_snapshot."""
         mock_task = MagicMock()
         mock_context = MagicMock()
@@ -884,7 +969,9 @@ class TestChannelContextExtraction:
         mock_context.system_snapshot = mock_system_snapshot
         mock_task.context = mock_context
 
-        snapshot = await build_system_snapshot(task=mock_task, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         # Should extract channel_id from channel_context object
         assert snapshot.channel_id == "context_channel_123"
@@ -907,7 +994,7 @@ class TestTypeEnforcement:
             )
 
     @pytest.mark.asyncio
-    async def test_invalid_task_type_fails(self, mock_resource_monitor):
+    async def test_invalid_task_type_fails(self, mock_resource_monitor, mock_time_service):
         """Test that invalid task type is handled gracefully."""
         # Create an object that looks like a task but isn't a proper Task
         invalid_task = MagicMock()
@@ -916,13 +1003,15 @@ class TestTypeEnforcement:
         invalid_task.channel_id = None
 
         # Should handle gracefully
-        snapshot = await build_system_snapshot(task=invalid_task, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=invalid_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         # The function handles this by checking attributes
         assert snapshot.channel_id is None  # No channel extracted from invalid object
 
     @pytest.mark.asyncio
-    async def test_channel_context_type_preservation(self, mock_resource_monitor):
+    async def test_channel_context_type_preservation(self, mock_resource_monitor, mock_time_service):
         """Test that channel_id is properly extracted from task context."""
         # Create task without context in constructor (to avoid validation error)
         task = Task(
@@ -942,7 +1031,9 @@ class TestTypeEnforcement:
         context.system_snapshot = system_snapshot
         task.context = context
 
-        snapshot = await build_system_snapshot(task=task, thought=None, resource_monitor=mock_resource_monitor)
+        snapshot = await build_system_snapshot(
+            task=task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        )
 
         # Channel ID should be extracted from context
         assert snapshot.channel_id == "typed_channel"

@@ -29,6 +29,16 @@ def mock_resource_monitor():
 
 
 @pytest.fixture
+def mock_time_service():
+    """Create a mock time service - REQUIRED parameter."""
+    time_service = Mock()
+    # Fixed time for consistent testing
+    fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+    time_service.now.return_value = fixed_time
+    return time_service
+
+
+@pytest.fixture
 def mock_task_with_channel():
     """Create a task with channel context."""
     task = Task(
@@ -104,9 +114,11 @@ def mock_runtime_with_tools():
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_minimal(mock_resource_monitor):
+async def test_build_system_snapshot_minimal(mock_resource_monitor, mock_time_service):
     """Test minimal snapshot with only required parameters."""
-    snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=mock_resource_monitor)
+    snapshot = await build_system_snapshot(
+        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+    )
 
     assert isinstance(snapshot, SystemSnapshot)
     assert snapshot.channel_id is None  # No channel without task/thought
@@ -114,10 +126,13 @@ async def test_build_system_snapshot_minimal(mock_resource_monitor):
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_with_channel):
+async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_with_channel, mock_time_service):
     """Test snapshot with task that has channel context."""
     snapshot = await build_system_snapshot(
-        task=mock_task_with_channel, thought=None, resource_monitor=mock_resource_monitor
+        task=mock_task_with_channel,
+        thought=None,
+        resource_monitor=mock_resource_monitor,
+        time_service=mock_time_service,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -127,9 +142,11 @@ async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_thought):
+async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_thought, mock_time_service):
     """Test snapshot with thought."""
-    snapshot = await build_system_snapshot(task=None, thought=mock_thought, resource_monitor=mock_resource_monitor)
+    snapshot = await build_system_snapshot(
+        task=None, thought=mock_thought, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+    )
 
     assert isinstance(snapshot, SystemSnapshot)
     assert snapshot.current_thought_summary is not None
@@ -138,10 +155,14 @@ async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_th
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runtime_with_tools):
+async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runtime_with_tools, mock_time_service):
     """Test snapshot with runtime that provides tools."""
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime_with_tools
+        task=None,
+        thought=None,
+        resource_monitor=mock_resource_monitor,
+        runtime=mock_runtime_with_tools,
+        time_service=mock_time_service,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -157,13 +178,15 @@ async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runt
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_monitor):
+async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_monitor, mock_time_service):
     """Test snapshot with critical resource alerts."""
     # Make resources unhealthy
     mock_resource_monitor.snapshot.critical = ["Memory usage above 90%"]
     mock_resource_monitor.snapshot.healthy = False
 
-    snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=mock_resource_monitor)
+    snapshot = await build_system_snapshot(
+        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+    )
 
     assert isinstance(snapshot, SystemSnapshot)
     assert len(snapshot.resource_alerts) == 2  # One for critical, one for unhealthy
@@ -172,7 +195,7 @@ async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_moni
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_memory_service():
+async def test_build_system_snapshot_with_memory_service(mock_time_service):
     """Test snapshot with memory service for identity retrieval."""
     # Mock resource monitor
     resource_monitor = Mock()
@@ -198,7 +221,11 @@ async def test_build_system_snapshot_with_memory_service():
     memory_service.recall = AsyncMock(return_value=[identity_node])
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=resource_monitor, memory_service=memory_service
+        task=None,
+        thought=None,
+        resource_monitor=resource_monitor,
+        memory_service=memory_service,
+        time_service=mock_time_service,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -208,7 +235,7 @@ async def test_build_system_snapshot_with_memory_service():
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_stewardship_data():
+async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
     """Test snapshot with memory service for identity retrieval including stewardship."""
     # Mock resource monitor
     resource_monitor = Mock()
@@ -257,7 +284,11 @@ async def test_build_system_snapshot_with_stewardship_data():
     memory_service.recall = AsyncMock(return_value=[identity_node])
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=resource_monitor, memory_service=memory_service
+        task=None,
+        thought=None,
+        resource_monitor=resource_monitor,
+        memory_service=memory_service,
+        time_service=mock_time_service,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -271,7 +302,7 @@ async def test_build_system_snapshot_with_stewardship_data():
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_type_safety():
+async def test_build_system_snapshot_type_safety(mock_time_service):
     """Test that invalid types fail fast and loud."""
     # Mock resource monitor
     resource_monitor = Mock()
@@ -293,11 +324,13 @@ async def test_build_system_snapshot_type_safety():
 
     # Should raise TypeError - FAIL FAST AND LOUD
     with pytest.raises(TypeError, match="returned invalid type"):
-        await build_system_snapshot(task=None, thought=None, resource_monitor=resource_monitor, runtime=runtime)
+        await build_system_snapshot(
+            task=None, thought=None, resource_monitor=resource_monitor, runtime=runtime, time_service=mock_time_service
+        )
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_service_registry():
+async def test_build_system_snapshot_with_service_registry(mock_time_service):
     """Test service health collection from service registry."""
     # Mock resource monitor
     resource_monitor = Mock()
@@ -321,7 +354,11 @@ async def test_build_system_snapshot_with_service_registry():
     )
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=resource_monitor, service_registry=service_registry
+        task=None,
+        thought=None,
+        resource_monitor=resource_monitor,
+        service_registry=service_registry,
+        time_service=mock_time_service,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -331,12 +368,14 @@ async def test_build_system_snapshot_with_service_registry():
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_version_info():
+async def test_build_system_snapshot_with_version_info(mock_time_service):
     """Test that version information is included in snapshot."""
     resource_monitor = Mock()
     resource_monitor.snapshot = Mock(critical=[], healthy=True)
 
-    snapshot = await build_system_snapshot(task=None, thought=None, resource_monitor=resource_monitor)
+    snapshot = await build_system_snapshot(
+        task=None, thought=None, resource_monitor=resource_monitor, time_service=mock_time_service
+    )
 
     assert isinstance(snapshot, SystemSnapshot)
     # Version info should be present and valid

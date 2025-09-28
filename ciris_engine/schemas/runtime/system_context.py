@@ -101,6 +101,10 @@ class SystemSnapshot(BaseModel):
 
     # Runtime context
     shutdown_context: Optional[ShutdownContext] = Field(None, description="Shutdown context if system is shutting down")
+    current_time_utc: str = Field(default="", description="Current system time in UTC ISO format from time service")
+    current_time_london: str = Field(default="", description="Current time in London timezone (Europe/London)")
+    current_time_chicago: str = Field(default="", description="Current time in Chicago timezone (America/Chicago)")
+    current_time_tokyo: str = Field(default="", description="Current time in Tokyo timezone (Asia/Tokyo)")
 
     # Resource alerts - CRITICAL for mission-critical systems
     resource_alerts: List[str] = Field(
@@ -213,6 +217,11 @@ class UserProfile(BaseModel):
     partnership_requested_at: Optional[datetime] = Field(None, description="When partnership was requested")
     partnership_approved: bool = Field(False, description="Whether partnership was approved by agent")
 
+    # Agent memorized data - arbitrary attributes the agent chose to store about this user
+    memorized_attributes: Dict[str, str] = Field(
+        default_factory=dict, description="Additional attributes the agent memorized about this user"
+    )
+
     # Additional context
     notes: Optional[str] = Field(None, description="Additional notes or context about the user")
 
@@ -239,6 +248,11 @@ class ChannelContext(BaseModel):
     # Configuration
     allowed_actions: List[str] = Field(default_factory=list, description="Allowed actions in channel")
     moderation_level: str = Field("standard", description="Moderation level")
+
+    # Agent memorized data - arbitrary attributes the agent chose to store about this channel
+    memorized_attributes: Dict[str, str] = Field(
+        default_factory=dict, description="Additional attributes the agent memorized about this channel"
+    )
 
     @field_serializer("created_at", "last_activity")
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:

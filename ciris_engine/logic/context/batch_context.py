@@ -4,6 +4,7 @@ Separates per-batch vs per-thought operations for performance.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
@@ -185,10 +186,13 @@ async def build_system_snapshot_with_batch(
     batch_data: BatchContextData,
     memory_service: Optional[Any] = None,
     graphql_provider: Optional[Any] = None,
+    time_service: Any = None,  # REQUIRED - will fail fast and loud if None
 ) -> SystemSnapshot:
     """Build system snapshot using pre-fetched batch data."""
 
     from ciris_engine.schemas.runtime.system_context import ThoughtSummary
+
+    from .system_snapshot_helpers import _get_localized_times
 
     logger.info(
         f"[DEBUG DB TIMING] Building snapshot for thought {getattr(thought, 'thought_id', 'unknown')} with batch data"
@@ -289,4 +293,6 @@ async def build_system_snapshot_with_batch(
         shutdown_context=batch_data.shutdown_context,
         telemetry_summary=batch_data.telemetry_summary,
         user_profiles=[],  # Not using dict, it expects a list
+        # Get localized times - FAILS FAST AND LOUD if time_service is None
+        **{f"current_time_{key}": value for key, value in _get_localized_times(time_service).items()},
     )

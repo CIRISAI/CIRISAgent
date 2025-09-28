@@ -25,6 +25,16 @@ from ciris_engine.schemas.runtime.system_context import SystemSnapshot, TaskSumm
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
 
+@pytest.fixture
+def mock_time_service():
+    """Create a mock time service with fixed time."""
+    time_service = MagicMock()
+    # Fixed time for consistent testing
+    fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+    time_service.now.return_value = fixed_time
+    return time_service
+
+
 # Mock Task model that matches what persistence returns
 class MockPersistedTask(BaseModel):
     """Mock task that matches database model structure."""
@@ -347,7 +357,7 @@ class TestPrefetchBatchContext:
 class TestBuildSystemSnapshotWithBatch:
     """Test system snapshot building with focus on completeness and type safety."""
 
-    async def test_build_snapshot_maintains_type_safety(self):
+    async def test_build_snapshot_maintains_type_safety(self, mock_time_service):
         """Verify snapshot maintains type safety throughout."""
         batch_data = BatchContextData()
 
@@ -357,7 +367,9 @@ class TestBuildSystemSnapshotWithBatch:
         batch_data.circuit_breaker_status = {"memory": "CLOSED", "llm": "OPEN"}
         batch_data.resource_alerts = ["High memory usage"]
 
-        snapshot = await build_system_snapshot_with_batch(task=None, thought=None, batch_data=batch_data)
+        snapshot = await build_system_snapshot_with_batch(
+            task=None, thought=None, batch_data=batch_data, time_service=mock_time_service
+        )
 
         # Verify SystemSnapshot type
         assert isinstance(snapshot, SystemSnapshot)
@@ -372,7 +384,7 @@ class TestBuildSystemSnapshotWithBatch:
         assert snapshot.service_health["memory"] is True
         assert snapshot.circuit_breaker_status["llm"] == "OPEN"
 
-    async def test_build_snapshot_with_complete_context(self):
+    async def test_build_snapshot_with_complete_context(self, mock_time_service):
         """Test building snapshot with all context fields populated."""
         batch_data = BatchContextData()
 
@@ -409,7 +421,9 @@ class TestBuildSystemSnapshotWithBatch:
         }
 
         # Build snapshot
-        snapshot = await build_system_snapshot_with_batch(task=None, thought=None, batch_data=batch_data)
+        snapshot = await build_system_snapshot_with_batch(
+            task=None, thought=None, batch_data=batch_data, time_service=mock_time_service
+        )
 
         # Verify all fields are properly populated
         assert snapshot.agent_identity["agent_id"] == "ciris_test"
@@ -425,7 +439,7 @@ class TestBuildSystemSnapshotWithBatch:
         assert snapshot.total_secrets_stored == 3
         assert snapshot.secrets_filter_version == 1
 
-    async def test_build_snapshot_extracts_channel_context(self):
+    async def test_build_snapshot_extracts_channel_context(self, mock_time_service):
         """Test channel context extraction from nested task context."""
         batch_data = BatchContextData()
 
@@ -451,7 +465,11 @@ class TestBuildSystemSnapshotWithBatch:
         mock_memory.recall.return_value = []
 
         snapshot = await build_system_snapshot_with_batch(
-            task=mock_task, thought=None, batch_data=batch_data, memory_service=mock_memory
+            task=mock_task,
+            thought=None,
+            batch_data=batch_data,
+            memory_service=mock_memory,
+            time_service=mock_time_service,
         )
 
         # Should extract channel_id from nested context
@@ -466,7 +484,7 @@ class TestBuildSystemSnapshotWithBatch:
         call_args = mock_memory.recall.call_args[0][0]
         assert call_args.node_id == "channel/discord_12345"
 
-    async def test_build_snapshot_handles_thought_status_variants(self):
+    async def test_build_snapshot_handles_thought_status_variants(self, mock_time_service):
         """Test handling of different thought status representations."""
         batch_data = BatchContextData()
 
@@ -479,7 +497,9 @@ class TestBuildSystemSnapshotWithBatch:
         mock_thought1.thought_type = "NORMAL"
         mock_thought1.thought_depth = 1
 
-        snapshot1 = await build_system_snapshot_with_batch(task=None, thought=mock_thought1, batch_data=batch_data)
+        snapshot1 = await build_system_snapshot_with_batch(
+            task=None, thought=mock_thought1, batch_data=batch_data, time_service=mock_time_service
+        )
 
         assert snapshot1.current_thought_summary.status == "processing"
 
@@ -492,7 +512,9 @@ class TestBuildSystemSnapshotWithBatch:
         mock_thought2.thought_type = "NORMAL"
         mock_thought2.thought_depth = 1
 
-        snapshot2 = await build_system_snapshot_with_batch(task=None, thought=mock_thought2, batch_data=batch_data)
+        snapshot2 = await build_system_snapshot_with_batch(
+            task=None, thought=mock_thought2, batch_data=batch_data, time_service=mock_time_service
+        )
 
         assert snapshot2.current_thought_summary.status == "completed"
 
@@ -505,6 +527,8 @@ class TestBuildSystemSnapshotWithBatch:
         mock_thought3.thought_type = "NORMAL"
         mock_thought3.thought_depth = 1
 
-        snapshot3 = await build_system_snapshot_with_batch(task=None, thought=mock_thought3, batch_data=batch_data)
+        snapshot3 = await build_system_snapshot_with_batch(
+            task=None, thought=mock_thought3, batch_data=batch_data, time_service=mock_time_service
+        )
 
         assert snapshot3.current_thought_summary.status is None

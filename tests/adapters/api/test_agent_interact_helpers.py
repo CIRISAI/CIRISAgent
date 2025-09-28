@@ -462,6 +462,10 @@ class TestGetCurrentCognitiveState:
 
         class MockRuntime:
             def __init__(self):
+                self.agent_processor = MockAgentProcessor()
+
+        class MockAgentProcessor:
+            def __init__(self):
                 self.state_manager = MockStateManager()
 
         class MockStateManager:
@@ -501,6 +505,10 @@ class TestGetCurrentCognitiveState:
 
         class MockRuntimeNoneStateManager:
             def __init__(self):
+                self.agent_processor = MockAgentProcessorNoneStateManager()
+
+        class MockAgentProcessorNoneStateManager:
+            def __init__(self):
                 self.state_manager = None
 
         class MockAppState:
@@ -525,6 +533,10 @@ class TestGetCurrentCognitiveState:
             pass  # No current_state attribute
 
         class MockRuntimeNoCurrentState:
+            def __init__(self):
+                self.agent_processor = MockAgentProcessorNoCurrentState()
+
+        class MockAgentProcessorNoCurrentState:
             def __init__(self):
                 self.state_manager = MockStateManagerNoCurrentState()
 
@@ -559,6 +571,10 @@ class TestGetCurrentCognitiveState:
 
         class MockRuntimeWithEnum:
             def __init__(self):
+                self.agent_processor = MockAgentProcessorWithEnum()
+
+        class MockAgentProcessorWithEnum:
+            def __init__(self):
                 self.state_manager = MockStateManagerWithEnum()
 
         class MockAppState:
@@ -584,6 +600,10 @@ class TestGetCurrentCognitiveState:
                 self.current_state = "PLAY"
 
         class MockRuntimeWithString:
+            def __init__(self):
+                self.agent_processor = MockAgentProcessorWithString()
+
+        class MockAgentProcessorWithString:
             def __init__(self):
                 self.state_manager = MockStateManagerWithString()
 

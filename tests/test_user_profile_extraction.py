@@ -44,6 +44,18 @@ class TestUserProfileExtraction:
     """Test user profile extraction from various sources."""
 
     @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        from datetime import datetime, timezone
+        from unittest.mock import Mock
+
+        time_service = Mock()
+        # Fixed time for consistent testing
+        fixed_time = datetime(2025, 9, 27, 12, 0, 0, tzinfo=timezone.utc)
+        time_service.now.return_value = fixed_time
+        return time_service
+
+    @pytest.fixture
     def mock_task_with_user(self):
         """Create a task with user in context."""
         return Task(
@@ -189,10 +201,10 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_extract_user_from_task_context(
-        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that user ID is extracted from task context."""
-        with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
+        with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
         ), patch("ciris_engine.logic.context.system_snapshot.persistence") as mock_persistence:
 
@@ -224,6 +236,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             print(f"DEBUG: Snapshot user_profiles = {snapshot.user_profiles}")
@@ -238,16 +251,16 @@ class TestUserProfileExtraction:
             assert snapshot.user_profiles
             assert any(p.user_id == "123456789" for p in snapshot.user_profiles)
 
-            # Verify ALL attributes were captured in notes
+            # Verify ALL custom attributes were captured in memorized_attributes
             user_profile = next(p for p in snapshot.user_profiles if p.user_id == "123456789")
-            assert "custom_field" in user_profile.notes
-            assert "custom_value_123456789" in user_profile.notes
-            assert "preferences" in user_profile.notes
-            assert "tags" in user_profile.notes
+            assert "custom_field" in user_profile.memorized_attributes
+            assert user_profile.memorized_attributes["custom_field"] == "custom_value_123456789"
+            assert "preferences" in user_profile.memorized_attributes
+            assert "tags" in user_profile.memorized_attributes
 
     @pytest.mark.asyncio
     async def test_extract_users_from_thought_content(
-        self, mock_thought_with_mentions, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_thought_with_mentions, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that user IDs are extracted from Discord mentions and ID patterns."""
         task = Task(
@@ -260,7 +273,7 @@ class TestUserProfileExtraction:
             context=TaskContext(correlation_id="test_correlation"),
         )
 
-        with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
+        with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
         ), patch("ciris_engine.logic.context.system_snapshot.persistence") as mock_persistence:
 
@@ -288,6 +301,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Check extraction logs
@@ -313,7 +327,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_extract_users_from_correlation_history(
-        self, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that user IDs are extracted from correlation history."""
         task = Task(
@@ -326,9 +340,9 @@ class TestUserProfileExtraction:
             context=TaskContext(correlation_id="test_correlation_with_history", user_id="123456789"),
         )
 
-        with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
+        with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
-        ), patch("ciris_engine.logic.context.system_snapshot.persistence") as mock_persistence:
+        ), patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
 
             # Mock correlation history with additional users
             mock_cursor = MagicMock()
@@ -362,6 +376,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Check correlation history extraction
@@ -377,7 +392,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_comprehensive_context_logging(
-        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that context building logs comprehensive statistics."""
         with patch("ciris_engine.logic.context.system_snapshot.logger") as mock_logger, patch(
@@ -408,6 +423,7 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Check comprehensive logging
@@ -428,7 +444,7 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_all_user_attributes_captured(
-        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks
+        self, mock_task_with_user, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
         """Test that ALL user node attributes are captured in the profile."""
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(
@@ -459,29 +475,33 @@ class TestUserProfileExtraction:
                 secrets_service=setup_mocks["secrets_service"],
                 runtime=setup_mocks["runtime"],
                 service_registry=setup_mocks["service_registry"],
+                time_service=mock_time_service,
             )
 
             # Get the user profile
             user_profile = next(p for p in snapshot.user_profiles if p.user_id == "123456789")
 
-            # Verify ALL attributes are in notes as JSON
-            assert user_profile.notes is not None
-            assert "All attributes:" in user_profile.notes
+            # Verify ALL custom attributes are in memorized_attributes
+            assert user_profile.memorized_attributes is not None
 
-            # Parse the attributes from notes
+            # Verify all custom fields are captured in memorized_attributes
+            assert user_profile.memorized_attributes["custom_field"] == "custom_value_123456789"
+            assert user_profile.memorized_attributes["email"] == "user_123456789@example.com"
+
+            # Verify complex objects are stringified in memorized_attributes
             import json
 
-            attrs_json = user_profile.notes.split("All attributes: ")[1].split("\n")[0]
-            captured_attrs = json.loads(attrs_json)
+            preferences = json.loads(user_profile.memorized_attributes["preferences"])
+            assert preferences["theme"] == "dark"
+            assert preferences["language"] == "en"
 
-            # Verify all custom fields are captured
-            assert captured_attrs["custom_field"] == "custom_value_123456789"
-            assert captured_attrs["preferences"]["theme"] == "dark"
-            assert captured_attrs["preferences"]["language"] == "en"
-            assert "active" in captured_attrs["tags"]
-            assert "verified" in captured_attrs["tags"]
-            assert captured_attrs["email"] == "user_123456789@example.com"
-            assert captured_attrs["trust_level"] == 0.8
+            tags = json.loads(user_profile.memorized_attributes["tags"])
+            assert "active" in tags
+            assert "verified" in tags
+
+            # Verify known fields are properly extracted to UserProfile fields, not memorized_attributes
+            assert user_profile.trust_level == 0.8
+            assert "trust_level" not in user_profile.memorized_attributes  # Should be in proper field
 
 
 if __name__ == "__main__":

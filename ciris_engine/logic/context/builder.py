@@ -26,6 +26,7 @@ class ContextBuilder:
         runtime: Optional[Any] = None,
         service_registry: Optional[Any] = None,
         resource_monitor: Optional[Any] = None,  # Will be REQUIRED
+        time_service: Any = None,  # REQUIRED - will fail fast and loud if None
     ) -> None:
         self.memory_service = memory_service
         self.graphql_provider = graphql_provider
@@ -35,6 +36,7 @@ class ContextBuilder:
         self.runtime = runtime
         self.service_registry = service_registry
         self.resource_monitor = resource_monitor
+        self.time_service = time_service
 
     async def build_thought_context(
         self, thought: Thought, task: Optional[Task] = None, system_snapshot: Optional[SystemSnapshot] = None
@@ -240,6 +242,7 @@ class ContextBuilder:
             secrets_service=self.secrets_service,
             runtime=self.runtime,
             service_registry=self.service_registry,
+            time_service=self.time_service,
         )
 
     async def _build_secrets_snapshot(self) -> dict:

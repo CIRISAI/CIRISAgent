@@ -254,9 +254,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
         return pending_status
 
-    async def _check_gaming_behavior(
-        self, request: ConsentRequest, previous_status: Optional[ConsentStatus]
-    ) -> None:
+    async def _check_gaming_behavior(self, request: ConsentRequest, previous_status: Optional[ConsentStatus]) -> None:
         """Check for gaming behavior if switching consent streams."""
         if not previous_status or request.stream == previous_status.stream:
             return
@@ -265,13 +263,17 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return
 
         # Handle both enum and string types for stream
-        prev_stream = previous_status.stream.value if hasattr(previous_status.stream, "value") else previous_status.stream
+        prev_stream = (
+            previous_status.stream.value if hasattr(previous_status.stream, "value") else previous_status.stream
+        )
         req_stream = request.stream.value if hasattr(request.stream, "value") else request.stream
 
         is_gaming = await self._filter_service.handle_consent_transition(request.user_id, prev_stream, req_stream)
 
         if is_gaming:
-            logger.warning(f"Gaming attempt detected for {request.user_id}: {previous_status.stream} -> {request.stream}")
+            logger.warning(
+                f"Gaming attempt detected for {request.user_id}: {previous_status.stream} -> {request.stream}"
+            )
 
     def _create_consent_status(
         self, request: ConsentRequest, previous_status: Optional[ConsentStatus]
@@ -537,14 +539,18 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         """
         Check if TEMPORARY consent has expired.
         NO GRACE PERIOD - expired means expired.
+
+        Returns:
+            False: Consent exists and is valid
+            True: Consent exists but is expired
+
+        Raises:
+            ConsentNotFoundError: User has no consent record (FAIL FAST)
         """
-        try:
-            status = await self.get_consent(user_id)
-            if status.stream == ConsentStream.TEMPORARY and status.expires_at:
-                return self._time_service.now() > status.expires_at
-            return False
-        except ConsentNotFoundError:
-            return True  # No consent = expired
+        status = await self.get_consent(user_id)  # Let it raise - fail fast!
+        if status.stream == ConsentStream.TEMPORARY and status.expires_at:
+            return self._time_service.now() > status.expires_at
+        return False
 
     async def get_impact_report(self, user_id: str) -> ConsentImpactReport:
         """

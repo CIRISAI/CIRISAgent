@@ -582,14 +582,14 @@ class TestConsentServiceCleanup:
 
     @pytest.mark.asyncio
     async def test_check_expiry_no_consent_found(self, consent_service):
-        """Test check_expiry returns True when no consent is found."""
+        """Test check_expiry propagates ConsentNotFoundError - FAIL FAST, FAIL LOUD."""
 
         # Mock get_consent to raise ConsentNotFoundError
         consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError("No consent found"))
 
-        result = await consent_service.check_expiry("nonexistent_user")
-
-        assert result is True  # No consent = expired
+        # Should propagate the exception - no fake defaults!
+        with pytest.raises(ConsentNotFoundError):
+            await consent_service.check_expiry("nonexistent_user")
 
     @pytest.mark.asyncio
     async def test_get_impact_report_with_real_tsdb_data(self, enhanced_consent_service, mock_time_service):

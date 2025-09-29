@@ -10,22 +10,23 @@ Focuses on:
 - Tool handlers (upgrade/degrade relationship)
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
 from ciris_engine.logic.services.governance.consent.service import (
-    ConsentService,
     ConsentNotFoundError,
+    ConsentService,
     ConsentValidationError,
 )
+from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
     ConsentCategory,
     ConsentRequest,
     ConsentStatus,
     ConsentStream,
 )
-from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
 
 @pytest.fixture
@@ -239,7 +240,10 @@ class TestGrantConsentFlow:
     async def test_grant_temporary_consent_new_user(self, consent_service):
         """Test granting TEMPORARY consent to new user."""
         request = ConsentRequest(
-            user_id="new_user", stream=ConsentStream.TEMPORARY, categories=[ConsentCategory.INTERACTION], reason="Testing"
+            user_id="new_user",
+            stream=ConsentStream.TEMPORARY,
+            categories=[ConsentCategory.INTERACTION],
+            reason="Testing",
         )
 
         with patch("ciris_engine.logic.services.governance.consent.service.add_graph_node"):
@@ -278,9 +282,7 @@ class TestGrantConsentFlow:
 
         consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError())
 
-        with patch(
-            "ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler"
-        ) as MockHandler:
+        with patch("ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler") as MockHandler:
             mock_handler = Mock()
             mock_task = Mock(task_id="task_123")
             mock_handler.create_partnership_task.return_value = mock_task
@@ -385,9 +387,7 @@ class TestToolHandlers:
         consent_service.get_consent = AsyncMock(return_value=existing)
         consent_service.update_consent = AsyncMock(return_value=existing)
 
-        with patch(
-            "ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler"
-        ) as MockHandler:
+        with patch("ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler") as MockHandler:
             mock_handler = Mock()
             mock_task = Mock(task_id="partnership_task")
             mock_handler.create_partnership_task.return_value = mock_task
@@ -450,9 +450,7 @@ class TestToolHandlers:
         )
         consent_service.update_consent = AsyncMock(return_value=new_status)
 
-        result = await consent_service._degrade_relationship_tool(
-            {"user_id": "new_user", "target_stream": "ANONYMOUS"}
-        )
+        result = await consent_service._degrade_relationship_tool({"user_id": "new_user", "target_stream": "ANONYMOUS"})
 
         assert result["success"] is True
         assert result["message"] == "Created ANONYMOUS consent for proactive opt-out"

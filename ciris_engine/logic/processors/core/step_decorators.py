@@ -208,17 +208,39 @@ async def _pause_thought_execution(thought_id: str) -> None:
 def _get_step_data_creators() -> dict[StepPoint, callable]:
     """Get dispatch dictionary for step data creators."""
     return {
-        StepPoint.START_ROUND: lambda base_data, result, args, kwargs, thought_item: _create_start_round_data(base_data, args),
-        StepPoint.GATHER_CONTEXT: lambda base_data, result, args, kwargs, thought_item: _create_gather_context_data(base_data, result),
-        StepPoint.PERFORM_DMAS: lambda base_data, result, args, kwargs, thought_item: _create_perform_dmas_data(base_data, result, thought_item),
-        StepPoint.PERFORM_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_perform_aspdma_data(base_data, result),
-        StepPoint.CONSCIENCE_EXECUTION: lambda base_data, result, args, kwargs, thought_item: _create_conscience_execution_data(base_data, result),
-        StepPoint.RECURSIVE_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_recursive_aspdma_data(base_data, result, args),
-        StepPoint.RECURSIVE_CONSCIENCE: lambda base_data, result, args, kwargs, thought_item: _create_recursive_conscience_data(base_data, result),
-        StepPoint.FINALIZE_ACTION: lambda base_data, result, args, kwargs, thought_item: _create_finalize_action_data(base_data, result),
-        StepPoint.PERFORM_ACTION: lambda base_data, result, args, kwargs, thought_item: _create_perform_action_data(base_data, result, args, kwargs),
-        StepPoint.ACTION_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_action_complete_data(base_data, result),
-        StepPoint.ROUND_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_round_complete_data(base_data, args),
+        StepPoint.START_ROUND: lambda base_data, result, args, kwargs, thought_item: _create_start_round_data(
+            base_data, args
+        ),
+        StepPoint.GATHER_CONTEXT: lambda base_data, result, args, kwargs, thought_item: _create_gather_context_data(
+            base_data, result
+        ),
+        StepPoint.PERFORM_DMAS: lambda base_data, result, args, kwargs, thought_item: _create_perform_dmas_data(
+            base_data, result, thought_item
+        ),
+        StepPoint.PERFORM_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_perform_aspdma_data(
+            base_data, result
+        ),
+        StepPoint.CONSCIENCE_EXECUTION: lambda base_data, result, args, kwargs, thought_item: _create_conscience_execution_data(
+            base_data, result
+        ),
+        StepPoint.RECURSIVE_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_recursive_aspdma_data(
+            base_data, result, args
+        ),
+        StepPoint.RECURSIVE_CONSCIENCE: lambda base_data, result, args, kwargs, thought_item: _create_recursive_conscience_data(
+            base_data, result
+        ),
+        StepPoint.FINALIZE_ACTION: lambda base_data, result, args, kwargs, thought_item: _create_finalize_action_data(
+            base_data, result
+        ),
+        StepPoint.PERFORM_ACTION: lambda base_data, result, args, kwargs, thought_item: _create_perform_action_data(
+            base_data, result, args, kwargs
+        ),
+        StepPoint.ACTION_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_action_complete_data(
+            base_data, result
+        ),
+        StepPoint.ROUND_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_round_complete_data(
+            base_data, args
+        ),
     }
 
 
@@ -367,7 +389,9 @@ def _extract_conscience_execution_values(result: Any) -> tuple[str, bool, str, s
     return selected_action, conscience_passed, action_result, override_reason
 
 
-def _build_conscience_result_from_check(conscience_check_result: "ConscienceCheckResult", override_reason: str | None) -> "ConscienceResult":
+def _build_conscience_result_from_check(
+    conscience_check_result: "ConscienceCheckResult", override_reason: str | None
+) -> "ConscienceResult":
     """Build ConscienceResult from ConscienceCheckResult."""
     from ciris_engine.schemas.conscience.results import ConscienceResult
 

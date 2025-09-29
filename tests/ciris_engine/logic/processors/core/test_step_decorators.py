@@ -1455,7 +1455,9 @@ class TestNewHelperFunctions:
         mock_result.final_action.selected_action = "proceed"
         mock_result.final_action.__str__ = Mock(return_value="final_action_result")
 
-        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(mock_result)
+        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(
+            mock_result
+        )
 
         assert selected_action == "proceed"
         assert conscience_passed is True  # not overridden
@@ -1473,7 +1475,9 @@ class TestNewHelperFunctions:
         mock_result.final_action.__str__ = Mock(return_value="aborted_action")
         mock_result.override_reason = "safety_concern"
 
-        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(mock_result)
+        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(
+            mock_result
+        )
 
         assert selected_action == "abort"
         assert conscience_passed is False  # overridden
@@ -1709,9 +1713,13 @@ class TestNewHelperFunctions:
         from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
         from ciris_engine.schemas.services.runtime_control import StepPoint
 
-        with patch("ciris_engine.logic.processors.core.step_decorators._prepare_base_data_with_task_id") as mock_prepare, \
-             patch("ciris_engine.logic.processors.core.step_decorators._log_step_debug_info") as mock_log, \
-             patch("ciris_engine.logic.processors.core.step_decorators._get_step_data_creators") as mock_get_creators:
+        with patch(
+            "ciris_engine.logic.processors.core.step_decorators._prepare_base_data_with_task_id"
+        ) as mock_prepare, patch(
+            "ciris_engine.logic.processors.core.step_decorators._log_step_debug_info"
+        ) as mock_log, patch(
+            "ciris_engine.logic.processors.core.step_decorators._get_step_data_creators"
+        ) as mock_get_creators:
 
             # Mock prepared base data
             mock_prepared_base_data = Mock()
@@ -1743,9 +1751,13 @@ class TestNewHelperFunctions:
         """Test _create_typed_step_data fails fast for unknown step."""
         from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
 
-        with patch("ciris_engine.logic.processors.core.step_decorators._prepare_base_data_with_task_id") as mock_prepare, \
-             patch("ciris_engine.logic.processors.core.step_decorators._log_step_debug_info") as mock_log, \
-             patch("ciris_engine.logic.processors.core.step_decorators._get_step_data_creators") as mock_get_creators:
+        with patch(
+            "ciris_engine.logic.processors.core.step_decorators._prepare_base_data_with_task_id"
+        ) as mock_prepare, patch(
+            "ciris_engine.logic.processors.core.step_decorators._log_step_debug_info"
+        ) as mock_log, patch(
+            "ciris_engine.logic.processors.core.step_decorators._get_step_data_creators"
+        ) as mock_get_creators:
 
             mock_prepare.return_value = Mock()
             mock_get_creators.return_value = {}  # Empty creators dict
@@ -1759,9 +1771,10 @@ class TestNewHelperFunctions:
 
     def test_create_typed_step_data_integration_end_to_end(self):
         """Test _create_typed_step_data integration with actual helper functions."""
-        from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
-        from ciris_engine.schemas.services.runtime_control import StepPoint, BaseStepData
         from datetime import datetime, timezone
+
+        from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
+        from ciris_engine.schemas.services.runtime_control import BaseStepData, StepPoint
 
         # Create real base data with all required fields
         base_data = BaseStepData(

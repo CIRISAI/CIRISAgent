@@ -714,10 +714,11 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_gather_context_data_with_context(self):
         """Test _enrich_gather_context_data with valid context."""
+        from datetime import datetime
         from unittest.mock import Mock
+
         from ciris_engine.schemas.services.runtime_control import GatherContextStepData
         from ciris_engine.schemas.streaming.reasoning_stream import _enrich_gather_context_data
-        from datetime import datetime
 
         # Create step data with context
         step_data = GatherContextStepData(
@@ -726,7 +727,7 @@ class TestRefactoredEnrichmentHelpers:
             task_id="test-task",
             processing_time_ms=100.0,
             success=True,
-            context="This is test context data"
+            context="This is test context data",
         )
 
         raw_result = Mock()
@@ -744,10 +745,11 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_gather_context_data_long_context(self):
         """Test _enrich_gather_context_data with long context that gets truncated."""
+        from datetime import datetime
         from unittest.mock import Mock
+
         from ciris_engine.schemas.services.runtime_control import GatherContextStepData
         from ciris_engine.schemas.streaming.reasoning_stream import _enrich_gather_context_data
-        from datetime import datetime
 
         # Create long context (over 200 chars)
         long_context = "This is a very long context " * 10  # ~280 characters
@@ -758,7 +760,7 @@ class TestRefactoredEnrichmentHelpers:
             task_id="test-task",
             processing_time_ms=100.0,
             success=True,
-            context=long_context
+            context=long_context,
         )
 
         raw_result = Mock()
@@ -777,10 +779,11 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_gather_context_data_empty_context(self):
         """Test _enrich_gather_context_data with empty context."""
+        from datetime import datetime
         from unittest.mock import Mock
+
         from ciris_engine.schemas.services.runtime_control import GatherContextStepData
         from ciris_engine.schemas.streaming.reasoning_stream import _enrich_gather_context_data
-        from datetime import datetime
 
         step_data = GatherContextStepData(
             timestamp=datetime.now().isoformat(),
@@ -788,7 +791,7 @@ class TestRefactoredEnrichmentHelpers:
             task_id="test-task",
             processing_time_ms=100.0,
             success=True,
-            context=""
+            context="",
         )
 
         raw_result = Mock()
@@ -805,10 +808,11 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_perform_dmas_data_with_decisions(self):
         """Test _enrich_perform_dmas_data with decision keywords."""
+        from datetime import datetime
         from unittest.mock import Mock
+
         from ciris_engine.schemas.services.runtime_control import PerformDMAsStepData
         from ciris_engine.schemas.streaming.reasoning_stream import _enrich_perform_dmas_data
-        from datetime import datetime
 
         step_data = PerformDMAsStepData(
             timestamp=datetime.now().isoformat(),
@@ -817,7 +821,7 @@ class TestRefactoredEnrichmentHelpers:
             processing_time_ms=100.0,
             success=True,
             dma_results="The system will approve this request, reject that one, and defer the third",
-            context="test context"
+            context="test context",
         )
 
         raw_result = Mock()
@@ -833,10 +837,11 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_perform_dmas_data_no_decisions(self):
         """Test _enrich_perform_dmas_data without decision keywords."""
+        from datetime import datetime
         from unittest.mock import Mock
+
         from ciris_engine.schemas.services.runtime_control import PerformDMAsStepData
         from ciris_engine.schemas.streaming.reasoning_stream import _enrich_perform_dmas_data
-        from datetime import datetime
 
         step_data = PerformDMAsStepData(
             timestamp=datetime.now().isoformat(),
@@ -845,7 +850,7 @@ class TestRefactoredEnrichmentHelpers:
             processing_time_ms=100.0,
             success=True,
             dma_results="This is just analysis without decisions",
-            context="test context"
+            context="test context",
         )
 
         raw_result = Mock()
@@ -861,11 +866,12 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_conscience_execution_data_complete(self):
         """Test _enrich_conscience_execution_data with complete conscience result."""
-        from unittest.mock import Mock
-        from ciris_engine.schemas.services.runtime_control import ConscienceExecutionStepData
-        from ciris_engine.schemas.conscience.results import ConscienceResult
-        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_conscience_execution_data
         from datetime import datetime
+        from unittest.mock import Mock
+
+        from ciris_engine.schemas.conscience.results import ConscienceResult
+        from ciris_engine.schemas.services.runtime_control import ConscienceExecutionStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_conscience_execution_data
 
         # Create proper conscience result
         conscience_result = ConscienceResult(
@@ -873,7 +879,7 @@ class TestRefactoredEnrichmentHelpers:
             passed=True,
             severity="error",
             message="Test conscience message",
-            details={"issue1": "value1", "issue2": "value2"}
+            details={"issue1": "value1", "issue2": "value2"},
         )
 
         step_data = ConscienceExecutionStepData(
@@ -885,7 +891,7 @@ class TestRefactoredEnrichmentHelpers:
             selected_action="test_action",
             conscience_passed=True,
             action_result="test_result",
-            conscience_result=conscience_result
+            conscience_result=conscience_result,
         )
 
         raw_result = Mock()
@@ -903,19 +909,16 @@ class TestRefactoredEnrichmentHelpers:
 
     def test_enrich_conscience_execution_data_missing_result(self):
         """Test _enrich_conscience_execution_data without conscience_result."""
-        from unittest.mock import Mock
-        from ciris_engine.schemas.services.runtime_control import ConscienceExecutionStepData
-        from ciris_engine.schemas.conscience.results import ConscienceResult
-        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_conscience_execution_data
         from datetime import datetime
+        from unittest.mock import Mock
+
+        from ciris_engine.schemas.conscience.results import ConscienceResult
+        from ciris_engine.schemas.services.runtime_control import ConscienceExecutionStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_conscience_execution_data
 
         # Create a minimal conscience result (required field)
         conscience_result = ConscienceResult(
-            conscience_name="test_conscience",
-            passed=True,
-            severity="info",
-            message="Test message",
-            details={}
+            conscience_name="test_conscience", passed=True, severity="info", message="Test message", details={}
         )
 
         step_data = ConscienceExecutionStepData(
@@ -927,7 +930,7 @@ class TestRefactoredEnrichmentHelpers:
             selected_action="test_action",
             conscience_passed=True,
             action_result="test_result",
-            conscience_result=conscience_result
+            conscience_result=conscience_result,
         )
 
         # Mock the step_data to simulate missing conscience_result
@@ -947,8 +950,12 @@ class TestRefactoredEnrichmentHelpers:
     def test_create_typed_step_result_gather_context(self):
         """Test _create_typed_step_result for GATHER_CONTEXT step."""
         from datetime import datetime
+
         from ciris_engine.schemas.services.runtime_control import (
-            GatherContextStepData, StepResultData, TraceContext, StepPoint
+            GatherContextStepData,
+            StepPoint,
+            StepResultData,
+            TraceContext,
         )
         from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
 
@@ -958,7 +965,7 @@ class TestRefactoredEnrichmentHelpers:
             task_id="test-task",
             processing_time_ms=100.0,
             success=True,
-            context="Test context for gathering"
+            context="Test context for gathering",
         )
 
         trace_context = TraceContext(
@@ -979,7 +986,7 @@ class TestRefactoredEnrichmentHelpers:
             task_id="test-task",
             step_data=step_data,
             trace_context=trace_context,
-            span_attributes=[]
+            span_attributes=[],
         )
 
         # Execute
@@ -994,6 +1001,7 @@ class TestRefactoredEnrichmentHelpers:
     def test_create_typed_step_result_invalid_step(self):
         """Test _create_typed_step_result with invalid step point."""
         from unittest.mock import Mock
+
         from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
 
         raw_result = Mock()
@@ -1020,8 +1028,12 @@ class TestRefactoredEnrichmentHelpers:
     def test_create_typed_step_result_dispatch_pattern(self):
         """Test that _create_typed_step_result uses dispatch pattern correctly."""
         from datetime import datetime
+
         from ciris_engine.schemas.services.runtime_control import (
-            PerformDMAsStepData, StepResultData, TraceContext, StepPoint
+            PerformDMAsStepData,
+            StepPoint,
+            StepResultData,
+            TraceContext,
         )
         from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
 
@@ -1032,7 +1044,7 @@ class TestRefactoredEnrichmentHelpers:
             processing_time_ms=100.0,
             success=True,
             dma_results="approve reject defer",
-            context="test context"
+            context="test context",
         )
 
         trace_context = TraceContext(
@@ -1053,7 +1065,7 @@ class TestRefactoredEnrichmentHelpers:
             task_id="test-task",
             step_data=step_data,
             trace_context=trace_context,
-            span_attributes=[]
+            span_attributes=[],
         )
 
         # Execute

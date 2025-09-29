@@ -650,11 +650,7 @@ class TestRuntimeAdapterManager:
     def test_create_adapter_operation_result_success(self, adapter_manager):
         """Test _create_adapter_operation_result for success case."""
         result = adapter_manager._create_adapter_operation_result(
-            success=True,
-            adapter_id="test_id",
-            adapter_type="cli",
-            message="Success message",
-            details={"key": "value"}
+            success=True, adapter_id="test_id", adapter_type="cli", message="Success message", details={"key": "value"}
         )
 
         assert result.success is True
@@ -667,11 +663,7 @@ class TestRuntimeAdapterManager:
     def test_create_adapter_operation_result_failure(self, adapter_manager):
         """Test _create_adapter_operation_result for failure case."""
         result = adapter_manager._create_adapter_operation_result(
-            success=False,
-            adapter_id="test_id",
-            adapter_type="api",
-            message="Failure message",
-            error="Error details"
+            success=False, adapter_id="test_id", adapter_type="api", message="Failure message", error="Error details"
         )
 
         assert result.success is False
@@ -782,15 +774,16 @@ class TestRuntimeAdapterManager:
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
             services_registered=["service1", "service2"],
-            is_running=True
+            is_running=True,
         )
 
         # Add the instance to loaded_adapters so it can be deleted
         adapter_manager.loaded_adapters["test_id"] = instance
 
         # Mock the service unregistration and config removal
-        with patch.object(adapter_manager, '_unregister_adapter_services') as mock_unreg, \
-             patch.object(adapter_manager, '_remove_adapter_config_from_graph') as mock_config:
+        with patch.object(adapter_manager, "_unregister_adapter_services") as mock_unreg, patch.object(
+            adapter_manager, "_remove_adapter_config_from_graph"
+        ) as mock_config:
 
             await adapter_manager._cleanup_adapter_from_runtime("test_id", instance)
 
@@ -821,15 +814,16 @@ class TestRuntimeAdapterManager:
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
             services_registered=["service1"],
-            is_running=True
+            is_running=True,
         )
 
         # Add the instance to loaded_adapters so it can be deleted
         adapter_manager.loaded_adapters["test_id"] = instance
 
         # Mock the service unregistration and config removal
-        with patch.object(adapter_manager, '_unregister_adapter_services') as mock_unreg, \
-             patch.object(adapter_manager, '_remove_adapter_config_from_graph') as mock_config:
+        with patch.object(adapter_manager, "_unregister_adapter_services") as mock_unreg, patch.object(
+            adapter_manager, "_remove_adapter_config_from_graph"
+        ) as mock_config:
 
             # Should not raise any errors
             await adapter_manager._cleanup_adapter_from_runtime("test_id", instance)
@@ -855,7 +849,7 @@ class TestRuntimeAdapterManager:
             adapter=adapter,
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
-            is_running=True
+            is_running=True,
         )
 
         health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
@@ -875,7 +869,7 @@ class TestRuntimeAdapterManager:
             adapter=adapter,
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
-            is_running=True
+            is_running=True,
         )
 
         health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
@@ -895,7 +889,7 @@ class TestRuntimeAdapterManager:
             adapter=adapter,
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
-            is_running=True
+            is_running=True,
         )
 
         health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
@@ -906,6 +900,7 @@ class TestRuntimeAdapterManager:
     @pytest.mark.asyncio
     async def test_determine_adapter_health_status_no_health_method_running(self, adapter_manager, mock_time_service):
         """Test _determine_adapter_health_status for adapter without health method but running."""
+
         # Create a simple class without is_healthy method
         class SimpleAdapter:
             def __init__(self):
@@ -926,7 +921,7 @@ class TestRuntimeAdapterManager:
             adapter=adapter,
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
-            is_running=True
+            is_running=True,
         )
 
         health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
@@ -937,6 +932,7 @@ class TestRuntimeAdapterManager:
     @pytest.mark.asyncio
     async def test_determine_adapter_health_status_no_health_method_stopped(self, adapter_manager, mock_time_service):
         """Test _determine_adapter_health_status for stopped adapter without health method."""
+
         # Create a simple class without is_healthy method
         class SimpleAdapter:
             def __init__(self):
@@ -957,7 +953,7 @@ class TestRuntimeAdapterManager:
             adapter=adapter,
             config_params=AdapterConfig(adapter_type="cli"),
             loaded_at=mock_time_service.now(),
-            is_running=False
+            is_running=False,
         )
 
         health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)

@@ -488,16 +488,16 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             service_details = []
 
             for reg in registrations:
-                service_details.append({
-                    "service_type": (
-                        reg.service_type.value
-                        if hasattr(reg.service_type, "value")
-                        else str(reg.service_type)
-                    ),
-                    "priority": reg.priority.name if hasattr(reg.priority, "name") else str(reg.priority),
-                    "handlers": reg.handlers,
-                    "capabilities": reg.capabilities,
-                })
+                service_details.append(
+                    {
+                        "service_type": (
+                            reg.service_type.value if hasattr(reg.service_type, "value") else str(reg.service_type)
+                        ),
+                        "priority": reg.priority.name if hasattr(reg.priority, "name") else str(reg.priority),
+                        "handlers": reg.handlers,
+                        "capabilities": reg.capabilities,
+                    }
+                )
 
             return service_details
 
@@ -519,7 +519,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 tool_names = await tool_service.list_tools()
                 # Convert string names to ToolInfo objects for schema compliance
                 from ciris_engine.schemas.adapters.tools import ToolInfo
-                return [ToolInfo(name=name, description="", parameters={"type": "object", "properties": {}, "required": []}) for name in tool_names]
+
+                return [
+                    ToolInfo(name=name, description="", parameters={"type": "object", "properties": {}, "required": []})
+                    for name in tool_names
+                ]
             else:
                 return None
 

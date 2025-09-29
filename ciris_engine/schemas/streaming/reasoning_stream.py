@@ -229,9 +229,7 @@ def _enrich_perform_dmas_data(raw_result: StepResultData, combined_data: dict) -
     dma_results = getattr(raw_result.step_data, "dma_results", "")
     if "result_count" not in combined_data and dma_results:
         # Count decision points, approvals, rejections for debugging
-        combined_data["result_count"] = len(
-            [r for r in dma_results.split() if r in ["approve", "reject", "defer"]]
-        )
+        combined_data["result_count"] = len([r for r in dma_results.split() if r in ["approve", "reject", "defer"]])
 
 
 def _enrich_conscience_execution_data(raw_result: StepResultData, combined_data: dict) -> None:

@@ -1226,371 +1226,53 @@ class CIRISRuntime:
 
     async def shutdown(self) -> None:
         """Gracefully shutdown all services with consciousness preservation."""
-        # Prevent double shutdown
-        if hasattr(self, "_shutdown_complete") and self._shutdown_complete:
-            logger.debug("Shutdown already completed, skipping...")
+        from .ciris_runtime_helpers import (
+            validate_shutdown_preconditions,
+            prepare_shutdown_maintenance_tasks,
+            execute_final_maintenance_tasks,
+            handle_agent_processor_shutdown,
+            handle_adapter_shutdown_cleanup,
+            execute_service_shutdown_sequence,
+            preserve_critical_system_state,
+            finalize_shutdown_logging,
+            cleanup_runtime_resources,
+            validate_shutdown_completion,
+        )
+
+        # 1. Validate preconditions and early exit if needed
+        if not validate_shutdown_preconditions(self):
             return
 
         logger.info("Shutting down CIRIS Runtime...")
 
-        # Set flag to indicate we're in shutdown mode
-        # This prevents services from being marked unhealthy during shutdown
-        if self.service_registry:
-            self.service_registry._shutdown_mode = True
+        # 2. Prepare maintenance and stop scheduled services
+        await prepare_shutdown_maintenance_tasks(self)
 
-        # Import and use the graceful shutdown manager
-        from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
+        # 3. Execute final maintenance tasks
+        await execute_final_maintenance_tasks(self)
 
-        shutdown_manager = get_shutdown_manager()
+        # 4. Preserve critical system state
+        await preserve_critical_system_state(self)
 
-        # First, stop all scheduled services and feedback loops
-        # This prevents them from trying to use services during shutdown
-        logger.info("Stopping scheduled services and feedback loops...")
-        scheduled_services = []
-        if self.service_registry:
-            all_services = self.service_registry.get_all_services()
-            for service in all_services:
-                # Check if it's a scheduled service (has _task attribute from BaseScheduledService)
-                # or has _scheduler attribute (other scheduled services)
-                if hasattr(service, "_task") or hasattr(service, "_scheduler"):
-                    scheduled_services.append(service)
-
-        # Stop all scheduled services first
-        for service in scheduled_services:
-            try:
-                service_name = service.__class__.__name__
-                logger.info(f"Stopping scheduled tasks for {service_name}")
-                if hasattr(service, "_task") and service._task:
-                    # Cancel the task directly
-                    service._task.cancel()
-                    try:
-                        await service._task
-                    except asyncio.CancelledError:
-                        # Only re-raise if we're being cancelled ourselves
-                        if asyncio.current_task() and asyncio.current_task().cancelled():
-                            raise
-                        # Otherwise, this is a normal stop - don't propagate the cancellation
-                elif hasattr(service, "stop_scheduler"):
-                    await service.stop_scheduler()
-            except Exception as e:
-                logger.error(f"Error stopping scheduled tasks for {service.__class__.__name__}: {e}")
-
-        # Give scheduled tasks a moment to stop
-        if scheduled_services:
-            logger.info(f"Stopped {len(scheduled_services)} scheduled services, waiting for tasks to complete...")
-            await asyncio.sleep(0.5)
-
-        # Register our final maintenance as a shutdown handler
-        async def run_final_maintenance() -> None:
-            """Run final maintenance and consolidation before services stop."""
-            logger.info("=" * 60)
-            logger.info("Running final maintenance tasks...")
-
-            # 1. Run final database maintenance
-            if hasattr(self, "maintenance_service") and self.maintenance_service:
-                try:
-                    logger.info("Running final database maintenance before shutdown...")
-                    await self.maintenance_service.perform_startup_cleanup()
-                    logger.info("Final database maintenance completed")
-                except Exception as e:
-                    logger.error(f"Failed to run final database maintenance: {e}")
-
-            # 2. Run final TSDB consolidation
-            if hasattr(self, "service_initializer") and self.service_initializer:
-                tsdb_service = getattr(self.service_initializer, "tsdb_consolidation_service", None)
-                if tsdb_service:
-                    try:
-                        logger.info("Running final TSDB consolidation before shutdown...")
-                        await tsdb_service._run_consolidation()
-                        logger.info("Final TSDB consolidation completed")
-                    except Exception as e:
-                        logger.error(f"Failed to run final TSDB consolidation: {e}")
-
-            logger.info("Final maintenance tasks completed")
-            logger.info("=" * 60)
-
-        # First run our maintenance handler
-        await run_final_maintenance()
-
-        # Execute any other registered async shutdown handlers
-        try:
-            await shutdown_manager.execute_async_handlers()
-        except Exception as e:
-            logger.error(f"Error executing shutdown handlers: {e}")
-
-        # Preserve agent consciousness if identity exists
-        if hasattr(self, "agent_identity") and self.agent_identity:
-            try:
-                await self._preserve_shutdown_consciousness()
-            except Exception as e:
-                logger.error(f"Failed to preserve consciousness during shutdown: {e}")
-
+        # 5. Handle agent processor shutdown
         logger.info("Initiating shutdown sequence for CIRIS Runtime...")
         self._ensure_shutdown_event()
         if self._shutdown_event:
-            self._shutdown_event.set()  # Ensure event is set for any waiting components
-
-        # Initiate graceful shutdown negotiation
-        if self.agent_processor and hasattr(self.agent_processor, "state_manager"):
-            current_state = self.agent_processor.state_manager.get_state()
-
-            # Only do negotiation if not already in SHUTDOWN state
-            if current_state != AgentState.SHUTDOWN:
-                try:
-                    logger.info("Initiating graceful shutdown negotiation...")
-
-                    # Check if we can transition to shutdown state
-                    if await self.agent_processor.state_manager.can_transition_to(AgentState.SHUTDOWN):
-                        logger.info(f"Transitioning from {current_state} to SHUTDOWN state")
-                        # Use the state manager directly to transition
-                        await self.agent_processor.state_manager.transition_to(AgentState.SHUTDOWN)
-
-                        # If processing loop is running, just signal it to stop
-                        # It will handle the SHUTDOWN state in its next iteration
-                        if self.agent_processor._processing_task and not self.agent_processor._processing_task.done():
-                            logger.info("Processing loop is running, signaling stop")
-                            # Just set the stop event, don't call stop_processing yet
-                            if hasattr(self.agent_processor, "_stop_event") and self.agent_processor._stop_event:
-                                self.agent_processor._stop_event.set()
-                        else:
-                            # Processing loop not running, we need to handle shutdown ourselves
-                            logger.info("Processing loop not running, executing shutdown processor directly")
-                            if (
-                                hasattr(self.agent_processor, "shutdown_processor")
-                                and self.agent_processor.shutdown_processor
-                            ):
-                                # Run a few rounds of shutdown processing
-                                for round_num in range(5):
-                                    try:
-                                        result = await self.agent_processor.shutdown_processor.process(round_num)
-                                        if self.agent_processor.shutdown_processor.shutdown_complete:
-                                            break
-                                    except Exception as e:
-                                        logger.error(f"Error in shutdown processor: {e}", exc_info=True)
-                                        break
-                                    await asyncio.sleep(0.1)
-                    else:
-                        logger.error(f"Cannot transition from {current_state} to SHUTDOWN state")
-
-                    # Wait a bit for ShutdownProcessor to complete
-                    # The processor will set shutdown_complete flag
-                    max_wait = 5.0  # Reduced from 30s to 5s for faster shutdown
-                    start_time = asyncio.get_event_loop().time()
-
-                    while (asyncio.get_event_loop().time() - start_time) < max_wait:
-                        if (
-                            hasattr(self.agent_processor, "shutdown_processor")
-                            and self.agent_processor.shutdown_processor
-                        ):
-                            if self.agent_processor.shutdown_processor.shutdown_complete:
-                                result = self.agent_processor.shutdown_processor.shutdown_result  # type: ignore[assignment]
-                                if result and hasattr(result, "get") and result.get("status") == "rejected":
-                                    logger.warning(f"Shutdown rejected by agent: {result.get('reason')}")
-                                    # Proceed with shutdown - emergency shutdown API provides override mechanism
-                                break
-                        await asyncio.sleep(0.1)  # Reduced from 0.5s to 0.1s for faster response
-
-                    logger.debug("Shutdown negotiation complete or timed out")
-                except Exception as e:
-                    logger.error(f"Error during shutdown negotiation: {e}")
-
-        # Stop multi-service sink
-        if self.bus_manager:
-            try:
-                logger.debug("Stopping multi-service sink...")
-                # Add timeout to prevent hanging forever
-                await asyncio.wait_for(self.bus_manager.stop(), timeout=10.0)
-                logger.debug("Multi-service sink stopped.")
-            except asyncio.TimeoutError:
-                logger.error("Timeout stopping multi-service sink after 10 seconds")
-            except Exception as e:
-                logger.error(f"Error stopping multi-service sink: {e}")
-
-        logger.debug(f"Stopping {len(self.adapters)} adapters...")
-        adapter_stop_results = await asyncio.gather(
-            *(adapter.stop() for adapter in self.adapters if hasattr(adapter, "stop")), return_exceptions=True
-        )
-        for i, stop_result in enumerate(adapter_stop_results):
-            if isinstance(stop_result, Exception):
-                logger.error(
-                    f"Error stopping adapter {self.adapters[i].__class__.__name__}: {stop_result}", exc_info=stop_result
-                )
-        logger.debug("Adapters stopped.")
-
-        logger.debug("Stopping core services...")
-
-        # Get all registered services dynamically
-        all_registered_services = []
-        if self.service_registry:
-            all_registered_services = self.service_registry.get_all_services()
-            logger.info(f"Found {len(all_registered_services)} registered services to stop")
-
-        # Build a comprehensive list of services to stop
-        # This includes both registered services and direct references
-        services_to_stop = []
-        seen_ids = set()
-
-        # Add all registered services
-        for service in all_registered_services:
-            service_id = id(service)
-            if service_id not in seen_ids and hasattr(service, "stop"):
-                seen_ids.add(service_id)
-                services_to_stop.append(service)
-
-        # Also add any services we have direct references to (in case they weren't registered)
-        # This ensures backward compatibility
-        direct_services = [
-            # From service_initializer
-            getattr(self.service_initializer, "tsdb_consolidation_service", None),
-            getattr(self.service_initializer, "task_scheduler_service", None),
-            getattr(self.service_initializer, "incident_management_service", None),
-            getattr(self.service_initializer, "resource_monitor_service", None),
-            getattr(self.service_initializer, "config_service", None),
-            getattr(self.service_initializer, "auth_service", None),
-            getattr(self.service_initializer, "runtime_control_service", None),
-            getattr(self.service_initializer, "self_observation_service", None),
-            getattr(self.service_initializer, "visibility_service", None),
-            getattr(self.service_initializer, "core_tool_service", None),
-            getattr(self.service_initializer, "wa_auth_system", None),
-            getattr(self.service_initializer, "initialization_service", None),
-            getattr(self.service_initializer, "shutdown_service", None),
-            getattr(self.service_initializer, "time_service", None),
-            # From runtime
-            self.maintenance_service,
-            self.transaction_orchestrator,
-            self.agent_config_service,
-            self.adaptive_filter_service,
-            self.telemetry_service,
-            self.audit_service,
-            self.llm_service,
-            self.secrets_service,
-            self.memory_service,
-        ]
-
-        for service in direct_services:
-            if service:
-                service_id = id(service)
-                if service_id not in seen_ids and hasattr(service, "stop"):
-                    seen_ids.add(service_id)
-                    services_to_stop.append(service)
-
-        # Sort services by priority for shutdown (reverse order)
-        # Infrastructure services should be stopped last
-        def get_shutdown_priority(service: Any) -> int:
-            service_name = service.__class__.__name__
-            # Priority 0: Services that depend on others
-            if "TSDB" in service_name or "Consolidation" in service_name:
-                return 0
-            elif "Task" in service_name or "Scheduler" in service_name:
-                return 1
-            elif "Incident" in service_name or "Monitor" in service_name:
-                return 2
-            # Priority 3: Application services
-            elif "Adaptive" in service_name or "Filter" in service_name:
-                return 3
-            elif "Tool" in service_name or "Control" in service_name:
-                return 4
-            elif "Observation" in service_name or "Visibility" in service_name:
-                return 5
-            # Priority 6: Core services
-            elif "Telemetry" in service_name or "Audit" in service_name:
-                return 6
-            elif "LLM" in service_name or "Auth" in service_name:
-                return 7
-            elif "Config" in service_name:
-                return 8
-            # Priority 9: Fundamental services
-            elif "Memory" in service_name or "Secrets" in service_name:
-                return 9
-            # Priority 10: Infrastructure services (stop last)
-            elif "Time" in service_name:
-                return 11
-            elif "Shutdown" in service_name:
-                return 12
-            elif "Initialization" in service_name:
-                return 10
-            else:
-                return 5  # Default priority
-
-        services_to_stop.sort(key=get_shutdown_priority)
-
-        # Stop services that have a stop method
-        stop_tasks = []
-        service_names = []
-        for service in services_to_stop:
-            if service and hasattr(service, "stop"):
-                # Check if stop is async or sync
-                stop_method = service.stop()
-                if asyncio.iscoroutine(stop_method):
-                    # Async stop method
-                    task = asyncio.create_task(stop_method)
-                    stop_tasks.append(task)
-                else:
-                    # Sync stop method - already completed
-                    # No need to add to tasks
-                    pass
-                service_names.append(service.__class__.__name__)
-
-        if stop_tasks:
-            logger.info(f"Stopping {len(stop_tasks)} services: {', '.join(service_names)}")
-
-            # Use wait with timeout instead of wait_for to better track individual tasks
-            done, pending = await asyncio.wait(stop_tasks, timeout=10.0)
-
-            if pending:
-                # Some tasks didn't complete
-                logger.error(f"Service shutdown timed out after 10 seconds. {len(pending)} services still running.")
-                hanging_services = []
-
-                for task in pending:
-                    # Find which service this task belongs to
-                    try:
-                        idx = stop_tasks.index(task)
-                        service_name = service_names[idx]
-                        hanging_services.append(service_name)
-                        logger.warning(f"Service {service_name} did not stop in time")
-                    except ValueError:
-                        logger.warning("Unknown service task did not stop in time")
-
-                    # Cancel the hanging task
-                    task.cancel()
-
-                logger.error(f"Hanging services: {', '.join(hanging_services)}")
-
-                # Try to await cancelled tasks to clean up properly
-                if pending:
-                    await asyncio.gather(*pending, return_exceptions=True)
-            else:
-                logger.info(
-                    f"All {len(stop_tasks)} services stopped successfully (Total services: {len(services_to_stop)})"
-                )
-
-            # Check for any errors in completed tasks
-            for task in done:
-                if task.done() and not task.cancelled():
-                    try:
-                        result = task.result()
-                        if isinstance(result, Exception):
-                            idx = stop_tasks.index(task)
-                            logger.error(f"Service {service_names[idx]} stop error: {result}")
-                    except Exception as e:
-                        logger.error(f"Error checking task result: {e}")
-
-        # Clear service registry
-        if self.service_registry:
-            try:
-                self.service_registry.clear_all()
-                logger.debug("Service registry cleared.")
-            except Exception as e:
-                logger.error(f"Error clearing service registry: {e}")
-
-        logger.info("CIRIS Runtime shutdown complete")
-
-        # Mark shutdown as truly complete
-        self._shutdown_complete = True
-        # If there's a shutdown event, set it to signal completion
-        if hasattr(self, "_shutdown_event"):
             self._shutdown_event.set()
+
+        await handle_agent_processor_shutdown(self)
+
+        # 6. Handle adapter cleanup
+        await handle_adapter_shutdown_cleanup(self)
+
+        # 7. Execute service shutdown sequence
+        logger.debug("Stopping core services...")
+        await execute_service_shutdown_sequence(self)
+
+        # 8. Finalize logging and cleanup resources
+        await finalize_shutdown_logging(self)
+        await cleanup_runtime_resources(self)
+        validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
 
     async def _preserve_shutdown_consciousness(self) -> None:

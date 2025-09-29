@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.conscience.results import ConscienceResult
+from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 
 
@@ -90,7 +92,7 @@ class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
 
     key: str = Field(..., description="Attribute key")
-    value: Dict[str, Any] = Field(..., description="Attribute value in OTLP format")
+    value: Dict[str, Any] = Field(..., description="Attribute value in OTLP format")  # NOQA - OTLP standard requires Dict[str, Any]
 
 
 class ConfigValueMap(BaseModel):
@@ -99,6 +101,20 @@ class ConfigValueMap(BaseModel):
     configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
         default_factory=dict, description="Configuration key-value pairs with typed values"
     )
+
+
+class TaskSelectionCriteria(BaseModel):
+    """Criteria used for task selection in processing rounds."""
+
+    max_priority: Optional[int] = Field(None, description="Maximum priority threshold")
+    min_priority: Optional[int] = Field(None, description="Minimum priority threshold")
+    max_age_hours: Optional[float] = Field(None, description="Maximum age in hours")
+    channel_filter: Optional[str] = Field(None, description="Channel ID filter")
+    task_type_filter: Optional[str] = Field(None, description="Task type filter")
+    exclude_failed: bool = Field(True, description="Whether to exclude previously failed tasks")
+    max_retry_count: int = Field(3, description="Maximum retry count for tasks")
+    user_id_filter: Optional[str] = Field(None, description="User ID filter")
+    batch_size: int = Field(10, description="Maximum number of tasks to select")
 
     def get(
         self, key: str, default: Optional[Union[str, int, float, bool, list, dict]] = None
@@ -302,14 +318,14 @@ class ThoughtInPipeline(BaseModel):
     processing_time_ms: float = Field(0.0, description="Total processing time so far")
 
     # Data accumulated at each step - using existing schemas
-    context_built: Optional[Dict[str, Any]] = Field(None, description="Context built for DMAs")
+    context_built: Optional[DMAContext] = Field(None, description="Context built for DMAs")
     ethical_dma: Optional[EthicalDMAResult] = Field(None, description="Ethical DMA result")
     common_sense_dma: Optional[CSDMAResult] = Field(None, description="Common sense DMA result")
     domain_dma: Optional[DSDMAResult] = Field(None, description="Domain DMA result")
     aspdma_result: Optional[ActionSelectionDMAResult] = Field(None, description="ASPDMA result")
     conscience_results: Optional[List[ConscienceResult]] = Field(None, description="Conscience evaluations")
     selected_action: Optional[str] = Field(None, description="Final selected action")
-    handler_result: Optional[Dict[str, Any]] = Field(None, description="Handler execution result")
+    handler_result: Optional[HandlerResult] = Field(None, description="Handler execution result")
     bus_operations: Optional[List[str]] = Field(None, description="Bus operations performed")
 
     # Tracking recursion
@@ -401,8 +417,8 @@ class ThoughtProcessingResult(BaseModel):
     tasks_deferred: List[Dict[str, str]] = Field(default_factory=list, description="Tasks deferred with reasons")
 
     # Selection criteria used
-    selection_criteria: Dict[str, Any] = Field(
-        default_factory=dict, description="Criteria used to select tasks (priority, age, channel, etc.)"
+    selection_criteria: TaskSelectionCriteria = Field(
+        default_factory=TaskSelectionCriteria, description="Criteria used to select tasks (priority, age, channel, etc.)"
     )
 
     # Metrics
@@ -672,7 +688,7 @@ class ConscienceExecutionStepData(BaseStepData):
     conscience_passed: bool = Field(..., description="Whether conscience validation passed")
     action_result: str = Field(..., description="Complete action result")
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
-    conscience_result: Dict[str, Any] = Field(..., description="Complete conscience evaluation result")
+    conscience_result: ConscienceResult = Field(..., description="Complete conscience evaluation result")
 
 
 class RecursiveASPDMAStepData(BaseStepData):
@@ -746,7 +762,7 @@ class StepResultData(BaseModel):
     processing_time_ms: float = Field(0.0, description="Step processing time")
     thought_id: str = Field("", description="Thought identifier")
     task_id: str = Field("", description="Task identifier")
-    step_data: Dict[str, Any] = Field(..., description="Typed step data")
+    step_data: StepDataUnion = Field(..., description="Typed step data")
     trace_context: TraceContext = Field(..., description="OTLP trace context")
     span_attributes: List[SpanAttribute] = Field(..., description="OTLP span attributes")
     otlp_compatible: bool = Field(True, description="OTLP compatibility flag")

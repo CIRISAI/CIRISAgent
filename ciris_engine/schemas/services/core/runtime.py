@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.adapters.tools import ToolInfo
+from ciris_engine.schemas.services.runtime_control import PipelineState, StepResultData
+
 
 class AdapterStatus(str, Enum):
     """Adapter operational status."""
@@ -70,7 +73,7 @@ class AdapterInfo(BaseModel):
     messages_processed: int = Field(0, description="Total messages processed")
     error_count: int = Field(0, description="Total errors")
     last_error: Optional[str] = Field(None, description="Last error message")
-    tools: Optional[List[Dict[str, Any]]] = Field(None, description="Tools provided by adapter")
+    tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
 
 
 class AdapterOperationResult(BaseModel):
@@ -168,10 +171,10 @@ class ProcessorControlResponse(BaseModel):
 
     # H3ERE step data for single-step operations
     step_point: Optional[str] = Field(None, description="H3ERE step point executed")
-    step_results: Optional[List[Dict[str, Any]]] = Field(None, description="Step results organized by round and task")
+    step_results: Optional[List[StepResultData]] = Field(None, description="Step results organized by round and task")
     thoughts_processed: Optional[int] = Field(None, description="Number of thoughts processed")
     processing_time_ms: Optional[float] = Field(None, description="Processing time in milliseconds")
-    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Current pipeline state")
+    pipeline_state: Optional[PipelineState] = Field(None, description="Current pipeline state")
     current_round: Optional[int] = Field(None, description="Current processing round")
     pipeline_empty: Optional[bool] = Field(None, description="Whether pipeline is empty")
 
@@ -217,11 +220,11 @@ class RuntimeStateSnapshot(BaseModel):
 class ConfigSnapshot(BaseModel):
     """Configuration snapshot for runtime control."""
 
-    configs: Dict[str, Any] = Field(..., description="Configuration key-value pairs")
+    configs: Dict[str, Any] = Field(..., description="Configuration key-value pairs")  # NOQA - Config KV store pattern
     version: str = Field(..., description="Configuration version")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sensitive_keys: List[str] = Field(default_factory=list, description="Keys containing sensitive data")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")  # NOQA - Extensible metadata pattern
 
 
 class ConfigOperationResponse(BaseModel):

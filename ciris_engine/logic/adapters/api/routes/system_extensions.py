@@ -243,12 +243,26 @@ def _consolidate_step_results(result) -> Optional[dict]:
     if not (result.step_results and isinstance(result.step_results, list)):
         return None
 
+    # Group step results by round number (from parent current_round)
+    results_by_round = {}
+    current_round = getattr(result, 'current_round', None)
+
+    if current_round is not None:
+        # Create a round entry with the step results
+        round_data = {
+            "round_number": current_round,
+            "step_data": result.step_results[0].model_dump() if result.step_results else {},
+        }
+        # Add task_id from first step result if available
+        if result.step_results and hasattr(result.step_results[0], 'task_id'):
+            round_data["task_id"] = result.step_results[0].task_id
+
+        results_by_round[str(current_round)] = round_data
+
     return {
         "steps_processed": len(result.step_results),
-        "results_by_round": {
-            str(item.get("round_number", 0)): item for item in result.step_results if isinstance(item, dict)
-        },
-        "summary": result.step_results[0] if result.step_results else None,
+        "results_by_round": results_by_round,
+        "summary": result.step_results[0].model_dump() if result.step_results else None,
     }
 
 

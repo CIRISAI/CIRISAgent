@@ -35,7 +35,9 @@ class LocalizedTimeData(BaseModel):
     chicago: str = Field(..., description="Chicago time in ISO format")
     tokyo: str = Field(..., description="Tokyo time in ISO format")
     source_service: str = Field(default="TimeService", description="Time service that provided this data")
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When this data was generated")
+    generated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When this data was generated"
+    )
     timezone_data: Optional[dict] = Field(None, description="Additional timezone data from future sources")
 
 

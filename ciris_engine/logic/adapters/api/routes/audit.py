@@ -175,7 +175,9 @@ async def _query_sqlite_audit(
     return await loop.run_in_executor(None, _sync_query_sqlite_audit, db_path, start_time, end_time, limit, offset)
 
 
-def _parse_jsonl_entry_timestamp(entry: Dict[str, Any]) -> Optional[datetime]:  # NOQA - JSONL entries are Dict[str, Any] by design
+def _parse_jsonl_entry_timestamp(
+    entry: Dict[str, Any],
+) -> Optional[datetime]:  # NOQA - JSONL entries are Dict[str, Any] by design
     """Parse timestamp from JSONL entry."""
     entry_time_str = entry.get("timestamp") or entry.get("event_timestamp")
     if entry_time_str:
@@ -187,7 +189,9 @@ def _parse_jsonl_entry_timestamp(entry: Dict[str, Any]) -> Optional[datetime]:  
 
 
 def _entry_matches_time_filter(
-    entry: Dict[str, Any], start_time: Optional[datetime], end_time: Optional[datetime]  # NOQA - JSONL entries are Dict[str, Any] by design
+    entry: Dict[str, Any],
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],  # NOQA - JSONL entries are Dict[str, Any] by design
 ) -> bool:
     """Check if entry matches time filter criteria."""
     if not (start_time or end_time):
@@ -257,7 +261,9 @@ def _process_graph_entries(merged: Dict[str, Dict], graph_entries: List[AuditEnt
             merged[entry_id]["sources"].append("graph")
 
 
-def _process_sqlite_entries(merged: Dict[str, Dict], sqlite_entries: List[Dict[str, Any]]) -> None:  # NOQA - SQLite query results are Dict[str, Any] by design
+def _process_sqlite_entries(
+    merged: Dict[str, Dict], sqlite_entries: List[Dict[str, Any]]
+) -> None:  # NOQA - SQLite query results are Dict[str, Any] by design
     """Process SQLite entries and add them to merged results."""
     for sqlite_entry in sqlite_entries:
         entry_id = (
@@ -288,7 +294,9 @@ def _process_sqlite_entries(merged: Dict[str, Dict], sqlite_entries: List[Dict[s
             merged[entry_id]["sources"].append("sqlite")
 
 
-def _process_jsonl_entries(merged: Dict[str, Dict], jsonl_entries: List[Dict[str, Any]]) -> None:  # NOQA - JSONL entries are Dict[str, Any] by design
+def _process_jsonl_entries(
+    merged: Dict[str, Dict], jsonl_entries: List[Dict[str, Any]]
+) -> None:  # NOQA - JSONL entries are Dict[str, Any] by design
     """Process JSONL entries and add them to merged results."""
     for jsonl_entry in jsonl_entries:
         entry_id = jsonl_entry.get("id") or f"audit_{jsonl_entry.get('timestamp', '')}_{jsonl_entry.get('actor', '')}"
@@ -322,7 +330,9 @@ def _process_jsonl_entries(merged: Dict[str, Dict], jsonl_entries: List[Dict[str
 
 
 async def _merge_audit_sources(
-    graph_entries: List[AuditEntry], sqlite_entries: List[Dict[str, Any]], jsonl_entries: List[Dict[str, Any]]  # NOQA - Raw database results are Dict[str, Any] by design
+    graph_entries: List[AuditEntry],
+    sqlite_entries: List[Dict[str, Any]],
+    jsonl_entries: List[Dict[str, Any]],  # NOQA - Raw database results are Dict[str, Any] by design
 ) -> List[AuditEntryResponse]:
     """Merge audit entries from all sources and track storage locations."""
     merged = {}  # Dict[str, Dict] to track entries by ID

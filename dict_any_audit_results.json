@@ -1,0 +1,2806 @@
+{
+  "production": {
+    "occurrences": 149,
+    "files_affected": 71,
+    "categories": {
+      "generic_data": 130,
+      "parameters": 3,
+      "api_response": 8,
+      "context_data": 5,
+      "configuration": 2,
+      "event_data": 1
+    },
+    "findings": [
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 38,
+        "class": null,
+        "function": "_prepare_log_context",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/utils/observability_decorators.py",
+        "line": 113,
+        "class": null,
+        "function": "_get_correlation_context",
+        "context": "function_parameter",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "ciris_engine/logic/utils/runtime_utils.py",
+        "line": 15,
+        "class": null,
+        "function": "load_config",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/utils/privacy.py",
+        "line": 23,
+        "class": null,
+        "function": "sanitize_for_anonymous",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/utils/privacy.py",
+        "line": 136,
+        "class": null,
+        "function": "sanitize_correlation_parameters",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/utils/privacy.py",
+        "line": 150,
+        "class": null,
+        "function": "sanitize_audit_details",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 36,
+        "class": "StepResultStream",
+        "function": "broadcast_step_result",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/logic/infrastructure/step_streaming.py",
+        "line": 90,
+        "class": "StepResultStream",
+        "function": "get_stats",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 217,
+        "class": "BaseObserver",
+        "function": "_create_history_entry",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/base_observer.py",
+        "line": 238,
+        "class": "BaseObserver",
+        "function": "_get_channel_history",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_runtime_control.py",
+        "line": 98,
+        "class": "APIRuntimeControlService",
+        "function": "get_runtime_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/models.py",
+        "line": 18,
+        "class": "StandardResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_communication.py",
+        "line": 30,
+        "class": "APICommunicationService",
+        "function": "__init__",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/api_communication.py",
+        "line": 169,
+        "class": "APICommunicationService",
+        "function": "_extract_parameters",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 80,
+        "class": "SingleStepResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 90,
+        "class": "SingleStepResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 158,
+        "class": null,
+        "function": "_extract_pipeline_data",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+        "line": 158,
+        "class": null,
+        "function": "_extract_pipeline_data",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 179,
+        "class": null,
+        "function": "_parse_jsonl_entry_timestamp",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 192,
+        "class": null,
+        "function": "_entry_matches_time_filter",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 265,
+        "class": null,
+        "function": "_process_sqlite_entries",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 298,
+        "class": null,
+        "function": "_process_jsonl_entries",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+        "line": 334,
+        "class": null,
+        "function": "_merge_audit_sources",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_queries.py",
+        "line": 77,
+        "class": null,
+        "function": "get_memory_stats",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+        "line": 263,
+        "class": null,
+        "function": "get_system_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/emergency.py",
+        "line": 70,
+        "class": null,
+        "function": "verify_signature",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 106,
+        "class": "RuntimeControlResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/system.py",
+        "line": 107,
+        "class": "RuntimeControlResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/memory_query_helpers.py",
+        "line": 114,
+        "class": "AttributeParser",
+        "function": "parse_attributes",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/api/routes/telemetry_otlp.py",
+        "line": 23,
+        "class": null,
+        "function": "safe_telemetry_get",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_rate_limiter.py",
+        "line": 231,
+        "class": "DiscordRateLimiter",
+        "function": "get_stats",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_audit.py",
+        "line": 49,
+        "class": "DiscordAuditLogger",
+        "function": "log_operation",
+        "context": "function_parameter",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_audit.py",
+        "line": 141,
+        "class": "DiscordAuditLogger",
+        "function": "log_guidance_request",
+        "context": "function_parameter",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_audit.py",
+        "line": 207,
+        "class": "DiscordAuditLogger",
+        "function": "log_tool_execution",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_service.py",
+        "line": 403,
+        "class": "DiscordToolService",
+        "function": "_get_user_info",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 118,
+        "class": "DiscordToolHandler",
+        "function": "_process_tool_result",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 233,
+        "class": "DiscordToolHandler",
+        "function": "_convert_to_typed_args",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 259,
+        "class": "DiscordToolHandler",
+        "function": "execute_tool",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_tool_handler.py",
+        "line": 407,
+        "class": "DiscordToolHandler",
+        "function": "validate_tool_parameters",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/adapters/discord/discord_vision_helper.py",
+        "line": 238,
+        "class": "DiscordVisionHelper",
+        "function": "get_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/processors/core/step_decorators.py",
+        "line": 989,
+        "class": null,
+        "function": "_add_typed_step_attributes",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot_helpers.py",
+        "line": 99,
+        "class": null,
+        "function": "collect_memorized_attributes",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot_helpers.py",
+        "line": 124,
+        "class": null,
+        "function": "get_channel_id_from_node",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot_helpers.py",
+        "line": 267,
+        "class": null,
+        "function": "_build_required_channel_fields",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot_helpers.py",
+        "line": 278,
+        "class": null,
+        "function": "_build_optional_channel_fields",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot_helpers.py",
+        "line": 295,
+        "class": null,
+        "function": "_collect_memorized_attributes",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/context/system_snapshot_helpers.py",
+        "line": 633,
+        "class": null,
+        "function": "_process_services_group",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/config/config_accessor.py",
+        "line": 158,
+        "class": "ConfigAccessor",
+        "function": "get_section",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/config/config_accessor.py",
+        "line": 178,
+        "class": "ConfigAccessor",
+        "function": "_get_section_from_bootstrap",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/config/bootstrap.py",
+        "line": 96,
+        "class": "ConfigBootstrap",
+        "function": "load_essential_config",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/config/bootstrap.py",
+        "line": 115,
+        "class": "ConfigBootstrap",
+        "function": "load_essential_config",
+        "context": "variable_annotation",
+        "usage_hint": "configuration"
+      },
+      {
+        "file": "ciris_engine/logic/config/bootstrap.py",
+        "line": 146,
+        "class": "ConfigBootstrap",
+        "function": "get_config_metadata",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 111,
+        "class": "ActionSelectionPDMAEvaluator",
+        "function": "recursive_evaluate_with_faculties",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 112,
+        "class": "ActionSelectionPDMAEvaluator",
+        "function": "recursive_evaluate_with_faculties",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection_pdma.py",
+        "line": 145,
+        "class": "ActionSelectionPDMAEvaluator",
+        "function": "_handle_special_cases",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dsdma_base.py",
+        "line": 47,
+        "class": "BaseDSDMA",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/base_dma.py",
+        "line": 149,
+        "class": "BaseDMA",
+        "function": "apply_faculties",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/base_dma.py",
+        "line": 159,
+        "class": "BaseDMA",
+        "function": "apply_faculties",
+        "context": "variable_annotation",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dma_executor.py",
+        "line": 307,
+        "class": null,
+        "function": "run_dsdma",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/dma_executor.py",
+        "line": 405,
+        "class": null,
+        "function": "run_action_selection_pdma",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection/faculty_integration.py",
+        "line": 90,
+        "class": "FacultyIntegration",
+        "function": "enhance_evaluation_with_faculties",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection/context_builder.py",
+        "line": 320,
+        "class": "ActionSelectionContextBuilder",
+        "function": "_build_conscience_guidance",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection/action_instruction_generator.py",
+        "line": 202,
+        "class": "ActionInstructionGenerator",
+        "function": "get_all_tools",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection/action_instruction_generator.py",
+        "line": 338,
+        "class": "ActionInstructionGenerator",
+        "function": "_simplify_schema",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/dma/action_selection/action_instruction_generator.py",
+        "line": 362,
+        "class": "ActionInstructionGenerator",
+        "function": "_extract_type",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/registries/base.py",
+        "line": 47,
+        "class": "ServiceProvider",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/registries/base.py",
+        "line": 97,
+        "class": "ServiceRegistry",
+        "function": "register_service",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/registries/base.py",
+        "line": 299,
+        "class": "ServiceRegistry",
+        "function": "get_circuit_breaker_details",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/infrastructure/database_maintenance/service.py",
+        "line": 81,
+        "class": "DatabaseMaintenanceService",
+        "function": "get_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/runtime/control_service/service.py",
+        "line": 716,
+        "class": "RuntimeControlService",
+        "function": "_extract_adapter_tools",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/runtime/control_service/service.py",
+        "line": 734,
+        "class": "RuntimeControlService",
+        "function": "_create_tool_info",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/runtime/control_service/service.py",
+        "line": 1324,
+        "class": "RuntimeControlService",
+        "function": "_find_provider_in_registry",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/runtime/control_service/service.py",
+        "line": 1334,
+        "class": "RuntimeControlService",
+        "function": "_apply_priority_updates",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/runtime/control_service/service.py",
+        "line": 1338,
+        "class": "RuntimeControlService",
+        "function": "_apply_priority_updates",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/audit_service/service.py",
+        "line": 1397,
+        "class": "GraphAuditService",
+        "function": "_convert_entry_to_audit_log_dict",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/audit_service/service.py",
+        "line": 1408,
+        "class": "GraphAuditService",
+        "function": "_search_event_in_memory_bus",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/audit_service/service.py",
+        "line": 1427,
+        "class": "GraphAuditService",
+        "function": "_search_event_in_recent_cache",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/services/graph/telemetry_service/service.py",
+        "line": 997,
+        "class": "TelemetryAggregator",
+        "function": "_extract_governance_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/models/correlations.py",
+        "line": 20,
+        "class": null,
+        "function": "_parse_response_data",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/persistence/models/correlations.py",
+        "line": 21,
+        "class": null,
+        "function": "_parse_response_data",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/buses/bus_manager.py",
+        "line": 101,
+        "class": "BusManager",
+        "function": "get_stats",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/logic/buses/runtime_control_bus.py",
+        "line": 171,
+        "class": "RuntimeControlBus",
+        "function": "get_runtime_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/tools.py",
+        "line": 62,
+        "class": "ToolResult",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/infrastructure/identity_variance.py",
+        "line": 106,
+        "class": "IdentityData",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/manifest.py",
+        "line": 100,
+        "class": "ServiceManifest",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/adapter_management.py",
+        "line": 23,
+        "class": "ToolInfo",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/runtime/adapter_management.py",
+        "line": 77,
+        "class": "RuntimeAdapterStatus",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/tool_execution.py",
+        "line": 23,
+        "class": "ToolExecutionArgs",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/tool_execution.py",
+        "line": 29,
+        "class": "ToolExecutionArgs",
+        "function": "get_all_params",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/tools.py",
+        "line": 28,
+        "class": "ToolParameterSchema",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/tools.py",
+        "line": 51,
+        "class": "ToolResult",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/adapters/tools.py",
+        "line": 63,
+        "class": "ToolExecutionResult",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/api/wa.py",
+        "line": 84,
+        "class": "WAGuidanceResponse",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/core.py",
+        "line": 38,
+        "class": "DMAInputData",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/prompts.py",
+        "line": 102,
+        "class": "PromptCollection",
+        "function": "to_dict",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/results.py",
+        "line": 86,
+        "class": "ActionSelectionDMAResult",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/faculty.py",
+        "line": 19,
+        "class": "FacultyContext",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/faculty.py",
+        "line": 24,
+        "class": "FacultyContext",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/faculty.py",
+        "line": 78,
+        "class": "FacultyEvaluationSet",
+        "function": "add_result",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/schemas/dma/faculty.py",
+        "line": 110,
+        "class": "FacultyEvaluationSet",
+        "function": "to_dict",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/secrets/service.py",
+        "line": 78,
+        "class": "FilterUpdateResult",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_typed_nodes.py",
+        "line": 66,
+        "class": "TypedGraphNode",
+        "function": "_serialize_extra_fields",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_typed_nodes.py",
+        "line": 48,
+        "class": "TypedGraphNode",
+        "function": "_serialize_extra_fields",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 276,
+        "class": "IdentitySnapshot",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/nodes.py",
+        "line": 530,
+        "class": "IdentityNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/trace_summary_node.py",
+        "line": 35,
+        "class": "TraceSummaryNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/trace_summary_node.py",
+        "line": 92,
+        "class": "TraceSummaryNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/audit_summary_node.py",
+        "line": 69,
+        "class": "AuditSummaryNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/discord_nodes.py",
+        "line": 36,
+        "class": "DiscordDeferralNode",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/discord_nodes.py",
+        "line": 135,
+        "class": "DiscordApprovalNode",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "context_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/discord_nodes.py",
+        "line": 136,
+        "class": "DiscordApprovalNode",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_core.py",
+        "line": 102,
+        "class": "GraphNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_core.py",
+        "line": 147,
+        "class": "ConnectedNodeInfo",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_core.py",
+        "line": 152,
+        "class": "ConnectedNodeInfo",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph_core.py",
+        "line": 167,
+        "class": "SecretsData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/conversation_summary_node.py",
+        "line": 31,
+        "class": "ConversationSummaryNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/conversation_summary_node.py",
+        "line": 96,
+        "class": "ConversationSummaryNode",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 93,
+        "class": "SpanAttribute",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 305,
+        "class": "ThoughtInPipeline",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 312,
+        "class": "ThoughtInPipeline",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 404,
+        "class": "ThoughtProcessingResult",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 675,
+        "class": "ConscienceExecutionStepData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/schemas/services/runtime_control.py",
+        "line": 749,
+        "class": "StepResultData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/authority/wa_updates.py",
+        "line": 72,
+        "class": "WACertificateUpdate",
+        "function": "get_update_fields",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 73,
+        "class": "AdapterInfo",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 171,
+        "class": "ProcessorControlResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 174,
+        "class": "ProcessorControlResponse",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 220,
+        "class": "ConfigSnapshot",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "configuration"
+      },
+      {
+        "file": "ciris_engine/schemas/services/core/runtime.py",
+        "line": 224,
+        "class": "ConfigSnapshot",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/tsdb_models.py",
+        "line": 41,
+        "class": "SummaryAttributes",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/tsdb_models.py",
+        "line": 42,
+        "class": "SummaryAttributes",
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/edge_types.py",
+        "line": 17,
+        "class": "EdgeAttributes",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/services/graph/incident.py",
+        "line": 229,
+        "class": "IncidentInsightNode",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 21,
+        "class": "CorrelationRequestData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 23,
+        "class": "CorrelationRequestData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 36,
+        "class": "CorrelationResponseData",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/persistence/correlations.py",
+        "line": 51,
+        "class": "ChannelInfo",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/memory_schemas.py",
+        "line": 19,
+        "class": "ConnectedNodeInfo",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/handlers/memory_schemas.py",
+        "line": 29,
+        "class": "RecalledNodeInfo",
+        "function": null,
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/streaming/reasoning_stream.py",
+        "line": 204,
+        "class": null,
+        "function": "_create_typed_step_result",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/schemas/streaming/reasoning_stream.py",
+        "line": 204,
+        "class": null,
+        "function": "_create_typed_step_result",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/streaming/reasoning_stream.py",
+        "line": 231,
+        "class": null,
+        "function": "_create_thought_stream_data",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "ciris_engine/schemas/streaming/reasoning_stream.py",
+        "line": 266,
+        "class": null,
+        "function": "_create_step_summary",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/streaming/reasoning_stream.py",
+        "line": 290,
+        "class": null,
+        "function": "create_stream_update_from_step_results",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/schemas/streaming/reasoning_stream.py",
+        "line": 405,
+        "class": null,
+        "function": "get_step_metadata",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/base.py",
+        "line": 36,
+        "class": "APIAdapterProtocol",
+        "function": "get_openapi_spec",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/base.py",
+        "line": 118,
+        "class": "SlackAdapterProtocol",
+        "function": "handle_event",
+        "context": "function_parameter",
+        "usage_hint": "event_data"
+      },
+      {
+        "file": "ciris_engine/protocols/adapters/message.py",
+        "line": 90,
+        "class": null,
+        "function": null,
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "ciris_engine/protocols/services/governance/wa_auth.py",
+        "line": 180,
+        "class": "OAuthService",
+        "function": "create_oauth_wa",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      }
+    ]
+  },
+  "tests": {
+    "occurrences": 62,
+    "findings": [
+      {
+        "file": "tests/test_handlers_api_mock_simple.py",
+        "line": 51,
+        "class": "CIRISAPIClient",
+        "function": "interact",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock_simple.py",
+        "line": 61,
+        "class": "CIRISAPIClient",
+        "function": "get_memory",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock_simple.py",
+        "line": 66,
+        "class": "CIRISAPIClient",
+        "function": "search_memory",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock_simple.py",
+        "line": 74,
+        "class": "CIRISAPIClient",
+        "function": "get_tasks",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock.py",
+        "line": 63,
+        "class": "CIRISAPIClient",
+        "function": "interact",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock.py",
+        "line": 72,
+        "class": "CIRISAPIClient",
+        "function": "get_audit_entries",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock.py",
+        "line": 82,
+        "class": "CIRISAPIClient",
+        "function": "search_memory",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_handlers_api_mock.py",
+        "line": 95,
+        "class": "CIRISAPIClient",
+        "function": "get_traces",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/test_discord_deferrals.py",
+        "line": 35,
+        "class": "MockDiscordAdapter",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 80,
+        "class": "MockCLIToolService",
+        "function": "_help_command",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 100,
+        "class": "MockCLIToolService",
+        "function": "_exit_command",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 104,
+        "class": "MockCLIToolService",
+        "function": "_clear_command",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 113,
+        "class": "MockCLIToolService",
+        "function": "_history_command",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 121,
+        "class": "MockCLIToolService",
+        "function": "_version_command",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 138,
+        "class": "MockCLIToolService",
+        "function": "get_available_tools",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 150,
+        "class": "MockCLIToolService",
+        "function": "execute_tool",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 190,
+        "class": "MockCLIToolService",
+        "function": "validate_parameters",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/cli/mock_cli_tools.py",
+        "line": 190,
+        "class": "MockCLIToolService",
+        "function": "validate_parameters",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/mock_llm/responses_action_selection.py",
+        "line": 22,
+        "class": null,
+        "function": "action_selection",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/mock_llm/responses_action_selection.py",
+        "line": 32,
+        "class": null,
+        "function": "action_selection",
+        "context": "variable_annotation",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "tests/adapters/mock_llm/responses_action_selection.py",
+        "line": 47,
+        "class": null,
+        "function": "action_selection",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/mock_llm/responses_action_selection.py",
+        "line": 228,
+        "class": null,
+        "function": "action_selection",
+        "context": "variable_annotation",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "tests/adapters/mock_llm/responses.py",
+        "line": 80,
+        "class": null,
+        "function": "extract_context_from_messages",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/adapters/mock_llm/responses.py",
+        "line": 385,
+        "class": null,
+        "function": "create_response",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 50,
+        "class": "MockToolRegistry",
+        "function": "add_tool",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 69,
+        "class": "MockToolRegistry",
+        "function": "get_tools",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 122,
+        "class": null,
+        "function": "create_tool_execution_args",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 139,
+        "class": null,
+        "function": "create_tool_info",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 163,
+        "class": null,
+        "function": "create_tool_execution_result",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 216,
+        "class": null,
+        "function": "create_successful_tool_handler",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 219,
+        "class": null,
+        "function": "handler",
+        "context": "function_parameter",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 219,
+        "class": null,
+        "function": "handler",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 228,
+        "class": null,
+        "function": "handler",
+        "context": "function_parameter",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 228,
+        "class": null,
+        "function": "handler",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/fixtures/discord_mocks.py",
+        "line": 237,
+        "class": null,
+        "function": "handler",
+        "context": "function_parameter",
+        "usage_hint": "parameters"
+      },
+      {
+        "file": "tests/integration/test_observe_handler_integration.py",
+        "line": 54,
+        "class": null,
+        "function": "create_realistic_discord_messages",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/integration/test_observe_handler_integration.py",
+        "line": 100,
+        "class": null,
+        "function": "create_edge_case_messages",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_persistence/test_node_registry.py",
+        "line": 381,
+        "class": "NestedNode",
+        "function": "test_nested_data_structures",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_persistence/test_node_registry.py",
+        "line": 432,
+        "class": "BaseEventNode",
+        "function": "get_base_attrs",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/test_persistence/test_node_registry.py",
+        "line": 552,
+        "class": "PerfTestNode",
+        "function": "test_deserialization_performance",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 263,
+        "class": "MetricValidator",
+        "function": "validate_gauge_metric",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 280,
+        "class": "MetricValidator",
+        "function": "validate_counter_metric",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 299,
+        "class": "MetricValidator",
+        "function": "validate_resource_attributes",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 314,
+        "class": "MetricValidator",
+        "function": "validate_service_attributes",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 336,
+        "class": "MetricValidator",
+        "function": "find_metric_by_name",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 336,
+        "class": "MetricValidator",
+        "function": "find_metric_by_name",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/logic/adapters/api/routes/conftest.py",
+        "line": 344,
+        "class": "MetricValidator",
+        "function": "count_metrics_by_type",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/runtime/test_modular_service_loader.py",
+        "line": 43,
+        "class": "MockService",
+        "function": "health_check",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/processors/core/test_single_step_covenant_compliance.py",
+        "line": 50,
+        "class": "TestSingleStepH3ERECompliance",
+        "function": "_test_single_step_point",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/processors/core/test_single_step_covenant_compliance.py",
+        "line": 114,
+        "class": "TestSingleStepH3ERECompliance",
+        "function": "_get_mock_step_data",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 41,
+        "class": "TestTelemetrySummary",
+        "function": "create_mock_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 65,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 66,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 109,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 110,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 146,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 147,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 167,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/test_telemetry_summary.py",
+        "line": 168,
+        "class": "TestTelemetrySummary",
+        "function": "mock_query_metrics",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/runtime/conftest.py",
+        "line": 83,
+        "class": "MockTelemetryService",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/runtime/conftest.py",
+        "line": 84,
+        "class": "MockTelemetryService",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tests/ciris_engine/logic/services/runtime/conftest.py",
+        "line": 102,
+        "class": "MockTelemetryService",
+        "function": "get_metrics_by_name",
+        "context": "other",
+        "usage_hint": "generic_data"
+      }
+    ]
+  },
+  "tools": {
+    "occurrences": 136,
+    "findings": [
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 53,
+        "class": "APITelemetryTester",
+        "function": "test_unified",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 85,
+        "class": "APITelemetryTester",
+        "function": "test_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 111,
+        "class": "APITelemetryTester",
+        "function": "test_traces",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 137,
+        "class": "APITelemetryTester",
+        "function": "test_logs",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/api_telemetry_tool.py",
+        "line": 197,
+        "class": "APITelemetryTester",
+        "function": "test_service_health",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 91,
+        "class": "DBStatusTool",
+        "function": "get_overall_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 179,
+        "class": "DBStatusTool",
+        "function": "get_tsdb_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 335,
+        "class": "DBStatusTool",
+        "function": "get_audit_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 476,
+        "class": "DBStatusTool",
+        "function": "get_consolidated_state_analysis",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 573,
+        "class": "DBStatusTool",
+        "function": "get_available_test_periods",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 677,
+        "class": "DBStatusTool",
+        "function": "get_tsdb_node_age_analysis",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/status.py",
+        "line": 789,
+        "class": "DBStatusTool",
+        "function": "get_nodes_without_edges",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/storage_analyzer.py",
+        "line": 15,
+        "class": "StorageAnalyzer",
+        "function": "get_storage_by_time_period",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/storage_analyzer.py",
+        "line": 95,
+        "class": "StorageAnalyzer",
+        "function": "get_edge_statistics_for_consolidated_periods",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/storage_analyzer.py",
+        "line": 229,
+        "class": "StorageAnalyzer",
+        "function": "get_orphaned_nodes_analysis",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/status_reporter.py",
+        "line": 15,
+        "class": "DBStatusReporter",
+        "function": "get_overall_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/graph_analyzer.py",
+        "line": 13,
+        "class": "GraphAnalyzer",
+        "function": "get_orphaned_nodes",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/graph_analyzer.py",
+        "line": 97,
+        "class": "GraphAnalyzer",
+        "function": "get_edge_statistics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/graph_analyzer.py",
+        "line": 161,
+        "class": "GraphAnalyzer",
+        "function": "get_connectivity_report",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/consolidation_monitor.py",
+        "line": 15,
+        "class": "ConsolidationMonitor",
+        "function": "get_consolidation_gaps",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/consolidation_monitor.py",
+        "line": 171,
+        "class": "ConsolidationMonitor",
+        "function": "get_retention_analysis",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/consolidation_monitor.py",
+        "line": 234,
+        "class": "ConsolidationMonitor",
+        "function": "get_consolidation_health",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/consolidation_monitor.py",
+        "line": 257,
+        "class": "ConsolidationMonitor",
+        "function": "get_orphaned_nodes_in_consolidated_periods",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/audit_verifier.py",
+        "line": 14,
+        "class": "AuditVerifierWrapper",
+        "function": "get_audit_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/audit_verifier.py",
+        "line": 129,
+        "class": "AuditVerifierWrapper",
+        "function": "verify_audit_integrity",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/tsdb_analyzer.py",
+        "line": 15,
+        "class": "TSDBAnalyzer",
+        "function": "get_tsdb_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/tsdb_analyzer.py",
+        "line": 113,
+        "class": "TSDBAnalyzer",
+        "function": "get_node_age_analysis",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/database/ciris_db_tools/tsdb_analyzer.py",
+        "line": 181,
+        "class": "TSDBAnalyzer",
+        "function": "_generate_recommendations",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 43,
+        "class": "SonarClient",
+        "function": "search_issues",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 53,
+        "class": "SonarClient",
+        "function": "transition_issue",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 67,
+        "class": "SonarClient",
+        "function": "add_comment",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 79,
+        "class": "SonarClient",
+        "function": "get_stats",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 100,
+        "class": "SonarClient",
+        "function": "get_quality_gate_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 106,
+        "class": "SonarClient",
+        "function": "search_hotspots",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 114,
+        "class": "SonarClient",
+        "function": "mark_hotspot_safe",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 124,
+        "class": "SonarClient",
+        "function": "get_coverage_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 145,
+        "class": null,
+        "function": "format_hotspot",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar.py",
+        "line": 160,
+        "class": null,
+        "function": "format_issue",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 27,
+        "class": "CIRISSystemAuditor",
+        "function": "__init__",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 52,
+        "class": "CIRISSystemAuditor",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 63,
+        "class": "CIRISSystemAuditor",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 65,
+        "class": "CIRISSystemAuditor",
+        "function": "__init__",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 68,
+        "class": "CIRISSystemAuditor",
+        "function": "audit",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 108,
+        "class": "CIRISSystemAuditor",
+        "function": "_scan_all_files",
+        "context": "variable_annotation",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 500,
+        "class": "CIRISSystemAuditor",
+        "function": "_generate_report",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/audit_system.py",
+        "line": 573,
+        "class": "CIRISSystemAuditor",
+        "function": "_save_markdown_summary",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/reporter.py",
+        "line": 14,
+        "class": "QualityReporter",
+        "function": "generate_coverage_report",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/reporter.py",
+        "line": 149,
+        "class": "QualityReporter",
+        "function": "generate_action_summary",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/reporter.py",
+        "line": 176,
+        "class": "QualityReporter",
+        "function": "export_json_report",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/analyzer.py",
+        "line": 26,
+        "class": "CoverageAnalyzer",
+        "function": "analyze_coverage_opportunities",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/analyzer.py",
+        "line": 99,
+        "class": "CoverageAnalyzer",
+        "function": "_analyze_by_package",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/analyzer.py",
+        "line": 136,
+        "class": "CoverageAnalyzer",
+        "function": "_find_quick_wins",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/analyzer.py",
+        "line": 160,
+        "class": "CoverageAnalyzer",
+        "function": "_prioritize_strategic_targets",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/analyzer.py",
+        "line": 202,
+        "class": "CoverageAnalyzer",
+        "function": "_estimate_files_needed",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/client.py",
+        "line": 20,
+        "class": "SonarClient",
+        "function": "search_issues",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/client.py",
+        "line": 31,
+        "class": "SonarClient",
+        "function": "get_coverage_metrics",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/client.py",
+        "line": 43,
+        "class": "SonarClient",
+        "function": "get_uncovered_files",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/client.py",
+        "line": 77,
+        "class": "SonarClient",
+        "function": "get_tech_debt_files",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/client.py",
+        "line": 110,
+        "class": "SonarClient",
+        "function": "get_quality_gate_status",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/analysis/sonar_tool/client.py",
+        "line": 118,
+        "class": "SonarClient",
+        "function": "get_hotspots",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/quality/validate_prod_routes.py",
+        "line": 75,
+        "class": "RouteValidator",
+        "function": "test_route",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/quality/validate_prod_routes.py",
+        "line": 76,
+        "class": "RouteValidator",
+        "function": "test_route",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/qa_runner/modules/streaming_verification.py",
+        "line": 47,
+        "class": "StreamingVerificationModule",
+        "function": "verify_streaming_steps",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/qa_runner/modules/streaming_verification.py",
+        "line": 39,
+        "class": "StreamingVerificationModule",
+        "function": "verify_streaming_steps",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/qa_runner/modules/streaming_verification.py",
+        "line": 531,
+        "class": "StreamingVerificationModule",
+        "function": "run_custom_test",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/testing/ciris_api_test.py",
+        "line": 43,
+        "class": "CIRISClient",
+        "function": "interact",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/testing/ciris_api_test.py",
+        "line": 63,
+        "class": "CIRISClient",
+        "function": "mock_command",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/testing/ciris_api_test.py",
+        "line": 70,
+        "class": "CIRISClient",
+        "function": "get_audit_entries",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/testing/ciris_api_test.py",
+        "line": 98,
+        "class": "CIRISClient",
+        "function": "health_check",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/core.py",
+        "line": 46,
+        "class": "CIRISMypyToolkit",
+        "function": "get_mypy_errors",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/core.py",
+        "line": 93,
+        "class": "CIRISMypyToolkit",
+        "function": "analyze_compliance",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/core.py",
+        "line": 261,
+        "class": "CIRISMypyToolkit",
+        "function": "validate_adapter_compliance",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/core.py",
+        "line": 298,
+        "class": "CIRISMypyToolkit",
+        "function": "_categorize_errors",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/core.py",
+        "line": 298,
+        "class": "CIRISMypyToolkit",
+        "function": "_categorize_errors",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/core.py",
+        "line": 340,
+        "class": "CIRISMypyToolkit",
+        "function": "_check_adapter_types",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/schema_compliance.py",
+        "line": 35,
+        "class": "SchemaComplianceChecker",
+        "function": "_load_v1_schemas",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/schema_compliance.py",
+        "line": 72,
+        "class": "SchemaComplianceChecker",
+        "function": "_load_protocol_interfaces",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/schema_compliance.py",
+        "line": 83,
+        "class": "SchemaComplianceChecker",
+        "function": "check_schema_usage",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/schema_compliance.py",
+        "line": 131,
+        "class": "SchemaComplianceChecker",
+        "function": "check_protocol_compliance",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/schema_compliance.py",
+        "line": 175,
+        "class": "SchemaComplianceChecker",
+        "function": "generate_schema_fixes",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/schema_compliance.py",
+        "line": 175,
+        "class": "SchemaComplianceChecker",
+        "function": "generate_schema_fixes",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 25,
+        "class": "SecurityAnalyzer",
+        "function": "_load_crypto_requirements",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 43,
+        "class": "SecurityAnalyzer",
+        "function": "analyze_security_compliance",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 105,
+        "class": "SecurityAnalyzer",
+        "function": "_check_forbidden_patterns",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 126,
+        "class": "SecurityAnalyzer",
+        "function": "_check_crypto_compliance",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 163,
+        "class": "SecurityAnalyzer",
+        "function": "_check_secrets_handling",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 213,
+        "class": "SecurityAnalyzer",
+        "function": "_check_security_imports",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 237,
+        "class": "SecurityAnalyzer",
+        "function": "_ast_security_checks",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 291,
+        "class": "SecurityAnalyzer",
+        "function": "_categorize_by_severity",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 299,
+        "class": "SecurityAnalyzer",
+        "function": "analyze_all_files",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 322,
+        "class": "SecurityAnalyzer",
+        "function": "_calculate_security_score",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/security_analyzer.py",
+        "line": 332,
+        "class": "SecurityAnalyzer",
+        "function": "_identify_critical_files",
+        "context": "function_parameter",
+        "usage_hint": "api_response"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 117,
+        "class": "SchemaValidator",
+        "function": "validate_file",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 177,
+        "class": "SchemaValidator",
+        "function": "validate_all_files",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 191,
+        "class": "SchemaValidator",
+        "function": "_validate_v1_usage",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 200,
+        "class": "SchemaValidator",
+        "function": "_find_dict_schema_candidates",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 212,
+        "class": "SchemaValidator",
+        "function": "_find_non_schema_classes",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 254,
+        "class": "SchemaValidator",
+        "function": "_check_internal_method_usage",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/schema_validator.py",
+        "line": 295,
+        "class": "SchemaValidator",
+        "function": "get_schema_usage_report",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/protocol_analyzer.py",
+        "line": 82,
+        "class": "ProtocolAnalyzer",
+        "function": "check_all_services",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/protocol_analyzer.py",
+        "line": 111,
+        "class": "ProtocolAnalyzer",
+        "function": "check_service_alignment",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/protocol_analyzer.py",
+        "line": 228,
+        "class": "ProtocolAnalyzer",
+        "function": "_find_protocols",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/protocol_analyzer.py",
+        "line": 353,
+        "class": "ProtocolAnalyzer",
+        "function": "_find_protocol",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/protocol_analyzer.py",
+        "line": 427,
+        "class": "ProtocolAnalyzer",
+        "function": "_find_module",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/protocol_analyzer.py",
+        "line": 499,
+        "class": "ProtocolAnalyzer",
+        "function": "_find_untyped_dicts",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 61,
+        "class": "UnusedCodeDetector",
+        "function": "find_unused_code",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 168,
+        "class": "UnusedCodeDetector",
+        "function": "_find_unused_functions",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 203,
+        "class": "UnusedCodeDetector",
+        "function": "_find_unused_classes",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 237,
+        "class": "UnusedCodeDetector",
+        "function": "_find_unused_imports",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 295,
+        "class": "UnusedCodeDetector",
+        "function": "_find_dead_code",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 344,
+        "class": "UnusedCodeDetector",
+        "function": "_find_questionable_internal_methods",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 420,
+        "class": "UnusedCodeDetector",
+        "function": "propose_cleanup",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 425,
+        "class": "UnusedCodeDetector",
+        "function": "apply_approved_cleanup",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/analyzers/unused_code_detector.py",
+        "line": 476,
+        "class": "UnusedCodeDetector",
+        "function": "generate_cleanup_report",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_compliance_fixer.py",
+        "line": 28,
+        "class": "ProtocolComplianceFixer",
+        "function": "propose_protocol_fixes",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_compliance_fixer.py",
+        "line": 33,
+        "class": "ProtocolComplianceFixer",
+        "function": "apply_approved_fixes",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/schema_alignment_fixer.py",
+        "line": 28,
+        "class": "SchemaAlignmentFixer",
+        "function": "propose_schema_fixes",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/schema_alignment_fixer.py",
+        "line": 33,
+        "class": "SchemaAlignmentFixer",
+        "function": "apply_approved_fixes",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 25,
+        "class": "ProtocolAlignmentFixer",
+        "function": "fix_all_protocols",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 51,
+        "class": "ProtocolAlignmentFixer",
+        "function": "_find_protocol_implementation_pairs",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 76,
+        "class": "ProtocolAlignmentFixer",
+        "function": "_fix_protocol_alignment",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 76,
+        "class": "ProtocolAlignmentFixer",
+        "function": "_fix_protocol_alignment",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 263,
+        "class": "ProtocolAlignmentFixer",
+        "function": "_find_protocol",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 281,
+        "class": "ProtocolAlignmentFixer",
+        "function": "_find_implementation",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/protocol_alignment_fixer.py",
+        "line": 311,
+        "class": "ProtocolAlignmentFixer",
+        "function": "_extract_signature",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 38,
+        "class": "TypeAnnotationFixer",
+        "function": "propose_type_fixes",
+        "context": "return_type",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 156,
+        "class": "TypeAnnotationFixer",
+        "function": "apply_approved_fixes",
+        "context": "function_parameter",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 249,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_unused_ignore_comments",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 367,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_missing_return_types_systematic",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 394,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_variable_annotations",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 432,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_union_attr",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 437,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_missing_imports",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 488,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_unreachable_code",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 512,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_attr_defined_errors",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/ciris_mypy_toolkit/error_fixers/type_annotation_fixer.py",
+        "line": 543,
+        "class": "TypeAnnotationFixer",
+        "function": "_fix_type_mismatches",
+        "context": "other",
+        "usage_hint": "generic_data"
+      },
+      {
+        "file": "tools/grace/context.py",
+        "line": 45,
+        "class": "WorkContext",
+        "function": "load",
+        "context": "other",
+        "usage_hint": "generic_data"
+      }
+    ]
+  },
+  "total_all_code": {
+    "occurrences": 347,
+    "files_affected": 112
+  }
+}

@@ -1082,7 +1082,7 @@ class TestRefactoredHelperFunctions:
         assert result.success is True
         assert result.processing_time_ms == 100.0
         assert result.task_id == "task-456"
-        assert result.step_data == {"serialized": "data"}
+        assert result.step_data == step_data
         assert result.trace_context == trace_context
         assert result.span_attributes == span_attributes
         assert result.otlp_compatible is True
@@ -1118,7 +1118,7 @@ class TestRefactoredHelperFunctions:
         assert result.task_id == ""  # Default empty string
         assert result.success is True  # Default True
         assert result.processing_time_ms == 0.0  # Default 0.0
-        assert result.step_data == {"some": "data"}
+        assert result.step_data == step_data
 
     def test_add_gather_context_attributes_success(self):
         """Test _add_gather_context_attributes adds context data."""

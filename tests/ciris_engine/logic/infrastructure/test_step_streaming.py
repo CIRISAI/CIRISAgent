@@ -263,11 +263,11 @@ class TestStepResultStreamIntegration:
         assert not client_queue.empty()
         ui_update = await client_queue.get()
 
-        # Should be a structured stream update
-        assert "updated_thoughts" in ui_update
-        assert "step_summaries" in ui_update
-        assert "current_round" in ui_update
-        assert "pipeline_active" in ui_update
+        # Should be a structured stream update with step result data
+        assert "thought_id" in ui_update
+        assert "task_id" in ui_update
+        assert "step_point" in ui_update
+        assert "success" in ui_update
 
         # Should have enrichment metadata
         assert "broadcast_timestamp" in ui_update

@@ -19,7 +19,9 @@ REDACTED_URL = "[url]"
 REDACTED_NAME = "[name]"
 
 
-def sanitize_for_anonymous(data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any data structure
+def sanitize_for_anonymous(
+    data: Dict[str, Any], user_id: Optional[str] = None
+) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any data structure
     """
     Sanitize data for anonymous users.
 
@@ -130,7 +132,9 @@ def should_sanitize_for_user(user_consent_stream: Optional[str]) -> bool:
     return user_consent_stream.lower() in ["anonymous", "expired", "revoked"]
 
 
-def sanitize_correlation_parameters(parameters: Dict[str, Any], consent_stream: Optional[str] = None) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any parameter structure
+def sanitize_correlation_parameters(
+    parameters: Dict[str, Any], consent_stream: Optional[str] = None
+) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any parameter structure
     """
     Sanitize correlation parameters based on consent.
 
@@ -142,7 +146,9 @@ def sanitize_correlation_parameters(parameters: Dict[str, Any], consent_stream: 
     return sanitize_for_anonymous(parameters)
 
 
-def sanitize_audit_details(details: Dict[str, Any], consent_stream: Optional[str] = None) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any audit detail structure
+def sanitize_audit_details(
+    details: Dict[str, Any], consent_stream: Optional[str] = None
+) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any audit detail structure
     """
     Sanitize audit entry details based on consent.
 
@@ -238,5 +244,5 @@ def create_refutation_proof(
         matches_stored=matches_stored,
         actual_content_hash=actual_content_hash,
         actual_matches_stored=actual_matches_stored,
-        claimed_matches_actual=claimed_matches_actual
+        claimed_matches_actual=claimed_matches_actual,
     )

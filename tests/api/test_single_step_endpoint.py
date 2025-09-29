@@ -137,8 +137,21 @@ class TestSingleStepEndpoint:
 
         # Verify step data contains DMA information
         step_data_inner = round_result["step_data"]
-        assert "dmas_executed" in step_data_inner
-        assert isinstance(step_data_inner["dmas_executed"], list)
+
+        # DMA execution info is now in span_attributes, not directly in step_data
+        assert "span_attributes" in step_data_inner
+        span_attributes = step_data_inner["span_attributes"]
+
+        # Find the dmas_executed attribute
+        dmas_executed_attr = None
+        for attr in span_attributes:
+            if attr["key"] == "dmas_executed":
+                dmas_executed_attr = attr
+                break
+
+        assert dmas_executed_attr is not None, "dmas_executed attribute not found in span_attributes"
+        assert "value" in dmas_executed_attr
+        assert "stringValue" in dmas_executed_attr["value"]
 
     def test_enhanced_response_pipeline_state(self, client, auth_headers, mock_app_with_services):
         """Test that pipeline state is correctly included in enhanced response."""

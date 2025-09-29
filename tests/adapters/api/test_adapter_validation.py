@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.routes import system
+from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterMetrics, RuntimeAdapterStatus
 
 
@@ -35,6 +36,17 @@ class TestAdapterValidation:
         # Create RuntimeAdapterStatus with metrics object
         config = AdapterConfig(adapter_type="test", enabled=True, settings={})
 
+        # Create proper ToolInfo object instead of string
+        test_tool = ToolInfo(
+            name="test_tool",
+            description="Test tool for validation",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+
         # This should not raise validation error
         status = RuntimeAdapterStatus(
             adapter_id="test_adapter",
@@ -45,7 +57,7 @@ class TestAdapterValidation:
             config_params=config,
             metrics=metrics,  # Pass object, not dict
             last_activity=datetime.now(timezone.utc),
-            tools=["test_tool"],
+            tools=[test_tool],
         )
 
         assert status.metrics == metrics
@@ -65,7 +77,26 @@ class TestAdapterValidation:
         mock_adapter_info.messages_processed = 50
         mock_adapter_info.error_count = 2
         mock_adapter_info.last_error = "Test error"
-        mock_adapter_info.tools = ["tool1", "tool2"]
+        # Create proper ToolInfo objects instead of strings
+        tool1 = ToolInfo(
+            name="tool1",
+            description="Test tool 1",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+        tool2 = ToolInfo(
+            name="tool2",
+            description="Test tool 2",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+        mock_adapter_info.tools = [tool1, tool2]
 
         # Make list_adapters async
         async def async_list_adapters():

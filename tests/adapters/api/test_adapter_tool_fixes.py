@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterMetrics, RuntimeAdapterStatus
 
 
@@ -31,6 +32,17 @@ class TestAdapterMetricsValidation:
         # Create config
         config = AdapterConfig(adapter_type="test", enabled=True, settings={})
 
+        # Create proper ToolInfo object instead of string
+        test_tool = ToolInfo(
+            name="test_tool",
+            description="Test tool for validation",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+
         # This should not raise validation error (was failing when metrics was dict)
         status = RuntimeAdapterStatus(
             adapter_id="test_adapter",
@@ -41,7 +53,7 @@ class TestAdapterMetricsValidation:
             config_params=config,
             metrics=metrics,  # Pass object, not dict - this was the fix
             last_activity=datetime.now(timezone.utc),
-            tools=["test_tool"],
+            tools=[test_tool],
         )
 
         # Verify the object is stored correctly

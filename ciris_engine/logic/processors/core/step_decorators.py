@@ -296,7 +296,9 @@ def _create_perform_dmas_data(base_data: BaseStepData, result: Any, thought_item
             f"PERFORM_DMAS thought_item missing 'initial_context' attribute. Type: {type(thought_item)}, attributes: {dir(thought_item)}"
         )
 
-    return PerformDMAsStepData(**_base_data_dict(base_data), dma_results=dma_results, context=str(thought_item.initial_context))
+    return PerformDMAsStepData(
+        **_base_data_dict(base_data), dma_results=dma_results, context=str(thought_item.initial_context)
+    )
 
 
 def _create_perform_aspdma_data(base_data: BaseStepData, result: Any) -> PerformASPDMAStepData:
@@ -315,7 +317,9 @@ def _create_perform_aspdma_data(base_data: BaseStepData, result: Any) -> Perform
         )
 
     return PerformASPDMAStepData(
-        **_base_data_dict(base_data), selected_action=str(result.selected_action), action_rationale=str(result.rationale)
+        **_base_data_dict(base_data),
+        selected_action=str(result.selected_action),
+        action_rationale=str(result.rationale),
     )
 
 
@@ -351,7 +355,24 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
         )
 
     # Create comprehensive conscience evaluation details for full transparency
-    conscience_result = _create_comprehensive_conscience_result(result)
+    conscience_check_result = _create_comprehensive_conscience_result(result)
+
+    # Convert ConscienceCheckResult to ConscienceResult for the step data
+    from ciris_engine.schemas.conscience.results import ConscienceResult
+    conscience_result = ConscienceResult(
+        conscience_name="conscience_execution",
+        passed=conscience_check_result.passed,
+        severity="critical" if not conscience_check_result.passed else "info",
+        message=conscience_check_result.reason or "Conscience check completed",
+        override_action=override_reason,
+        details={
+            "status": conscience_check_result.status.value if conscience_check_result.status else "unknown",
+            "entropy_passed": conscience_check_result.entropy_check.passed if conscience_check_result.entropy_check else None,
+            "coherence_passed": conscience_check_result.coherence_check.passed if conscience_check_result.coherence_check else None,
+            "optimization_veto": conscience_check_result.optimization_veto_check.decision if conscience_check_result.optimization_veto_check else None,
+            "epistemic_humility": conscience_check_result.epistemic_humility_check.epistemic_certainty if conscience_check_result.epistemic_humility_check else None,
+        }
+    )
 
     return ConscienceExecutionStepData(
         **_base_data_dict(base_data),
@@ -359,7 +380,7 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
         conscience_passed=conscience_passed,
         action_result=action_result,
         override_reason=override_reason,
-        conscience_result=conscience_result.model_dump(),
+        conscience_result=conscience_result,
     )
 
 
@@ -473,7 +494,9 @@ def _create_recursive_aspdma_data(base_data: BaseStepData, result: Any, args: tu
             f"RECURSIVE_ASPDMA result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
         )
 
-    return RecursiveASPDMAStepData(**_base_data_dict(base_data), retry_reason=str(args[0]), original_action=str(result.selected_action))
+    return RecursiveASPDMAStepData(
+        **_base_data_dict(base_data), retry_reason=str(args[0]), original_action=str(result.selected_action)
+    )
 
 
 def _create_recursive_conscience_data(base_data: BaseStepData, result: Any) -> RecursiveConscienceStepData:
@@ -486,7 +509,9 @@ def _create_recursive_conscience_data(base_data: BaseStepData, result: Any) -> R
             f"RECURSIVE_CONSCIENCE result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
         )
 
-    return RecursiveConscienceStepData(**_base_data_dict(base_data), retry_action=str(result.selected_action), retry_result=str(result))
+    return RecursiveConscienceStepData(
+        **_base_data_dict(base_data), retry_action=str(result.selected_action), retry_result=str(result)
+    )
 
 
 def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> FinalizeActionStepData:
@@ -670,7 +695,7 @@ def _build_step_result_data(
         processing_time_ms=step_data.processing_time_ms,
         thought_id=step_data.thought_id,
         task_id=step_data.task_id or "",
-        step_data=step_result.model_dump(),  # Put the typed data in step_data field
+        step_data=step_data,  # Use the typed step data object directly
         # Enhanced trace data for OTLP compatibility
         trace_context=trace_context,
         span_attributes=span_attributes,
@@ -977,7 +1002,9 @@ def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data
         )
 
 
-def _add_typed_step_attributes(attributes: List[SpanAttribute], step: StepPoint, result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_typed_step_attributes(
+    attributes: List[SpanAttribute], step: StepPoint, result_data: Dict[str, Any]
+) -> None:  # NOQA
     """Add step-specific attributes based on typed step result data."""
 
     # Map step types to their handler functions

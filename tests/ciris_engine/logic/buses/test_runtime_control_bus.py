@@ -441,6 +441,28 @@ class TestRuntimeControlBus:
     @pytest.mark.asyncio
     async def test_get_adapter_info_success(self, runtime_control_bus, mock_runtime_control_service):
         """Test successful adapter info retrieval."""
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        # Create proper ToolInfo objects with required parameters field
+        tool1 = ToolInfo(
+            name="tool1",
+            description="Tool 1",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+        tool2 = ToolInfo(
+            name="tool2",
+            description="Tool 2",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+
         expected_info = AdapterInfo(
             adapter_id="test_adapter",
             adapter_type="discord",
@@ -449,7 +471,7 @@ class TestRuntimeControlBus:
             messages_processed=500,
             error_count=2,
             last_error=None,
-            tools=[{"name": "tool1", "description": "Tool 1"}, {"name": "tool2", "description": "Tool 2"}],
+            tools=[tool1, tool2],
         )
 
         mock_runtime_control_service.get_adapter_info.return_value = expected_info

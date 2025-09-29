@@ -126,8 +126,14 @@ class DictAnyAuditor(ast.NodeVisitor):
 
         # Check for OTLP-related function or variable context
         otlp_indicators = [
-            "otlp", "attributes", "metric", "create_", "_create_",
-            "resource_attributes", "scope_metrics", "data_points"
+            "otlp",
+            "attributes",
+            "metric",
+            "create_",
+            "_create_",
+            "resource_attributes",
+            "scope_metrics",
+            "data_points",
         ]
 
         # Check current function name

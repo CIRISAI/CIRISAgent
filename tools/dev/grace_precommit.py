@@ -230,7 +230,7 @@ async def main():
         print("   Pre-commit will show 'Failed' above - this is expected behavior!")
         print("   ")
         print("   To commit your properly formatted changes:")
-        print("   1. git commit --no-verify -m \"your commit message\"")
+        print('   1. git commit --no-verify -m "your commit message"')
         print("   2. git push origin <branch-name>")
         print("   ")
         print("   💡 Use --no-verify to skip re-running hooks on already-processed code.")

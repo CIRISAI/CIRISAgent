@@ -960,95 +960,28 @@ class CIRISRuntime:
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""
-        logger.info("Starting adapter connections...")
+        from .ciris_runtime_helpers import (
+            create_adapter_lifecycle_tasks,
+            log_adapter_configuration_details,
+            verify_adapter_service_registration,
+            wait_for_adapter_readiness,
+        )
 
-        # Report adapter configuration details
-        for adapter in self.adapters:
-            adapter_name = adapter.__class__.__name__
+        # Log adapter configuration details
+        log_adapter_configuration_details(self.adapters)
 
-            # Report adapter details for Discord
-            if adapter_name == "DiscordPlatform" and hasattr(adapter, "config"):
-                config = adapter.config
-                if hasattr(config, "monitored_channel_ids"):
-                    logger.info(f"  → {adapter_name} configuration:")
-                    logger.info(f"    Monitored channels: {config.monitored_channel_ids}")
-                if hasattr(config, "server_id"):
-                    logger.info(f"    Target server: {config.server_id}")
-                if hasattr(config, "bot_token") and config.bot_token:
-                    logger.info(f"    Bot token: ...{config.bot_token[-10:]}")
-
-        # Create the real agent task upfront instead of using placeholders
-        # This eliminates race conditions and simplifies the architecture
-        logger.info("Creating agent processor task...")
+        # Create agent processor task and adapter lifecycle tasks
         agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
+        self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
 
-        # Start adapter lifecycles with the real agent task
-        self._adapter_tasks = []
-        for adapter in self.adapters:
-            adapter_name = adapter.__class__.__name__
+        # Wait for adapters to be ready
+        adapters_ready = await wait_for_adapter_readiness(self.adapters, timeout=30.0)
+        if not adapters_ready:
+            raise RuntimeError("Adapters failed to become ready within timeout")
 
-            if hasattr(adapter, "run_lifecycle"):
-                lifecycle_task = asyncio.create_task(
-                    adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask"
-                )
-                self._adapter_tasks.append(lifecycle_task)
-                logger.info(f"  → Starting {adapter_name} lifecycle...")
-
-        # Wait for adapters to connect and register services with retries
-        logger.info("  ⏳ Waiting for adapter connections to establish...")
-        start_time = asyncio.get_event_loop().time()
-        timeout = 30.0
-        services_registered = False
-
-        while (asyncio.get_event_loop().time() - start_time) < timeout:
-            # Check if Discord adapters are ready
-            all_adapters_ready = True
-            for adapter in self.adapters:
-                adapter_name = adapter.__class__.__name__
-                if "Discord" in adapter_name:
-                    # Check health directly on the adapter (DiscordPlatform)
-                    if hasattr(adapter, "is_healthy"):
-                        try:
-                            is_healthy = await adapter.is_healthy()
-                            if not is_healthy:
-                                all_adapters_ready = False
-                                logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
-                            else:
-                                logger.info(f"  ✓ {adapter_name} is healthy and connected")
-                        except Exception as e:
-                            all_adapters_ready = False
-                            logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
-                    else:
-                        all_adapters_ready = False
-                        logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
-
-            if all_adapters_ready and not services_registered:
-                # Register adapter services once adapters are ready
-                logger.info("  → Registering adapter services...")
-                await self._register_adapter_services()
-                services_registered = True
-                # Give services a moment to settle after registration
-                await asyncio.sleep(0.1)
-                # Continue to wait for services to be available in registry
-
-            if services_registered:
-                # Check if services are actually available
-                service_available = False
-                if self.service_registry:
-                    test_service = await self.service_registry.get_service(
-                        handler="test", service_type=ServiceType.COMMUNICATION, required_capabilities=["send_message"]
-                    )
-                    if test_service:
-                        service_available = True
-
-                if service_available:
-                    logger.info("  ✅ All adapters connected and services registered!")
-                    break
-
-            # Wait a bit before checking again
-            await asyncio.sleep(0.5)
-
-        if not services_registered:
+        # Register services and verify availability
+        services_available = await verify_adapter_service_registration(self, timeout=30.0)
+        if not services_available:
             raise RuntimeError("Failed to establish adapter connections within timeout")
 
         # Final verification with the existing wait method
@@ -1124,38 +1057,22 @@ class CIRISRuntime:
 
     async def run(self, num_rounds: Optional[int] = None) -> None:
         """Run the agent processing loop with shutdown monitoring."""
+        from .ciris_runtime_helpers import (
+            finalize_runtime_execution,
+            handle_runtime_agent_task_completion,
+            handle_runtime_task_failures,
+            monitor_runtime_shutdown_signals,
+            setup_runtime_monitoring_tasks,
+        )
+
         if not self._initialized:
             await self.initialize()
 
         try:
-            # Agent task is already running from initialization, just monitor it
-            adapter_tasks = getattr(self, "_adapter_tasks", [])
-            if not adapter_tasks:
-                logger.warning("No adapter tasks found - this may indicate a problem with initialization")
-                return
-
-            logger.info(f"Monitoring {len(adapter_tasks)} adapter lifecycle tasks...")
-
-            # Find the agent task that was created during initialization
-            agent_task = None
-            for task in asyncio.all_tasks():
-                if task.get_name() == "AgentProcessorTask":
-                    agent_task = task
-                    break
-
+            # Set up runtime monitoring tasks
+            agent_task, adapter_tasks, all_tasks = setup_runtime_monitoring_tasks(self)
             if not agent_task:
-                raise RuntimeError("Agent processor task not found - initialization may have failed")
-
-            # Monitor agent_task, all adapter_tasks, and shutdown events
-            self._ensure_shutdown_event()
-            shutdown_event_task = None
-            if self._shutdown_event:
-                shutdown_event_task = asyncio.create_task(self._shutdown_event.wait(), name="ShutdownEventWait")
-
-            global_shutdown_task = asyncio.create_task(wait_for_global_shutdown_async(), name="GlobalShutdownWait")
-            all_tasks: List[asyncio.Task[Any]] = [agent_task, *adapter_tasks, global_shutdown_task]
-            if shutdown_event_task:
-                all_tasks.append(shutdown_event_task)
+                return
 
             # Keep monitoring until agent task completes
             shutdown_logged = False
@@ -1165,58 +1082,27 @@ class CIRISRuntime:
                 # Remove completed tasks from all_tasks to avoid re-processing
                 all_tasks = [t for t in all_tasks if t not in done]
 
-                # Handle task completion and cancellation logic
+                # Monitor shutdown signals
+                shutdown_logged = monitor_runtime_shutdown_signals(self, shutdown_logged)
+
+                # Handle task completion based on type
                 if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                    if not shutdown_logged:
-                        shutdown_reason = (
-                            self._shutdown_reason or self._shutdown_manager.get_shutdown_reason() or "Unknown reason"
-                        )
-                        logger.critical(f"GRACEFUL SHUTDOWN TRIGGERED: {shutdown_reason}")
-                        shutdown_logged = True
-                    # Don't cancel anything! Let the graceful shutdown process handle it
-                    # The agent processor will transition to SHUTDOWN state and handle everything
-                    # Continue the loop - wait for agent to finish its shutdown process
+                    # Continue loop - let graceful shutdown process handle everything
+                    continue
                 elif agent_task in done:
-                    logger.info(
-                        f"Agent processing task completed. Result: {agent_task.result() if not agent_task.cancelled() else 'Cancelled'}"
-                    )
-                    # If agent task finishes (e.g. num_rounds reached), signal shutdown for adapters
-                    self.request_shutdown("Agent processing completed normally.")
-                    for (
-                        ad_task
-                    ) in (
-                        adapter_tasks
-                    ):  # Adapters should react to agent_task completion via its cancellation or by observing shutdown event
-                        if not ad_task.done():
-                            ad_task.cancel()  # Or rely on their run_lifecycle to exit when agent_task is done
+                    handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
                     break  # Exit the while loop
-                else:  # One of the adapter tasks finished, or an unexpected task completion
-                    for task in done:
-                        if task not in [shutdown_event_task, global_shutdown_task]:  # Don't log for event tasks
-                            task_name = task.get_name() if hasattr(task, "get_name") else "Unnamed task"
-                            logger.info(
-                                f"Task '{task_name}' completed. Result: {task.result() if not task.cancelled() else 'Cancelled'}"
-                            )
-                            if task.exception():
-                                logger.error(
-                                    f"Task '{task_name}' raised an exception: {task.exception()}",
-                                    exc_info=task.exception(),
-                                )
-                                self.request_shutdown(f"Task {task_name} failed: {task.exception()}")
+                else:
+                    # Handle other task completions/failures
+                    excluded_tasks = {t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]}
+                    handle_runtime_task_failures(self, done, excluded_tasks)
 
-            # Await all pending tasks (including cancellations)
-            if pending:
-                await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
-
-            # Execute any pending global shutdown handlers
-            if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                await self._shutdown_manager.execute_async_handlers()
+            # Finalize execution
+            await finalize_runtime_execution(self, pending)
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal. Requesting shutdown.")
             self.request_shutdown("KeyboardInterrupt")
-            # Re-raise to allow outer event loop (if any) to catch it, or ensure finally block runs
-            # For this structure, self.request_shutdown and then letting it flow to finally is fine.
         except Exception as e:
             logger.error(f"Runtime error: {e}", exc_info=True)
         finally:

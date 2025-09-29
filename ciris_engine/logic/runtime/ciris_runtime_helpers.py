@@ -20,6 +20,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+# Set up logger for helpers
+logger = logging.getLogger(__name__)
+
+# Import runtime utilities
+from ciris_engine.logic.utils.shutdown_manager import (
+    is_global_shutdown_requested,
+    wait_for_global_shutdown_async,
+)
+
 
 # Service priority mapping for clean lookup
 _SERVICE_SHUTDOWN_PRIORITIES = {
@@ -550,34 +559,97 @@ def validate_shutdown_completion(runtime) -> None:
 # ============================================================================
 
 
-def initialize_runtime_execution_context():
-    """Set up execution context for runtime operation"""
-    pass
+def initialize_runtime_execution_context(runtime: Any) -> None:
+    """Initialize the runtime for execution if not already done."""
+    if not runtime._initialized:
+        raise RuntimeError("Runtime must be initialized before execution")
 
 
-def execute_runtime_main_loop():
-    """Core runtime processing loop with cognitive states"""
-    pass
+def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[Any], List[Any]]:
+    """Set up monitoring tasks for agent and adapters."""
+    # Get adapter tasks
+    adapter_tasks = getattr(runtime, "_adapter_tasks", [])
+    if not adapter_tasks:
+        logger.warning("No adapter tasks found - this may indicate a problem with initialization")
+        return None, [], []
+
+    logger.info(f"Monitoring {len(adapter_tasks)} adapter lifecycle tasks...")
+
+    # Find the agent task
+    agent_task = None
+    for task in asyncio.all_tasks():
+        if task.get_name() == "AgentProcessorTask":
+            agent_task = task
+            break
+
+    if not agent_task:
+        raise RuntimeError("Agent processor task not found - initialization may have failed")
+
+    # Set up monitoring tasks
+    runtime._ensure_shutdown_event()
+    shutdown_event_task = None
+    if runtime._shutdown_event:
+        shutdown_event_task = asyncio.create_task(runtime._shutdown_event.wait(), name="ShutdownEventWait")
+
+    global_shutdown_task = asyncio.create_task(wait_for_global_shutdown_async(), name="GlobalShutdownWait")
+    all_tasks = [agent_task, *adapter_tasks, global_shutdown_task]
+    if shutdown_event_task:
+        all_tasks.append(shutdown_event_task)
+
+    return agent_task, adapter_tasks, all_tasks
 
 
-def handle_runtime_state_transitions():
-    """Manage cognitive state transitions during execution"""
-    pass
+def monitor_runtime_shutdown_signals(runtime: Any, shutdown_logged: bool) -> bool:
+    """Monitor and handle shutdown signals, returns updated shutdown_logged flag."""
+    if (runtime._shutdown_event and runtime._shutdown_event.is_set()) or is_global_shutdown_requested():
+        if not shutdown_logged:
+            shutdown_reason = (
+                runtime._shutdown_reason
+                or runtime._shutdown_manager.get_shutdown_reason()
+                or "Unknown reason"
+            )
+            logger.critical(f"GRACEFUL SHUTDOWN TRIGGERED: {shutdown_reason}")
+            return True  # Now logged
+    return shutdown_logged
 
 
-def process_runtime_maintenance_cycles():
-    """Handle periodic maintenance during runtime"""
-    pass
+def handle_runtime_agent_task_completion(runtime: Any, agent_task: Any, adapter_tasks: List[Any]) -> None:
+    """Handle agent task completion and initiate adapter cleanup."""
+    logger.info(
+        f"Agent processing task completed. Result: {agent_task.result() if not agent_task.cancelled() else 'Cancelled'}"
+    )
+    # Signal shutdown for adapters
+    runtime.request_shutdown("Agent processing completed normally.")
+    for ad_task in adapter_tasks:
+        if not ad_task.done():
+            ad_task.cancel()
 
 
-def monitor_runtime_health_metrics():
-    """Track and respond to runtime health indicators"""
-    pass
+def handle_runtime_task_failures(runtime: Any, done_tasks: Set[Any], excluded_tasks: Set[Any]) -> None:
+    """Handle completed tasks and failures, excluding monitoring tasks."""
+    for task in done_tasks:
+        if task not in excluded_tasks:
+            task_name = task.get_name() if hasattr(task, "get_name") else "Unnamed task"
+            logger.info(
+                f"Task '{task_name}' completed. Result: {task.result() if not task.cancelled() else 'Cancelled'}"
+            )
+            if task.exception():
+                logger.error(
+                    f"Task '{task_name}' raised an exception: {task.exception()}",
+                    exc_info=task.exception(),
+                )
+                runtime.request_shutdown(f"Task {task_name} failed: {task.exception()}")
 
 
-def handle_runtime_error_recovery():
-    """Implement error recovery and resilience patterns"""
-    pass
+async def finalize_runtime_execution(runtime: Any, pending_tasks: Set[Any]) -> None:
+    """Finalize runtime execution by cleaning up tasks and handlers."""
+    # Await all pending tasks
+    if pending_tasks:
+        await asyncio.wait(pending_tasks, return_when=asyncio.ALL_COMPLETED)
+
+    # Execute any pending global shutdown handlers
+    if (runtime._shutdown_event and runtime._shutdown_event.is_set()) or is_global_shutdown_requested():
+        await runtime._shutdown_manager.execute_async_handlers()
 
 
 # ============================================================================
@@ -585,24 +657,108 @@ def handle_runtime_error_recovery():
 # ============================================================================
 
 
-def validate_adapter_connection_prerequisites():
-    """Verify adapter readiness for connection"""
-    pass
+def log_adapter_configuration_details(adapters: List[Any]) -> None:
+    """Log detailed configuration for each adapter."""
+    logger.info("Starting adapter connections...")
+
+    for adapter in adapters:
+        adapter_name = adapter.__class__.__name__
+
+        # Report adapter details for Discord
+        if adapter_name == "DiscordPlatform" and hasattr(adapter, "config"):
+            config = adapter.config
+            logger.info(f"  → {adapter_name} configuration:")
+            if hasattr(config, "monitored_channel_ids"):
+                logger.info(f"    Monitored channels: {config.monitored_channel_ids}")
+            if hasattr(config, "server_id"):
+                logger.info(f"    Target server: {config.server_id}")
+            if hasattr(config, "bot_token") and config.bot_token:
+                logger.info(f"    Bot token: ...{config.bot_token[-10:]}")
 
 
-def establish_adapter_communication_channels():
-    """Create and configure adapter communication"""
-    pass
+def create_adapter_lifecycle_tasks(adapters: List[Any], agent_task: Any) -> List[Any]:
+    """Create and start adapter lifecycle tasks."""
+    logger.info("Creating agent processor task...")
+
+    adapter_tasks = []
+    for adapter in adapters:
+        adapter_name = adapter.__class__.__name__
+
+        if hasattr(adapter, "run_lifecycle"):
+            lifecycle_task = asyncio.create_task(
+                adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask"
+            )
+            adapter_tasks.append(lifecycle_task)
+            logger.info(f"  → Starting {adapter_name} lifecycle...")
+
+    return adapter_tasks
 
 
-def register_adapter_event_handlers():
-    """Set up adapter event handling and callbacks"""
-    pass
+async def wait_for_adapter_readiness(adapters: List[Any], timeout: float = 30.0) -> bool:
+    """Wait for all adapters to be ready and healthy."""
+    logger.info("  ⏳ Waiting for adapter connections to establish...")
+    start_time = asyncio.get_event_loop().time()
+
+    while (asyncio.get_event_loop().time() - start_time) < timeout:
+        all_adapters_ready = True
+
+        for adapter in adapters:
+            adapter_name = adapter.__class__.__name__
+            if "Discord" in adapter_name:
+                # Check health directly on the adapter
+                if hasattr(adapter, "is_healthy"):
+                    try:
+                        is_healthy = await adapter.is_healthy()
+                        if not is_healthy:
+                            all_adapters_ready = False
+                            logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
+                        else:
+                            logger.info(f"  ✓ {adapter_name} is healthy and connected")
+                    except Exception as e:
+                        all_adapters_ready = False
+                        logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
+                else:
+                    all_adapters_ready = False
+                    logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
+
+        if all_adapters_ready:
+            return True
+
+        await asyncio.sleep(0.5)
+
+    return False
 
 
-def monitor_adapter_connection_health():
-    """Track adapter connection status and recovery"""
-    pass
+async def verify_adapter_service_registration(runtime: Any, timeout: float = 30.0) -> bool:
+    """Verify that adapter services are properly registered and available."""
+    from ciris_engine.schemas.base import ServiceType
+
+    logger.info("  → Registering adapter services...")
+    await runtime._register_adapter_services()
+
+    # Give services a moment to settle after registration
+    await asyncio.sleep(0.1)
+
+    start_time = asyncio.get_event_loop().time()
+
+    while (asyncio.get_event_loop().time() - start_time) < timeout:
+        # Check if services are actually available
+        if runtime.service_registry:
+            try:
+                test_service = await runtime.service_registry.get_service(
+                    handler="test",
+                    service_type=ServiceType.COMMUNICATION,
+                    required_capabilities=["send_message"]
+                )
+                if test_service:
+                    logger.info("  ✅ All adapters connected and services registered!")
+                    return True
+            except Exception as e:
+                logger.debug(f"Service registration check failed: {e}")
+
+        await asyncio.sleep(0.5)
+
+    return False
 
 
 # ============================================================================

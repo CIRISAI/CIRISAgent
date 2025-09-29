@@ -312,7 +312,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             scope=GraphScope.LOCAL,
             attributes={
                 "stream": new_status.stream,
-                "categories": [c for c in new_status.categories],
+                "categories": list(new_status.categories),
                 "granted_at": new_status.granted_at.isoformat(),
                 "expires_at": new_status.expires_at.isoformat() if new_status.expires_at else None,
                 "last_modified": new_status.last_modified.isoformat(),
@@ -389,7 +389,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             scope=GraphScope.LOCAL,
             attributes={
                 "stream": new_status.stream,
-                "categories": [c for c in new_status.categories],
+                "categories": list(new_status.categories),
                 "granted_at": new_status.granted_at.isoformat(),
                 "expires_at": new_status.expires_at.isoformat() if new_status.expires_at else None,
                 "last_modified": new_status.last_modified.isoformat(),
@@ -700,7 +700,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 scope=GraphScope.LOCAL,
                 attributes={
                     "stream": partnered_status.stream,
-                    "categories": [c for c in partnered_status.categories],
+                    "categories": list(partnered_status.categories),
                     "granted_at": partnered_status.granted_at.isoformat(),
                     "expires_at": None,
                     "last_modified": partnered_status.last_modified.isoformat(),

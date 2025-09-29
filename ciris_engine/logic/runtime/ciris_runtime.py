@@ -7,7 +7,10 @@ New simplified runtime that properly orchestrates all components.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters import load_adapter
@@ -26,6 +29,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.operations import InitializationPhase
 
@@ -53,8 +57,9 @@ class CIRISRuntime:
         self,
         adapter_types: List[str],
         essential_config: Optional[EssentialConfig] = None,
+        bootstrap: Optional["RuntimeBootstrapConfig"] = None,
         startup_channel_id: Optional[str] = None,
-        adapter_configs: Optional[dict] = None,
+        adapter_configs: Optional[Dict[str, AdapterConfig]] = None,
         **kwargs: Any,
     ) -> None:
         # CRITICAL: Prevent runtime creation during module imports
@@ -67,13 +72,45 @@ class CIRISRuntime:
                 "This prevents side effects and unwanted process creation. "
                 "Call prevent_sideeffects.allow_runtime_creation() before creating runtime."
             )
-        self.essential_config = essential_config
-        # Store startup_channel_id, may be None or empty string
-        self.startup_channel_id = startup_channel_id or ""
-        self.adapter_configs = adapter_configs or {}
+
+        # Import RuntimeBootstrapConfig here to avoid circular imports
+        from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
+
+        # Use bootstrap config if provided, otherwise construct from legacy parameters
+        if bootstrap is not None:
+            self.bootstrap = bootstrap
+            # Extract values from bootstrap config
+            self.essential_config = essential_config or EssentialConfig()
+            self.startup_channel_id = bootstrap.startup_channel_id or ""
+            self.adapter_configs = bootstrap.adapter_overrides
+            self.modules_to_load = bootstrap.modules
+            self.debug = bootstrap.debug
+            self._preload_tasks = bootstrap.preload_tasks
+        else:
+            # Legacy parameter handling for backward compatibility
+            self.essential_config = essential_config
+            self.startup_channel_id = startup_channel_id or ""
+            self.adapter_configs = adapter_configs or {}
+            self.modules_to_load = kwargs.get("modules", [])
+            self.debug = kwargs.get("debug", False)
+            self._preload_tasks = []
+
+            # Create bootstrap config from legacy parameters for internal use
+            from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
+            adapter_load_requests = [
+                AdapterLoadRequest(adapter_type=atype, adapter_id=atype, auto_start=True)
+                for atype in adapter_types
+            ]
+            self.bootstrap = RuntimeBootstrapConfig(
+                adapters=adapter_load_requests,
+                adapter_overrides=self.adapter_configs,
+                modules=self.modules_to_load,
+                startup_channel_id=self.startup_channel_id,
+                debug=self.debug,
+                preload_tasks=self._preload_tasks,
+            )
+
         self.adapters: List[BaseAdapterProtocol] = []
-        self.modules_to_load = kwargs.get("modules", [])
-        self.debug = kwargs.get("debug", False)
 
         # CRITICAL: Check for mock LLM environment variable
         if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
@@ -99,7 +136,8 @@ class CIRISRuntime:
                     adapter_kwargs["adapter_config"] = self.adapter_configs[adapter_name]
 
                 # Adapters expect runtime as first positional argument
-                self.adapters.append(adapter_class(self, **adapter_kwargs))  # type: ignore[call-arg]
+                adapter_instance = adapter_class(self, **adapter_kwargs)
+                self.adapters.append(adapter_instance)
                 logger.info(f"Successfully loaded and initialized adapter: {adapter_name}")
             except Exception as e:
                 logger.error(f"Failed to load or initialize adapter '{adapter_name}': {e}", exc_info=True)
@@ -113,7 +151,6 @@ class CIRISRuntime:
         self._shutdown_event: Optional[asyncio.Event] = None
         self._shutdown_reason: Optional[str] = None
         self._agent_task: Optional[asyncio.Task] = None
-        self._preload_tasks: List[str] = []
         self._shutdown_complete = False
 
         # Identity - will be loaded during initialization

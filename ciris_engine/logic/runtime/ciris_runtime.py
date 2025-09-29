@@ -975,7 +975,7 @@ class CIRISRuntime:
         self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
 
         # Wait for adapters to be ready
-        adapters_ready = await wait_for_adapter_readiness(self.adapters, timeout=30.0)
+        adapters_ready = await wait_for_adapter_readiness(self.adapters)
         if not adapters_ready:
             raise RuntimeError("Adapters failed to become ready within timeout")
 

@@ -163,9 +163,11 @@ async def _wait_for_shutdown_processor_completion(runtime) -> None:
     start_time = asyncio.get_event_loop().time()
 
     while (asyncio.get_event_loop().time() - start_time) < max_wait:
-        if (hasattr(runtime.agent_processor, "shutdown_processor")
+        if (
+            hasattr(runtime.agent_processor, "shutdown_processor")
             and runtime.agent_processor.shutdown_processor
-            and runtime.agent_processor.shutdown_processor.shutdown_complete):
+            and runtime.agent_processor.shutdown_processor.shutdown_complete
+        ):
             result = runtime.agent_processor.shutdown_processor.shutdown_result
             if result and hasattr(result, "get") and result.get("status") == "rejected":
                 logger.warning(f"Shutdown rejected by agent: {result.get('reason')}")
@@ -507,7 +509,7 @@ async def preserve_critical_system_state(runtime) -> None:
             logger.error(f"Failed to preserve consciousness during shutdown: {e}")
 
 
-async def finalize_shutdown_logging(runtime) -> None:
+async def finalize_shutdown_logging(_) -> None:
     """Complete logging and audit trail for shutdown."""
     import logging
 
@@ -758,7 +760,9 @@ async def verify_adapter_service_registration(runtime: Any) -> bool:
                 if runtime.service_registry:
                     try:
                         test_service = await runtime.service_registry.get_service(
-                            handler="test", service_type=ServiceType.COMMUNICATION, required_capabilities=["send_message"]
+                            handler="test",
+                            service_type=ServiceType.COMMUNICATION,
+                            required_capabilities=["send_message"],
                         )
                         if test_service:
                             logger.info("  ✅ All adapters connected and services registered!")

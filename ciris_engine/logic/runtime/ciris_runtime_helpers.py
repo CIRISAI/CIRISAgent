@@ -745,7 +745,7 @@ async def wait_for_adapter_readiness(adapters: List[Any]) -> bool:
 
 async def verify_adapter_service_registration(runtime: Any) -> bool:
     """Verify that adapter services are properly registered and available."""
-    from ciris_engine.schemas.base import ServiceType
+    from ciris_engine.schemas.runtime.enums import ServiceType
 
     logger.info("  → Registering adapter services...")
     await runtime._register_adapter_services()

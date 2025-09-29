@@ -29,6 +29,7 @@ from ciris_engine.schemas.consent.core import (
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
+from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
 logger = logging.getLogger(__name__)
@@ -315,6 +316,87 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         logger.info(f"Consent granted for {request.user_id}: {new_status.stream}")
         return new_status
 
+    async def update_consent(
+        self, user_id: str, stream: ConsentStream, categories: List[ConsentCategory], reason: Optional[str] = None
+    ) -> ConsentStatus:
+        """
+        Internal method to update consent status directly.
+        Used by tool handlers for consent transitions.
+        Does NOT perform bilateral agreement checks - those should be done by caller.
+        """
+        # Get previous status if exists
+        previous_status = None
+        try:
+            previous_status = await self.get_consent(user_id)
+        except ConsentNotFoundError:
+            pass
+
+        now = self._time_service.now()
+        expires_at = None
+        if stream == ConsentStream.TEMPORARY:
+            expires_at = now + timedelta(days=14)
+
+        new_status = ConsentStatus(
+            user_id=user_id,
+            stream=stream,
+            categories=categories,
+            granted_at=previous_status.granted_at if previous_status else now,
+            expires_at=expires_at,
+            last_modified=now,
+            impact_score=previous_status.impact_score if previous_status else 0.0,
+            attribution_count=previous_status.attribution_count if previous_status else 0,
+        )
+
+        # Store in graph
+        node = GraphNode(
+            id=f"consent/{user_id}",
+            type=NodeType.CONSENT,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "stream": new_status.stream,
+                "categories": [c for c in new_status.categories],
+                "granted_at": new_status.granted_at.isoformat(),
+                "expires_at": new_status.expires_at.isoformat() if new_status.expires_at else None,
+                "last_modified": new_status.last_modified.isoformat(),
+                "impact_score": new_status.impact_score,
+                "attribution_count": new_status.attribution_count,
+            },
+            updated_by="consent_manager",
+            updated_at=now,
+        )
+
+        add_graph_node(node, self._time_service, self._db_path)
+
+        # Create audit entry
+        audit = ConsentAuditEntry(
+            entry_id=str(uuid4()),
+            user_id=user_id,
+            timestamp=now,
+            previous_stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
+            new_stream=new_status.stream,
+            previous_categories=previous_status.categories if previous_status else [],
+            new_categories=new_status.categories,
+            initiated_by="tool",
+            reason=reason or "Tool-initiated update",
+        )
+
+        # Store audit entry
+        audit_node = GraphNode(
+            id=f"consent_audit/{audit.entry_id}",
+            type=NodeType.AUDIT_ENTRY,
+            scope=GraphScope.LOCAL,
+            attributes=audit.model_dump(mode="json"),
+            updated_by="consent_manager",
+            updated_at=now,
+        )
+        add_graph_node(audit_node, self._time_service, self._db_path)
+
+        # Update cache
+        self._consent_cache[user_id] = new_status
+
+        logger.info(f"Consent updated for {user_id}: {new_status.stream}")
+        return new_status
+
     async def revoke_consent(self, user_id: str, reason: Optional[str] = None) -> ConsentDecayStatus:
         """
         Start decay protocol - IMMEDIATE identity severance.
@@ -443,8 +525,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             raise ValueError("Memory bus required for impact reporting - no fake data allowed")
 
         # Get real interaction data from TSDB conversation summaries
-        conversation_summaries = await self._memory_bus.query_nodes(
-            node_type=NodeType.CONVERSATION_SUMMARY, scope=GraphScope.COMMUNITY, attributes={}
+        conversation_summaries = await self._memory_bus.search(
+            query="",  # Empty query to get all matching nodes
+            filters=MemorySearchFilter(node_type=NodeType.CONVERSATION_SUMMARY.value, scope=GraphScope.COMMUNITY.value),
         )
 
         # Count interactions where this user participated
@@ -458,8 +541,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                         total_interactions += participant_data.get("message_count", 0)
 
         # Get real contribution data from task summaries
-        task_summaries = await self._memory_bus.query_nodes(
-            node_type=NodeType.TASK_SUMMARY, scope=GraphScope.IDENTITY, attributes={}
+        task_summaries = await self._memory_bus.search(
+            query="", filters=MemorySearchFilter(node_type=NodeType.TASK_SUMMARY.value, scope=GraphScope.IDENTITY.value)
         )
 
         patterns_contributed = 0
@@ -504,10 +587,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         if self._memory_bus:
             try:
                 # Query audit nodes for this user
-                audit_nodes = await self._memory_bus.query_nodes(
-                    node_type=NodeType.AUDIT,
-                    scope=GraphScope.IDENTITY,
-                    attributes={"user_id": user_id, "service": "consent"},
+                audit_nodes = await self._memory_bus.search(
+                    query="",
+                    filters=MemorySearchFilter(
+                        node_type=NodeType.AUDIT.value,
+                        scope=GraphScope.IDENTITY.value,
+                        attribute_values={"user_id": user_id, "service": "consent"},
+                    ),
                 )
 
                 # Convert nodes to audit entries (limit by parameter)
@@ -622,8 +708,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         if self._memory_bus:
             try:
                 # Query recent contribution nodes from this user
-                contribution_nodes = await self._memory_bus.query_nodes(
-                    node_type=NodeType.CONCEPT, scope=GraphScope.BEHAVIORAL, attributes={"contributor_id": user_id}
+                contribution_nodes = await self._memory_bus.search(
+                    query="",
+                    filters=MemorySearchFilter(
+                        node_type=NodeType.CONCEPT.value,
+                        scope=GraphScope.BEHAVIORAL.value,
+                        attribute_values={"contributor_id": user_id},
+                    ),
                 )
 
                 # Extract meaningful examples (limit to 3-5)
@@ -678,8 +769,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         expired = []
 
         try:
-            consent_nodes = await self._memory_bus.query_nodes(
-                node_type=NodeType.CONCEPT, scope=GraphScope.IDENTITY, attributes={"service": "consent"}
+            consent_nodes = await self._memory_bus.search(
+                query="",
+                filters=MemorySearchFilter(
+                    node_type=NodeType.CONCEPT.value,
+                    scope=GraphScope.IDENTITY.value,
+                    attribute_values={"service": "consent"},
+                ),
             )
 
             for node in consent_nodes:
@@ -1043,7 +1139,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             )
 
             # Update to PARTNERED (pending agent approval via thought/task system)
-            self.update_consent(user_id, ConsentStream.PARTNERED, request.requested_categories)
+            await self.update_consent(user_id, ConsentStream.PARTNERED, request.requested_categories)
 
             self._partnership_requests += 1
 
@@ -1079,7 +1175,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             except ConsentNotFoundError:
                 # If no consent exists and target is ANONYMOUS, create it
                 if target_stream == "ANONYMOUS":
-                    self.update_consent(user_id, ConsentStream.ANONYMOUS, [ConsentCategory.STATISTICAL])
+                    await self.update_consent(user_id, ConsentStream.ANONYMOUS, [ConsentCategory.STATISTICAL])
                     self._downgrades_completed += 1
                     return {
                         "success": True,
@@ -1106,7 +1202,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             else:  # ANONYMOUS
                 categories = [ConsentCategory.STATISTICAL]
 
-            self.update_consent(user_id, target, categories)
+            await self.update_consent(user_id, target, categories)
 
             self._downgrades_completed += 1
 

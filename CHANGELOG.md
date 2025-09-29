@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added 21 comprehensive tests for critical paths (get_consent, revoke_consent, impact reports)
   - Coverage increased from 59.35% to 74.12% with all 70 tests passing
 - **TaskSelectionCriteria Bug Fix**: Added missing `configs` field preventing `AttributeError` in runtime control
+- **Critical Emergency Shutdown Fix**: Fixed ServiceRegistry.get_service() call with proper handler and ServiceType parameters
 - **🚀 MASSIVE Complexity Reduction**: Transformed the most complex runtime methods to production-grade excellence
   - `shutdown` method: CC 75 → CC 3 (96% reduction, 368 lines → 45 lines)
   - `run` method: CC 32 → CC 14 (56% reduction, 100 lines → 45 lines)

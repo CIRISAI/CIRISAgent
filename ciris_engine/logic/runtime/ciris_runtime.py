@@ -1227,16 +1227,16 @@ class CIRISRuntime:
     async def shutdown(self) -> None:
         """Gracefully shutdown all services with consciousness preservation."""
         from .ciris_runtime_helpers import (
-            validate_shutdown_preconditions,
-            prepare_shutdown_maintenance_tasks,
-            execute_final_maintenance_tasks,
-            handle_agent_processor_shutdown,
-            handle_adapter_shutdown_cleanup,
-            execute_service_shutdown_sequence,
-            preserve_critical_system_state,
-            finalize_shutdown_logging,
             cleanup_runtime_resources,
+            execute_final_maintenance_tasks,
+            execute_service_shutdown_sequence,
+            finalize_shutdown_logging,
+            handle_adapter_shutdown_cleanup,
+            handle_agent_processor_shutdown,
+            prepare_shutdown_maintenance_tasks,
+            preserve_critical_system_state,
             validate_shutdown_completion,
+            validate_shutdown_preconditions,
         )
 
         # 1. Validate preconditions and early exit if needed

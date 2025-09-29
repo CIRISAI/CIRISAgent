@@ -205,15 +205,32 @@ async def _pause_thought_execution(thought_id: str) -> None:
     _paused_thoughts[thought_id].clear()
 
 
-def _create_typed_step_data(
-    step: StepPoint, base_data: BaseStepData, thought_item: Any, result: Any, args: tuple, kwargs: dict
-) -> StepDataUnion:
-    """Create typed step data based on step type."""
-    # Add task_id to base data
-    task_id = getattr(thought_item, "source_task_id", None)
-    base_data = base_data.model_copy(update={"task_id": task_id})
+def _get_step_data_creators() -> dict[StepPoint, callable]:
+    """Get dispatch dictionary for step data creators."""
+    return {
+        StepPoint.START_ROUND: lambda base_data, result, args, kwargs, thought_item: _create_start_round_data(base_data, args),
+        StepPoint.GATHER_CONTEXT: lambda base_data, result, args, kwargs, thought_item: _create_gather_context_data(base_data, result),
+        StepPoint.PERFORM_DMAS: lambda base_data, result, args, kwargs, thought_item: _create_perform_dmas_data(base_data, result, thought_item),
+        StepPoint.PERFORM_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_perform_aspdma_data(base_data, result),
+        StepPoint.CONSCIENCE_EXECUTION: lambda base_data, result, args, kwargs, thought_item: _create_conscience_execution_data(base_data, result),
+        StepPoint.RECURSIVE_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_recursive_aspdma_data(base_data, result, args),
+        StepPoint.RECURSIVE_CONSCIENCE: lambda base_data, result, args, kwargs, thought_item: _create_recursive_conscience_data(base_data, result),
+        StepPoint.FINALIZE_ACTION: lambda base_data, result, args, kwargs, thought_item: _create_finalize_action_data(base_data, result),
+        StepPoint.PERFORM_ACTION: lambda base_data, result, args, kwargs, thought_item: _create_perform_action_data(base_data, result, args, kwargs),
+        StepPoint.ACTION_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_action_complete_data(base_data, result),
+        StepPoint.ROUND_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_round_complete_data(base_data, args),
+    }
 
-    # Log debug information
+
+def _prepare_base_data_with_task_id(base_data: BaseStepData, thought_item: Any) -> BaseStepData:
+    """Prepare base data with task_id from thought_item."""
+    task_id = getattr(thought_item, "source_task_id", None)
+    return base_data.model_copy(update={"task_id": task_id})
+
+
+def _log_step_debug_info(step: StepPoint, base_data: BaseStepData, thought_item: Any) -> None:
+    """Log debug information for step processing."""
+    task_id = base_data.task_id
     thought_id = base_data.thought_id
     logger.debug(
         f"Step {step.value} for thought {thought_id}: task_id={task_id}, thought_item type={type(thought_item).__name__}"
@@ -221,32 +238,24 @@ def _create_typed_step_data(
     if not task_id:
         logger.warning(f"Missing task_id for thought {thought_id} at step {step.value}")
 
-    # Create step-specific typed data - fail fast and loud on any errors
-    if step == StepPoint.START_ROUND:
-        return _create_start_round_data(base_data, args)
-    elif step == StepPoint.GATHER_CONTEXT:
-        return _create_gather_context_data(base_data, result)
-    elif step == StepPoint.PERFORM_DMAS:
-        return _create_perform_dmas_data(base_data, result, thought_item)
-    elif step == StepPoint.PERFORM_ASPDMA:
-        return _create_perform_aspdma_data(base_data, result)
-    elif step == StepPoint.CONSCIENCE_EXECUTION:
-        return _create_conscience_execution_data(base_data, result)
-    elif step == StepPoint.RECURSIVE_ASPDMA:
-        return _create_recursive_aspdma_data(base_data, result, args)
-    elif step == StepPoint.RECURSIVE_CONSCIENCE:
-        return _create_recursive_conscience_data(base_data, result)
-    elif step == StepPoint.FINALIZE_ACTION:
-        return _create_finalize_action_data(base_data, result)
-    elif step == StepPoint.PERFORM_ACTION:
-        return _create_perform_action_data(base_data, result, args, kwargs)
-    elif step == StepPoint.ACTION_COMPLETE:
-        return _create_action_complete_data(base_data, result)
-    elif step == StepPoint.ROUND_COMPLETE:
-        return _create_round_complete_data(base_data, args)
-    else:
-        # Fail fast for unknown steps - no fallbacks
+
+def _create_typed_step_data(
+    step: StepPoint, base_data: BaseStepData, thought_item: Any, result: Any, args: tuple, kwargs: dict
+) -> StepDataUnion:
+    """Create typed step data based on step type using dispatch pattern."""
+    # Prepare base data with task_id
+    base_data = _prepare_base_data_with_task_id(base_data, thought_item)
+
+    # Log debug information
+    _log_step_debug_info(step, base_data, thought_item)
+
+    # Get step data creator using dispatch pattern - fail fast for unknown steps
+    step_creators = _get_step_data_creators()
+    if step not in step_creators:
         raise ValueError(f"Unknown step point: {step.value}. No step data creator available.")
+
+    # Create step-specific typed data - fail fast and loud on any errors
+    return step_creators[step](base_data, result, args, kwargs, thought_item)
 
 
 # This function is now integrated into _create_typed_step_data
@@ -323,8 +332,8 @@ def _create_perform_aspdma_data(base_data: BaseStepData, result: Any) -> Perform
     )
 
 
-def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> ConscienceExecutionStepData:
-    """Add CONSCIENCE_EXECUTION specific data with full transparency."""
+def _validate_conscience_execution_result(result: Any) -> None:
+    """Validate conscience execution result has required attributes."""
     if not result:
         raise ValueError("CONSCIENCE_EXECUTION step result is None - this indicates a serious pipeline issue")
 
@@ -343,49 +352,63 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
             f"CONSCIENCE_EXECUTION final_action missing 'selected_action' attribute. final_action type: {type(result.final_action)}, attributes: {dir(result.final_action)}"
         )
 
-    # Extract data for typed step data creation
-    selected_action = str(result.final_action.selected_action)
-    conscience_passed = not result.overridden
-    action_result = str(result.final_action)
-    override_reason = str(result.override_reason) if result.overridden else None
-
     if result.overridden and not hasattr(result, "override_reason"):
         raise AttributeError(
             f"CONSCIENCE_EXECUTION result overridden but missing 'override_reason'. Result type: {type(result)}, attributes: {dir(result)}"
         )
 
-    # Create comprehensive conscience evaluation details for full transparency
-    conscience_check_result = _create_comprehensive_conscience_result(result)
 
-    # Convert ConscienceCheckResult to ConscienceResult for the step data
+def _extract_conscience_execution_values(result: Any) -> tuple[str, bool, str, str | None]:
+    """Extract core values from conscience execution result."""
+    selected_action = str(result.final_action.selected_action)
+    conscience_passed = not result.overridden
+    action_result = str(result.final_action)
+    override_reason = str(result.override_reason) if result.overridden else None
+    return selected_action, conscience_passed, action_result, override_reason
+
+
+def _build_conscience_result_from_check(conscience_check_result: "ConscienceCheckResult", override_reason: str | None) -> "ConscienceResult":
+    """Build ConscienceResult from ConscienceCheckResult."""
     from ciris_engine.schemas.conscience.results import ConscienceResult
 
-    conscience_result = ConscienceResult(
+    # Build details dict, excluding None values
+    details = {"status": conscience_check_result.status.value if conscience_check_result.status else "unknown"}
+
+    if conscience_check_result.entropy_check:
+        details["entropy_passed"] = conscience_check_result.entropy_check.passed
+
+    if conscience_check_result.coherence_check:
+        details["coherence_passed"] = conscience_check_result.coherence_check.passed
+
+    if conscience_check_result.optimization_veto_check:
+        details["optimization_veto"] = conscience_check_result.optimization_veto_check.decision
+
+    if conscience_check_result.epistemic_humility_check:
+        details["epistemic_humility"] = conscience_check_result.epistemic_humility_check.epistemic_certainty
+
+    return ConscienceResult(
         conscience_name="conscience_execution",
         passed=conscience_check_result.passed,
         severity="critical" if not conscience_check_result.passed else "info",
         message=conscience_check_result.reason or "Conscience check completed",
         override_action=override_reason,
-        details={
-            "status": conscience_check_result.status.value if conscience_check_result.status else "unknown",
-            "entropy_passed": (
-                conscience_check_result.entropy_check.passed if conscience_check_result.entropy_check else None
-            ),
-            "coherence_passed": (
-                conscience_check_result.coherence_check.passed if conscience_check_result.coherence_check else None
-            ),
-            "optimization_veto": (
-                conscience_check_result.optimization_veto_check.decision
-                if conscience_check_result.optimization_veto_check
-                else None
-            ),
-            "epistemic_humility": (
-                conscience_check_result.epistemic_humility_check.epistemic_certainty
-                if conscience_check_result.epistemic_humility_check
-                else None
-            ),
-        },
+        details=details,
     )
+
+
+def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> ConscienceExecutionStepData:
+    """Add CONSCIENCE_EXECUTION specific data with full transparency."""
+    # Validate result structure using helper
+    _validate_conscience_execution_result(result)
+
+    # Extract core values using helper
+    selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(result)
+
+    # Create comprehensive conscience evaluation details for full transparency
+    conscience_check_result = _create_comprehensive_conscience_result(result)
+
+    # Build conscience result using helper
+    conscience_result = _build_conscience_result_from_check(conscience_check_result, override_reason)
 
     return ConscienceExecutionStepData(
         **_base_data_dict(base_data),
@@ -697,7 +720,6 @@ def _extract_timing_data(step_data: StepDataUnion) -> tuple:
 def _build_step_result_data(
     step: StepPoint,
     step_data: StepDataUnion,
-    step_result,
     trace_context: TraceContext,
     span_attributes: List[SpanAttribute],
 ) -> StepResultData:
@@ -738,7 +760,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
             span_attributes = _build_span_attributes_dict(step, step_result, step_data)
 
             # Build complete step result data
-            step_result_data = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
+            step_result_data = _build_step_result_data(step, step_data, trace_context, span_attributes)
 
             logger.debug(
                 f"Broadcasting step result for {step.value}: task_id={step_result_data.task_id}, thought_id={step_result_data.thought_id}"

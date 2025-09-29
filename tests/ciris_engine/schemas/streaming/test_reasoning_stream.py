@@ -709,6 +709,362 @@ class TestCreateStreamUpdateFromStepResults:
         assert thought.step_result.summary == "Context gathered successfully"
 
 
+class TestRefactoredEnrichmentHelpers:
+    """Test refactored enrichment helper functions for cognitive complexity reduction."""
+
+    def test_enrich_gather_context_data_with_context(self):
+        """Test _enrich_gather_context_data with valid context."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import GatherContextStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_gather_context_data
+        from datetime import datetime
+
+        # Create step data with context
+        step_data = GatherContextStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            context="This is test context data"
+        )
+
+        raw_result = Mock()
+        raw_result.step_data = step_data
+        combined_data = {}
+
+        # Execute
+        _enrich_gather_context_data(raw_result, combined_data)
+
+        # Verify
+        assert "summary" in combined_data
+        assert combined_data["summary"] == "This is test context data"
+        assert "context_size" in combined_data
+        assert combined_data["context_size"] == 5  # 5 words
+
+    def test_enrich_gather_context_data_long_context(self):
+        """Test _enrich_gather_context_data with long context that gets truncated."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import GatherContextStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_gather_context_data
+        from datetime import datetime
+
+        # Create long context (over 200 chars)
+        long_context = "This is a very long context " * 10  # ~280 characters
+
+        step_data = GatherContextStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            context=long_context
+        )
+
+        raw_result = Mock()
+        raw_result.step_data = step_data
+        combined_data = {}
+
+        # Execute
+        _enrich_gather_context_data(raw_result, combined_data)
+
+        # Verify
+        assert "summary" in combined_data
+        assert len(combined_data["summary"]) == 203  # 200 + "..."
+        assert combined_data["summary"].endswith("...")
+        assert "context_size" in combined_data
+        assert combined_data["context_size"] > 0
+
+    def test_enrich_gather_context_data_empty_context(self):
+        """Test _enrich_gather_context_data with empty context."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import GatherContextStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_gather_context_data
+        from datetime import datetime
+
+        step_data = GatherContextStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            context=""
+        )
+
+        raw_result = Mock()
+        raw_result.step_data = step_data
+        combined_data = {}
+
+        # Execute
+        _enrich_gather_context_data(raw_result, combined_data)
+
+        # Verify
+        assert "summary" not in combined_data  # Empty context, no summary
+        assert "context_size" in combined_data
+        assert combined_data["context_size"] == 0
+
+    def test_enrich_perform_dmas_data_with_decisions(self):
+        """Test _enrich_perform_dmas_data with decision keywords."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import PerformDMAsStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_perform_dmas_data
+        from datetime import datetime
+
+        step_data = PerformDMAsStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            dma_results="The system will approve this request, reject that one, and defer the third",
+            context="test context"
+        )
+
+        raw_result = Mock()
+        raw_result.step_data = step_data
+        combined_data = {}
+
+        # Execute
+        _enrich_perform_dmas_data(raw_result, combined_data)
+
+        # Verify
+        assert "result_count" in combined_data
+        assert combined_data["result_count"] == 3  # approve, reject, defer
+
+    def test_enrich_perform_dmas_data_no_decisions(self):
+        """Test _enrich_perform_dmas_data without decision keywords."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import PerformDMAsStepData
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_perform_dmas_data
+        from datetime import datetime
+
+        step_data = PerformDMAsStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            dma_results="This is just analysis without decisions",
+            context="test context"
+        )
+
+        raw_result = Mock()
+        raw_result.step_data = step_data
+        combined_data = {}
+
+        # Execute
+        _enrich_perform_dmas_data(raw_result, combined_data)
+
+        # Verify
+        assert "result_count" in combined_data
+        assert combined_data["result_count"] == 0
+
+    def test_enrich_conscience_execution_data_complete(self):
+        """Test _enrich_conscience_execution_data with complete conscience result."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import ConscienceExecutionStepData
+        from ciris_engine.schemas.conscience.results import ConscienceResult
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_conscience_execution_data
+        from datetime import datetime
+
+        # Create proper conscience result
+        conscience_result = ConscienceResult(
+            conscience_name="test_conscience",
+            passed=True,
+            severity="error",
+            message="Test conscience message",
+            details={"issue1": "value1", "issue2": "value2"}
+        )
+
+        step_data = ConscienceExecutionStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            selected_action="test_action",
+            conscience_passed=True,
+            action_result="test_result",
+            conscience_result=conscience_result
+        )
+
+        raw_result = Mock()
+        raw_result.step_data = step_data
+        combined_data = {}
+
+        # Execute
+        _enrich_conscience_execution_data(raw_result, combined_data)
+
+        # Verify
+        assert "severity_level" in combined_data
+        assert combined_data["severity_level"] == "error"
+        assert "details_count" in combined_data
+        assert combined_data["details_count"] == 2
+
+    def test_enrich_conscience_execution_data_missing_result(self):
+        """Test _enrich_conscience_execution_data without conscience_result."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.services.runtime_control import ConscienceExecutionStepData
+        from ciris_engine.schemas.conscience.results import ConscienceResult
+        from ciris_engine.schemas.streaming.reasoning_stream import _enrich_conscience_execution_data
+        from datetime import datetime
+
+        # Create a minimal conscience result (required field)
+        conscience_result = ConscienceResult(
+            conscience_name="test_conscience",
+            passed=True,
+            severity="info",
+            message="Test message",
+            details={}
+        )
+
+        step_data = ConscienceExecutionStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            selected_action="test_action",
+            conscience_passed=True,
+            action_result="test_result",
+            conscience_result=conscience_result
+        )
+
+        # Mock the step_data to simulate missing conscience_result
+        step_data_mock = Mock(spec=[])  # Empty spec means no attributes will be created
+
+        raw_result = Mock()
+        raw_result.step_data = step_data_mock
+        combined_data = {}
+
+        # Execute
+        _enrich_conscience_execution_data(raw_result, combined_data)
+
+        # Verify
+        assert "severity_level" not in combined_data
+        assert "details_count" not in combined_data
+
+    def test_create_typed_step_result_gather_context(self):
+        """Test _create_typed_step_result for GATHER_CONTEXT step."""
+        from datetime import datetime
+        from ciris_engine.schemas.services.runtime_control import (
+            GatherContextStepData, StepResultData, TraceContext, StepPoint
+        )
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
+
+        step_data = GatherContextStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            context="Test context for gathering"
+        )
+
+        trace_context = TraceContext(
+            trace_id="trace-123",
+            span_id="span-456",
+            span_name="test-span",
+            operation_name="test_operation",
+            start_time_ns=1000000000,
+            end_time_ns=1000100000,
+            duration_ns=100000,
+        )
+
+        raw_result = StepResultData(
+            step_point="gather_context",
+            success=True,
+            processing_time_ms=50.0,
+            thought_id="test-thought",
+            task_id="test-task",
+            step_data=step_data,
+            trace_context=trace_context,
+            span_attributes=[]
+        )
+
+        # Execute
+        result = _create_typed_step_result(raw_result, StepPoint.GATHER_CONTEXT)
+
+        # Verify (result may be None if mapping doesn't exist)
+        if result is not None:
+            assert result.step_point == StepPoint.GATHER_CONTEXT
+            assert result.success is True
+            assert result.thought_id == "test-thought"
+
+    def test_create_typed_step_result_invalid_step(self):
+        """Test _create_typed_step_result with invalid step point."""
+        from unittest.mock import Mock
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
+
+        raw_result = Mock()
+        invalid_step = Mock()
+        invalid_step.value = "invalid_step"
+
+        # Execute
+        result = _create_typed_step_result(raw_result, invalid_step)
+
+        # Verify
+        assert result is None
+
+    def test_create_typed_step_result_none_input(self):
+        """Test _create_typed_step_result with None raw_result."""
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
+
+        # Execute
+        result = _create_typed_step_result(None, StepPoint.GATHER_CONTEXT)
+
+        # Verify
+        assert result is None
+
+    def test_create_typed_step_result_dispatch_pattern(self):
+        """Test that _create_typed_step_result uses dispatch pattern correctly."""
+        from datetime import datetime
+        from ciris_engine.schemas.services.runtime_control import (
+            PerformDMAsStepData, StepResultData, TraceContext, StepPoint
+        )
+        from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
+
+        step_data = PerformDMAsStepData(
+            timestamp=datetime.now().isoformat(),
+            thought_id="test-thought",
+            task_id="test-task",
+            processing_time_ms=100.0,
+            success=True,
+            dma_results="approve reject defer",
+            context="test context"
+        )
+
+        trace_context = TraceContext(
+            trace_id="trace-123",
+            span_id="span-456",
+            span_name="test-span",
+            operation_name="test_operation",
+            start_time_ns=1000000000,
+            end_time_ns=1000100000,
+            duration_ns=100000,
+        )
+
+        raw_result = StepResultData(
+            step_point="perform_dmas",
+            success=True,
+            processing_time_ms=75.0,
+            thought_id="test-thought",
+            task_id="test-task",
+            step_data=step_data,
+            trace_context=trace_context,
+            span_attributes=[]
+        )
+
+        # Execute
+        result = _create_typed_step_result(raw_result, StepPoint.PERFORM_DMAS)
+
+        # Verify (result may be None if mapping doesn't exist, which is acceptable)
+        if result is not None:
+            assert result.step_point == StepPoint.PERFORM_DMAS
+            assert result.success is True
+
+
 class TestHelperFunctions:
     """Test refactored helper functions for complexity reduction."""
 

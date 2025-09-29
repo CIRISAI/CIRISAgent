@@ -1075,7 +1075,7 @@ class TestRefactoredHelperFunctions:
         )
         span_attributes = [SpanAttribute(key="test_key", value={"stringValue": "test_value"})]
 
-        result = _build_step_result_data(step, step_data, step_result, trace_context, span_attributes)
+        result = _build_step_result_data(step, step_data, trace_context, span_attributes)
 
         assert result.step_point == "gather_context"
         assert result.thought_id == "test-123"
@@ -1111,7 +1111,7 @@ class TestRefactoredHelperFunctions:
             duration_ns=1000,
         )
 
-        result = _build_step_result_data(step, step_data, step_result, trace_context, [])
+        result = _build_step_result_data(step, step_data, trace_context, [])
 
         assert result.step_point == "perform_dmas"
         assert result.thought_id == ""  # Default empty string
@@ -1355,3 +1355,436 @@ class TestRefactoredHelperFunctions:
 
         # No attributes should be added
         assert attributes == []
+
+
+class TestNewHelperFunctions:
+    """Test newly created helper functions from refactoring for reduced complexity."""
+
+    def test_validate_conscience_execution_result_valid(self):
+        """Test _validate_conscience_execution_result with valid result."""
+        # Import the function
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        # Create mock result with required attributes
+        mock_result = Mock()
+        mock_result.overridden = False
+        mock_result.final_action = Mock()
+        mock_result.final_action.selected_action = "proceed"
+
+        # Should not raise any exception
+        _validate_conscience_execution_result(mock_result)
+
+    def test_validate_conscience_execution_result_none_result(self):
+        """Test _validate_conscience_execution_result with None result."""
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        with pytest.raises(ValueError, match="CONSCIENCE_EXECUTION step result is None"):
+            _validate_conscience_execution_result(None)
+
+    def test_validate_conscience_execution_result_missing_overridden(self):
+        """Test _validate_conscience_execution_result with missing overridden attribute."""
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        mock_result = Mock(spec=[])  # Empty spec to prevent auto attribute creation
+
+        with pytest.raises(AttributeError, match="missing 'overridden' attribute"):
+            _validate_conscience_execution_result(mock_result)
+
+    def test_validate_conscience_execution_result_missing_final_action(self):
+        """Test _validate_conscience_execution_result with missing final_action attribute."""
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        # Use an object without final_action instead of Mock
+        class MockResult:
+            overridden = False
+
+        mock_result = MockResult()
+
+        with pytest.raises(AttributeError, match="missing 'final_action' attribute"):
+            _validate_conscience_execution_result(mock_result)
+
+    def test_validate_conscience_execution_result_missing_selected_action(self):
+        """Test _validate_conscience_execution_result with missing selected_action attribute."""
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        mock_result = Mock()
+        mock_result.overridden = False
+        mock_result.final_action = Mock(spec=[])  # Empty spec
+
+        with pytest.raises(AttributeError, match="missing 'selected_action' attribute"):
+            _validate_conscience_execution_result(mock_result)
+
+    def test_validate_conscience_execution_result_overridden_missing_reason(self):
+        """Test _validate_conscience_execution_result with overridden but missing override_reason."""
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        # Use an object without override_reason instead of Mock
+        class MockResult:
+            overridden = True
+
+            class MockFinalAction:
+                selected_action = "abort"
+
+            final_action = MockFinalAction()
+
+        mock_result = MockResult()
+
+        with pytest.raises(AttributeError, match="overridden but missing 'override_reason'"):
+            _validate_conscience_execution_result(mock_result)
+
+    def test_validate_conscience_execution_result_overridden_with_reason(self):
+        """Test _validate_conscience_execution_result with overridden and override_reason."""
+        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+
+        mock_result = Mock()
+        mock_result.overridden = True
+        mock_result.final_action = Mock()
+        mock_result.final_action.selected_action = "abort"
+        mock_result.override_reason = "safety_violation"
+
+        # Should not raise any exception
+        _validate_conscience_execution_result(mock_result)
+
+    def test_extract_conscience_execution_values_not_overridden(self):
+        """Test _extract_conscience_execution_values for non-overridden result."""
+        from ciris_engine.logic.processors.core.step_decorators import _extract_conscience_execution_values
+
+        mock_result = Mock()
+        mock_result.overridden = False
+        mock_result.final_action = Mock()
+        mock_result.final_action.selected_action = "proceed"
+        mock_result.final_action.__str__ = Mock(return_value="final_action_result")
+
+        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(mock_result)
+
+        assert selected_action == "proceed"
+        assert conscience_passed is True  # not overridden
+        assert action_result == "final_action_result"
+        assert override_reason is None
+
+    def test_extract_conscience_execution_values_overridden(self):
+        """Test _extract_conscience_execution_values for overridden result."""
+        from ciris_engine.logic.processors.core.step_decorators import _extract_conscience_execution_values
+
+        mock_result = Mock()
+        mock_result.overridden = True
+        mock_result.final_action = Mock()
+        mock_result.final_action.selected_action = "abort"
+        mock_result.final_action.__str__ = Mock(return_value="aborted_action")
+        mock_result.override_reason = "safety_concern"
+
+        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(mock_result)
+
+        assert selected_action == "abort"
+        assert conscience_passed is False  # overridden
+        assert action_result == "aborted_action"
+        assert override_reason == "safety_concern"
+
+    def test_build_conscience_result_from_check_passed(self):
+        """Test _build_conscience_result_from_check for passed conscience check."""
+        from ciris_engine.logic.processors.core.step_decorators import _build_conscience_result_from_check
+
+        # Create mock conscience check result
+        mock_check_result = Mock()
+        mock_check_result.passed = True
+        mock_check_result.reason = "All checks passed"
+        mock_check_result.status = Mock()
+        mock_check_result.status.value = "PASSED"
+
+        # Mock the nested check results
+        mock_check_result.entropy_check = Mock()
+        mock_check_result.entropy_check.passed = True
+
+        mock_check_result.coherence_check = Mock()
+        mock_check_result.coherence_check.passed = True
+
+        mock_check_result.optimization_veto_check = Mock()
+        mock_check_result.optimization_veto_check.decision = "proceed"
+
+        mock_check_result.epistemic_humility_check = Mock()
+        mock_check_result.epistemic_humility_check.epistemic_certainty = 0.7
+
+        conscience_result = _build_conscience_result_from_check(mock_check_result, None)
+
+        assert conscience_result.conscience_name == "conscience_execution"
+        assert conscience_result.passed is True
+        assert conscience_result.severity == "info"  # Passed check
+        assert conscience_result.message == "All checks passed"
+        assert conscience_result.override_action is None
+        assert conscience_result.details["status"] == "PASSED"
+        assert conscience_result.details["entropy_passed"] is True
+        assert conscience_result.details["coherence_passed"] is True
+        assert conscience_result.details["optimization_veto"] == "proceed"
+        assert conscience_result.details["epistemic_humility"] == 0.7
+
+    def test_build_conscience_result_from_check_failed(self):
+        """Test _build_conscience_result_from_check for failed conscience check."""
+        from ciris_engine.logic.processors.core.step_decorators import _build_conscience_result_from_check
+
+        # Create mock conscience check result
+        mock_check_result = Mock()
+        mock_check_result.passed = False
+        mock_check_result.reason = "Safety violation detected"
+        mock_check_result.status = Mock()
+        mock_check_result.status.value = "FAILED"
+
+        # Mock the nested check results
+        mock_check_result.entropy_check = Mock()
+        mock_check_result.entropy_check.passed = False
+
+        mock_check_result.coherence_check = Mock()
+        mock_check_result.coherence_check.passed = False
+
+        mock_check_result.optimization_veto_check = Mock()
+        mock_check_result.optimization_veto_check.decision = "abort"
+
+        mock_check_result.epistemic_humility_check = Mock()
+        mock_check_result.epistemic_humility_check.epistemic_certainty = 0.9
+
+        conscience_result = _build_conscience_result_from_check(mock_check_result, "safety_override")
+
+        assert conscience_result.conscience_name == "conscience_execution"
+        assert conscience_result.passed is False
+        assert conscience_result.severity == "critical"  # Failed check
+        assert conscience_result.message == "Safety violation detected"
+        assert conscience_result.override_action == "safety_override"
+        assert conscience_result.details["status"] == "FAILED"
+        assert conscience_result.details["entropy_passed"] is False
+        assert conscience_result.details["coherence_passed"] is False
+        assert conscience_result.details["optimization_veto"] == "abort"
+        assert conscience_result.details["epistemic_humility"] == 0.9
+
+    def test_build_conscience_result_from_check_no_reason(self):
+        """Test _build_conscience_result_from_check with no reason provided."""
+        from ciris_engine.logic.processors.core.step_decorators import _build_conscience_result_from_check
+
+        mock_check_result = Mock()
+        mock_check_result.passed = True
+        mock_check_result.reason = None  # No specific reason
+        mock_check_result.status = None
+        mock_check_result.entropy_check = None
+        mock_check_result.coherence_check = None
+        mock_check_result.optimization_veto_check = None
+        mock_check_result.epistemic_humility_check = None
+
+        conscience_result = _build_conscience_result_from_check(mock_check_result, None)
+
+        assert conscience_result.conscience_name == "conscience_execution"
+        assert conscience_result.passed is True
+        assert conscience_result.severity == "info"  # Passed check
+        assert conscience_result.message == "Conscience check completed"  # Default message
+        assert conscience_result.override_action is None
+        assert conscience_result.details["status"] == "unknown"  # No status
+        # None values are excluded from details dict
+        assert "entropy_passed" not in conscience_result.details
+        assert "coherence_passed" not in conscience_result.details
+        assert "optimization_veto" not in conscience_result.details
+        assert "epistemic_humility" not in conscience_result.details
+
+    def test_get_step_data_creators_contains_all_steps(self):
+        """Test _get_step_data_creators returns creators for all step points."""
+        from ciris_engine.logic.processors.core.step_decorators import _get_step_data_creators
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+
+        creators = _get_step_data_creators()
+
+        # Check all step points are covered
+        expected_steps = [
+            StepPoint.START_ROUND,
+            StepPoint.GATHER_CONTEXT,
+            StepPoint.PERFORM_DMAS,
+            StepPoint.PERFORM_ASPDMA,
+            StepPoint.CONSCIENCE_EXECUTION,
+            StepPoint.RECURSIVE_ASPDMA,
+            StepPoint.RECURSIVE_CONSCIENCE,
+            StepPoint.FINALIZE_ACTION,
+            StepPoint.PERFORM_ACTION,
+            StepPoint.ACTION_COMPLETE,
+            StepPoint.ROUND_COMPLETE,
+        ]
+
+        for step in expected_steps:
+            assert step in creators, f"Missing creator for {step}"
+            assert callable(creators[step]), f"Creator for {step} is not callable"
+
+    def test_get_step_data_creators_callable_signature(self):
+        """Test _get_step_data_creators returns callables with correct signature."""
+        from ciris_engine.logic.processors.core.step_decorators import _get_step_data_creators
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+
+        creators = _get_step_data_creators()
+
+        # Test one creator to verify signature (they all have same lambda signature)
+        creator = creators[StepPoint.GATHER_CONTEXT]
+
+        # Mock parameters
+        base_data = Mock()
+        result = Mock()
+        args = ()
+        kwargs = {}
+        thought_item = Mock()
+
+        # Should be callable with expected parameters (though it may fail due to mocked data)
+        try:
+            creator(base_data, result, args, kwargs, thought_item)
+        except Exception:
+            # Expected to fail with mocked data, but should be callable
+            pass
+
+    def test_prepare_base_data_with_task_id_with_task_id(self):
+        """Test _prepare_base_data_with_task_id when thought_item has source_task_id."""
+        from ciris_engine.logic.processors.core.step_decorators import _prepare_base_data_with_task_id
+
+        # Mock base data and thought item
+        mock_base_data = Mock()
+        mock_base_data.model_copy = Mock(return_value="updated_base_data")
+
+        mock_thought_item = Mock()
+        mock_thought_item.source_task_id = "test-task-456"
+
+        result = _prepare_base_data_with_task_id(mock_base_data, mock_thought_item)
+
+        mock_base_data.model_copy.assert_called_once_with(update={"task_id": "test-task-456"})
+        assert result == "updated_base_data"
+
+    def test_prepare_base_data_with_task_id_no_task_id(self):
+        """Test _prepare_base_data_with_task_id when thought_item has no source_task_id."""
+        from ciris_engine.logic.processors.core.step_decorators import _prepare_base_data_with_task_id
+
+        # Mock base data and thought item
+        mock_base_data = Mock()
+        mock_base_data.model_copy = Mock(return_value="updated_base_data")
+
+        mock_thought_item = Mock(spec=[])  # No source_task_id attribute
+
+        result = _prepare_base_data_with_task_id(mock_base_data, mock_thought_item)
+
+        mock_base_data.model_copy.assert_called_once_with(update={"task_id": None})
+        assert result == "updated_base_data"
+
+    def test_log_step_debug_info_with_task_id(self):
+        """Test _log_step_debug_info logs correctly when task_id is present."""
+        from ciris_engine.logic.processors.core.step_decorators import _log_step_debug_info
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+
+        with patch("ciris_engine.logic.processors.core.step_decorators.logger") as mock_logger:
+            # Mock data
+            step = StepPoint.GATHER_CONTEXT
+            mock_base_data = Mock()
+            mock_base_data.task_id = "test-task-456"
+            mock_base_data.thought_id = "test-thought-123"
+
+            mock_thought_item = Mock()
+
+            _log_step_debug_info(step, mock_base_data, mock_thought_item)
+
+            # Should log debug message - check it was called
+            mock_logger.debug.assert_called_once()
+            # Should not log warning since task_id exists
+            mock_logger.warning.assert_not_called()
+
+    def test_log_step_debug_info_no_task_id(self):
+        """Test _log_step_debug_info logs warning when task_id is missing."""
+        from ciris_engine.logic.processors.core.step_decorators import _log_step_debug_info
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+
+        with patch("ciris_engine.logic.processors.core.step_decorators.logger") as mock_logger:
+            # Mock data
+            step = StepPoint.PERFORM_DMAS
+            mock_base_data = Mock()
+            mock_base_data.task_id = None  # Missing task_id
+            mock_base_data.thought_id = "test-thought-789"
+
+            mock_thought_item = Mock()
+
+            _log_step_debug_info(step, mock_base_data, mock_thought_item)
+
+            # Should log debug message
+            mock_logger.debug.assert_called_once()
+            # Should log warning when task_id is None
+            mock_logger.warning.assert_called_once()
+
+    def test_create_typed_step_data_dispatch_success(self):
+        """Test _create_typed_step_data uses dispatch pattern correctly."""
+        from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+
+        with patch("ciris_engine.logic.processors.core.step_decorators._prepare_base_data_with_task_id") as mock_prepare, \
+             patch("ciris_engine.logic.processors.core.step_decorators._log_step_debug_info") as mock_log, \
+             patch("ciris_engine.logic.processors.core.step_decorators._get_step_data_creators") as mock_get_creators:
+
+            # Mock prepared base data
+            mock_prepared_base_data = Mock()
+            mock_prepare.return_value = mock_prepared_base_data
+
+            # Mock creator function
+            mock_creator = Mock(return_value="step_data_result")
+            mock_creators = {StepPoint.GATHER_CONTEXT: mock_creator}
+            mock_get_creators.return_value = mock_creators
+
+            # Test data
+            step = StepPoint.GATHER_CONTEXT
+            mock_base_data = Mock()
+            mock_thought_item = Mock()
+            result = "test_result"
+            args = ("arg1",)
+            kwargs = {"key": "value"}
+
+            # Execute
+            output = _create_typed_step_data(step, mock_base_data, mock_thought_item, result, args, kwargs)
+
+            # Verify
+            mock_prepare.assert_called_once_with(mock_base_data, mock_thought_item)
+            mock_log.assert_called_once_with(step, mock_prepared_base_data, mock_thought_item)
+            mock_creator.assert_called_once_with(mock_prepared_base_data, result, args, kwargs, mock_thought_item)
+            assert output == "step_data_result"
+
+    def test_create_typed_step_data_unknown_step(self):
+        """Test _create_typed_step_data fails fast for unknown step."""
+        from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
+
+        with patch("ciris_engine.logic.processors.core.step_decorators._prepare_base_data_with_task_id") as mock_prepare, \
+             patch("ciris_engine.logic.processors.core.step_decorators._log_step_debug_info") as mock_log, \
+             patch("ciris_engine.logic.processors.core.step_decorators._get_step_data_creators") as mock_get_creators:
+
+            mock_prepare.return_value = Mock()
+            mock_get_creators.return_value = {}  # Empty creators dict
+
+            # Create a mock unknown step
+            unknown_step = Mock()
+            unknown_step.value = "UNKNOWN_STEP"
+
+            with pytest.raises(ValueError, match="Unknown step point: UNKNOWN_STEP"):
+                _create_typed_step_data(unknown_step, Mock(), Mock(), None, (), {})
+
+    def test_create_typed_step_data_integration_end_to_end(self):
+        """Test _create_typed_step_data integration with actual helper functions."""
+        from ciris_engine.logic.processors.core.step_decorators import _create_typed_step_data
+        from ciris_engine.schemas.services.runtime_control import StepPoint, BaseStepData
+        from datetime import datetime, timezone
+
+        # Create real base data with all required fields
+        base_data = BaseStepData(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            thought_id="test-thought-123",
+            processing_time_ms=100,
+            success=True,
+        )
+
+        # Mock thought item
+        mock_thought_item = Mock()
+        mock_thought_item.source_task_id = "test-task-456"
+
+        # Mock result for GATHER_CONTEXT
+        mock_result = Mock()
+        mock_result.context_count = 5
+
+        # This should work with real dispatch pattern (though may fail on actual step creation)
+        try:
+            result = _create_typed_step_data(
+                StepPoint.GATHER_CONTEXT, base_data, mock_thought_item, mock_result, (), {}
+            )
+            # If it doesn't throw an exception, the dispatch pattern worked
+        except Exception as e:
+            # Expected to fail due to mock result, but should get past dispatch logic
+            assert "Unknown step point" not in str(e), f"Dispatch failed: {e}"

@@ -14,6 +14,7 @@ import pytest
 from ciris_engine.logic.processors.core.main_processor import AgentProcessor
 from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
 from ciris_engine.protocols.pipeline_control import PipelineController
+from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.models import Task, TaskStatus, Thought, ThoughtStatus
 from ciris_engine.schemas.services.core.runtime import ProcessorControlResponse, ProcessorStatus
@@ -27,7 +28,6 @@ from ciris_engine.schemas.services.runtime_control import (
     StepResultPerformDMAs,
     ThoughtInPipeline,
 )
-from ciris_engine.schemas.dma.core import DMAContext
 
 
 class TestAgentProcessorPause:
@@ -527,10 +527,7 @@ class TestEndToEndPipelineStepping:
             thought_type="standard",
             current_step=StepPoint.GATHER_CONTEXT,
             entered_step_at=datetime.now(timezone.utc),
-            context_built=DMAContext(
-                domain_knowledge={"test": "data"},
-                similar_decisions=[]
-            ),
+            context_built=DMAContext(domain_knowledge={"test": "data"}, similar_decisions=[]),
         )
 
         controller._paused_thoughts[thought_id] = thought

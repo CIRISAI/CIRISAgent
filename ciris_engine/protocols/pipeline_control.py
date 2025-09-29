@@ -515,7 +515,7 @@ class PipelineController:
         # Always broadcast step results to connected clients
         try:
             from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
-            from ciris_engine.schemas.services.runtime_control import StepResultData, TraceContext, SpanAttribute
+            from ciris_engine.schemas.services.runtime_control import SpanAttribute, StepResultData, TraceContext
 
             # Create proper StepResultData object for streaming
             trace_context = TraceContext(

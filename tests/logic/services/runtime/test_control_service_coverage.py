@@ -28,7 +28,12 @@ from ciris_engine.schemas.services.core.runtime import (
     ProcessorStatus,
 )
 from ciris_engine.schemas.services.runtime_control import (
-    StepPoint, StepResultData, TraceContext, SpanAttribute, FinalizeActionStepData, PipelineState
+    FinalizeActionStepData,
+    PipelineState,
+    SpanAttribute,
+    StepPoint,
+    StepResultData,
+    TraceContext,
 )
 
 
@@ -38,7 +43,7 @@ def create_test_step_result_data(
     step_point: StepPoint = StepPoint.FINALIZE_ACTION,
     success: bool = True,
     processing_time_ms: float = 50.0,
-    **kwargs
+    **kwargs,
 ) -> StepResultData:
     """Helper to create StepResultData for tests."""
 

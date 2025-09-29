@@ -11,7 +11,12 @@ import pytest
 
 from ciris_engine.logic.infrastructure.step_streaming import StepResultStream, step_result_stream
 from ciris_engine.schemas.services.runtime_control import (
-    StepPoint, StepResultData, TraceContext, SpanAttribute, FinalizeActionStepData, PerformDMAsStepData
+    FinalizeActionStepData,
+    PerformDMAsStepData,
+    SpanAttribute,
+    StepPoint,
+    StepResultData,
+    TraceContext,
 )
 
 
@@ -21,7 +26,7 @@ def create_test_step_result_data(
     step_point: StepPoint = StepPoint.FINALIZE_ACTION,
     success: bool = True,
     processing_time_ms: float = 100.0,
-    **kwargs
+    **kwargs,
 ) -> StepResultData:
     """Helper to create StepResultData for tests."""
     from datetime import datetime

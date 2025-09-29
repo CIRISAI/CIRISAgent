@@ -79,12 +79,16 @@ class StepCategory(str, Enum):
     COMPLETION = "completion"  # Final steps and cleanup
 
 
+# Constants for reusable field descriptions
+STEP_CATEGORY_DESCRIPTION = "Step category for UI grouping"
+
+
 class StepMetadata(BaseModel):
     """UI metadata for a step point."""
 
     name: str = Field(..., description="Human-readable step name")
     description: str = Field(..., description="Step description for tooltips")
-    category: StepCategory = Field(..., description="Step category for UI grouping")
+    category: StepCategory = Field(..., description=STEP_CATEGORY_DESCRIPTION)
     svg_position: Dict[str, float] = Field(..., description="X,Y coordinates for SVG visualization")
 
 
@@ -97,7 +101,7 @@ class ThoughtStreamData(BaseModel):
 
     # Current state
     current_step: StepPoint = Field(..., description="Current step point")
-    step_category: StepCategory = Field(..., description="Step category for UI grouping")
+    step_category: StepCategory = Field(..., description=STEP_CATEGORY_DESCRIPTION)
     status: ThoughtStatus = Field(..., description="Current processing status")
 
     # Progress tracking
@@ -125,7 +129,7 @@ class StepPointSummary(BaseModel):
     """Summary of all thoughts at a specific step point."""
 
     step_point: StepPoint = Field(..., description="Step point identifier")
-    step_category: StepCategory = Field(..., description="Step category for UI grouping")
+    step_category: StepCategory = Field(..., description=STEP_CATEGORY_DESCRIPTION)
     step_name: str = Field(..., description="Human-readable step name")
     step_description: str = Field(..., description="Step description for tooltips")
 
@@ -211,6 +215,37 @@ class ReasoningStreamUpdate(BaseModel):
     notification_messages: List[str] = Field(default_factory=list, description="User-facing status messages")
 
 
+def _enrich_gather_context_data(raw_result: StepResultData, combined_data: dict) -> None:
+    """Enrich combined_data with GATHER_CONTEXT specific fields."""
+    context_data = getattr(raw_result.step_data, "context", "")
+    if "summary" not in combined_data and context_data:
+        combined_data["summary"] = context_data[:200] + "..." if len(context_data) > 200 else context_data
+    if "context_size" not in combined_data:
+        combined_data["context_size"] = len(context_data.split()) if context_data else 0
+
+
+def _enrich_perform_dmas_data(raw_result: StepResultData, combined_data: dict) -> None:
+    """Enrich combined_data with PERFORM_DMAS specific fields."""
+    dma_results = getattr(raw_result.step_data, "dma_results", "")
+    if "result_count" not in combined_data and dma_results:
+        # Count decision points, approvals, rejections for debugging
+        combined_data["result_count"] = len(
+            [r for r in dma_results.split() if r in ["approve", "reject", "defer"]]
+        )
+
+
+def _enrich_conscience_execution_data(raw_result: StepResultData, combined_data: dict) -> None:
+    """Enrich combined_data with CONSCIENCE_EXECUTION specific fields."""
+    if not hasattr(raw_result.step_data, "conscience_result"):
+        return
+
+    conscience_result = raw_result.step_data.conscience_result
+    if hasattr(conscience_result, "severity"):
+        combined_data["severity_level"] = conscience_result.severity
+    if hasattr(conscience_result, "details") and isinstance(conscience_result.details, dict):
+        combined_data["details_count"] = len(conscience_result.details)
+
+
 def _create_typed_step_result(raw_result: StepResultData, step_point: StepPoint):
     """Create typed step result from raw data with intelligent field mapping for rich analysis."""
     import logging
@@ -233,38 +268,21 @@ def _create_typed_step_result(raw_result: StepResultData, step_point: StepPoint)
             **raw_result.step_data.model_dump(),
         }
 
-        # Intelligent field mapping for rich debugging and analysis
-        if step_point == StepPoint.GATHER_CONTEXT:
-            # Transform context data for StepResultGatherContext
-            context_data = getattr(raw_result.step_data, "context", "")
-            if "summary" not in combined_data and context_data:
-                combined_data["summary"] = context_data[:200] + "..." if len(context_data) > 200 else context_data
-            if "context_size" not in combined_data:
-                # Calculate meaningful context size (word count, item count, etc.)
-                combined_data["context_size"] = len(context_data.split()) if context_data else 0
+        # Use dispatch pattern for step-specific enrichment
+        enrichment_functions = {
+            StepPoint.GATHER_CONTEXT: _enrich_gather_context_data,
+            StepPoint.PERFORM_DMAS: _enrich_perform_dmas_data,
+            StepPoint.CONSCIENCE_EXECUTION: _enrich_conscience_execution_data,
+        }
 
-        elif step_point == StepPoint.PERFORM_DMAS:
-            # Enrich DMA results with analysis metadata
-            dma_results = getattr(raw_result.step_data, "dma_results", "")
-            if "result_count" not in combined_data and dma_results:
-                # Count decision points, approvals, rejections for debugging
-                combined_data["result_count"] = len(
-                    [r for r in dma_results.split() if r in ["approve", "reject", "defer"]]
-                )
-
-        elif step_point == StepPoint.CONSCIENCE_EXECUTION:
-            # Enhance conscience data with debugging metadata
-            if hasattr(raw_result.step_data, "conscience_result"):
-                conscience_result = raw_result.step_data.conscience_result
-                if hasattr(conscience_result, "severity"):
-                    combined_data["severity_level"] = conscience_result.severity
-                if hasattr(conscience_result, "details") and isinstance(conscience_result.details, dict):
-                    combined_data["details_count"] = len(conscience_result.details)
+        enrichment_func = enrichment_functions.get(step_point)
+        if enrichment_func:
+            enrichment_func(raw_result, combined_data)
 
         return step_result_model(**combined_data)
     except Exception as e:
         logger.warning(
-            f"Could not create typed step result for {step_point.value}: {e}. " f"Raw data: {raw_result.step_data}"
+            f"Could not create typed step result for {step_point.value}: {e}. Raw data: {raw_result.step_data}"
         )
         return None
 

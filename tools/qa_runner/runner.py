@@ -95,10 +95,10 @@ class QARunner:
 
         # Final incidents reminder - CANNOT be missed
         if has_incidents:
-            self.console.print("\n" + "="*60)
+            self.console.print("\n" + "=" * 60)
             self.console.print("[bold red]🚨 CRITICAL: INCIDENTS DETECTED DURING TESTING! 🚨[/bold red]")
             self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
-            self.console.print("="*60)
+            self.console.print("=" * 60)
             return False  # Force failure if incidents occurred
         else:
             self.console.print("\n[bold green]✅ No critical incidents - tests completed cleanly![/bold green]")
@@ -279,16 +279,23 @@ class QARunner:
 
             # Check only the new content
             ignore_patterns = [
-                "MOCK_MODULE_LOADED", "MOCK LLM", "RUNTIME SHUTDOWN",
-                "SYSTEM SHUTDOWN", "GRACEFUL SHUTDOWN", "Edge already exists",
-                "duplicate edge", "TSDB consolidation",
+                "MOCK_MODULE_LOADED",
+                "MOCK LLM",
+                "RUNTIME SHUTDOWN",
+                "SYSTEM SHUTDOWN",
+                "GRACEFUL SHUTDOWN",
+                "Edge already exists",
+                "duplicate edge",
+                "TSDB consolidation",
             ]
 
             with open(incidents_log, "r") as f:
                 f.seek(self._startup_incidents_position)  # Start from where we left off
 
                 for line in f:
-                    if ("ERROR" in line or "CRITICAL" in line) and not any(pattern in line for pattern in ignore_patterns):
+                    if ("ERROR" in line or "CRITICAL" in line) and not any(
+                        pattern in line for pattern in ignore_patterns
+                    ):
                         return True
 
         except Exception:

@@ -19,12 +19,20 @@ from ciris_engine.schemas.adapters.tools import (
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .ap2 import AP2CheckoutPayload, AP2MandateType
-from .schemas import AP2CheckoutRequest, BillingChargeRequest
+from .commerce_service import UnlimitCommerceService
+from .schemas import (
+    AP2CheckoutRequest,
+    AP2InvoiceRequest,
+    BillingChargeRequest,
+    InvoiceRequest,
+    PaymentCustomer,
+)
 from .service import UnlimitBillingService
 
 logger = logging.getLogger(__name__)
 
 AP2_CHECKOUT_TOOL = "ap2_unlimit_checkout"
+AP2_INVOICE_TOOL = "ap2_unlimit_invoice"
 
 
 class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
@@ -38,6 +46,7 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,
+        restricted_countries: Optional[set[str]] = None,
         transport=None,
     ) -> None:
         super().__init__(service_name="UnlimitBillingToolService")
@@ -47,6 +56,13 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
             timeout_seconds=timeout_seconds,
             cache_ttl_seconds=cache_ttl_seconds,
             fail_open=fail_open,
+            transport=transport,
+        )
+        self._commerce = UnlimitCommerceService(
+            base_url=base_url,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            restricted_countries=restricted_countries,
             transport=transport,
         )
         self._results: Dict[str, ToolExecutionResult] = {}
@@ -73,27 +89,101 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
 
     async def _on_start(self) -> None:
         await self._billing.start()
+        await self._commerce.start()
 
     async def _on_stop(self) -> None:
         await self._billing.stop()
+        await self._commerce.stop()
 
     # ToolServiceProtocol implementation
 
     async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
-        if tool_name != AP2_CHECKOUT_TOOL:
-            return await self._build_failed_result(
-                tool_name,
-                error=f"Unknown tool '{tool_name}'",
-            )
+        if tool_name == AP2_CHECKOUT_TOOL:
+            return await self._execute_checkout(parameters)
+        if tool_name == AP2_INVOICE_TOOL:
+            return await self._execute_invoice(parameters)
+        return await self._build_failed_result(tool_name, error=f"Unknown tool '{tool_name}'")
 
+    async def list_tools(self) -> List[str]:
+        return [AP2_CHECKOUT_TOOL, AP2_INVOICE_TOOL]
+
+    async def get_available_tools(self) -> List[str]:
+        return [AP2_CHECKOUT_TOOL, AP2_INVOICE_TOOL]
+
+    async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
+        if tool_name == AP2_CHECKOUT_TOOL:
+            return self._build_checkout_schema()
+        if tool_name == AP2_INVOICE_TOOL:
+            return self._build_invoice_schema()
+        return None
+
+    async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
+        if tool_name == AP2_CHECKOUT_TOOL:
+            return ToolInfo(
+                name=AP2_CHECKOUT_TOOL,
+                description=(
+                    "Execute an AP2-compliant checkout using Unlimit as the payment processor. "
+                    "Requires a valid mandate chain and payment credential."
+                ),
+                parameters=self._build_checkout_schema(),
+                category="commerce",
+                cost=0.0,
+                when_to_use=(
+                    "Use after obtaining signed AP2 mandates and the user has authorised "
+                    "the agent to complete the purchase with Unlimit."
+                ),
+            )
+        if tool_name == AP2_INVOICE_TOOL:
+            return ToolInfo(
+                name=AP2_INVOICE_TOOL,
+                description=(
+                    "Create an AP2-compliant invoice via Unlimit so the customer can pay securely "
+                    "through hosted payment flows."
+                ),
+                parameters=self._build_invoice_schema(),
+                category="commerce",
+                cost=0.0,
+                when_to_use="Use when you have mandates allowing you to request payment from a user.",
+            )
+        return None
+
+    async def get_all_tool_info(self) -> List[ToolInfo]:
+        infos = []
+        for tool in [AP2_CHECKOUT_TOOL, AP2_INVOICE_TOOL]:
+            info = await self.get_tool_info(tool)
+            if info:
+                infos.append(info)
+        return infos
+
+    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+        try:
+            if tool_name == AP2_CHECKOUT_TOOL:
+                request = AP2CheckoutRequest.model_validate(parameters)
+                error = self._validate_ap2_payload(request.ap2, request.charge)
+                return error is None
+            if tool_name == AP2_INVOICE_TOOL:
+                request = AP2InvoiceRequest.model_validate(parameters)
+                error = self._validate_ap2_payload(request.ap2, request.charge)
+                return error is None
+        except Exception:
+            return False
+        return False
+
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
+        async with self._results_lock:
+            return self._results.get(correlation_id)
+
+    # Helper methods
+
+    async def _execute_checkout(self, parameters: dict) -> ToolExecutionResult:
         try:
             request = AP2CheckoutRequest.model_validate(parameters)
         except Exception as exc:
-            return await self._build_failed_result(tool_name, error=f"invalid_parameters:{exc}")
+            return await self._build_failed_result(AP2_CHECKOUT_TOOL, error=f"invalid_parameters:{exc}")
 
         validation_error = self._validate_ap2_payload(request.ap2, request.charge)
         if validation_error:
-            return await self._build_failed_result(tool_name, error=validation_error)
+            return await self._build_failed_result(AP2_CHECKOUT_TOOL, error=validation_error)
 
         charge_result = await self._billing.spend_credits(
             identity=request.identity,
@@ -103,7 +193,7 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
 
         if not charge_result.succeeded:
             return await self._build_failed_result(
-                tool_name,
+                AP2_CHECKOUT_TOOL,
                 error=charge_result.reason or "charge_failed",
                 data={"charge_result": charge_result.model_dump()},
             )
@@ -118,9 +208,9 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
             "metadata": request.ap2.metadata,
         }
 
-        correlation_id = self._build_correlation_id(tool_name)
+        correlation_id = self._build_correlation_id(AP2_CHECKOUT_TOOL)
         execution_result = ToolExecutionResult(
-            tool_name=tool_name,
+            tool_name=AP2_CHECKOUT_TOOL,
             status=ToolExecutionStatus.COMPLETED,
             success=True,
             data=result_data,
@@ -130,54 +220,54 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
         await self._store_result(execution_result)
         return execution_result
 
-    async def list_tools(self) -> List[str]:
-        return [AP2_CHECKOUT_TOOL]
+    async def _execute_invoice(self, parameters: dict) -> ToolExecutionResult:
+        try:
+            request = AP2InvoiceRequest.model_validate(parameters)
+        except Exception as exc:
+            return await self._build_failed_result(AP2_INVOICE_TOOL, error=f"invalid_parameters:{exc}")
 
-    async def get_available_tools(self) -> List[str]:
-        return [AP2_CHECKOUT_TOOL]
+        validation_error = self._validate_ap2_payload(request.ap2, request.charge)
+        if validation_error:
+            return await self._build_failed_result(AP2_INVOICE_TOOL, error=validation_error)
 
-    async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
-        info = await self.get_tool_info(tool_name)
-        return info.parameters if info else None
-
-    async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
-        if tool_name != AP2_CHECKOUT_TOOL:
-            return None
-
-        return ToolInfo(
-            name=AP2_CHECKOUT_TOOL,
-            description=(
-                "Execute an AP2-compliant checkout using Unlimit as the payment processor. "
-                "Requires a valid mandate chain and payment credential."
-            ),
-            parameters=self._build_parameter_schema(),
-            category="commerce",
-            cost=0.0,
-            when_to_use=(
-                "Use after obtaining signed AP2 mandates and the user has authorised "
-                "the agent to complete the purchase with Unlimit."
-            ),
+        invoice_request = InvoiceRequest(
+            request_id=request.invoice.request_id,
+            description=request.invoice.description,
+            amount=request.charge.amount_minor / 100.0,
+            currency=request.charge.currency,
+            customer=request.customer,
+            items=request.invoice.items,
+            metadata=request.invoice.metadata,
         )
 
-    async def get_all_tool_info(self) -> List[ToolInfo]:
-        info = await self.get_tool_info(AP2_CHECKOUT_TOOL)
-        return [info] if info else []
+        invoice_result = await self._commerce.create_invoice(invoice_request)
+        if not invoice_result.succeeded:
+            return await self._build_failed_result(
+                AP2_INVOICE_TOOL,
+                error=invoice_result.reason or "invoice_failed",
+                data={"invoice_result": invoice_result.model_dump()},
+            )
 
-    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
-        if tool_name != AP2_CHECKOUT_TOOL:
-            return False
-        try:
-            request = AP2CheckoutRequest.model_validate(parameters)
-            error = self._validate_ap2_payload(request.ap2, request.charge)
-            return error is None
-        except Exception:
-            return False
+        result_data = {
+            "invoice": invoice_result.model_dump(),
+            "mandates": {
+                "intent": request.ap2.mandates.intent.mandate_id,
+                "cart": request.ap2.mandates.cart.mandate_id,
+            },
+            "metadata": request.ap2.metadata,
+        }
 
-    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
-        async with self._results_lock:
-            return self._results.get(correlation_id)
-
-    # Helper methods
+        correlation_id = self._build_correlation_id(AP2_INVOICE_TOOL)
+        execution_result = ToolExecutionResult(
+            tool_name=AP2_INVOICE_TOOL,
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data=result_data,
+            error=None,
+            correlation_id=correlation_id,
+        )
+        await self._store_result(execution_result)
+        return execution_result
 
     async def _build_failed_result(
         self,
@@ -234,7 +324,7 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
 
         return None
 
-    def _build_parameter_schema(self) -> ToolParameterSchema:
+    def _build_checkout_schema(self) -> ToolParameterSchema:
         return ToolParameterSchema(
             type="object",
             properties={
@@ -374,6 +464,41 @@ class UnlimitBillingToolService(BaseService, ToolServiceProtocol):
             },
             required=["identity", "charge", "ap2"],
         )
+
+    def _build_invoice_schema(self) -> ToolParameterSchema:
+        schema = self._build_checkout_schema().model_copy(deep=True)
+        schema.properties["invoice"] = {
+            "type": "object",
+            "properties": {
+                "request_id": {"type": "string"},
+                "description": {"type": "string"},
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "quantity": {"type": "integer", "minimum": 1},
+                            "unit_price": {"type": "number", "minimum": 0},
+                        },
+                        "required": ["name", "quantity", "unit_price"],
+                    },
+                },
+                "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+            },
+            "required": ["request_id", "description"],
+        }
+        schema.properties["customer"] = {
+            "type": "object",
+            "properties": {
+                "email": {"type": "string"},
+                "phone": {"type": "string"},
+                "full_name": {"type": "string"},
+                "country": {"type": "string", "minLength": 2, "maxLength": 2},
+            },
+        }
+        schema.required.append("invoice")
+        return schema
 
     def _build_correlation_id(self, tool_name: str) -> str:
         return f"{tool_name}_{uuid4()}"

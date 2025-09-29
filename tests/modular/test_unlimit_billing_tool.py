@@ -6,6 +6,7 @@ import pytest
 
 from ciris_modular_services.unlimit_billing.tool_service import (
     AP2_CHECKOUT_TOOL,
+    AP2_INVOICE_TOOL,
     UnlimitBillingToolService,
 )
 
@@ -100,6 +101,76 @@ async def test_ap2_tool_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ap2_invoice_success() -> None:
+    invoice_calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal invoice_calls
+        if request.url.path.endswith("/api/invoices"):
+            invoice_calls += 1
+            return httpx.Response(
+                201,
+                json={
+                    "invoice": {
+                        "id": "inv-1",
+                        "status": "pending",
+                        "payment_url": "https://checkout.example/pay",
+                    }
+                },
+            )
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    service = UnlimitBillingToolService(
+        api_key="token",
+        transport=httpx.MockTransport(handler),
+    )
+    await service.start()
+
+    payload = {
+        "identity": {"oauth_provider": "google", "external_id": "user-1"},
+        "charge": {"amount_minor": 2500, "currency": "USD"},
+        "ap2": build_ap2_payload(amount=2500),
+        "invoice": {"request_id": "req-1", "description": "Test Invoice"},
+        "customer": {"email": "buyer@example.com", "country": "US"},
+    }
+
+    result = await service.execute_tool(AP2_INVOICE_TOOL, payload)
+
+    assert result.success is True
+    assert result.data["invoice"]["invoice_id"] == "inv-1"
+    assert invoice_calls == 1
+
+    await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_ap2_invoice_restricted_country() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        raise AssertionError("transport should not be called")
+
+    service = UnlimitBillingToolService(
+        api_key="token",
+        restricted_countries={"RU"},
+        transport=httpx.MockTransport(handler),
+    )
+    await service.start()
+
+    payload = {
+        "identity": {"oauth_provider": "google", "external_id": "user-1"},
+        "charge": {"amount_minor": 2500, "currency": "USD"},
+        "ap2": build_ap2_payload(amount=2500),
+        "invoice": {"request_id": "req-1", "description": "Test"},
+        "customer": {"country": "RU"},
+    }
+
+    result = await service.execute_tool(AP2_INVOICE_TOOL, payload)
+    assert result.success is False
+    assert result.error == "payer_country_restricted"
+
+    await service.stop()
+
+
+@pytest.mark.asyncio
 async def test_ap2_tool_amount_mismatch() -> None:
     async def fail_handler(_: httpx.Request) -> httpx.Response:
         raise AssertionError("transport should not be called")
@@ -174,5 +245,16 @@ async def test_validate_parameters() -> None:
         },
     )
     assert invalid is False
+
+    invoice_valid = await service.validate_parameters(
+        AP2_INVOICE_TOOL,
+        {
+            "identity": {"oauth_provider": "google", "external_id": "user-1"},
+            "charge": {"amount_minor": 2500, "currency": "USD"},
+            "ap2": build_ap2_payload(amount=2500),
+            "invoice": {"request_id": "req-1", "description": "Test"},
+        },
+    )
+    assert invoice_valid is True
 
     await service.stop()

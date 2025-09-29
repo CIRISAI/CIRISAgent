@@ -19,19 +19,22 @@ preventing unpaid utilization without entangling the ethical core of the engine 
 
 ## Architectural Mapping
 
-- **Schemas (WHAT)** — `BillingIdentity`, `BillingContext`, `BillingCheckResult`, and
-  `BillingChargeResult` capture mission-critical information: who is billed, why, with what
-  outcome, and how funds move.
-- **Protocols (WHO)** — `UnlimitBillingProtocol` defines the contract for checking balances and
-  executing charges without constraining the core agent runtime; the AP2 tool service implements
-  the ToolService contract to expose spending through the sanctioned `TOOL` verb.
-- **Logic (HOW)** — `UnlimitBillingService` implements the contract with caching, telemetry-friendly
-  logging, and configurable failure behaviour, while `UnlimitBillingToolService` validates AP2
-  mandate chains before invoking spending.
+- **Schemas (WHAT)** — `BillingIdentity`, `BillingContext`, `BillingCheckResult`,
+  `BillingChargeResult`, `PaymentRequest`, `InvoiceRequest`, `PayoutRequest`, and `ReportEntry`
+  capture mission-critical information: who is billed, by how much, through which channel, and how
+  settlements are recorded.
+- **Protocols (WHO)** — `UnlimitBillingProtocol` and the AP2 tool service expose spending through
+  the sanctioned `TOOL` verb while `UnlimitCommerceService` offers pay-ins, refunds, payouts, and
+  reporting without polluting the core runtime.
+- **Logic (HOW)** — `UnlimitBillingService` implements credit checks with caching and telemetry,
+  `UnlimitCommerceService` calls Unlimit’s REST APIs with payer filtering, and
+  `UnlimitBillingToolService` validates AP2 mandate chains before invoking either spending or
+  invoice creation.
 
 ## Success Criteria
 
 - Optional module can be enabled/disabled without modifying `ciris_engine`.
 - Every credit denial returns a typed reason for downstream logging/auditing.
 - No untyped dictionaries cross the module boundary.
-- Tests demonstrate cache correctness and failure handling consistent with mission goals.
+- Tests demonstrate cache correctness, payer filtering, and mandate-validated payment flows
+  consistent with mission goals.

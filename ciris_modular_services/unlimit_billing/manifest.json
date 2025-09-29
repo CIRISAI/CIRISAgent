@@ -16,6 +16,19 @@
     {
       "type": "tool",
       "priority": "HIGH",
+      "class": "unlimit_billing.commerce_service.UnlimitCommerceService",
+      "capabilities": [
+        "create_payment",
+        "create_invoice",
+        "refund_payment",
+        "create_payout",
+        "get_payment",
+        "get_reports"
+      ]
+    },
+    {
+      "type": "tool",
+      "priority": "HIGH",
       "class": "unlimit_billing.tool_service.UnlimitBillingToolService",
       "capabilities": [
         "execute_tool",

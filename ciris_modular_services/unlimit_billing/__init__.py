@@ -1,5 +1,6 @@
 """Unlimit billing service module."""
 
+from .commerce_service import UnlimitCommerceService
 from .protocol import UnlimitBillingProtocol
 from .schemas import (
     AP2CheckoutPayload,
@@ -34,4 +35,5 @@ __all__ = [
     "AP2CheckoutRequest",
     "UnlimitBillingProtocol",
     "UnlimitBillingService",
+    "UnlimitCommerceService",
 ]

@@ -10,7 +10,66 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ciris_engine.logic.infrastructure.step_streaming import StepResultStream, step_result_stream
-from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.services.runtime_control import (
+    StepPoint, StepResultData, TraceContext, SpanAttribute, FinalizeActionStepData, PerformDMAsStepData
+)
+
+
+def create_test_step_result_data(
+    thought_id: str = "test-thought",
+    task_id: str = "test-task",
+    step_point: StepPoint = StepPoint.FINALIZE_ACTION,
+    success: bool = True,
+    processing_time_ms: float = 100.0,
+    **kwargs
+) -> StepResultData:
+    """Helper to create StepResultData for tests."""
+    from datetime import datetime
+
+    trace_context = TraceContext(
+        trace_id=f"trace-{thought_id}",
+        span_id=f"span-{step_point.value}",
+        span_name=f"test-{step_point.value}",
+        operation_name=f"test_{step_point.value}",
+        start_time_ns=1000000000,
+        end_time_ns=1000100000,
+        duration_ns=100000,
+    )
+
+    timestamp = datetime.now().isoformat()
+
+    # Create appropriate step data based on step point
+    if step_point == StepPoint.PERFORM_DMAS:
+        step_data = PerformDMAsStepData(
+            timestamp=timestamp,
+            thought_id=thought_id,
+            task_id=task_id,
+            processing_time_ms=processing_time_ms,
+            success=success,
+            dma_results=kwargs.get("dma_results", "test DMA results"),
+            context=kwargs.get("context", "test context"),
+        )
+    else:  # Default to FINALIZE_ACTION
+        step_data = FinalizeActionStepData(
+            timestamp=timestamp,
+            thought_id=thought_id,
+            task_id=task_id,
+            processing_time_ms=processing_time_ms,
+            success=success,
+            selected_action=kwargs.get("selected_action", "test_action"),
+            selection_reasoning=kwargs.get("selection_reasoning", "test reasoning"),
+        )
+
+    return StepResultData(
+        step_point=step_point.value,
+        success=success,
+        processing_time_ms=processing_time_ms,
+        thought_id=thought_id,
+        task_id=task_id,
+        step_data=step_data,
+        trace_context=trace_context,
+        span_attributes=kwargs.get("span_attributes", []),
+    )
 
 
 class TestStepResultStream:
@@ -69,13 +128,7 @@ class TestStepResultStream:
         # Disable streaming
         stream.disable()
 
-        step_result = {
-            "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_ACTION.value,
-            "success": True,
-            "processing_time_ms": 100.0,
-        }
-
+        step_result = create_test_step_result_data()
         await stream.broadcast_step_result(step_result)
 
         # Queue should be empty
@@ -87,13 +140,7 @@ class TestStepResultStream:
         """Test broadcasting with no subscribers does nothing."""
         stream = StepResultStream()
 
-        step_result = {
-            "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_ACTION.value,
-            "success": True,
-            "processing_time_ms": 100.0,
-        }
-
+        step_result = create_test_step_result_data()
         await stream.broadcast_step_result(step_result)
 
         # Should not increment step count
@@ -139,33 +186,21 @@ class TestStepResultStream:
         assert broadcasted_result["subscriber_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_broadcast_step_result_fallback_on_error(self):
-        """Test fallback to raw result when stream update creation fails."""
+    async def test_broadcast_step_result_error_handling(self):
+        """Test that errors in stream update creation are handled gracefully."""
         stream = StepResultStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
 
-        step_result = {
-            "thought_id": "test-thought",
-            "step_point": StepPoint.FINALIZE_ACTION.value,
-            "success": True,
-            "processing_time_ms": 100.0,
-        }
+        step_result = create_test_step_result_data()
 
         with patch(
             "ciris_engine.schemas.streaming.reasoning_stream.create_stream_update_from_step_results",
             side_effect=Exception("Test error"),
         ):
-            await stream.broadcast_step_result(step_result)
-
-        # Should still broadcast raw result with metadata
-        assert not queue.empty()
-        broadcasted_result = await queue.get()
-
-        assert broadcasted_result["thought_id"] == "test-thought"
-        assert broadcasted_result["step_point"] == StepPoint.FINALIZE_ACTION.value
-        assert "stream_sequence" in broadcasted_result
-        assert "broadcast_timestamp" in broadcasted_result
+            # Should fail fast and loud - no fallback
+            with pytest.raises(Exception, match="Test error"):
+                await stream.broadcast_step_result(step_result)
 
     @pytest.mark.asyncio
     async def test_broadcast_step_result_full_queue(self):
@@ -242,19 +277,15 @@ class TestStepResultStreamIntegration:
         stream.subscribe(client_queue)
 
         # Simulate a complete step result
-        step_result = {
-            "thought_id": "integration-test-thought",
-            "task_id": "integration-test-task",
-            "round_id": 5,
-            "step_point": StepPoint.PERFORM_DMAS.value,
-            "success": True,
-            "processing_time_ms": 250.5,
-            "step_data": {
-                "thought_content": "Testing DMA performance analysis",
-                "dmas_executed": ["ethical", "common_sense", "domain_specific"],
-                "analysis_depth": "comprehensive",
-            },
-        }
+        step_result = create_test_step_result_data(
+            thought_id="integration-test-thought",
+            task_id="integration-test-task",
+            step_point=StepPoint.PERFORM_DMAS,
+            success=True,
+            processing_time_ms=250.5,
+            dma_results="DMA results: ethical, common_sense, domain_specific",
+            context="Testing DMA performance analysis",
+        )
 
         # Broadcast the result
         await stream.broadcast_step_result(step_result)
@@ -264,10 +295,14 @@ class TestStepResultStreamIntegration:
         ui_update = await client_queue.get()
 
         # Should be a structured stream update with step result data
-        assert "thought_id" in ui_update
-        assert "task_id" in ui_update
-        assert "step_point" in ui_update
-        assert "success" in ui_update
+        assert "updated_thoughts" in ui_update
+        assert len(ui_update["updated_thoughts"]) == 1
+
+        thought = ui_update["updated_thoughts"][0]
+        assert thought["thought_id"] == "integration-test-thought"
+        assert thought["task_id"] == "integration-test-task"
+        assert thought["current_step"] == StepPoint.PERFORM_DMAS
+        assert "step_result" in thought
 
         # Should have enrichment metadata
         assert "broadcast_timestamp" in ui_update
@@ -285,16 +320,17 @@ class TestStepResultStreamIntegration:
 
         # Create multiple step results to broadcast concurrently
         step_results = []
+        step_points = list(StepPoint)
         for i in range(10):
+            step_point = step_points[i % len(step_points)]
             step_results.append(
-                {
-                    "thought_id": f"concurrent-thought-{i}",
-                    "task_id": f"concurrent-task-{i}",
-                    "round_id": i + 1,
-                    "step_point": list(StepPoint)[i % len(StepPoint)].value,
-                    "success": True,
-                    "processing_time_ms": float(i * 10),
-                }
+                create_test_step_result_data(
+                    thought_id=f"concurrent-thought-{i}",
+                    task_id=f"concurrent-task-{i}",
+                    step_point=step_point,
+                    success=True,
+                    processing_time_ms=float(i * 10),
+                )
             )
 
         # Broadcast all results concurrently

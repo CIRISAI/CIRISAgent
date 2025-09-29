@@ -27,6 +27,54 @@ from ciris_engine.schemas.services.core.runtime import (
     ProcessorControlResponse,
     ProcessorStatus,
 )
+from ciris_engine.schemas.services.runtime_control import (
+    StepPoint, StepResultData, TraceContext, SpanAttribute, FinalizeActionStepData, PipelineState
+)
+
+
+def create_test_step_result_data(
+    thought_id: str = "test-thought",
+    task_id: str = "task_001",
+    step_point: StepPoint = StepPoint.FINALIZE_ACTION,
+    success: bool = True,
+    processing_time_ms: float = 50.0,
+    **kwargs
+) -> StepResultData:
+    """Helper to create StepResultData for tests."""
+
+    trace_context = TraceContext(
+        trace_id=f"trace-{thought_id}",
+        span_id=f"span-{step_point.value}",
+        span_name=f"test-{step_point.value}",
+        operation_name=f"test_{step_point.value}",
+        start_time_ns=1000000000,
+        end_time_ns=1000100000,
+        duration_ns=100000,
+    )
+
+    timestamp = datetime.now().isoformat()
+
+    # Create step data for FINALIZE_ACTION
+    step_data = FinalizeActionStepData(
+        timestamp=timestamp,
+        thought_id=thought_id,
+        task_id=task_id,
+        processing_time_ms=processing_time_ms,
+        success=success,
+        selected_action=kwargs.get("selected_action", "test_action"),
+        selection_reasoning=kwargs.get("selection_reasoning", "test reasoning"),
+    )
+
+    return StepResultData(
+        step_point=step_point.value,
+        success=success,
+        processing_time_ms=processing_time_ms,
+        thought_id=thought_id,
+        task_id=task_id,
+        step_data=step_data,
+        trace_context=trace_context,
+        span_attributes=kwargs.get("span_attributes", []),
+    )
 
 
 class TestRuntimeControlServiceCoverage:
@@ -45,6 +93,25 @@ class TestRuntimeControlServiceCoverage:
         """Create a mock runtime interface."""
         mock = Mock()
 
+        # Create proper StepResultData object for the mock
+        test_step_result = create_test_step_result_data(
+            thought_id="test-thought",
+            task_id="task_001",
+            step_point=StepPoint.FINALIZE_ACTION,
+            success=True,
+            processing_time_ms=50.0,
+        )
+
+        # Create proper PipelineState object for the mock
+        test_pipeline_state = PipelineState(
+            is_paused=False,
+            current_round=1,
+            task_queue=[],
+            thought_queue=[],
+            total_thoughts_processed=2,
+            total_thoughts_in_flight=0,
+        )
+
         # Mock agent processor with proper methods
         mock.agent_processor = Mock()
         mock.agent_processor.queue = []  # Empty list instead of queue_size
@@ -56,9 +123,9 @@ class TestRuntimeControlServiceCoverage:
                 "success": True,
                 "processing_time_ms": 50.0,
                 "step_point": "BUILD_CONTEXT",
-                "step_results": [{"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}],
+                "step_results": [test_step_result],
                 "thoughts_processed": 1,
-                "pipeline_state": {"current_round": 1, "thoughts_in_pipeline": 2},
+                "pipeline_state": test_pipeline_state,
                 "current_round": 1,
                 "pipeline_empty": False,
             }
@@ -138,12 +205,16 @@ class TestRuntimeControlServiceCoverage:
 
         # Verify H3ERE step data is passed through
         assert response.step_point == "BUILD_CONTEXT"
-        assert response.step_results == [
-            {"round_number": 1, "task_id": "task_001", "step_data": {"context_size": 1024}}
-        ]
+        assert response.step_results is not None
+        assert len(response.step_results) == 1
+        assert isinstance(response.step_results[0], StepResultData)
+        assert response.step_results[0].task_id == "task_001"
+        assert response.step_results[0].thought_id == "test-thought"
         assert response.thoughts_processed == 1
         assert response.processing_time_ms == 50.0
-        assert response.pipeline_state == {"current_round": 1, "thoughts_in_pipeline": 2}
+        assert isinstance(response.pipeline_state, PipelineState)
+        assert response.pipeline_state.current_round == 1
+        assert response.pipeline_state.total_thoughts_processed == 2
         assert response.current_round == 1
         assert response.pipeline_empty is False
 

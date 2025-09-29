@@ -501,7 +501,7 @@ class PipelineController:
 
         processing_time_ms = (asyncio.get_event_loop().time() - processing_start) * 1000
 
-        step_result = {
+        step_result_dict = {
             "thought_id": thought.thought_id if hasattr(thought, "thought_id") else str(thought),
             "round_id": getattr(self, "_current_round", 1),
             "task_id": getattr(thought, "task_id", getattr(thought, "source_task_id", None)),
@@ -515,15 +515,44 @@ class PipelineController:
         # Always broadcast step results to connected clients
         try:
             from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+            from ciris_engine.schemas.services.runtime_control import StepResultData, TraceContext, SpanAttribute
 
-            await step_result_stream.broadcast_step_result(step_result)
+            # Create proper StepResultData object for streaming
+            trace_context = TraceContext(
+                trace_id=f"trace_{thought.thought_id if hasattr(thought, 'thought_id') else str(thought)}",
+                span_id=f"span_{step_point.value}",
+                span_name=f"Step: {step_point.value}",
+                operation_name=step_point.value,
+                start_time_ns=int(processing_start * 1_000_000_000),
+                end_time_ns=int((processing_start + processing_time_ms / 1000) * 1_000_000_000),
+                duration_ns=int(processing_time_ms * 1_000_000),
+            )
+
+            span_attributes = [
+                SpanAttribute(key="step_point", value={"stringValue": step_point.value}),
+                SpanAttribute(key="thought_id", value={"stringValue": step_result_dict["thought_id"]}),
+                SpanAttribute(key="success", value={"boolValue": True}),
+            ]
+
+            step_result_data = StepResultData(
+                step_point=step_point.value,
+                success=True,
+                processing_time_ms=processing_time_ms,
+                thought_id=step_result_dict["thought_id"],
+                task_id=step_result_dict.get("task_id", ""),
+                step_data=step_data,
+                trace_context=trace_context,
+                span_attributes=span_attributes,
+            )
+
+            await step_result_stream.broadcast_step_result(step_result_data)
         except Exception as e:
             # Don't let streaming errors break step execution
             import logging
 
             logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
 
-        return step_result
+        return step_result_dict
 
     # Note: All step execution is now handled by step decorators in ThoughtProcessor phases
     # No manual step execution methods needed - decorators handle pause/resume automatically

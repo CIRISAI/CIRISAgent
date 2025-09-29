@@ -743,7 +743,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
             logger.debug(
                 f"Broadcasting step result for {step.value}: task_id={step_result_data.task_id}, thought_id={step_result_data.thought_id}"
             )
-            await step_result_stream.broadcast_step_result(step_result_data.model_dump())
+            await step_result_stream.broadcast_step_result(step_result_data)
         else:
             logger.warning(f"No step result created for {step.value}, step_data type: {type(step_data)}")
 

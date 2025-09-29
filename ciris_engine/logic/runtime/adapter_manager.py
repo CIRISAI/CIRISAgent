@@ -384,10 +384,12 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         tool_service = instance.adapter.tool_service
                         if hasattr(tool_service, "get_all_tool_info"):
                             tool_infos = await tool_service.get_all_tool_info()
-                            tools = [info.name for info in tool_infos]
+                            tools = tool_infos  # Pass ToolInfo objects directly, not just names
                         elif hasattr(tool_service, "list_tools"):
                             tool_names = await tool_service.list_tools()
-                            tools = tool_names
+                            # Convert string names to ToolInfo objects for schema compliance
+                            from ciris_engine.schemas.adapters.tools import ToolInfo
+                            tools = [ToolInfo(name=name, description="") for name in tool_names]
                 except Exception as e:
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
@@ -484,10 +486,12 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     tool_service = instance.adapter.tool_service
                     if hasattr(tool_service, "get_all_tool_info"):
                         tool_infos = await tool_service.get_all_tool_info()
-                        tools = [info.name for info in tool_infos]
+                        tools = tool_infos  # Pass ToolInfo objects directly, not just names
                     elif hasattr(tool_service, "list_tools"):
                         tool_names = await tool_service.list_tools()
-                        tools = tool_names
+                        # Convert string names to ToolInfo objects for schema compliance
+                        from ciris_engine.schemas.adapters.tools import ToolInfo
+                        tools = [ToolInfo(name=name, description="") for name in tool_names]
             except Exception as e:
                 logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 

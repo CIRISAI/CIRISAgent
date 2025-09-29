@@ -27,6 +27,7 @@ from ciris_engine.schemas.services.runtime_control import (
     StepResultPerformDMAs,
     ThoughtInPipeline,
 )
+from ciris_engine.schemas.dma.core import DMAContext
 
 
 class TestAgentProcessorPause:
@@ -526,14 +527,18 @@ class TestEndToEndPipelineStepping:
             thought_type="standard",
             current_step=StepPoint.GATHER_CONTEXT,
             entered_step_at=datetime.now(timezone.utc),
-            context_built={"test": "data"},
+            context_built=DMAContext(
+                domain_knowledge={"test": "data"},
+                similar_decisions=[]
+            ),
         )
 
         controller._paused_thoughts[thought_id] = thought
 
         # Verify we can track it through the pipeline
         assert thought.current_step == StepPoint.GATHER_CONTEXT
-        assert thought.context_built == {"test": "data"}
+        assert isinstance(thought.context_built, DMAContext)
+        assert thought.context_built.domain_knowledge == {"test": "data"}
 
 
 if __name__ == "__main__":

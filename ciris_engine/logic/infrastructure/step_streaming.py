@@ -12,6 +12,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Set
 from weakref import WeakSet
 
+from ciris_engine.schemas.services.runtime_control import StepResultData
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,41 +35,30 @@ class StepResultStream:
         self._subscribers.discard(queue)
         logger.debug(f"Subscriber removed, total: {len(self._subscribers)}")
 
-    async def broadcast_step_result(self, step_result: Dict[str, Any]) -> None:
+    async def broadcast_step_result(self, step_result: StepResultData) -> None:
         """
         Broadcast a step result to all connected subscribers.
 
         Args:
-            step_result: Step result dict from pipeline controller
+            step_result: Typed step result from pipeline controller
         """
         if not self._is_enabled or not self._subscribers:
             return
 
         self._step_count += 1
 
-        # Convert raw step result to UI-friendly stream update
-        try:
-            from ciris_engine.schemas.streaming.reasoning_stream import create_stream_update_from_step_results
+        # Convert typed step result to UI-friendly stream update
+        from ciris_engine.schemas.streaming.reasoning_stream import create_stream_update_from_step_results
 
-            stream_update = create_stream_update_from_step_results(
-                step_results=[step_result], stream_sequence=self._step_count
-            )
+        stream_update = create_stream_update_from_step_results(
+            step_results=[step_result], stream_sequence=self._step_count
+        )
 
-            # Convert to dict for JSON serialization
-            enriched_result = stream_update.model_dump()
-            enriched_result.update(
-                {"broadcast_timestamp": datetime.now().isoformat(), "subscriber_count": len(self._subscribers)}
-            )
-
-        except Exception as e:
-            logger.warning(f"Error creating stream update, falling back to raw result: {e}")
-            # Fallback to raw result with metadata
-            enriched_result = {
-                **step_result,
-                "stream_sequence": self._step_count,
-                "broadcast_timestamp": datetime.now().isoformat(),
-                "subscriber_count": len(self._subscribers),
-            }
+        # Convert to dict for JSON serialization
+        enriched_result = stream_update.model_dump()
+        enriched_result.update(
+            {"broadcast_timestamp": datetime.now().isoformat(), "subscriber_count": len(self._subscribers)}
+        )
 
         # Broadcast to all subscribers
         dead_queues = []

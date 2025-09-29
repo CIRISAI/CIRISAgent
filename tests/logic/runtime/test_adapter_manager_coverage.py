@@ -18,6 +18,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     AdapterOperationResult,
     RuntimeAdapterStatus,
 )
+from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
 
 class MockAdapter:
@@ -372,11 +373,25 @@ class TestRuntimeAdapterManager:
         # Setup adapter with tool service
         adapter = MockAdapter(None)
         tool_service = Mock()
-        # Create proper mock tool info objects with string names
-        tool1 = Mock()
-        tool1.name = "tool1"  # Set as string attribute, not Mock
-        tool2 = Mock()
-        tool2.name = "tool2"
+        # Create proper ToolInfo objects
+        tool1 = ToolInfo(
+            name="tool1",
+            description="Test tool 1",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
+        tool2 = ToolInfo(
+            name="tool2",
+            description="Test tool 2",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[]
+            )
+        )
         tool_service.get_all_tool_info = AsyncMock(return_value=[tool1, tool2])
         adapter.tool_service = tool_service
 
@@ -395,7 +410,12 @@ class TestRuntimeAdapterManager:
 
         # Verify
         assert len(result) == 1
-        assert result[0].tools == ["tool1", "tool2"]
+        assert result[0].tools is not None
+        assert len(result[0].tools) == 2
+        assert isinstance(result[0].tools[0], ToolInfo)
+        assert isinstance(result[0].tools[1], ToolInfo)
+        assert result[0].tools[0].name == "tool1"
+        assert result[0].tools[1].name == "tool2"
 
     @pytest.mark.asyncio
     async def test_list_adapters_exception_handling(self, adapter_manager, mock_time_service):

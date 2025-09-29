@@ -874,15 +874,15 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 logger.warning(f"Cannot remove adapter config for {adapter_id} - GraphConfigService not available")
                 return
 
-            # Get all config keys for this adapter
-            all_configs = await config_service.get_all()
-            adapter_prefix = f"adapter.{adapter_id}."
+            # List all configs with adapter prefix
+            adapter_prefix = f"adapter.{adapter_id}"
+            all_configs = await config_service.list_configs(prefix=adapter_prefix)
 
-            # Remove all config entries for this adapter
-            for config in all_configs:
-                if config.key.startswith(adapter_prefix) or config.key == f"adapter.{adapter_id}.config":
-                    await config_service.delete(config.key)
-                    logger.debug(f"Removed config key: {config.key}")
+            # Remove all config entries for this adapter by setting them to None
+            # Note: GraphConfigService doesn't have delete, so we set to None to clear
+            for config_key in all_configs.keys():
+                await config_service.set_config(config_key, None, updated_by="adapter_manager")
+                logger.debug(f"Removed config key: {config_key}")
 
             logger.info(f"Removed adapter config for {adapter_id} from graph")
 

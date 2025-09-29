@@ -93,6 +93,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._partnership_requests = 0
         self._partnership_approvals = 0
         self._partnership_rejections = 0
+        self._downgrades_completed = 0
 
         # Decay metrics
         self._total_decays_initiated = 0
@@ -170,92 +171,118 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._consent_grants += 1
 
         # Validate request
+        self._validate_consent_request(request)
+
+        # Get previous status if exists
+        previous_status = await self._get_previous_status(request.user_id)
+
+        # Check if upgrading to PARTNERED - requires bilateral agreement
+        if request.stream == ConsentStream.PARTNERED:
+            return await self._handle_partnership_request(request, previous_status, channel_id)
+
+        # Check for gaming behavior if switching streams
+        await self._check_gaming_behavior(request, previous_status)
+
+        # For TEMPORARY and ANONYMOUS - no bilateral agreement needed
+        new_status = self._create_consent_status(request, previous_status)
+
+        # Persist consent and audit trail
+        await self._persist_consent(new_status, previous_status, request.reason, "user")
+
+        logger.info(f"Consent granted for {request.user_id}: {new_status.stream}")
+        return new_status
+
+    def _validate_consent_request(self, request: ConsentRequest) -> None:
+        """Validate consent request parameters."""
         if not request.user_id:
             raise ConsentValidationError("User ID required")
         if not request.categories and request.stream == ConsentStream.PARTNERED:
             raise ConsentValidationError("PARTNERED requires at least one category")
 
-        # Get previous status if exists
-        previous_status = None
+    async def _get_previous_status(self, user_id: str) -> Optional[ConsentStatus]:
+        """Get previous consent status if exists."""
         try:
-            previous_status = await self.get_consent(request.user_id)
+            return await self.get_consent(user_id)
         except ConsentNotFoundError:
-            # New user - this is fine
-            pass
+            return None
 
-        # Check if upgrading to PARTNERED - requires bilateral agreement
-        if request.stream == ConsentStream.PARTNERED:
-            # Check if already partnered
-            if previous_status and previous_status.stream == ConsentStream.PARTNERED:
-                logger.info(f"User {request.user_id} already has PARTNERED consent")
-                return previous_status
+    async def _handle_partnership_request(
+        self, request: ConsentRequest, previous_status: Optional[ConsentStatus], channel_id: Optional[str]
+    ) -> ConsentStatus:
+        """Handle PARTNERED consent request with bilateral agreement."""
+        # Check if already partnered
+        if previous_status and previous_status.stream == ConsentStream.PARTNERED:
+            logger.info(f"User {request.user_id} already has PARTNERED consent")
+            return previous_status
 
-            # Track partnership request
-            self._partnership_requests += 1
+        # Track partnership request
+        self._partnership_requests += 1
 
-            # Create partnership task for agent approval
-            from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
+        # Create partnership task for agent approval
+        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
-            handler = PartnershipRequestHandler(time_service=self._time_service)
-            task = await handler.create_partnership_task(
-                user_id=request.user_id,
-                categories=[c.value for c in request.categories],
-                reason=request.reason,
-                channel_id=channel_id,  # Pass through the channel_id from API
-            )
+        handler = PartnershipRequestHandler(time_service=self._time_service)
+        task = handler.create_partnership_task(
+            user_id=request.user_id,
+            categories=[c.value for c in request.categories],
+            reason=request.reason,
+            channel_id=channel_id,
+        )
 
-            # Return pending status with task ID
-            now = self._time_service.now()
-            pending_status = ConsentStatus(
-                user_id=request.user_id,
-                stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
-                categories=previous_status.categories if previous_status else [],
-                granted_at=previous_status.granted_at if previous_status else now,
-                expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
-                last_modified=now,
-                impact_score=previous_status.impact_score if previous_status else 0.0,
-                attribution_count=previous_status.attribution_count if previous_status else 0,
-            )
+        # Create pending status
+        now = self._time_service.now()
+        pending_status = ConsentStatus(
+            user_id=request.user_id,
+            stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
+            categories=previous_status.categories if previous_status else [],
+            granted_at=previous_status.granted_at if previous_status else now,
+            expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
+            last_modified=now,
+            impact_score=previous_status.impact_score if previous_status else 0.0,
+            attribution_count=previous_status.attribution_count if previous_status else 0,
+        )
 
-            # Store pending partnership request
-            if request.user_id not in self._pending_partnerships:
-                self._pending_partnerships = {}
-            self._pending_partnerships[request.user_id] = {
-                "task_id": task.task_id,
-                "request": request,
-                "created_at": now,
-            }
+        # Store pending partnership request
+        if request.user_id not in self._pending_partnerships:
+            self._pending_partnerships = {}
+        self._pending_partnerships[request.user_id] = {
+            "task_id": task.task_id,
+            "request": request,
+            "created_at": now,
+        }
 
-            logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
-            return pending_status
+        logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
+        return pending_status
 
-        # Check for gaming behavior if switching to/from ANONYMOUS
-        if previous_status and request.stream != previous_status.stream:
-            # Notify adaptive filter about consent transition
-            if hasattr(self, "_filter_service"):
-                # Handle both enum and string types for stream
-                prev_stream = (
-                    previous_status.stream.value if hasattr(previous_status.stream, "value") else previous_status.stream
-                )
-                req_stream = request.stream.value if hasattr(request.stream, "value") else request.stream
-                is_gaming = await self._filter_service.handle_consent_transition(
-                    request.user_id, prev_stream, req_stream
-                )
+    async def _check_gaming_behavior(
+        self, request: ConsentRequest, previous_status: Optional[ConsentStatus]
+    ) -> None:
+        """Check for gaming behavior if switching consent streams."""
+        if not previous_status or request.stream == previous_status.stream:
+            return
 
-                if is_gaming:
-                    logger.warning(
-                        f"Gaming attempt detected for {request.user_id}: {previous_status.stream} -> {request.stream}"
-                    )
-                    # Still allow the change but flag the user in filter service
+        if not hasattr(self, "_filter_service"):
+            return
 
-        # For TEMPORARY and ANONYMOUS - no bilateral agreement needed
-        # Users can always downgrade unilaterally
+        # Handle both enum and string types for stream
+        prev_stream = previous_status.stream.value if hasattr(previous_status.stream, "value") else previous_status.stream
+        req_stream = request.stream.value if hasattr(request.stream, "value") else request.stream
+
+        is_gaming = await self._filter_service.handle_consent_transition(request.user_id, prev_stream, req_stream)
+
+        if is_gaming:
+            logger.warning(f"Gaming attempt detected for {request.user_id}: {previous_status.stream} -> {request.stream}")
+
+    def _create_consent_status(
+        self, request: ConsentRequest, previous_status: Optional[ConsentStatus]
+    ) -> ConsentStatus:
+        """Create new consent status from request."""
         now = self._time_service.now()
         expires_at = None
         if request.stream == ConsentStream.TEMPORARY:
             expires_at = now + timedelta(days=14)
 
-        new_status = ConsentStatus(
+        return ConsentStatus(
             user_id=request.user_id,
             stream=request.stream,
             categories=request.categories,
@@ -266,9 +293,19 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             attribution_count=previous_status.attribution_count if previous_status else 0,
         )
 
+    async def _persist_consent(
+        self,
+        new_status: ConsentStatus,
+        previous_status: Optional[ConsentStatus],
+        reason: Optional[str],
+        initiated_by: str,
+    ) -> None:
+        """Persist consent status and audit trail to graph."""
+        now = self._time_service.now()
+
         # Store in graph
         node = GraphNode(
-            id=f"consent/{request.user_id}",
+            id=f"consent/{new_status.user_id}",
             type=NodeType.CONSENT,
             scope=GraphScope.LOCAL,
             attributes={
@@ -283,20 +320,19 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             updated_by="consent_manager",
             updated_at=now,
         )
-
         add_graph_node(node, self._time_service, self._db_path)
 
         # Create audit entry
         audit = ConsentAuditEntry(
             entry_id=str(uuid4()),
-            user_id=request.user_id,
+            user_id=new_status.user_id,
             timestamp=now,
             previous_stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
             new_stream=new_status.stream,
             previous_categories=previous_status.categories if previous_status else [],
             new_categories=new_status.categories,
-            initiated_by="user",
-            reason=request.reason,
+            initiated_by=initiated_by,
+            reason=reason,
         )
 
         # Store audit entry
@@ -311,10 +347,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         add_graph_node(audit_node, self._time_service, self._db_path)
 
         # Update cache
-        self._consent_cache[request.user_id] = new_status
-
-        logger.info(f"Consent granted for {request.user_id}: {new_status.stream}")
-        return new_status
+        self._consent_cache[new_status.user_id] = new_status
 
     async def update_consent(
         self, user_id: str, stream: ConsentStream, categories: List[ConsentCategory], reason: Optional[str] = None
@@ -1132,21 +1165,20 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             # Create upgrade request - this will need agent approval
             request = ConsentRequest(
                 user_id=user_id,
-                requested_stream=ConsentStream.PARTNERED,
-                requested_categories=[ConsentCategory.ESSENTIAL, ConsentCategory.BEHAVIORAL],
+                stream=ConsentStream.PARTNERED,
+                categories=[ConsentCategory.INTERACTION, ConsentCategory.PREFERENCE],
                 reason=reason,
-                metadata={"tool_request": True},
             )
 
             # Update to PARTNERED (pending agent approval via thought/task system)
-            await self.update_consent(user_id, ConsentStream.PARTNERED, request.requested_categories)
+            await self.update_consent(user_id, ConsentStream.PARTNERED, request.categories)
 
             self._partnership_requests += 1
 
             return {
                 "success": True,
                 "message": "Partnership upgrade requested - requires agent approval",
-                "current_stream": current.stream.value,
+                "current_stream": current.stream.value if hasattr(current.stream, "value") else current.stream,
                 "requested_stream": "PARTNERED",
                 "user_id": user_id,
                 "status": "PENDING_APPROVAL",
@@ -1169,13 +1201,16 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             if target_stream not in ["TEMPORARY", "ANONYMOUS"]:
                 return {"success": False, "error": "target_stream must be TEMPORARY or ANONYMOUS"}
 
+            # Convert uppercase to lowercase for enum
+            target_stream_lower = target_stream.lower()
+
             # Get current consent status
             try:
                 current = await self.get_consent(user_id)
             except ConsentNotFoundError:
                 # If no consent exists and target is ANONYMOUS, create it
                 if target_stream == "ANONYMOUS":
-                    await self.update_consent(user_id, ConsentStream.ANONYMOUS, [ConsentCategory.STATISTICAL])
+                    await self.update_consent(user_id, ConsentStream.ANONYMOUS, [ConsentCategory.RESEARCH])
                     self._downgrades_completed += 1
                     return {
                         "success": True,
@@ -1186,7 +1221,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 else:
                     return {"success": False, "error": f"No consent found for user {user_id}"}
 
-            target = ConsentStream(target_stream)
+            target = ConsentStream(target_stream_lower)
 
             if current.stream == target:
                 return {
@@ -1198,9 +1233,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
             # Downgrades are immediate - no approval needed
             if target == ConsentStream.TEMPORARY:
-                categories = [ConsentCategory.ESSENTIAL]
+                categories = [ConsentCategory.INTERACTION]
             else:  # ANONYMOUS
-                categories = [ConsentCategory.STATISTICAL]
+                categories = [ConsentCategory.RESEARCH]
 
             await self.update_consent(user_id, target, categories)
 
@@ -1209,7 +1244,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return {
                 "success": True,
                 "message": f"Relationship downgraded to {target_stream}",
-                "previous_stream": current.stream.value,
+                "previous_stream": current.stream.value if hasattr(current.stream, "value") else current.stream,
                 "current_stream": target_stream,
                 "user_id": user_id,
             }

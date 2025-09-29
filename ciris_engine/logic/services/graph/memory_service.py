@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
@@ -90,218 +90,92 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             # Check if this is a wildcard query
             if recall_query.node_id in ["*", "%", "all"]:
-                logger.debug(f"Memory recall: wildcard query with scope {recall_query.scope}, type {recall_query.type}")
-
-                # Use the new get_all_graph_nodes function
-                nodes = get_all_graph_nodes(
-                    scope=recall_query.scope,
-                    node_type=recall_query.type.value if recall_query.type else None,
-                    limit=100,  # Reasonable default limit for wildcard queries
-                    db_path=self.db_path,
-                )
-                logger.debug(f"Wildcard query returned {len(nodes)} nodes")
-
-                # Process secrets for all nodes
-                processed_nodes = []
-                for node in nodes:
-                    # Process attributes - convert to proper schema
-                    processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, dict] = {}
-                    if node.attributes:
-                        processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
-
-                    # Include edges if requested
-                    if recall_query.include_edges:
-                        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
-
-                        edges = get_edges_for_node(node.id, node.scope, db_path=self.db_path)
-
-                        if edges:
-                            edges_data = []
-                            for edge in edges:
-                                edge_dict = {
-                                    "source": edge.source,
-                                    "target": edge.target,
-                                    "relationship": edge.relationship,
-                                    "weight": edge.weight,
-                                    "attributes": (
-                                        edge.attributes.model_dump()
-                                        if hasattr(edge.attributes, "model_dump")
-                                        else edge.attributes
-                                    ),
-                                }
-                                edges_data.append(edge_dict)
-
-                            # Add edges to attributes
-                            # processed_attrs is always a dict after _process_secrets_for_recall
-                            if isinstance(processed_attrs, dict):
-                                processed_attrs["_edges"] = edges_data
-
-                    processed_node = GraphNode(
-                        id=node.id,
-                        type=node.type,
-                        scope=node.scope,
-                        attributes=processed_attrs,
-                        version=node.version,
-                        updated_by=node.updated_by,
-                        updated_at=node.updated_at,
-                    )
-                    processed_nodes.append(processed_node)
-
-                return processed_nodes
-
+                return await self._recall_wildcard(recall_query)
             else:
-                # Regular single node query
-                logger.debug(f"Memory recall: getting node {recall_query.node_id} scope {recall_query.scope}")
-                stored = persistence.get_graph_node(recall_query.node_id, recall_query.scope, db_path=self.db_path)
-                if not stored:
-                    return []
-
-                # Process secrets in the node's attributes
-                if stored.attributes:
-                    processed_attrs = await self._process_secrets_for_recall(stored.attributes, "recall")
-                    stored = GraphNode(
-                        id=stored.id,
-                        type=stored.type,
-                        scope=stored.scope,
-                        attributes=processed_attrs,
-                        version=stored.version,
-                        updated_by=stored.updated_by,
-                        updated_at=stored.updated_at,
-                    )
-
-                nodes = [stored]
-
-                # If include_edges is True, fetch connected nodes up to specified depth
-                if recall_query.include_edges and recall_query.depth > 0:
-                    # Import edge functions
-                    from ciris_engine.logic.persistence.models.graph import get_edges_for_node
-
-                    # Get edges for the node
-                    edges = get_edges_for_node(stored.id, stored.scope, db_path=self.db_path)
-
-                    # Add edges to the node's attributes if they exist
-                    if edges:
-                        # Convert edges to dict format for inclusion in response
-                        edges_data = []
-                        for edge in edges:
-                            edge_dict = {
-                                "source": edge.source,
-                                "target": edge.target,
-                                "relationship": edge.relationship,
-                                "weight": edge.weight,
-                                "attributes": (
-                                    edge.attributes.model_dump()
-                                    if hasattr(edge.attributes, "model_dump")
-                                    else edge.attributes
-                                ),
-                            }
-                            edges_data.append(edge_dict)
-
-                        # Add edges to node attributes
-                        # Need to ensure we have a mutable dict for attributes
-                        if isinstance(stored.attributes, dict):
-                            stored.attributes["_edges"] = edges_data
-                        else:
-                            # For typed attributes, we need to convert to dict first
-                            attrs_dict = (
-                                stored.attributes.model_dump()
-                                if hasattr(stored.attributes, "model_dump")
-                                else dict(stored.attributes) if stored.attributes else {}
-                            )
-                            attrs_dict["_edges"] = edges_data
-                            stored = GraphNode(
-                                id=stored.id,
-                                type=stored.type,
-                                scope=stored.scope,
-                                attributes=attrs_dict,
-                                version=stored.version,
-                                updated_by=stored.updated_by,
-                                updated_at=stored.updated_at,
-                            )
-
-                        nodes = [stored]
-
-                    # If depth > 1, fetch connected nodes recursively
-                    if recall_query.depth > 1:
-                        visited_nodes = {stored.id}
-                        nodes_to_process = [(stored, 0)]
-                        all_nodes = [stored]
-
-                        while nodes_to_process:
-                            current_node, current_depth = nodes_to_process.pop(0)
-
-                            if current_depth < recall_query.depth - 1:
-                                # Get edges for current node
-                                current_edges = get_edges_for_node(
-                                    current_node.id, current_node.scope, db_path=self.db_path
-                                )
-
-                                for edge in current_edges:
-                                    # Determine the connected node ID
-                                    connected_id = edge.target if edge.source == current_node.id else edge.source
-
-                                    if connected_id not in visited_nodes:
-                                        # Fetch the connected node
-                                        connected_node = persistence.get_graph_node(
-                                            connected_id, edge.scope, db_path=self.db_path
-                                        )
-                                        if connected_node:
-                                            visited_nodes.add(connected_id)
-
-                                            # Process secrets if needed
-                                            connected_processed_attrs: Union[
-                                                AnyNodeAttributes, GraphNodeAttributes, dict
-                                            ] = {}
-                                            if connected_node.attributes:
-                                                connected_processed_attrs = await self._process_secrets_for_recall(
-                                                    connected_node.attributes, "recall"
-                                                )
-
-                                            # Add edges to connected node
-                                            connected_edges = get_edges_for_node(
-                                                connected_node.id, connected_node.scope, db_path=self.db_path
-                                            )
-                                            if connected_edges:
-                                                edges_data = []
-                                                for e in connected_edges:
-                                                    edge_dict = {
-                                                        "source": e.source,
-                                                        "target": e.target,
-                                                        "relationship": e.relationship,
-                                                        "weight": e.weight,
-                                                        "attributes": (
-                                                            e.attributes.model_dump()
-                                                            if hasattr(e.attributes, "model_dump")
-                                                            else e.attributes
-                                                        ),
-                                                    }
-                                                    edges_data.append(edge_dict)
-
-                                                # Add edges to processed attributes dict
-                                                if isinstance(connected_processed_attrs, dict):
-                                                    connected_processed_attrs["_edges"] = edges_data
-
-                                            # Create new node with processed attributes
-                                            connected_node = GraphNode(
-                                                id=connected_node.id,
-                                                type=connected_node.type,
-                                                scope=connected_node.scope,
-                                                attributes=connected_processed_attrs,
-                                                version=connected_node.version,
-                                                updated_by=connected_node.updated_by,
-                                                updated_at=connected_node.updated_at,
-                                            )
-
-                                            all_nodes.append(connected_node)
-                                            nodes_to_process.append((connected_node, current_depth + 1))
-
-                        nodes = all_nodes
-
-                return nodes
+                return await self._recall_single_node(recall_query)
 
         except Exception as e:
             logger.exception("Error recalling nodes for query %s: %s", recall_query.node_id, e)
             return []
+
+    async def _recall_wildcard(self, recall_query: MemoryQuery) -> List[GraphNode]:
+        """Handle wildcard recall queries."""
+        from ciris_engine.logic.persistence import get_all_graph_nodes
+
+        logger.debug(f"Memory recall: wildcard query with scope {recall_query.scope}, type {recall_query.type}")
+
+        # Use the new get_all_graph_nodes function
+        nodes = get_all_graph_nodes(
+            scope=recall_query.scope,
+            node_type=recall_query.type.value if recall_query.type else None,
+            limit=100,  # Reasonable default limit for wildcard queries
+            db_path=self.db_path,
+        )
+        logger.debug(f"Wildcard query returned {len(nodes)} nodes")
+
+        # Process secrets and edges for all nodes
+        processed_nodes = []
+        for node in nodes:
+            processed_node = await self._process_node_for_recall(node, recall_query.include_edges)
+            processed_nodes.append(processed_node)
+
+        return processed_nodes
+
+    async def _recall_single_node(self, recall_query: MemoryQuery) -> List[GraphNode]:
+        """Handle single node recall queries."""
+        from ciris_engine.logic.persistence.models import graph as persistence
+
+        logger.debug(f"Memory recall: getting node {recall_query.node_id} scope {recall_query.scope}")
+        stored = persistence.get_graph_node(recall_query.node_id, recall_query.scope, db_path=self.db_path)
+        if not stored:
+            return []
+
+        # Process secrets in the node's attributes
+        if stored.attributes:
+            processed_attrs = await self._process_secrets_for_recall(stored.attributes, "recall")
+            stored = GraphNode(
+                id=stored.id,
+                type=stored.type,
+                scope=stored.scope,
+                attributes=processed_attrs,
+                version=stored.version,
+                updated_by=stored.updated_by,
+                updated_at=stored.updated_at,
+            )
+
+        # Handle edges if requested
+        if recall_query.include_edges and recall_query.depth > 0:
+            stored = await self._process_node_with_edges(stored, include_edges=True)
+
+            # If depth > 1, fetch connected nodes recursively
+            if recall_query.depth > 1:
+                return await self._fetch_connected_nodes(stored, recall_query.depth)
+
+        return [stored]
+
+    async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
+        """Process a single node for recall, handling secrets and edges."""
+        # Process attributes - convert to proper schema
+        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, dict] = {}
+        if node.attributes:
+            processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
+
+        # Create node with processed attributes
+        processed_node = GraphNode(
+            id=node.id,
+            type=node.type,
+            scope=node.scope,
+            attributes=processed_attrs,
+            version=node.version,
+            updated_by=node.updated_by,
+            updated_at=node.updated_at,
+        )
+
+        # Include edges if requested
+        if include_edges:
+            processed_node = await self._process_node_with_edges(processed_node, include_edges=True)
+
+        return processed_node
 
     def forget(self, node: GraphNode) -> MemoryOpResult:
         """Forget a node and clean up any associated secrets."""
@@ -750,80 +624,68 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         self._track_request()
         logger.debug(f"Memory search START: query='{query}', filters={filters}")
         try:
-            from ciris_engine.logic.persistence import get_all_graph_nodes, get_nodes_by_type
+            # Parse query for search terms and filters
+            search_terms, query_node_type, query_scope = self._parse_search_query(query)
 
-            # Extract filters
-            scope = filters.scope if filters and hasattr(filters, "scope") else GraphScope.LOCAL
-            node_type = filters.node_type if filters and hasattr(filters, "node_type") else None
+            # Extract filters, preferring query string values
+            scope = query_scope or (filters.scope if filters and hasattr(filters, "scope") else GraphScope.LOCAL)
+            node_type = query_node_type or (filters.node_type if filters and hasattr(filters, "node_type") else None)
             limit = filters.limit if filters and hasattr(filters, "limit") else 100
 
-            # Parse query string for additional filters
-            query_parts = query.split() if query else []
-            for part in query_parts:
-                if part.startswith("type:"):
-                    # Override node_type from query string if provided
-                    node_type = part.split(":")[1]
-                elif part.startswith("scope:"):
-                    # Override scope from query string if provided
-                    scope = GraphScope(part.split(":")[1].lower())
+            # Fetch nodes based on type
+            nodes = await self._fetch_nodes_for_search(scope, node_type, limit)
 
-            # Use the new persistence functions
-            if node_type:
-                nodes = get_nodes_by_type(
-                    node_type=node_type,
-                    scope=scope if isinstance(scope, GraphScope) else GraphScope.LOCAL,
-                    limit=limit,
-                    db_path=self.db_path,
-                )
-            else:
-                nodes = get_all_graph_nodes(
-                    scope=scope if isinstance(scope, GraphScope) else GraphScope.LOCAL,
-                    limit=limit,
-                    db_path=self.db_path,
-                )
+            # Filter by content if search terms exist
+            if search_terms:
+                nodes = self._filter_nodes_by_content(nodes, search_terms)
 
-            # If query contains text search terms (not just filters), filter by content
-            if query and not all(part.startswith(("type:", "scope:")) for part in query_parts):
-                search_terms = [part.lower() for part in query_parts if not part.startswith(("type:", "scope:"))]
-                filtered_nodes = []
-
-                for node in nodes:
-                    # Search in node ID
-                    if any(term in node.id.lower() for term in search_terms):
-                        filtered_nodes.append(node)
-                        continue
-
-                    # Search in attributes
-                    if node.attributes:
-                        attrs_str = json.dumps(node.attributes, cls=DateTimeEncoder).lower()
-                        if any(term in attrs_str for term in search_terms):
-                            filtered_nodes.append(node)
-
-                nodes = filtered_nodes
-
-            # Process secrets for recall
-            processed_nodes = []
-            for node in nodes:
-                if node.attributes:
-                    processed_attrs = await self._process_secrets_for_recall(node.attributes, "search")
-                    processed_node = GraphNode(
-                        id=node.id,
-                        type=node.type,
-                        scope=node.scope,
-                        attributes=processed_attrs,
-                        version=node.version,
-                        updated_by=node.updated_by,
-                        updated_at=node.updated_at,
-                    )
-                    processed_nodes.append(processed_node)
-                else:
-                    processed_nodes.append(node)
-
-            return processed_nodes
+            # Process secrets for all nodes
+            return await self._process_nodes_for_search(nodes)
 
         except Exception as e:
             logger.exception(f"Error searching graph: {e}")
             return []
+
+    async def _fetch_nodes_for_search(
+        self, scope: GraphScope, node_type: Optional[str], limit: int
+    ) -> List[GraphNode]:
+        """Fetch nodes for search based on scope and type."""
+        from ciris_engine.logic.persistence import get_all_graph_nodes, get_nodes_by_type
+
+        if node_type:
+            return get_nodes_by_type(
+                node_type=node_type,
+                scope=scope if isinstance(scope, GraphScope) else GraphScope.LOCAL,
+                limit=limit,
+                db_path=self.db_path,
+            )
+        else:
+            return get_all_graph_nodes(
+                scope=scope if isinstance(scope, GraphScope) else GraphScope.LOCAL,
+                limit=limit,
+                db_path=self.db_path,
+            )
+
+    async def _process_nodes_for_search(self, nodes: List[GraphNode]) -> List[GraphNode]:
+        """Process nodes for search, handling secrets."""
+        processed_nodes = []
+        for node in nodes:
+            if node.attributes:
+                processed_attrs = await self._process_secrets_for_recall(node.attributes, "search")
+                processed_node = GraphNode(
+                    id=node.id,
+                    type=node.type,
+                    scope=node.scope,
+                    attributes=processed_attrs,
+                    version=node.version,
+                    updated_by=node.updated_by,
+                    updated_at=node.updated_at,
+                )
+                processed_nodes.append(processed_node)
+            else:
+                processed_nodes.append(node)
+
+        return processed_nodes
 
     # ============================================================================
     # SERVICE PROTOCOL METHODS
@@ -963,3 +825,224 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Memory service doesn't use memory bus (it IS what memory bus uses)
         # Check for optional dependencies
         return True  # Base memory service has no hard dependencies
+
+    # ============================================================================
+    # REFACTORED HELPER METHODS TO REDUCE COMPLEXITY
+    # ============================================================================
+
+    async def _process_node_with_edges(
+        self, node: GraphNode, include_edges: bool = False
+    ) -> GraphNode:
+        """Process a node and optionally attach its edges."""
+        if not include_edges:
+            return node
+
+        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+        edges = get_edges_for_node(node.id, node.scope, db_path=self.db_path)
+        if not edges:
+            return node
+
+        # Convert edges to dict format
+        edges_data = [
+            {
+                "source": edge.source,
+                "target": edge.target,
+                "relationship": edge.relationship,
+                "weight": edge.weight,
+                "attributes": (
+                    edge.attributes.model_dump()
+                    if hasattr(edge.attributes, "model_dump")
+                    else edge.attributes
+                ),
+            }
+            for edge in edges
+        ]
+
+        # Add edges to node attributes
+        if isinstance(node.attributes, dict):
+            node.attributes["_edges"] = edges_data
+        else:
+            attrs_dict = (
+                node.attributes.model_dump()
+                if hasattr(node.attributes, "model_dump")
+                else dict(node.attributes) if node.attributes else {}
+            )
+            attrs_dict["_edges"] = edges_data
+            node = GraphNode(
+                id=node.id,
+                type=node.type,
+                scope=node.scope,
+                attributes=attrs_dict,
+                version=node.version,
+                updated_by=node.updated_by,
+                updated_at=node.updated_at,
+            )
+
+        return node
+
+    async def _fetch_connected_nodes(
+        self, start_node: GraphNode, depth: int
+    ) -> List[GraphNode]:
+        """Fetch nodes connected to start_node up to specified depth."""
+        if depth <= 0:
+            return [start_node]
+
+        from ciris_engine.logic.persistence.models import graph as persistence
+        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+        visited_nodes = {start_node.id}
+        nodes_to_process = [(start_node, 0)]
+        all_nodes = [start_node]
+
+        while nodes_to_process:
+            current_node, current_depth = nodes_to_process.pop(0)
+
+            if current_depth >= depth - 1:
+                continue
+
+            # Get edges for current node
+            current_edges = get_edges_for_node(
+                current_node.id, current_node.scope, db_path=self.db_path
+            )
+
+            for edge in current_edges:
+                # Determine the connected node ID
+                connected_id = (
+                    edge.target if edge.source == current_node.id else edge.source
+                )
+
+                if connected_id in visited_nodes:
+                    continue
+
+                # Fetch the connected node
+                connected_node = persistence.get_graph_node(
+                    connected_id, edge.scope, db_path=self.db_path
+                )
+
+                if not connected_node:
+                    continue
+
+                visited_nodes.add(connected_id)
+
+                # Process secrets if needed
+                if connected_node.attributes:
+                    processed_attrs = await self._process_secrets_for_recall(
+                        connected_node.attributes, "recall"
+                    )
+                    connected_node = GraphNode(
+                        id=connected_node.id,
+                        type=connected_node.type,
+                        scope=connected_node.scope,
+                        attributes=processed_attrs,
+                        version=connected_node.version,
+                        updated_by=connected_node.updated_by,
+                        updated_at=connected_node.updated_at,
+                    )
+
+                # Process edges for the connected node
+                connected_node = await self._process_node_with_edges(
+                    connected_node, include_edges=True
+                )
+
+                all_nodes.append(connected_node)
+                nodes_to_process.append((connected_node, current_depth + 1))
+
+        return all_nodes
+
+    def _apply_time_filters(
+        self, nodes: List[GraphNode], filters: Optional[dict]
+    ) -> List[GraphNode]:
+        """Apply time-based filters to a list of nodes."""
+        if not filters:
+            return nodes
+
+        filtered = nodes
+
+        if "since" in filters:
+            since = filters["since"]
+            if isinstance(since, str):
+                from datetime import datetime
+                since = datetime.fromisoformat(since)
+            filtered = [n for n in filtered if n.updated_at and n.updated_at >= since]
+
+        if "until" in filters:
+            until = filters["until"]
+            if isinstance(until, str):
+                from datetime import datetime
+                until = datetime.fromisoformat(until)
+            filtered = [n for n in filtered if n.updated_at and n.updated_at <= until]
+
+        return filtered
+
+    def _apply_tag_filters(
+        self, nodes: List[GraphNode], filters: Optional[dict]
+    ) -> List[GraphNode]:
+        """Apply tag-based filters to a list of nodes."""
+        if not filters or "tags" not in filters:
+            return nodes
+
+        tags = filters["tags"]
+        if not isinstance(tags, list):
+            return nodes
+
+        filtered = []
+        for n in nodes:
+            if not n.attributes:
+                continue
+
+            # Handle both dict and object attributes
+            node_tags = None
+            if isinstance(n.attributes, dict):
+                node_tags = n.attributes.get("tags", [])
+            elif hasattr(n.attributes, "tags"):
+                node_tags = n.attributes.tags
+
+            if node_tags and any(tag in node_tags for tag in tags):
+                filtered.append(n)
+
+        return filtered
+
+    def _parse_search_query(self, query: str) -> Tuple[List[str], Optional[str], Optional[GraphScope]]:
+        """Parse search query string for terms and filters."""
+        if not query:
+            return [], None, None
+
+        query_parts = query.split()
+        search_terms = []
+        node_type = None
+        scope = None
+
+        for part in query_parts:
+            if part.startswith("type:"):
+                node_type = part.split(":")[1]
+            elif part.startswith("scope:"):
+                scope = GraphScope(part.split(":")[1].lower())
+            else:
+                search_terms.append(part.lower())
+
+        return search_terms, node_type, scope
+
+    def _filter_nodes_by_content(
+        self, nodes: List[GraphNode], search_terms: List[str]
+    ) -> List[GraphNode]:
+        """Filter nodes by search terms in content."""
+        if not search_terms:
+            return nodes
+
+        filtered = []
+        for node in nodes:
+            # Search in node ID
+            if any(term in node.id.lower() for term in search_terms):
+                filtered.append(node)
+                continue
+
+            # Search in attributes
+            if node.attributes:
+                attrs_str = json.dumps(
+                    node.attributes, cls=DateTimeEncoder
+                ).lower()
+                if any(term in attrs_str for term in search_terms):
+                    filtered.append(node)
+
+        return filtered

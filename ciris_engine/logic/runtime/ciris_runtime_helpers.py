@@ -24,28 +24,33 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 logger = logging.getLogger(__name__)
 
 # Import runtime utilities
-from ciris_engine.logic.utils.shutdown_manager import (
-    is_global_shutdown_requested,
-    wait_for_global_shutdown_async,
-)
-
+from ciris_engine.logic.utils.shutdown_manager import is_global_shutdown_requested, wait_for_global_shutdown_async
 
 # Service priority mapping for clean lookup
 _SERVICE_SHUTDOWN_PRIORITIES = {
     # Priority 0-2: Dependent services (shutdown first)
-    "TSDB": 0, "Consolidation": 0,
-    "Task": 1, "Scheduler": 1,
-    "Incident": 2, "Monitor": 2,
+    "TSDB": 0,
+    "Consolidation": 0,
+    "Task": 1,
+    "Scheduler": 1,
+    "Incident": 2,
+    "Monitor": 2,
     # Priority 3-5: Application services
-    "Adaptive": 3, "Filter": 3,
-    "Tool": 4, "Control": 4,
-    "Observation": 5, "Visibility": 5,
+    "Adaptive": 3,
+    "Filter": 3,
+    "Tool": 4,
+    "Control": 4,
+    "Observation": 5,
+    "Visibility": 5,
     # Priority 6-8: Core services
-    "Telemetry": 6, "Audit": 6,
-    "LLM": 7, "Auth": 7,
+    "Telemetry": 6,
+    "Audit": 6,
+    "LLM": 7,
+    "Auth": 7,
     "Config": 8,
     # Priority 9-12: Infrastructure services (shutdown last)
-    "Memory": 9, "Secrets": 9,
+    "Memory": 9,
+    "Secrets": 9,
     "Initialization": 10,
     "Time": 11,
     "Shutdown": 12,
@@ -102,6 +107,7 @@ async def execute_final_maintenance_tasks(runtime) -> None:
 async def _transition_agent_to_shutdown_state(runtime, current_state) -> bool:
     """Transition agent processor to shutdown state."""
     from ciris_engine.schemas.processors.states import AgentState
+
     logger = logging.getLogger(__name__)
 
     if not await runtime.agent_processor.state_manager.can_transition_to(AgentState.SHUTDOWN):
@@ -116,6 +122,7 @@ async def _transition_agent_to_shutdown_state(runtime, current_state) -> bool:
 async def _handle_processing_loop_shutdown(runtime) -> None:
     """Handle shutdown of processing loop or direct shutdown processor."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     if runtime.agent_processor._processing_task and not runtime.agent_processor._processing_task.done():
@@ -129,17 +136,15 @@ async def _handle_processing_loop_shutdown(runtime) -> None:
 async def _execute_shutdown_processor_directly(runtime) -> None:
     """Execute shutdown processor directly when processing loop is not running."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     logger.info("Processing loop not running, executing shutdown processor directly")
-    if (
-        hasattr(runtime.agent_processor, "shutdown_processor")
-        and runtime.agent_processor.shutdown_processor
-    ):
+    if hasattr(runtime.agent_processor, "shutdown_processor") and runtime.agent_processor.shutdown_processor:
         # Run a few rounds of shutdown processing
         for round_num in range(5):
             try:
-                result = await runtime.agent_processor.shutdown_processor.process(round_num)
+                _ = await runtime.agent_processor.shutdown_processor.process(round_num)
                 if runtime.agent_processor.shutdown_processor.shutdown_complete:
                     break
             except Exception as e:
@@ -151,21 +156,20 @@ async def _execute_shutdown_processor_directly(runtime) -> None:
 async def _wait_for_shutdown_processor_completion(runtime) -> None:
     """Wait for shutdown processor to complete with timeout."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     max_wait = 5.0  # Reduced from 30s to 5s for faster shutdown
     start_time = asyncio.get_event_loop().time()
 
     while (asyncio.get_event_loop().time() - start_time) < max_wait:
-        if (
-            hasattr(runtime.agent_processor, "shutdown_processor")
+        if (hasattr(runtime.agent_processor, "shutdown_processor")
             and runtime.agent_processor.shutdown_processor
-        ):
-            if runtime.agent_processor.shutdown_processor.shutdown_complete:
-                result = runtime.agent_processor.shutdown_processor.shutdown_result
-                if result and hasattr(result, "get") and result.get("status") == "rejected":
-                    logger.warning(f"Shutdown rejected by agent: {result.get('reason')}")
-                break
+            and runtime.agent_processor.shutdown_processor.shutdown_complete):
+            result = runtime.agent_processor.shutdown_processor.shutdown_result
+            if result and hasattr(result, "get") and result.get("status") == "rejected":
+                logger.warning(f"Shutdown rejected by agent: {result.get('reason')}")
+            break
         await asyncio.sleep(0.1)
 
     logger.debug("Shutdown negotiation complete or timed out")
@@ -174,6 +178,7 @@ async def _wait_for_shutdown_processor_completion(runtime) -> None:
 async def handle_agent_processor_shutdown(runtime) -> None:
     """Handle graceful agent processor shutdown negotiation."""
     from ciris_engine.schemas.processors.states import AgentState
+
     logger = logging.getLogger(__name__)
 
     # Early exit if no agent processor
@@ -244,6 +249,7 @@ def _collect_scheduled_services(runtime) -> List[Any]:
 async def _stop_service_task(service) -> None:
     """Stop a specific service's task safely."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     service_name = service.__class__.__name__
@@ -269,6 +275,7 @@ async def prepare_shutdown_maintenance_tasks(runtime) -> List[Any]:
     Returns list of scheduled services that need to be stopped.
     """
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     # Collect scheduled services that need to be stopped
@@ -352,6 +359,7 @@ def _get_direct_service_references(runtime):
 async def _execute_service_stop_tasks(services_to_stop):
     """Execute stop tasks for all services."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     stop_tasks = []
@@ -375,6 +383,7 @@ async def _execute_service_stop_tasks(services_to_stop):
 async def _wait_for_service_stops(stop_tasks, service_names):
     """Wait for service stop tasks with timeout handling."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     done, pending = await asyncio.wait(stop_tasks, timeout=10.0)
@@ -393,6 +402,7 @@ async def _wait_for_service_stops(stop_tasks, service_names):
 async def _handle_hanging_services(pending, stop_tasks, service_names):
     """Handle services that didn't stop in time."""
     import asyncio
+
     logger = logging.getLogger(__name__)
 
     logger.error(f"Service shutdown timed out after 10 seconds. {len(pending)} services still running.")
@@ -446,7 +456,7 @@ async def execute_service_shutdown_sequence(runtime) -> Tuple[List[Any], List[st
     services_to_stop.sort(key=_get_service_shutdown_priority)
 
     # Execute service stops
-    stop_tasks, service_names = await _execute_service_stop_tasks(services_to_stop)
+    _, service_names = await _execute_service_stop_tasks(services_to_stop)
 
     return services_to_stop, service_names
 
@@ -604,9 +614,7 @@ def monitor_runtime_shutdown_signals(runtime: Any, shutdown_logged: bool) -> boo
     if (runtime._shutdown_event and runtime._shutdown_event.is_set()) or is_global_shutdown_requested():
         if not shutdown_logged:
             shutdown_reason = (
-                runtime._shutdown_reason
-                or runtime._shutdown_manager.get_shutdown_reason()
-                or "Unknown reason"
+                runtime._shutdown_reason or runtime._shutdown_manager.get_shutdown_reason() or "Unknown reason"
             )
             logger.critical(f"GRACEFUL SHUTDOWN TRIGGERED: {shutdown_reason}")
             return True  # Now logged
@@ -685,51 +693,55 @@ def create_adapter_lifecycle_tasks(adapters: List[Any], agent_task: Any) -> List
         adapter_name = adapter.__class__.__name__
 
         if hasattr(adapter, "run_lifecycle"):
-            lifecycle_task = asyncio.create_task(
-                adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask"
-            )
+            lifecycle_task = asyncio.create_task(adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask")
             adapter_tasks.append(lifecycle_task)
             logger.info(f"  → Starting {adapter_name} lifecycle...")
 
     return adapter_tasks
 
 
-async def wait_for_adapter_readiness(adapters: List[Any], timeout: float = 30.0) -> bool:
+async def _check_adapter_health(adapter: Any) -> bool:
+    """Check health of a single adapter."""
+    adapter_name = adapter.__class__.__name__
+    if "Discord" not in adapter_name:
+        return True
+
+    if not hasattr(adapter, "is_healthy"):
+        logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
+        return False
+
+    try:
+        is_healthy = await adapter.is_healthy()
+        if not is_healthy:
+            logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
+            return False
+        else:
+            logger.info(f"  ✓ {adapter_name} is healthy and connected")
+            return True
+    except Exception as e:
+        logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
+        return False
+
+
+async def wait_for_adapter_readiness(adapters: List[Any]) -> bool:
     """Wait for all adapters to be ready and healthy."""
     logger.info("  ⏳ Waiting for adapter connections to establish...")
-    start_time = asyncio.get_event_loop().time()
 
-    while (asyncio.get_event_loop().time() - start_time) < timeout:
-        all_adapters_ready = True
+    try:
+        async with asyncio.timeout(30.0):
+            while True:
+                health_checks = [_check_adapter_health(adapter) for adapter in adapters]
+                health_results = await asyncio.gather(*health_checks)
 
-        for adapter in adapters:
-            adapter_name = adapter.__class__.__name__
-            if "Discord" in adapter_name:
-                # Check health directly on the adapter
-                if hasattr(adapter, "is_healthy"):
-                    try:
-                        is_healthy = await adapter.is_healthy()
-                        if not is_healthy:
-                            all_adapters_ready = False
-                            logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
-                        else:
-                            logger.info(f"  ✓ {adapter_name} is healthy and connected")
-                    except Exception as e:
-                        all_adapters_ready = False
-                        logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
-                else:
-                    all_adapters_ready = False
-                    logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
+                if all(health_results):
+                    return True
 
-        if all_adapters_ready:
-            return True
-
-        await asyncio.sleep(0.5)
-
-    return False
+                await asyncio.sleep(0.5)
+    except asyncio.TimeoutError:
+        return False
 
 
-async def verify_adapter_service_registration(runtime: Any, timeout: float = 30.0) -> bool:
+async def verify_adapter_service_registration(runtime: Any) -> bool:
     """Verify that adapter services are properly registered and available."""
     from ciris_engine.schemas.base import ServiceType
 
@@ -739,26 +751,24 @@ async def verify_adapter_service_registration(runtime: Any, timeout: float = 30.
     # Give services a moment to settle after registration
     await asyncio.sleep(0.1)
 
-    start_time = asyncio.get_event_loop().time()
+    try:
+        async with asyncio.timeout(30.0):
+            while True:
+                # Check if services are actually available
+                if runtime.service_registry:
+                    try:
+                        test_service = await runtime.service_registry.get_service(
+                            handler="test", service_type=ServiceType.COMMUNICATION, required_capabilities=["send_message"]
+                        )
+                        if test_service:
+                            logger.info("  ✅ All adapters connected and services registered!")
+                            return True
+                    except Exception as e:
+                        logger.debug(f"Service registration check failed: {e}")
 
-    while (asyncio.get_event_loop().time() - start_time) < timeout:
-        # Check if services are actually available
-        if runtime.service_registry:
-            try:
-                test_service = await runtime.service_registry.get_service(
-                    handler="test",
-                    service_type=ServiceType.COMMUNICATION,
-                    required_capabilities=["send_message"]
-                )
-                if test_service:
-                    logger.info("  ✅ All adapters connected and services registered!")
-                    return True
-            except Exception as e:
-                logger.debug(f"Service registration check failed: {e}")
-
-        await asyncio.sleep(0.5)
-
-    return False
+                await asyncio.sleep(0.5)
+    except asyncio.TimeoutError:
+        return False
 
 
 # ============================================================================

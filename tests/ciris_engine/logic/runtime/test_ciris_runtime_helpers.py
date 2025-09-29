@@ -5,28 +5,29 @@ Ensures 80%+ coverage for all helper functions with production-grade testing.
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
 from ciris_engine.logic.runtime.ciris_runtime_helpers import (
-    _get_service_shutdown_priority,
     _SERVICE_SHUTDOWN_PRIORITIES,
-    validate_shutdown_preconditions,
-    prepare_shutdown_maintenance_tasks,
-    execute_final_maintenance_tasks,
-    handle_agent_processor_shutdown,
-    handle_adapter_shutdown_cleanup,
-    execute_service_shutdown_sequence,
-    preserve_critical_system_state,
-    finalize_shutdown_logging,
-    cleanup_runtime_resources,
-    validate_shutdown_completion,
     _collect_scheduled_services,
+    _execute_shutdown_processor_directly,
+    _get_service_shutdown_priority,
+    _handle_processing_loop_shutdown,
     _stop_service_task,
     _transition_agent_to_shutdown_state,
-    _handle_processing_loop_shutdown,
-    _execute_shutdown_processor_directly,
     _wait_for_shutdown_processor_completion,
+    cleanup_runtime_resources,
+    execute_final_maintenance_tasks,
+    execute_service_shutdown_sequence,
+    finalize_shutdown_logging,
+    handle_adapter_shutdown_cleanup,
+    handle_agent_processor_shutdown,
+    prepare_shutdown_maintenance_tasks,
+    preserve_critical_system_state,
+    validate_shutdown_completion,
+    validate_shutdown_preconditions,
 )
 
 
@@ -149,7 +150,7 @@ class TestStopServiceTask:
     @pytest.mark.asyncio
     async def test_cancelled_error_handling(self):
         """Test proper CancelledError handling."""
-        service = Mock(spec=['__class__'])  # Limit mock attributes
+        service = Mock(spec=["__class__"])  # Limit mock attributes
         service.__class__.__name__ = "TestService"
 
         # Create a task and cancel it immediately to trigger CancelledError
@@ -174,7 +175,7 @@ class TestPrepareShutdownMaintenanceTasks:
     @pytest.mark.asyncio
     async def test_successful_maintenance_prep(self, mock_runtime_with_services):
         """Test successful maintenance task preparation."""
-        with patch('ciris_engine.logic.runtime.ciris_runtime_helpers._stop_service_task') as mock_stop:
+        with patch("ciris_engine.logic.runtime.ciris_runtime_helpers._stop_service_task") as mock_stop:
             mock_stop.return_value = None
 
             result = await prepare_shutdown_maintenance_tasks(mock_runtime_with_services)
@@ -186,7 +187,7 @@ class TestPrepareShutdownMaintenanceTasks:
     @pytest.mark.asyncio
     async def test_maintenance_with_task_error(self, mock_runtime_with_services):
         """Test handling of service stop errors."""
-        with patch('ciris_engine.logic.runtime.ciris_runtime_helpers._stop_service_task') as mock_stop:
+        with patch("ciris_engine.logic.runtime.ciris_runtime_helpers._stop_service_task") as mock_stop:
             mock_stop.side_effect = Exception("Stop failed")
 
             result = await prepare_shutdown_maintenance_tasks(mock_runtime_with_services)
@@ -259,9 +260,7 @@ class TestAgentProcessorShutdown:
         agent_processor = mock_runtime_with_agent_processor.agent_processor
         agent_processor.state_manager.can_transition_to.return_value = False
 
-        result = await _transition_agent_to_shutdown_state(
-            mock_runtime_with_agent_processor, AgentState.WORK
-        )
+        result = await _transition_agent_to_shutdown_state(mock_runtime_with_agent_processor, AgentState.WORK)
         assert result is False
 
 
@@ -309,8 +308,9 @@ class TestServiceShutdownSequence:
     async def test_service_collection_and_priority(self, mock_runtime_with_services, priority_services):
         """Test service collection and priority ordering."""
         # Add priority services to the mock
-        all_services = list(mock_runtime_with_services.service_registry.get_all_services()) + \
-                      [data['service'] for data in priority_services.values()]
+        all_services = list(mock_runtime_with_services.service_registry.get_all_services()) + [
+            data["service"] for data in priority_services.values()
+        ]
 
         mock_runtime_with_services.service_registry.get_all_services.return_value = all_services
 
@@ -352,7 +352,7 @@ class TestShutdownLogging:
     @pytest.mark.asyncio
     async def test_successful_logging(self, mock_runtime):
         """Test successful shutdown logging."""
-        with patch('ciris_engine.logic.utils.shutdown_manager.get_shutdown_manager') as mock_get_manager:
+        with patch("ciris_engine.logic.utils.shutdown_manager.get_shutdown_manager") as mock_get_manager:
             shutdown_manager = Mock()
             shutdown_manager.execute_async_handlers = AsyncMock()
             mock_get_manager.return_value = shutdown_manager
@@ -363,7 +363,7 @@ class TestShutdownLogging:
     @pytest.mark.asyncio
     async def test_logging_error_handling(self, mock_runtime):
         """Test error handling in shutdown logging."""
-        with patch('ciris_engine.logic.utils.shutdown_manager.get_shutdown_manager') as mock_get_manager:
+        with patch("ciris_engine.logic.utils.shutdown_manager.get_shutdown_manager") as mock_get_manager:
             shutdown_manager = Mock()
             shutdown_manager.execute_async_handlers = AsyncMock(side_effect=Exception("Handler failed"))
             mock_get_manager.return_value = shutdown_manager
@@ -407,7 +407,7 @@ class TestShutdownCompletion:
     def test_completion_no_event(self):
         """Test completion when no shutdown event exists."""
         runtime = Mock()
-        delattr(runtime, '_shutdown_event')  # Remove shutdown event
+        delattr(runtime, "_shutdown_event")  # Remove shutdown event
 
         validate_shutdown_completion(runtime)
         assert runtime._shutdown_complete is True

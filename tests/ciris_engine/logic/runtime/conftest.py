@@ -5,18 +5,19 @@ Provides robust, reusable fixtures for testing ciris_runtime_helpers.py function
 """
 
 import asyncio
+from typing import Any, List
+from unittest.mock import AsyncMock, MagicMock, Mock
+
 import pytest
-from unittest.mock import AsyncMock, Mock, MagicMock
-from typing import List, Any
 
 from ciris_engine.logic.runtime.ciris_runtime_helpers import _SERVICE_SHUTDOWN_PRIORITIES
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 
-
 # =============================================================================
 # SERVICE FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def mock_scheduled_service():
@@ -59,6 +60,7 @@ def mock_services_collection(mock_scheduled_service, mock_scheduler_service, moc
 # PRIORITY SERVICE FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def priority_services():
     """Services with different shutdown priorities."""
@@ -71,17 +73,14 @@ def priority_services():
         "MemoryService": 9,
         "TimeService": 11,
         "ShutdownService": 12,
-        "UnknownService": 5  # Default
+        "UnknownService": 5,  # Default
     }
 
     for service_name, expected_priority in priority_mapping.items():
         service = Mock()
         service.__class__.__name__ = service_name
         service.stop = AsyncMock()
-        services[service_name] = {
-            'service': service,
-            'priority': expected_priority
-        }
+        services[service_name] = {"service": service, "priority": expected_priority}
 
     return services
 
@@ -89,6 +88,7 @@ def priority_services():
 # =============================================================================
 # RUNTIME FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def mock_runtime():
@@ -139,6 +139,7 @@ def mock_runtime_with_identity(mock_runtime):
 # AGENT PROCESSOR FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def mock_agent_processor():
     """Mock agent processor with state manager based on real AgentState schema."""
@@ -177,6 +178,7 @@ def mock_runtime_with_agent_processor(mock_runtime, mock_agent_processor):
 # ADAPTER FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def mock_adapters():
     """Mock adapters for testing adapter shutdown - schema-based behavior."""
@@ -189,9 +191,7 @@ def mock_adapters():
 
         # Mock adapter config based on schema
         adapter.config = AdapterConfig(
-            adapter_type=f"mock_type_{i+1}",
-            enabled=True,
-            settings={"timeout": 30, "max_retries": 3}
+            adapter_type=f"mock_type_{i+1}", enabled=True, settings={"timeout": 30, "max_retries": 3}
         )
 
         adapters.append(adapter)
@@ -226,6 +226,7 @@ def mock_runtime_with_adapters(mock_runtime, mock_adapters, mock_bus_manager):
 # SERVICE STOP TASK FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def service_with_real_task(event_loop):
     """Service with a real asyncio task."""
@@ -249,8 +250,8 @@ def service_with_scheduler_only():
     service.stop_scheduler = AsyncMock()
 
     # Explicitly ensure no _task attribute
-    if hasattr(service, '_task'):
-        delattr(service, '_task')
+    if hasattr(service, "_task"):
+        delattr(service, "_task")
 
     return service
 
@@ -258,6 +259,7 @@ def service_with_scheduler_only():
 # =============================================================================
 # MAINTENANCE FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def mock_runtime_with_maintenance(mock_runtime):
@@ -282,21 +284,18 @@ def mock_runtime_with_maintenance(mock_runtime):
 # ERROR HANDLING FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def failing_maintenance_runtime(mock_runtime):
     """Mock runtime with failing maintenance services."""
     # Mock failing maintenance service
     maintenance_service = AsyncMock()
-    maintenance_service.perform_startup_cleanup = AsyncMock(
-        side_effect=Exception("Maintenance failed")
-    )
+    maintenance_service.perform_startup_cleanup = AsyncMock(side_effect=Exception("Maintenance failed"))
     mock_runtime.maintenance_service = maintenance_service
 
     # Mock failing TSDB service
     tsdb_service = AsyncMock()
-    tsdb_service._run_consolidation = AsyncMock(
-        side_effect=Exception("TSDB failed")
-    )
+    tsdb_service._run_consolidation = AsyncMock(side_effect=Exception("TSDB failed"))
 
     service_initializer = Mock()
     service_initializer.tsdb_consolidation_service = tsdb_service
@@ -319,19 +318,22 @@ def failing_maintenance_runtime(mock_runtime):
 # PARAMETER SETS
 # =============================================================================
 
+
 @pytest.fixture(params=list(_SERVICE_SHUTDOWN_PRIORITIES.keys()))
 def service_priority_keyword(request):
     """Parameterized fixture for all service priority keywords."""
     return request.param
 
 
-@pytest.fixture(params=[
-    ("TSDBConsolidationService", 0),
-    ("TaskSchedulerService", 1),
-    ("MemoryService", 9),
-    ("TimeService", 11),
-    ("UnknownTypeService", 5)
-])
+@pytest.fixture(
+    params=[
+        ("TSDBConsolidationService", 0),
+        ("TaskSchedulerService", 1),
+        ("MemoryService", 9),
+        ("TimeService", 11),
+        ("UnknownTypeService", 5),
+    ]
+)
 def service_with_expected_priority(request):
     """Parameterized fixture for services with their expected priorities."""
     service_name, expected_priority = request.param

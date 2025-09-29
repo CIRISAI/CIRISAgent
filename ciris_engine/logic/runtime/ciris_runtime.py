@@ -980,7 +980,7 @@ class CIRISRuntime:
             raise RuntimeError("Adapters failed to become ready within timeout")
 
         # Register services and verify availability
-        services_available = await verify_adapter_service_registration(self, timeout=30.0)
+        services_available = await verify_adapter_service_registration(self)
         if not services_available:
             raise RuntimeError("Failed to establish adapter connections within timeout")
 
@@ -1055,7 +1055,7 @@ class CIRISRuntime:
             secrets_service=self.secrets_service,
         )
 
-    async def run(self, num_rounds: Optional[int] = None) -> None:
+    async def run(self, _: Optional[int] = None) -> None:
         """Run the agent processing loop with shutdown monitoring."""
         from .ciris_runtime_helpers import (
             finalize_runtime_execution,
@@ -1094,7 +1094,9 @@ class CIRISRuntime:
                     break  # Exit the while loop
                 else:
                     # Handle other task completions/failures
-                    excluded_tasks = {t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]}
+                    excluded_tasks = {
+                        t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]
+                    }
                     handle_runtime_task_failures(self, done, excluded_tasks)
 
             # Finalize execution

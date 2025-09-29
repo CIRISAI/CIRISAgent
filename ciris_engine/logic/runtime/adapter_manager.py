@@ -561,10 +561,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             instance = self.loaded_adapters[adapter_id]
 
             # Determine health status using helper
-            health_status, health_details = await self._determine_adapter_health_status(instance)
+            health_status, _ = await self._determine_adapter_health_status(instance)
 
             # Extract service details using helper
-            service_details = self._extract_adapter_service_details(instance)
+            _ = self._extract_adapter_service_details(instance)
 
             # Get tools information using helper
             tools = await self._get_adapter_tools_info(adapter_id, instance)

@@ -359,6 +359,7 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
 
     # Convert ConscienceCheckResult to ConscienceResult for the step data
     from ciris_engine.schemas.conscience.results import ConscienceResult
+
     conscience_result = ConscienceResult(
         conscience_name="conscience_execution",
         passed=conscience_check_result.passed,
@@ -367,11 +368,23 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
         override_action=override_reason,
         details={
             "status": conscience_check_result.status.value if conscience_check_result.status else "unknown",
-            "entropy_passed": conscience_check_result.entropy_check.passed if conscience_check_result.entropy_check else None,
-            "coherence_passed": conscience_check_result.coherence_check.passed if conscience_check_result.coherence_check else None,
-            "optimization_veto": conscience_check_result.optimization_veto_check.decision if conscience_check_result.optimization_veto_check else None,
-            "epistemic_humility": conscience_check_result.epistemic_humility_check.epistemic_certainty if conscience_check_result.epistemic_humility_check else None,
-        }
+            "entropy_passed": (
+                conscience_check_result.entropy_check.passed if conscience_check_result.entropy_check else None
+            ),
+            "coherence_passed": (
+                conscience_check_result.coherence_check.passed if conscience_check_result.coherence_check else None
+            ),
+            "optimization_veto": (
+                conscience_check_result.optimization_veto_check.decision
+                if conscience_check_result.optimization_veto_check
+                else None
+            ),
+            "epistemic_humility": (
+                conscience_check_result.epistemic_humility_check.epistemic_certainty
+                if conscience_check_result.epistemic_humility_check
+                else None
+            ),
+        },
     )
 
     return ConscienceExecutionStepData(

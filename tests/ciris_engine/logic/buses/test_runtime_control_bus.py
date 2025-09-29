@@ -447,20 +447,12 @@ class TestRuntimeControlBus:
         tool1 = ToolInfo(
             name="tool1",
             description="Tool 1",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
         tool2 = ToolInfo(
             name="tool2",
             description="Tool 2",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
 
         expected_info = AdapterInfo(

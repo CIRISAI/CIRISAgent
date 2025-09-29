@@ -92,7 +92,9 @@ class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
 
     key: str = Field(..., description="Attribute key")
-    value: Dict[str, Any] = Field(..., description="Attribute value in OTLP format")  # NOQA - OTLP standard requires Dict[str, Any]
+    value: Dict[str, Any] = Field(
+        ..., description="Attribute value in OTLP format"
+    )  # NOQA - OTLP standard requires Dict[str, Any]
 
 
 class ConfigValueMap(BaseModel):
@@ -418,7 +420,8 @@ class ThoughtProcessingResult(BaseModel):
 
     # Selection criteria used
     selection_criteria: TaskSelectionCriteria = Field(
-        default_factory=TaskSelectionCriteria, description="Criteria used to select tasks (priority, age, channel, etc.)"
+        default_factory=TaskSelectionCriteria,
+        description="Criteria used to select tasks (priority, age, channel, etc.)",
     )
 
     # Metrics

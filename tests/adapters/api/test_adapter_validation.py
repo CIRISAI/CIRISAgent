@@ -40,11 +40,7 @@ class TestAdapterValidation:
         test_tool = ToolInfo(
             name="test_tool",
             description="Test tool for validation",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
 
         # This should not raise validation error
@@ -81,20 +77,12 @@ class TestAdapterValidation:
         tool1 = ToolInfo(
             name="tool1",
             description="Test tool 1",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
         tool2 = ToolInfo(
             name="tool2",
             description="Test tool 2",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
         mock_adapter_info.tools = [tool1, tool2]
 

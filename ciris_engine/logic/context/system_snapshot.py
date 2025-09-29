@@ -126,7 +126,9 @@ async def build_system_snapshot(
         "channel_id": channel_id,
         "channel_context": channel_context,  # Preserve the full ChannelContext object
         # Identity graph data - loaded once per snapshot
-        "agent_identity": {k: v for k, v in identity_data.model_dump().items() if v is not None},  # Convert IdentityData to dict, exclude None values
+        "agent_identity": {
+            k: v for k, v in identity_data.model_dump().items() if v is not None
+        },  # Convert IdentityData to dict, exclude None values
         "identity_purpose": identity_purpose,
         "identity_capabilities": identity_capabilities,
         "identity_restrictions": identity_restrictions,

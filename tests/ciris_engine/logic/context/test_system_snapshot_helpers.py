@@ -513,7 +513,7 @@ class TestSystemContext:
         expected_data = {
             "total_secrets_stored": 5,
             "secrets_filter_version": 2,
-            "detected_secrets": ["API_KEY_*", "TOKEN_*"]
+            "detected_secrets": ["API_KEY_*", "TOKEN_*"],
         }
 
         with patch("ciris_engine.logic.context.system_snapshot_helpers.build_secrets_snapshot") as mock_build:

@@ -197,8 +197,15 @@ def mock_api_runtime_control_service():
     mock.get_processor_queue_status = AsyncMock(return_value=api_queue_status)
 
     # Add single step functionality for single step endpoint tests
-    from ciris_engine.schemas.services.runtime_control import StepPoint, StepResultData, PerformDMAsStepData, TraceContext, SpanAttribute
     from datetime import datetime
+
+    from ciris_engine.schemas.services.runtime_control import (
+        PerformDMAsStepData,
+        SpanAttribute,
+        StepPoint,
+        StepResultData,
+        TraceContext,
+    )
 
     # Create proper StepResultData with required fields
     step_data = PerformDMAsStepData(
@@ -208,7 +215,7 @@ def mock_api_runtime_control_service():
         processing_time_ms=250.0,
         success=True,
         dma_results="ethical,common_sense",
-        context="test context for DMA execution"
+        context="test context for DMA execution",
     )
 
     trace_context = TraceContext(
@@ -218,7 +225,7 @@ def mock_api_runtime_control_service():
         operation_name="single_step_perform_dmas",
         start_time_ns=1000000000,
         end_time_ns=1000250000,
-        duration_ns=250000
+        duration_ns=250000,
     )
 
     step_result = StepResultData(
@@ -229,7 +236,7 @@ def mock_api_runtime_control_service():
         task_id="task_001",
         step_data=step_data,
         trace_context=trace_context,
-        span_attributes=[SpanAttribute(key="dmas_executed", value={"stringValue": "ethical,common_sense"})]
+        span_attributes=[SpanAttribute(key="dmas_executed", value={"stringValue": "ethical,common_sense"})],
     )
 
     single_step_response = ProcessorControlResponse(
@@ -254,7 +261,13 @@ def mock_api_runtime_control_service():
 @pytest.fixture
 def single_step_control_response():
     """Create a ProcessorControlResponse for single step operation with H3ERE data."""
-    from ciris_engine.schemas.services.runtime_control import StepPoint, StepResultData, PerformDMAsStepData, TraceContext, SpanAttribute
+    from ciris_engine.schemas.services.runtime_control import (
+        PerformDMAsStepData,
+        SpanAttribute,
+        StepPoint,
+        StepResultData,
+        TraceContext,
+    )
 
     # Create proper StepResultData with required fields
     step_data = PerformDMAsStepData(
@@ -264,7 +277,7 @@ def single_step_control_response():
         processing_time_ms=150.0,
         success=True,
         dma_results="ethical:PROCEED:0.85",
-        context="test ethical DMA context"
+        context="test ethical DMA context",
     )
 
     trace_context = TraceContext(
@@ -274,7 +287,7 @@ def single_step_control_response():
         operation_name="single_step_perform_dmas_fixture",
         start_time_ns=1000000000,
         end_time_ns=1000150000,
-        duration_ns=150000
+        duration_ns=150000,
     )
 
     step_result = StepResultData(
@@ -287,8 +300,8 @@ def single_step_control_response():
         trace_context=trace_context,
         span_attributes=[
             SpanAttribute(key="ethical_dma_decision", value={"stringValue": "PROCEED"}),
-            SpanAttribute(key="ethical_dma_confidence", value={"doubleValue": 0.85})
-        ]
+            SpanAttribute(key="ethical_dma_confidence", value={"doubleValue": 0.85}),
+        ],
     )
 
     return ProcessorControlResponse(

@@ -17,7 +17,6 @@ ADAPTER_TYPE_DESC = "Adapter type"
 IS_RUNNING_DESC = "Whether adapter is running"
 
 
-
 class AdapterConfig(BaseModel):
     """Configuration for an adapter."""
 
@@ -69,9 +68,7 @@ class RuntimeAdapterStatus(BaseModel):
     config_params: AdapterConfig = Field(..., description="Adapter configuration")
     metrics: Optional[AdapterMetrics] = Field(None, description="Adapter metrics")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
-    tools: Optional[List[ToolInfo]] = Field(
-        None, description="Tools provided by adapter"
-    )
+    tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
 
 
 class AdapterListResponse(BaseModel):

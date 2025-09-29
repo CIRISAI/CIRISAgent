@@ -465,9 +465,8 @@ class TestCreateStreamUpdateFromStepResults:
     def test_create_stream_update_single_result(self):
         """Test creating stream update from single step result."""
         from datetime import datetime
-        from ciris_engine.schemas.services.runtime_control import (
-            StepResultData, PerformDMAsStepData, TraceContext
-        )
+
+        from ciris_engine.schemas.services.runtime_control import PerformDMAsStepData, StepResultData, TraceContext
 
         # Create proper step data
         step_data = PerformDMAsStepData(
@@ -477,7 +476,7 @@ class TestCreateStreamUpdateFromStepResults:
             processing_time_ms=150.0,
             success=True,
             dma_results="Test DMA analysis",
-            context="test context"
+            context="test context",
         )
 
         # Create proper trace context
@@ -488,7 +487,7 @@ class TestCreateStreamUpdateFromStepResults:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         step_results = [
@@ -500,7 +499,7 @@ class TestCreateStreamUpdateFromStepResults:
                 task_id="test-task",
                 step_data=step_data,
                 trace_context=trace_context,
-                span_attributes=[]
+                span_attributes=[],
             )
         ]
 
@@ -521,9 +520,8 @@ class TestCreateStreamUpdateFromStepResults:
     def test_create_stream_update_multiple_results(self):
         """Test creating stream update from multiple step results."""
         from datetime import datetime
-        from ciris_engine.schemas.services.runtime_control import (
-            StepResultData, PerformDMAsStepData, TraceContext
-        )
+
+        from ciris_engine.schemas.services.runtime_control import PerformDMAsStepData, StepResultData, TraceContext
 
         # Create proper trace context
         trace_context = TraceContext(
@@ -533,7 +531,7 @@ class TestCreateStreamUpdateFromStepResults:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         step_results = []
@@ -546,19 +544,21 @@ class TestCreateStreamUpdateFromStepResults:
                 processing_time_ms=float(i * 50),
                 success=True,
                 dma_results=f"DMA results {i}",
-                context=f"context {i}"
+                context=f"context {i}",
             )
 
-            step_results.append(StepResultData(
-                step_point=StepPoint.PERFORM_DMAS.value,
-                success=True,
-                processing_time_ms=float(i * 50),
-                thought_id=f"thought-{i}",
-                task_id=f"task-{i}",
-                step_data=step_data,
-                trace_context=trace_context,
-                span_attributes=[]
-            ))
+            step_results.append(
+                StepResultData(
+                    step_point=StepPoint.PERFORM_DMAS.value,
+                    success=True,
+                    processing_time_ms=float(i * 50),
+                    thought_id=f"thought-{i}",
+                    task_id=f"task-{i}",
+                    step_data=step_data,
+                    trace_context=trace_context,
+                    span_attributes=[],
+                )
+            )
 
         update = create_stream_update_from_step_results(step_results, 5)
 
@@ -574,10 +574,13 @@ class TestCreateStreamUpdateFromStepResults:
     def test_create_stream_update_failed_result(self):
         """Test creating stream update with failed step result."""
         from datetime import datetime
-        from ciris_engine.schemas.services.runtime_control import (
-            StepResultData, ConscienceExecutionStepData, TraceContext
-        )
+
         from ciris_engine.schemas.conscience.results import ConscienceResult
+        from ciris_engine.schemas.services.runtime_control import (
+            ConscienceExecutionStepData,
+            StepResultData,
+            TraceContext,
+        )
 
         # Create conscience result
         conscience_result = ConscienceResult(
@@ -585,7 +588,7 @@ class TestCreateStreamUpdateFromStepResults:
             passed=False,
             severity="error",
             message="Conscience check failed",
-            details={"reason": "Test failure reason"}
+            details={"reason": "Test failure reason"},
         )
 
         # Create proper step data
@@ -599,7 +602,7 @@ class TestCreateStreamUpdateFromStepResults:
             selected_action="test_action",
             conscience_passed=False,
             action_result="failed",
-            conscience_result=conscience_result
+            conscience_result=conscience_result,
         )
 
         # Create proper trace context
@@ -610,7 +613,7 @@ class TestCreateStreamUpdateFromStepResults:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         step_results = [
@@ -622,7 +625,7 @@ class TestCreateStreamUpdateFromStepResults:
                 task_id="failed-task",
                 step_data=step_data,
                 trace_context=trace_context,
-                span_attributes=[]
+                span_attributes=[],
             )
         ]
 
@@ -655,9 +658,8 @@ class TestCreateStreamUpdateFromStepResults:
         populates the typed step_result field.
         """
         from datetime import datetime
-        from ciris_engine.schemas.services.runtime_control import (
-            StepResultData, GatherContextStepData, TraceContext
-        )
+
+        from ciris_engine.schemas.services.runtime_control import GatherContextStepData, StepResultData, TraceContext
 
         # Create proper step data
         step_data = GatherContextStepData(
@@ -666,7 +668,7 @@ class TestCreateStreamUpdateFromStepResults:
             task_id="test-task-typed",
             processing_time_ms=120.0,
             success=True,
-            context="Context gathered successfully"
+            context="Context gathered successfully",
         )
 
         # Create proper trace context
@@ -677,7 +679,7 @@ class TestCreateStreamUpdateFromStepResults:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         step_results = [
@@ -689,7 +691,7 @@ class TestCreateStreamUpdateFromStepResults:
                 task_id="test-task-typed",
                 step_data=step_data,
                 trace_context=trace_context,
-                span_attributes=[]
+                span_attributes=[],
             )
         ]
 
@@ -762,8 +764,13 @@ class TestHelperFunctions:
     def test_create_typed_step_result_valid_data(self):
         """Test creating typed step result with valid data."""
         from datetime import datetime
+
         from ciris_engine.schemas.services.runtime_control import (
-            StepPoint, StepResultData, GatherContextStepData, TraceContext, SpanAttribute
+            GatherContextStepData,
+            SpanAttribute,
+            StepPoint,
+            StepResultData,
+            TraceContext,
         )
         from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
 
@@ -774,7 +781,7 @@ class TestHelperFunctions:
             task_id="test-task",
             processing_time_ms=100.0,
             success=True,
-            context="test context data"
+            context="test context data",
         )
 
         # Create proper trace context
@@ -785,7 +792,7 @@ class TestHelperFunctions:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         # Create StepResultData object
@@ -797,7 +804,7 @@ class TestHelperFunctions:
             task_id="test-task",
             step_data=step_data,
             trace_context=trace_context,
-            span_attributes=[]
+            span_attributes=[],
         )
 
         result = _create_typed_step_result(raw_result, StepPoint.GATHER_CONTEXT)
@@ -811,8 +818,12 @@ class TestHelperFunctions:
     def test_create_typed_step_result_no_model(self):
         """Test creating typed step result when no model exists."""
         from datetime import datetime
+
         from ciris_engine.schemas.services.runtime_control import (
-            StepPoint, StepResultData, FinalizeActionStepData, TraceContext
+            FinalizeActionStepData,
+            StepPoint,
+            StepResultData,
+            TraceContext,
         )
         from ciris_engine.schemas.streaming.reasoning_stream import _create_typed_step_result
 
@@ -824,7 +835,7 @@ class TestHelperFunctions:
             success=True,
             selected_action="test action",
             selection_reasoning="test reasoning",
-            conscience_passed=True
+            conscience_passed=True,
         )
 
         # Create proper trace context
@@ -835,7 +846,7 @@ class TestHelperFunctions:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         # Create StepResultData object
@@ -847,7 +858,7 @@ class TestHelperFunctions:
             task_id="test-task",
             step_data=step_data,
             trace_context=trace_context,
-            span_attributes=[]
+            span_attributes=[],
         )
 
         # Use a step that might not have a mapped result model
@@ -859,8 +870,12 @@ class TestHelperFunctions:
     def test_create_thought_stream_data(self):
         """Test creating thought stream data from raw result."""
         from datetime import datetime
+
         from ciris_engine.schemas.services.runtime_control import (
-            StepPoint, StepResultData, GatherContextStepData, TraceContext
+            GatherContextStepData,
+            StepPoint,
+            StepResultData,
+            TraceContext,
         )
         from ciris_engine.schemas.streaming.reasoning_stream import _create_thought_stream_data
 
@@ -871,7 +886,7 @@ class TestHelperFunctions:
             task_id="test-task",
             processing_time_ms=150.0,
             success=True,
-            context="Test content"
+            context="Test content",
         )
 
         # Create proper trace context
@@ -882,7 +897,7 @@ class TestHelperFunctions:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         # Create StepResultData object
@@ -894,7 +909,7 @@ class TestHelperFunctions:
             task_id="test-task",
             step_data=step_data,
             trace_context=trace_context,
-            span_attributes=[]
+            span_attributes=[],
         )
 
         result = _create_thought_stream_data(raw_result)
@@ -909,8 +924,13 @@ class TestHelperFunctions:
     def test_create_step_summary(self):
         """Test creating step summary for a step point."""
         from datetime import datetime
+
         from ciris_engine.schemas.services.runtime_control import (
-            StepPoint, StepResultData, GatherContextStepData, StartRoundStepData, TraceContext
+            GatherContextStepData,
+            StartRoundStepData,
+            StepPoint,
+            StepResultData,
+            TraceContext,
         )
         from ciris_engine.schemas.streaming.reasoning_stream import _create_step_summary
 
@@ -922,7 +942,7 @@ class TestHelperFunctions:
             operation_name="test operation",
             start_time_ns=1000000,
             end_time_ns=2000000,
-            duration_ns=1000000
+            duration_ns=1000000,
         )
 
         # Create gather_context step data (success)
@@ -931,7 +951,7 @@ class TestHelperFunctions:
             thought_id="test-thought-1",
             processing_time_ms=100.0,
             success=True,
-            context="test context 1"
+            context="test context 1",
         )
 
         # Create gather_context step data (failure)
@@ -940,7 +960,7 @@ class TestHelperFunctions:
             thought_id="test-thought-2",
             processing_time_ms=200.0,
             success=False,
-            context="test context 2"
+            context="test context 2",
         )
 
         # Create other step data
@@ -950,7 +970,7 @@ class TestHelperFunctions:
             processing_time_ms=50.0,
             success=True,
             thoughts_processed=1,
-            round_started=True
+            round_started=True,
         )
 
         step_results = [
@@ -962,7 +982,7 @@ class TestHelperFunctions:
                 task_id="test-task",
                 step_data=step_data_1,
                 trace_context=trace_context,
-                span_attributes=[]
+                span_attributes=[],
             ),
             StepResultData(
                 step_point=StepPoint.GATHER_CONTEXT.value,
@@ -972,7 +992,7 @@ class TestHelperFunctions:
                 task_id="test-task",
                 step_data=step_data_2,
                 trace_context=trace_context,
-                span_attributes=[]
+                span_attributes=[],
             ),
             StepResultData(
                 step_point=StepPoint.START_ROUND.value,
@@ -982,7 +1002,7 @@ class TestHelperFunctions:
                 task_id="test-task",
                 step_data=step_data_3,
                 trace_context=trace_context,
-                span_attributes=[]
+                span_attributes=[],
             ),
         ]
 

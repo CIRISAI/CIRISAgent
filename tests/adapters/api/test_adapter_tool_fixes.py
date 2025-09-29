@@ -36,11 +36,7 @@ class TestAdapterMetricsValidation:
         test_tool = ToolInfo(
             name="test_tool",
             description="Test tool for validation",
-            parameters=ToolParameterSchema(
-                type="object",
-                properties={},
-                required=[]
-            )
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         )
 
         # This should not raise validation error (was failing when metrics was dict)

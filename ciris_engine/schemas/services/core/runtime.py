@@ -224,7 +224,9 @@ class ConfigSnapshot(BaseModel):
     version: str = Field(..., description="Configuration version")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sensitive_keys: List[str] = Field(default_factory=list, description="Keys containing sensitive data")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")  # NOQA - Extensible metadata pattern
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata"
+    )  # NOQA - Extensible metadata pattern
 
 
 class ConfigOperationResponse(BaseModel):

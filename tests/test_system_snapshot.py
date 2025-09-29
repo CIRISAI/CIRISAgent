@@ -229,6 +229,7 @@ class TestBuildSystemSnapshot:
             "ciris_engine.logic.context.system_snapshot._get_secrets_data", new_callable=AsyncMock
         ) as mock_build:
             from ciris_engine.schemas.services.graph_core import SecretsData
+
             mock_build.return_value = SecretsData(
                 detected_secrets=["API_KEY_*", "TOKEN_*"],
                 secrets_count=5,

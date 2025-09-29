@@ -229,39 +229,43 @@ def _create_typed_step_result(raw_result: StepResultData, step_point: StepPoint)
             "thought_id": raw_result.thought_id,
             "task_id": raw_result.task_id,
             "processing_time_ms": raw_result.processing_time_ms,
-            "error": getattr(raw_result, 'error', None) if not raw_result.success else None,
+            "error": getattr(raw_result, "error", None) if not raw_result.success else None,
             **raw_result.step_data.model_dump(),
         }
 
         # Intelligent field mapping for rich debugging and analysis
         if step_point == StepPoint.GATHER_CONTEXT:
             # Transform context data for StepResultGatherContext
-            context_data = getattr(raw_result.step_data, 'context', '')
-            if 'summary' not in combined_data and context_data:
-                combined_data['summary'] = context_data[:200] + "..." if len(context_data) > 200 else context_data
-            if 'context_size' not in combined_data:
+            context_data = getattr(raw_result.step_data, "context", "")
+            if "summary" not in combined_data and context_data:
+                combined_data["summary"] = context_data[:200] + "..." if len(context_data) > 200 else context_data
+            if "context_size" not in combined_data:
                 # Calculate meaningful context size (word count, item count, etc.)
-                combined_data['context_size'] = len(context_data.split()) if context_data else 0
+                combined_data["context_size"] = len(context_data.split()) if context_data else 0
 
         elif step_point == StepPoint.PERFORM_DMAS:
             # Enrich DMA results with analysis metadata
-            dma_results = getattr(raw_result.step_data, 'dma_results', '')
-            if 'result_count' not in combined_data and dma_results:
+            dma_results = getattr(raw_result.step_data, "dma_results", "")
+            if "result_count" not in combined_data and dma_results:
                 # Count decision points, approvals, rejections for debugging
-                combined_data['result_count'] = len([r for r in dma_results.split() if r in ['approve', 'reject', 'defer']])
+                combined_data["result_count"] = len(
+                    [r for r in dma_results.split() if r in ["approve", "reject", "defer"]]
+                )
 
         elif step_point == StepPoint.CONSCIENCE_EXECUTION:
             # Enhance conscience data with debugging metadata
-            if hasattr(raw_result.step_data, 'conscience_result'):
+            if hasattr(raw_result.step_data, "conscience_result"):
                 conscience_result = raw_result.step_data.conscience_result
-                if hasattr(conscience_result, 'severity'):
-                    combined_data['severity_level'] = conscience_result.severity
-                if hasattr(conscience_result, 'details') and isinstance(conscience_result.details, dict):
-                    combined_data['details_count'] = len(conscience_result.details)
+                if hasattr(conscience_result, "severity"):
+                    combined_data["severity_level"] = conscience_result.severity
+                if hasattr(conscience_result, "details") and isinstance(conscience_result.details, dict):
+                    combined_data["details_count"] = len(conscience_result.details)
 
         return step_result_model(**combined_data)
     except Exception as e:
-        logger.warning(f"Could not create typed step result for {step_point.value}: {e}. " f"Raw data: {raw_result.step_data}")
+        logger.warning(
+            f"Could not create typed step result for {step_point.value}: {e}. " f"Raw data: {raw_result.step_data}"
+        )
         return None
 
 
@@ -293,10 +297,10 @@ def _create_thought_stream_data(raw_result: StepResultData) -> ThoughtStreamData
         current_step_started_at=datetime.now(),
         processing_time_ms=raw_result.processing_time_ms,
         total_processing_time_ms=raw_result.processing_time_ms,
-        content_preview=str(getattr(raw_result.step_data, 'thought_content', ''))[:200],
-        thought_type=getattr(raw_result.step_data, 'thought_type', 'task_execution'),
+        content_preview=str(getattr(raw_result.step_data, "thought_content", ""))[:200],
+        thought_type=getattr(raw_result.step_data, "thought_type", "task_execution"),
         step_result=typed_step_result,
-        last_error=getattr(raw_result, 'error', None) if not raw_result.success else None,
+        last_error=getattr(raw_result, "error", None) if not raw_result.success else None,
     )
 
 
@@ -350,7 +354,7 @@ def create_stream_update_from_step_results(
         timestamp=datetime.now(),
         update_type="step_complete",
         current_round=1,  # Default since round_id not in StepResultData
-        total_rounds=1,   # Default since round_id not in StepResultData
+        total_rounds=1,  # Default since round_id not in StepResultData
         pipeline_active=True,
         step_results=[],  # TODO: Convert to typed StepResults
         updated_thoughts=updated_thoughts,

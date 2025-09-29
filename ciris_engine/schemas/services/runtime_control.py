@@ -104,6 +104,30 @@ class ConfigValueMap(BaseModel):
         default_factory=dict, description="Configuration key-value pairs with typed values"
     )
 
+    def get(self, key: str, default=None):
+        """Get a configuration value with optional default."""
+        return self.configs.get(key, default)
+
+    def set(self, key: str, value: Union[str, int, float, bool, list, dict]) -> None:
+        """Set a configuration value."""
+        self.configs[key] = value
+
+    def update(self, values: Dict[str, Union[str, int, float, bool, list, dict]]) -> None:
+        """Update multiple configuration values."""
+        self.configs.update(values)
+
+    def keys(self):
+        """Get all configuration keys."""
+        return self.configs.keys()
+
+    def items(self):
+        """Get all key-value pairs."""
+        return self.configs.items()
+
+    def values(self):
+        """Get all configuration values."""
+        return self.configs.values()
+
 
 class TaskSelectionCriteria(BaseModel):
     """Criteria used for task selection in processing rounds."""

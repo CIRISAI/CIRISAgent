@@ -517,8 +517,10 @@ class TestRuntimeAdapterManager:
         # Setup mock config service on service_initializer
         mock_config = AsyncMock()
         mock_config.set_config = AsyncMock()
-        mock_config.delete = AsyncMock()
-        mock_config.get_all = AsyncMock(return_value=[])
+        mock_config.list_configs = AsyncMock(return_value={
+            "adapter.test_id.config": {"test": "value"},
+            "adapter.test_id.type": "cli"
+        })
 
         mock_initializer = Mock()
         mock_initializer.config_service = mock_config
@@ -530,9 +532,11 @@ class TestRuntimeAdapterManager:
         await adapter_manager._save_adapter_config_to_graph("test_id", "cli", config)
         mock_config.set_config.assert_called()
 
-        # Test remove
+        # Test remove - now uses list_configs and set_config to None
         await adapter_manager._remove_adapter_config_from_graph("test_id")
-        mock_config.get_all.assert_called_once()
+        mock_config.list_configs.assert_called_once_with(prefix="adapter.test_id")
+        # Should set each config to None to clear it
+        assert mock_config.set_config.call_count >= 2  # At least 2 configs to clear
 
     @pytest.mark.asyncio
     async def test_config_listener_registration(self, adapter_manager, mock_runtime):

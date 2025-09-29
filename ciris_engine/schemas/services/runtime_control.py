@@ -117,6 +117,9 @@ class TaskSelectionCriteria(BaseModel):
     max_retry_count: int = Field(3, description="Maximum retry count for tasks")
     user_id_filter: Optional[str] = Field(None, description="User ID filter")
     batch_size: int = Field(10, description="Maximum number of tasks to select")
+    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+        default_factory=dict, description="Additional configuration key-value pairs with typed values"
+    )
 
     def get(
         self, key: str, default: Optional[Union[str, int, float, bool, list, dict]] = None

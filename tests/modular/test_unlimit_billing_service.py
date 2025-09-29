@@ -199,3 +199,23 @@ async def test_spend_request_error() -> None:
     assert result.reason and "request_error" in result.reason
 
     await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_check_credits_unexpected_status() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"detail": "server error"})
+
+    service = UnlimitBillingService(
+        api_key="token",
+        cache_ttl_seconds=0,
+        transport=httpx.MockTransport(handler),
+    )
+
+    identity = BillingIdentity(oauth_provider="google", external_id="user-1")
+    result = await service.check_credits(identity)
+
+    assert result.has_balance is False
+    assert result.reason.startswith("billing_failure:unexpected_status_500")
+
+    await service.stop()

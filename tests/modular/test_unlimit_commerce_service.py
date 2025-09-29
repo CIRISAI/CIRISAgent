@@ -52,6 +52,30 @@ async def test_create_payment_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_payment_request_error() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom")
+
+    service = UnlimitCommerceService(transport=httpx.MockTransport(handler))
+    await service.start()
+
+    result = await service.create_payment(
+        PaymentRequest(
+            request_id="req-err",
+            description="Order",
+            amount=10.0,
+            currency="USD",
+            payment_method=PaymentMethod.CARD,
+        )
+    )
+
+    assert result.succeeded is False
+    assert result.reason == "boom"
+
+    await service.stop()
+
+
+@pytest.mark.asyncio
 async def test_create_invoice_restricted_country() -> None:
     service = UnlimitCommerceService(restricted_countries={"RU"})
     await service.start()
@@ -111,6 +135,27 @@ async def test_create_payout_success() -> None:
 
     assert result.succeeded is True
     assert result.payout_id == "payout-1"
+    await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_create_payout_restricted() -> None:
+    service = UnlimitCommerceService(restricted_countries={"RU"})
+    await service.start()
+
+    result = await service.create_payout(
+        PayoutRequest(
+            request_id="req-4",
+            amount=15.0,
+            currency="USD",
+            description="Blocked",
+            beneficiary=PayoutBeneficiary(name="Bob", account_number="1", bank_code=None, country="RU"),
+        )
+    )
+
+    assert result.succeeded is False
+    assert result.reason == "beneficiary_country_restricted"
+
     await service.stop()
 
 

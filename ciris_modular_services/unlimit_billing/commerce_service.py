@@ -107,7 +107,7 @@ class UnlimitCommerceService(BaseService):
 
         payload = self._build_payment_payload(request)
         response_json, status_code = await self._post("/api/payments", payload)
-        if status_code and status_code >= 400:
+        if not status_code or status_code >= 400:
             return PaymentResult(
                 succeeded=False,
                 status=response_json.get("status") if response_json else None,
@@ -129,7 +129,7 @@ class UnlimitCommerceService(BaseService):
 
         payload = self._build_invoice_payload(request)
         response_json, status_code = await self._post("/api/invoices", payload)
-        if status_code and status_code >= 400:
+        if not status_code or status_code >= 400:
             return InvoiceResult(
                 succeeded=False,
                 status=response_json.get("status") if response_json else None,
@@ -148,7 +148,7 @@ class UnlimitCommerceService(BaseService):
     async def refund_payment(self, request: RefundRequest) -> RefundResult:
         path = f"/api/payments/{request.payment_id}/refunds"
         response_json, status_code = await self._post(path, self._build_refund_payload(request))
-        if status_code and status_code >= 400:
+        if not status_code or status_code >= 400:
             return RefundResult(
                 succeeded=False,
                 status=response_json.get("status") if response_json else None,
@@ -169,7 +169,7 @@ class UnlimitCommerceService(BaseService):
 
         payload = self._build_payout_payload(request)
         response_json, status_code = await self._post("/api/payouts", payload)
-        if status_code and status_code >= 400:
+        if not status_code or status_code >= 400:
             return PayoutResult(
                 succeeded=False,
                 status=response_json.get("status") if response_json else None,
@@ -186,7 +186,7 @@ class UnlimitCommerceService(BaseService):
 
     async def get_payment(self, payment_id: str) -> PaymentResult:
         response_json, status_code = await self._get(f"/api/payments/{payment_id}")
-        if status_code and status_code >= 400:
+        if not status_code or status_code >= 400:
             return PaymentResult(
                 succeeded=False,
                 status=response_json.get("status") if response_json else None,
@@ -211,7 +211,7 @@ class UnlimitCommerceService(BaseService):
         if query.kind:
             params["kind"] = query.kind
         response_json, status_code = await self._get("/api/reports", params=params)
-        if status_code and status_code >= 400:
+        if not status_code or status_code >= 400:
             reason = self._extract_reason(response_json, status_code)
             logger.warning("Failed to fetch reports from Unlimit: %s", reason)
             return []

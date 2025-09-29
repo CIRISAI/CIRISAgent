@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -257,4 +256,60 @@ async def test_validate_parameters() -> None:
     )
     assert invoice_valid is True
 
+    currency_invalid = await service.validate_parameters(
+        AP2_CHECKOUT_TOOL,
+        {
+            "identity": {"oauth_provider": "google", "external_id": "user-1"},
+            "charge": {"amount_minor": 1000, "currency": "USD"},
+            "ap2": build_ap2_payload(amount=1000, currency="EUR"),
+        },
+    )
+    assert currency_invalid is False
+
     await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_unknown() -> None:
+    service = UnlimitBillingToolService(api_key="token")
+    await service.start()
+
+    result = await service.execute_tool("does_not_exist", {})
+    assert result.success is False
+    assert result.error == "Unknown tool 'does_not_exist'"
+
+    await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_validate_payment_method_link() -> None:
+    async def fail_handler(_: httpx.Request) -> httpx.Response:
+        raise AssertionError("transport should not be called")
+
+    service = UnlimitBillingToolService(api_key="token", transport=httpx.MockTransport(fail_handler))
+    await service.start()
+
+    payload = build_ap2_payload()
+    payload["payment_method"]["linked_mandate_id"] = "other"
+
+    result = await service.execute_tool(
+        AP2_CHECKOUT_TOOL,
+        {
+            "identity": {"oauth_provider": "google", "external_id": "user-1"},
+            "charge": {"amount_minor": 1000, "currency": "USD"},
+            "ap2": payload,
+        },
+    )
+
+    assert result.success is False
+    assert result.error == "payment_method_not_linked_to_cart"
+
+    await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_get_tool_schema_invoice() -> None:
+    service = UnlimitBillingToolService(api_key="token")
+    schema = await service.get_tool_schema(AP2_INVOICE_TOOL)
+    assert schema is not None
+    assert "invoice" in schema.properties

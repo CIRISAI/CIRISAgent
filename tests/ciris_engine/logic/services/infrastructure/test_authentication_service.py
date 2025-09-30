@@ -464,3 +464,63 @@ async def test_jwt_expiration_extraction(auth_service):
     assert channel_verification.valid is True
     # When no expiration in token, should use current time as fallback
     assert channel_verification.expires_at is not None
+
+
+@pytest.mark.asyncio
+async def test_link_unlink_oauth_identity(auth_service):
+    """Ensure multiple OAuth identities can be linked and unlinked."""
+
+    private_key, public_key = auth_service.generate_keypair()
+
+    wa = WACertificate(
+        wa_id="wa-2025-06-24-LINK01",
+        name="Link Test WA",
+        role=WARole.AUTHORITY,
+        pubkey=auth_service._encode_public_key(public_key),
+        jwt_kid="link-test-kid",
+        scopes_json='["read:any"]',
+        created_at=datetime.now(timezone.utc),
+    )
+
+    await auth_service._store_wa_certificate(wa)
+
+    linked = await auth_service.link_oauth_identity(
+        wa_id=wa.wa_id,
+        provider="google",
+        external_id="google-user-123",
+        account_name="Google User",
+        primary=True,
+    )
+    assert linked is not None
+    assert linked.oauth_provider == "google"
+    assert any(link.provider == "google" for link in linked.oauth_links)
+
+    linked = await auth_service.link_oauth_identity(
+        wa_id=wa.wa_id,
+        provider="discord",
+        external_id="discord-user-456",
+        account_name="Discord User",
+        metadata={"discriminator": "0001"},
+    )
+    assert linked is not None
+    assert len(linked.oauth_links) == 2
+
+    fetched = await auth_service.get_wa_by_oauth("discord", "discord-user-456")
+    assert fetched is not None
+    assert fetched.wa_id == wa.wa_id
+
+    promoted = await auth_service.link_oauth_identity(
+        wa_id=wa.wa_id,
+        provider="discord",
+        external_id="discord-user-456",
+        primary=True,
+    )
+    assert promoted is not None
+    assert promoted.oauth_provider == "discord"
+    assert promoted.oauth_external_id == "discord-user-456"
+    assert any(link.is_primary for link in promoted.oauth_links if link.provider == "discord")
+
+    updated = await auth_service.unlink_oauth_identity(wa.wa_id, "google", "google-user-123")
+    assert updated is not None
+    assert all(link.provider != "google" for link in updated.oauth_links)
+    assert updated.oauth_provider == "discord"

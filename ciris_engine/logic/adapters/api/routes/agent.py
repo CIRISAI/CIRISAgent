@@ -13,10 +13,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.adapters.base_observer import CreditCheckFailed, CreditDenied
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.messages import IncomingMessage
+from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 
 from ..constants import DESC_CURRENT_COGNITIVE_STATE, ERROR_MEMORY_SERVICE_NOT_AVAILABLE
 from ..dependencies.auth import AuthContext, require_observer
@@ -232,6 +234,97 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
         return ""
 
 
+def _derive_credit_account(
+    auth: AuthContext,
+    request: Request,
+) -> Tuple[CreditAccount, Dict[str, str]]:
+    """Build credit account metadata for the current request."""
+
+    auth_service = getattr(request.app.state, "auth_service", None)
+    user = None
+    if auth_service and hasattr(auth_service, "get_user"):
+        try:
+            user = auth_service.get_user(auth.user_id)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("Unable to load user for credit gating: %s", exc)
+
+    provider = "api"
+    account_id = auth.user_id
+    authority_id = None
+    tenant_id = None
+
+    if user:
+        authority_id = getattr(user, "wa_id", None) or auth.user_id
+        tenant_id = getattr(user, "wa_parent_id", None)
+
+        oauth_provider = getattr(user, "oauth_provider", None)
+        oauth_external_id = getattr(user, "oauth_external_id", None)
+        if oauth_provider and oauth_external_id:
+            provider = f"oauth:{oauth_provider}"
+            account_id = oauth_external_id
+        else:
+            provider = "wa"
+            account_id = getattr(user, "wa_id", None) or auth.user_id
+    else:
+        if auth.api_key_id:
+            provider = "api-key"
+            account_id = auth.api_key_id
+        elif auth.role == UserRole.SERVICE_ACCOUNT:
+            provider = "service-account"
+            account_id = auth.user_id
+
+    account = CreditAccount(
+        provider=provider,
+        account_id=account_id,
+        authority_id=authority_id,
+        tenant_id=tenant_id,
+    )
+
+    metadata: Dict[str, str] = {
+        "role": auth.role.value,
+    }
+    if auth.api_key_id:
+        metadata["api_key_id"] = auth.api_key_id
+
+    return account, metadata
+
+
+def _attach_credit_metadata(
+    msg: IncomingMessage,
+    request: Request,
+    auth: AuthContext,
+    channel_id: str,
+) -> IncomingMessage:
+    """Attach credit envelope data to the message for downstream processing."""
+
+    resource_monitor = getattr(request.app.state, "resource_monitor", None)
+    if not resource_monitor or not getattr(resource_monitor, "credit_provider", None):
+        return msg
+
+    account, metadata = _derive_credit_account(auth, request)
+
+    runtime = getattr(request.app.state, "runtime", None)
+    agent_identity = getattr(runtime, "agent_identity", None) if runtime else None
+    agent_id = getattr(agent_identity, "agent_id", None)
+
+    credit_context = CreditContext(
+        agent_id=agent_id,
+        channel_id=channel_id,
+        request_id=msg.message_id,
+        metadata={
+            **metadata,
+            "channel_id": channel_id,
+            "message_id": msg.message_id,
+        },
+    )
+
+    return msg.model_copy(
+        update={
+            "credit_account": account.model_dump(),
+            "credit_context": credit_context.model_dump(),
+        }
+    )
+
 def _get_runtime_processor(request: Request):
     """Get runtime processor if available and valid."""
     runtime = getattr(request.app.state, "runtime", None)
@@ -342,6 +435,8 @@ async def interact(
 
     # Create message and tracking
     message_id, channel_id, msg = _create_interaction_message(auth, body)
+    msg = _attach_credit_metadata(msg, request, auth, channel_id)
+
     event = asyncio.Event()
     _response_events[message_id] = event
 
@@ -356,11 +451,24 @@ async def interact(
     if pause_response:
         return pause_response
 
-    # Route message through adapter's handler
-    if hasattr(request.app.state, "on_message"):
-        await request.app.state.on_message(msg)
-    else:
-        raise HTTPException(status_code=503, detail="Message handler not configured")
+    try:
+        if hasattr(request.app.state, "on_message"):
+            await request.app.state.on_message(msg)
+        else:
+            raise HTTPException(status_code=503, detail="Message handler not configured")
+    except CreditDenied as exc:
+        _cleanup_interaction_tracking(message_id)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "insufficient_credit",
+                "message": "Interaction blocked by credit policy.",
+                "reason": exc.reason,
+            },
+        ) from exc
+    except CreditCheckFailed as exc:
+        _cleanup_interaction_tracking(message_id)
+        raise HTTPException(status_code=503, detail="Credit provider unavailable") from exc
 
     # Get timeout and wait for response
     timeout = _get_interaction_timeout(request)

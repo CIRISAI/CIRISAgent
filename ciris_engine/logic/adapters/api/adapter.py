@@ -311,6 +311,7 @@ class ApiPlatform(Service):
             secrets_service=getattr(self.runtime, "secrets_service", None),
             time_service=getattr(self.runtime, "time_service", None),
             origin_service="api",
+            resource_monitor=getattr(self.runtime, "resource_monitor_service", None),
         )
         await self.message_observer.start()
         logger.info("Started API message observer")

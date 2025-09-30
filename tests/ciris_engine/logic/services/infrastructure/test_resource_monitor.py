@@ -4,10 +4,15 @@ import asyncio
 import os
 import tempfile
 
+import httpx
 import pytest
 
 from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService, ResourceSignalBus
+from ciris_engine.logic.services.infrastructure.resource_monitor.unlimit_credit_provider import (
+    UnlimitCreditProvider,
+)
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.resources_core import ResourceAction, ResourceBudget, ResourceLimit, ResourceSnapshot
 
@@ -285,3 +290,128 @@ def test_resource_monitor_get_capabilities(resource_monitor):
     assert "memory_tracking" in caps.actions
     assert "token_rate_limiting" in caps.actions
     assert "TimeService" in caps.dependencies
+
+
+@pytest.mark.asyncio
+async def test_resource_monitor_credit_check_and_cache(resource_budget, temp_db, time_service):
+    """Resource monitor should reuse credit decisions within cache TTL."""
+
+    check_calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal check_calls
+        if request.url.path.endswith("/credits/check"):
+            check_calls += 1
+            return httpx.Response(
+                200,
+                json={
+                    "has_credit": True,
+                    "credits_remaining": 5,
+                },
+            )
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    provider = UnlimitCreditProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
+    monitor = ResourceMonitorService(
+        budget=resource_budget,
+        db_path=temp_db,
+        time_service=time_service,
+        credit_provider=provider,
+    )
+
+    await monitor.start()
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-123")
+        context = CreditContext(agent_id="agent-1")
+
+        first = await monitor.check_credit(account, context)
+        second = await monitor.check_credit(account, context)
+
+        assert first.has_credit is True
+        assert second.has_credit is True
+        assert check_calls == 1  # Cached response reused
+
+        metrics = monitor._collect_custom_metrics()
+        assert metrics["credit_provider_enabled"] == 1.0
+        assert metrics["credit_last_available"] == 1.0
+    finally:
+        await monitor.stop()
+
+
+@pytest.mark.asyncio
+async def test_resource_monitor_credit_spend(resource_budget, temp_db, time_service):
+    """Resource monitor should relay spend results and clear cached credit."""
+
+    check_calls = 0
+    spend_calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal check_calls, spend_calls
+        if request.url.path.endswith("/credits/check"):
+            check_calls += 1
+            return httpx.Response(200, json={"has_credit": True})
+        if request.url.path.endswith("/charges"):
+            spend_calls += 1
+            return httpx.Response(
+                201,
+                json={
+                    "succeeded": True,
+                    "transaction_id": "txn-42",
+                    "balance_remaining": 3,
+                },
+            )
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    provider = UnlimitCreditProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
+    monitor = ResourceMonitorService(
+        budget=resource_budget,
+        db_path=temp_db,
+        time_service=time_service,
+        credit_provider=provider,
+    )
+
+    await monitor.start()
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-456")
+        await monitor.check_credit(account)
+
+        spend_req = CreditSpendRequest(amount_minor=100, currency="USD", description="Usage")
+        spend_result = await monitor.spend_credit(account, spend_req)
+
+        assert spend_result.succeeded is True
+        assert spend_result.transaction_id == "txn-42"
+        assert spend_calls == 1
+
+        metrics = monitor._collect_custom_metrics()
+        # Last credit result cleared after successful spend
+        assert metrics["credit_last_available"] == -1.0
+    finally:
+        await monitor.stop()
+
+
+@pytest.mark.asyncio
+async def test_resource_monitor_credit_failure(resource_budget, temp_db, time_service):
+    """Credit failures surface through the resource monitor and mark metrics."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/credits/check"):
+            return httpx.Response(200, json={"status": "ok"})  # Missing required fields
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    provider = UnlimitCreditProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=0)
+    monitor = ResourceMonitorService(
+        budget=resource_budget,
+        db_path=temp_db,
+        time_service=time_service,
+        credit_provider=provider,
+    )
+
+    await monitor.start()
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-789")
+        with pytest.raises(ValueError):
+            await monitor.check_credit(account)
+        metrics = monitor._collect_custom_metrics()
+        assert metrics["credit_error_flag"] == 1.0
+    finally:
+        await monitor.stop()

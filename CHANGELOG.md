@@ -8,10 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2025-09-30
 
 ### Fixed
-- **🤝 Discord Bot Message Visibility**: Fixed agents unable to see other agents' messages in conversation history
-  - Changed Discord fetch_messages() to prioritize Discord API over correlation database
-  - Now includes messages from all users and bots, enabling inter-agent awareness
-  - Maintains fallback to correlation database if Discord API unavailable
+- **🤝 Discord Inter-Agent Awareness**: Complete fix for agents seeing other agents' messages
+  - **Conversation History**: Changed Discord fetch_messages() to prioritize Discord API over correlation database
+    - Now includes messages from all users and bots in history lookups
+    - Maintains fallback to correlation database if Discord API unavailable
+  - **Real-time Observations**: Removed bot message filter from on_message handler
+    - Agents now create passive observations for messages from other agents
+    - Enables full multi-agent awareness in monitored Discord channels
+- **🔒 Security Logging**: Fixed CodeQL high-severity finding (ciris_engine/logic/context/system_snapshot_helpers.py:516)
+  - Changed from logging potentially sensitive error messages to generic internal error message
+  - Redirects to monitoring systems for sensitive error details
 
 ## [1.1.9] - 2025-09-30
 

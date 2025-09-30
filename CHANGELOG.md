@@ -5,6 +5,14 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-09-30
+
+### Fixed
+- **🤝 Discord Bot Message Visibility**: Fixed agents unable to see other agents' messages in conversation history
+  - Changed Discord fetch_messages() to prioritize Discord API over correlation database
+  - Now includes messages from all users and bots, enabling inter-agent awareness
+  - Maintains fallback to correlation database if Discord API unavailable
+
 ## [1.1.9] - 2025-09-30
 
 ### Fixed

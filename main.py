@@ -341,9 +341,7 @@ def main(
 
                 # Convert APIAdapterConfig to generic AdapterConfig
                 adapter_configs[adapter_type] = AdapterConfig(
-                    adapter_type="api",
-                    enabled=True,
-                    settings=api_config.model_dump()  # Convert all fields to dict
+                    adapter_type="api", enabled=True, settings=api_config.model_dump()  # Convert all fields to dict
                 )
                 api_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
                 if not startup_channel_id:
@@ -364,7 +362,7 @@ def main(
                 adapter_configs[adapter_type] = AdapterConfig(
                     adapter_type="discord",
                     enabled=True,
-                    settings=discord_config.model_dump()  # Convert all fields to dict
+                    settings=discord_config.model_dump(),  # Convert all fields to dict
                 )
                 discord_channel_id = discord_config.get_home_channel_id()
                 if discord_channel_id and not startup_channel_id:
@@ -386,9 +384,7 @@ def main(
 
                 # Convert CLIAdapterConfig to generic AdapterConfig
                 adapter_configs[adapter_type] = AdapterConfig(
-                    adapter_type="cli",
-                    enabled=True,
-                    settings=cli_config.model_dump()  # Convert all fields to dict
+                    adapter_type="cli", enabled=True, settings=cli_config.model_dump()  # Convert all fields to dict
                 )
                 cli_channel_id = cli_config.get_home_channel_id()
                 if not startup_channel_id:

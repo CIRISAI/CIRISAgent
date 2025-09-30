@@ -5,11 +5,37 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.8] - 2025-09-29
+## [1.1.8] - 2025-09-30
 
-### Major Runtime Refactoring - "Beast Conquered" 🐉→✨
+### Major Runtime Refactoring & Type Safety Improvements - "Beast Conquered" 🐉→✨
 
 ### Fixed
+- **🔧 SonarCloud Code Quality Issues**: Resolved 5 critical code smells
+  - Fixed duplicate if-else blocks in base_adapter.py
+  - Converted Union types to Python 3.10+ | syntax in runtime_control.py
+  - Reduced cognitive complexity in ciris_runtime.__init__ from 32 to ~10
+  - Eliminated nested conditionals in memory_service.py
+  - Reduced _fetch_connected_nodes complexity from 18 to ~10
+- **🔧 Type Safety Migration**: Complete migration from untyped dicts to Pydantic models
+  - Replaced all runtime/adapter kwargs plumbing with RuntimeBootstrapConfig
+  - Fixed adapter configuration passing to use typed AdapterConfig
+  - Ensured all adapters (API, Discord, CLI) use proper typed configs
+  - Fixed ToolInfo validation error (schema → parameters field)
+
+### Tested
+- **✅ Complete QA Test Suite Validation**: All 94 tests passing across all modules
+  - auth: 5/5 tests passing
+  - agent: 6/6 tests passing
+  - memory: 3/3 tests passing
+  - telemetry: 5/5 tests passing
+  - system: 4/4 tests passing
+  - audit: 3/3 tests passing
+  - tools: 1/1 tests passing
+  - guidance: 2/2 tests passing
+  - handlers: 5/5 tests passing
+  - filters: 36/36 tests passing
+  - api_full: 24/24 tests passing
+  - **Total: 94/94 tests (100% success rate)**
 - **ConsentService Critical Fixes**:
   - Fixed `check_expiry()` to propagate `ConsentNotFoundError` (fail fast, fail loud philosophy)
   - Added 21 comprehensive tests for critical paths (get_consent, revoke_consent, impact reports)

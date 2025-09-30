@@ -5,8 +5,10 @@ This protocol defines how step points are injected and controlled throughout
 the thought processing pipeline.
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import TYPE_CHECKING, Optional, Protocol, Union
+from typing import TYPE_CHECKING, Optional, Protocol
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.telemetry.collector import SingleStepResult
@@ -26,7 +28,7 @@ class PipelineControlProtocol(Protocol):
         ...
 
     async def pause_at_step_point(
-        self, step_point: StepPoint, thought_id: str, step_data: "SingleStepResult"
+        self, step_point: StepPoint, thought_id: str, step_data: SingleStepResult
     ) -> StepResult:
         """
         Pause execution at a step point and wait for release.
@@ -103,7 +105,7 @@ class PipelineController:
         return step_point in [StepPoint.POPULATE_ROUND, StepPoint.FINALIZE_ACTION]
 
     async def pause_at_step_point(
-        self, step_point: StepPoint, thought_id: str, step_data: "SingleStepResult"
+        self, step_point: StepPoint, thought_id: str, step_data: SingleStepResult
     ) -> StepResult:
         """Pause execution at a step point."""
         # Create or update thought in pipeline
@@ -259,7 +261,7 @@ class PipelineController:
 
         return (asyncio.get_event_loop().time() - start_time) * 1000
 
-    async def _handle_paused_thoughts(self, start_time) -> "SingleStepResult":
+    async def _handle_paused_thoughts(self, start_time) -> SingleStepResult:
         """Handle execution of paused thoughts."""
         from ciris_engine.logic.processors.core.step_decorators import execute_all_steps
 
@@ -276,7 +278,7 @@ class PipelineController:
             "pipeline_state": self._get_pipeline_state_dict(),
         }
 
-    def _handle_no_pending_thoughts(self, start_time) -> "SingleStepResult":
+    def _handle_no_pending_thoughts(self, start_time) -> SingleStepResult:
         """Handle case when no pending thoughts are available."""
         processing_time_ms = self._calculate_processing_time(start_time)
         return {
@@ -289,7 +291,7 @@ class PipelineController:
             "pipeline_state": self._get_pipeline_state_dict(),
         }
 
-    def _handle_successful_initiation(self, thought, start_time) -> "SingleStepResult":
+    def _handle_successful_initiation(self, thought, start_time) -> SingleStepResult:
         """Handle successful thought processing initiation."""
         processing_time_ms = self._calculate_processing_time(start_time)
         return {
@@ -302,7 +304,7 @@ class PipelineController:
             "pipeline_state": self._get_pipeline_state_dict(),
         }
 
-    def _handle_initiation_error(self, error, start_time) -> "SingleStepResult":
+    def _handle_initiation_error(self, error, start_time) -> SingleStepResult:
         """Handle error during thought processing initiation."""
         processing_time_ms = self._calculate_processing_time(start_time)
         return {
@@ -314,7 +316,7 @@ class PipelineController:
             "pipeline_state": self._get_pipeline_state_dict(),
         }
 
-    def _handle_no_processor(self, start_time) -> "SingleStepResult":
+    def _handle_no_processor(self, start_time) -> SingleStepResult:
         """Handle case when no thought processor is available."""
         processing_time_ms = self._calculate_processing_time(start_time)
         return {
@@ -326,7 +328,7 @@ class PipelineController:
             "pipeline_state": self._get_pipeline_state_dict(),
         }
 
-    async def _initiate_thought_processing(self, thought, start_time) -> "SingleStepResult":
+    async def _initiate_thought_processing(self, thought, start_time) -> SingleStepResult:
         """Initiate processing for a pending thought."""
         if not (self.main_processor and self.main_processor.thought_processor):
             return self._handle_no_processor(start_time)
@@ -338,7 +340,7 @@ class PipelineController:
         except Exception as e:
             return self._handle_initiation_error(e, start_time)
 
-    async def execute_single_step_point(self) -> "SingleStepResult":
+    async def execute_single_step_point(self) -> SingleStepResult:
         """
         Execute exactly one step point in the H3ERE pipeline using step decorators.
 
@@ -488,7 +490,7 @@ class PipelineController:
         else:
             return thought.created_at
 
-    async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> "ThoughtProcessingResult":
+    async def _execute_step_for_thought(self, step_point: StepPoint, thought) -> ThoughtProcessingResult:
         """
         Execute a specific step point for a single thought.
 

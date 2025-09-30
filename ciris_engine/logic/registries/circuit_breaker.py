@@ -168,7 +168,7 @@ class CircuitBreaker:
             success_rate = self.total_successes / self.total_calls
 
         # Calculate last failure age
-        last_failure_age = 0
+        last_failure_age = 0.0
         if self.last_failure_time:
             last_failure_age = time.time() - self.last_failure_time
 

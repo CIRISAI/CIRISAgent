@@ -6,7 +6,7 @@ Authentication = "Who are you?"
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional, Protocol, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Protocol, Tuple, Union
 
 from ...runtime.base import ServiceProtocol
 
@@ -99,6 +99,25 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
     @abstractmethod
     async def get_wa_by_oauth(self, provider: str, external_id: str) -> Optional["WACertificate"]:
         """Get WA certificate by OAuth identity."""
+        ...
+
+    @abstractmethod
+    async def link_oauth_identity(
+        self,
+        wa_id: str,
+        provider: str,
+        external_id: str,
+        *,
+        account_name: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+        primary: bool = False,
+    ) -> Optional["WACertificate"]:
+        """Associate an additional OAuth identity with a WA."""
+        ...
+
+    @abstractmethod
+    async def unlink_oauth_identity(self, wa_id: str, provider: str, external_id: str) -> Optional["WACertificate"]:
+        """Remove an associated OAuth identity from a WA."""
         ...
 
     @abstractmethod

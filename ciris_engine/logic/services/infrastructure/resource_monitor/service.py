@@ -10,8 +10,16 @@ import psutil
 
 from ciris_engine.logic.persistence import get_db_connection
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.services.credit_gate import (
+    CreditAccount,
+    CreditCheckResult,
+    CreditContext,
+    CreditSpendRequest,
+    CreditSpendResult,
+)
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceStatus
 from ciris_engine.schemas.services.resources_core import ResourceAction, ResourceBudget, ResourceLimit, ResourceSnapshot
@@ -50,12 +58,14 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         db_path: str,
         time_service: TimeServiceProtocol,
         signal_bus: Optional[ResourceSignalBus] = None,
+        credit_provider: CreditGateProtocol | None = None,
     ) -> None:
         super().__init__(run_interval_seconds=1.0, time_service=time_service)
         self.budget = budget
         self.db_path = db_path
         self.snapshot = ResourceSnapshot()
         self.signal_bus = signal_bus or ResourceSignalBus()
+        self.credit_provider = credit_provider
         # Make time_service a direct attribute to match protocol
         self.time_service: Optional[TimeServiceProtocol] = time_service
 
@@ -68,6 +78,11 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         # Network tracking for v1.4.3 metrics
         self._network_bytes_sent = 0
         self._network_bytes_recv = 0
+
+        # Credit telemetry
+        self._last_credit_result: CreditCheckResult | None = None
+        self._last_credit_error: str | None = None
+        self._last_credit_timestamp: float | None = None
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
@@ -91,12 +106,16 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
     async def _on_start(self) -> None:
         """Called when service starts."""
         self._monitoring = True
+        if self.credit_provider:
+            await self.credit_provider.start()
         await super()._on_start()
 
     async def _on_stop(self) -> None:
         """Called when service stops."""
         self._monitoring = False
         await super()._on_stop()
+        if self.credit_provider:
+            await self.credit_provider.stop()
 
     async def _run_scheduled_task(self) -> None:
         """Update resource snapshot and check limits."""
@@ -192,6 +211,44 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             return self.snapshot.thoughts_active + amount < self.budget.thoughts_active.warning
         return True
 
+    async def check_credit(
+        self,
+        account: CreditAccount,
+        context: CreditContext | None = None,
+    ) -> CreditCheckResult:
+        if not self.credit_provider:
+            raise RuntimeError("No credit provider configured")
+        self._track_request()
+        try:
+            result = await self.credit_provider.check_credit(account, context)
+            self._last_credit_result = result
+            self._last_credit_error = None
+            self._last_credit_timestamp = self._now().timestamp()
+            return result
+        except Exception as exc:
+            self._last_credit_error = str(exc)
+            raise
+
+    async def spend_credit(
+        self,
+        account: CreditAccount,
+        request: CreditSpendRequest,
+        context: CreditContext | None = None,
+    ) -> CreditSpendResult:
+        if not self.credit_provider:
+            raise RuntimeError("No credit provider configured")
+        self._track_request()
+        try:
+            result = await self.credit_provider.spend_credit(account, request, context)
+            if result.succeeded:
+                self._last_credit_result = None
+            self._last_credit_error = None
+            self._last_credit_timestamp = self._now().timestamp()
+            return result
+        except Exception as exc:
+            self._last_credit_error = str(exc)
+            raise
+
     def _count_active_thoughts(self) -> int:
         try:
             conn = get_db_connection(self.db_path)
@@ -211,7 +268,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         uptime_seconds = self._calculate_uptime()
 
         # Return both v1.4.3 required metrics and existing metrics for backward compatibility
-        return {
+        metrics = {
             # v1.4.3 Required metrics (EXACTLY these 6 metrics)
             "cpu_percent": float(self.snapshot.cpu_percent),
             "memory_mb": float(self.snapshot.memory_mb),
@@ -225,6 +282,22 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             "warnings": float(len(self.snapshot.warnings)),
             "critical": float(len(self.snapshot.critical)),
         }
+
+        if self.credit_provider:
+            metrics["credit_provider_enabled"] = 1.0
+            if self._last_credit_result is not None:
+                metrics["credit_last_available"] = 1.0 if self._last_credit_result.has_credit else 0.0
+            else:
+                metrics["credit_last_available"] = -1.0
+            metrics["credit_error_flag"] = 1.0 if self._last_credit_error else 0.0
+            metrics["credit_last_timestamp"] = self._last_credit_timestamp or 0.0
+        else:
+            metrics["credit_provider_enabled"] = 0.0
+            metrics["credit_last_available"] = -1.0
+            metrics["credit_error_flag"] = 0.0
+            metrics["credit_last_timestamp"] = 0.0
+
+        return metrics
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

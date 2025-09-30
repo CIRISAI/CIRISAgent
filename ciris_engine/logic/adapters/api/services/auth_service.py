@@ -6,7 +6,7 @@ Manages API keys, OAuth users, and authentication state.
 import base64
 import hashlib
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -17,7 +17,7 @@ from ciris_engine.protocols.services.infrastructure.authentication import Authen
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 from ciris_engine.schemas.services.authority.wise_authority import WAUpdate
-from ciris_engine.schemas.services.authority_core import WARole
+from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WARole
 
 # Permission constants to avoid duplication
 PERMISSION_SYSTEM_READ = "system.read"
@@ -93,6 +93,7 @@ class User:
     oauth_name: Optional[str] = None  # Full name from OAuth provider
     oauth_picture: Optional[str] = None  # Profile picture URL from OAuth provider
     permission_requested_at: Optional[datetime] = None  # Timestamp when user requested permissions
+    oauth_links: List[OAuthIdentityLink] = field(default_factory=list)
 
 
 class APIAuthService:
@@ -162,20 +163,26 @@ class APIAuthService:
             oauth_provider=wa.oauth_provider,
             oauth_external_id=wa.oauth_external_id,
             custom_permissions=wa.custom_permissions if hasattr(wa, "custom_permissions") else None,
+            oauth_links=list(wa.oauth_links),
         )
 
     async def _process_wa_record(self, wa) -> None:
         """Process a single WA record and add/update user."""
-        is_oauth_wa = wa.oauth_provider and wa.oauth_external_id
-        oauth_user_id = f"{wa.oauth_provider}:{wa.oauth_external_id}" if is_oauth_wa else None
-
-        if is_oauth_wa and oauth_user_id in self._users:
-            self._update_existing_oauth_user(oauth_user_id, wa)
-            return
+        # Remove stale cache entries for this WA
+        to_remove = [key for key, value in self._users.items() if getattr(value, "wa_id", None) == wa.wa_id]
+        for key in to_remove:
+            self._users.pop(key, None)
 
         user = self._create_user_from_wa(wa)
-        user_key = oauth_user_id if is_oauth_wa else wa.wa_id
-        self._users[user_key] = user
+        self._users[wa.wa_id] = user
+
+        if wa.oauth_provider and wa.oauth_external_id:
+            primary_key = f"{wa.oauth_provider}:{wa.oauth_external_id}"
+            self._users[primary_key] = user
+
+        for link in wa.oauth_links:
+            link_key = f"{link.provider}:{link.external_id}"
+            self._users[link_key] = user
 
     async def _load_users_from_db(self) -> None:
         """Load existing users from the database."""
@@ -625,6 +632,45 @@ class APIAuthService:
                 oauth_user.role = role_mapping.get(api_role, UserRole.OBSERVER)
 
         return user
+
+    async def link_user_oauth(
+        self,
+        wa_id: str,
+        provider: str,
+        external_id: str,
+        *,
+        account_name: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+        primary: bool = False,
+    ) -> Optional[User]:
+        if not self._auth_service:
+            raise ValueError("Authentication service not configured")
+
+        updated = await self._auth_service.link_oauth_identity(
+            wa_id,
+            provider,
+            external_id,
+            account_name=account_name,
+            metadata=metadata,
+            primary=primary,
+        )
+
+        if not updated:
+            return None
+
+        await self._process_wa_record(updated)
+        return self.get_user(wa_id)
+
+    async def unlink_user_oauth(self, wa_id: str, provider: str, external_id: str) -> Optional[User]:
+        if not self._auth_service:
+            raise ValueError("Authentication service not configured")
+
+        updated = await self._auth_service.unlink_oauth_identity(wa_id, provider, external_id)
+        if not updated:
+            return None
+
+        await self._process_wa_record(updated)
+        return self.get_user(wa_id)
 
     async def change_password(
         self, user_id: str, new_password: str, current_password: Optional[str] = None, skip_current_check: bool = False

@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS wa_cert (
   api_key_hash       TEXT,
   oauth_provider     TEXT,
   oauth_external_id  TEXT,
+  oauth_links_json   TEXT,
   veilid_id          TEXT,
   auto_minted        INTEGER DEFAULT 0,          -- 1 = OAuth observer
   parent_wa_id       TEXT,

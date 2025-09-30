@@ -32,6 +32,7 @@ from ciris_engine.schemas.services.authority_core import (
     AuthorizationContext,
     ChannelIdentity,
     JWTSubType,
+    OAuthIdentityLink,
     TokenType,
     WACertificate,
     WARole,
@@ -291,6 +292,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "custom_permissions_json": "ALTER TABLE wa_cert ADD COLUMN custom_permissions_json TEXT",
                 "adapter_name": "ALTER TABLE wa_cert ADD COLUMN adapter_name TEXT",
                 "adapter_metadata_json": "ALTER TABLE wa_cert ADD COLUMN adapter_metadata_json TEXT",
+                "oauth_links_json": "ALTER TABLE wa_cert ADD COLUMN oauth_links_json TEXT",
             }
 
             for column_name, ddl in column_migrations.items():
@@ -298,6 +300,48 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     conn.execute(ddl)
 
             conn.commit()
+
+    def _row_to_wa(self, row_dict: Dict[str, Any]) -> WACertificate:
+        """Convert a SQLite row dictionary to a WACertificate instance."""
+
+        oauth_links_json = row_dict.get("oauth_links_json")
+        oauth_links: List[OAuthIdentityLink] = []
+        if oauth_links_json:
+            try:
+                raw_links = json.loads(oauth_links_json)
+                for link in raw_links:
+                    try:
+                        oauth_links.append(OAuthIdentityLink(**link))
+                    except Exception as exc:
+                        logger.warning("Invalid OAuth link entry skipped: %s", exc)
+            except json.JSONDecodeError:
+                logger.warning("Invalid oauth_links_json for WA %s", row_dict.get("wa_id"))
+
+        wa_dict = {
+            "wa_id": row_dict["wa_id"],
+            "name": row_dict["name"],
+            "role": row_dict["role"],
+            "pubkey": row_dict["pubkey"],
+            "jwt_kid": row_dict["jwt_kid"],
+            "password_hash": row_dict.get("password_hash"),
+            "api_key_hash": row_dict.get("api_key_hash"),
+            "oauth_provider": row_dict.get("oauth_provider"),
+            "oauth_external_id": row_dict.get("oauth_external_id"),
+            "oauth_links": oauth_links,
+            "auto_minted": bool(row_dict.get("auto_minted", 0)),
+            "veilid_id": row_dict.get("veilid_id"),
+            "parent_wa_id": row_dict.get("parent_wa_id"),
+            "parent_signature": row_dict.get("parent_signature"),
+            "scopes_json": row_dict["scopes_json"],
+            "custom_permissions_json": row_dict.get("custom_permissions_json"),
+            "adapter_id": row_dict.get("adapter_id"),
+            "adapter_name": row_dict.get("adapter_name"),
+            "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
+            "created_at": row_dict["created"],
+            "last_auth": row_dict.get("last_login"),
+        }
+
+        return WACertificate(**wa_dict)
 
     # WAStore Protocol Implementation
 
@@ -309,31 +353,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             row = cursor.fetchone()
 
             if row:
-                # Map database fields to schema fields
-                row_dict = dict(row)
-                wa_dict = {
-                    "wa_id": row_dict["wa_id"],
-                    "name": row_dict["name"],
-                    "role": row_dict["role"],
-                    "pubkey": row_dict["pubkey"],
-                    "jwt_kid": row_dict["jwt_kid"],
-                    "password_hash": row_dict.get("password_hash"),
-                    "api_key_hash": row_dict.get("api_key_hash"),
-                    "oauth_provider": row_dict.get("oauth_provider"),
-                    "oauth_external_id": row_dict.get("oauth_external_id"),
-                    "auto_minted": bool(row_dict.get("auto_minted", 0)),
-                    "veilid_id": row_dict.get("veilid_id"),
-                    "parent_wa_id": row_dict.get("parent_wa_id"),
-                    "parent_signature": row_dict.get("parent_signature"),
-                    "scopes_json": row_dict["scopes_json"],
-                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
-                    "adapter_id": row_dict.get("adapter_id"),
-                    "adapter_name": row_dict.get("adapter_name"),
-                    "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
-                    "created_at": row_dict["created"],
-                    "last_auth": row_dict.get("last_login"),
-                }
-                return WACertificate(**wa_dict)
+                return self._row_to_wa(dict(row))
             return None
 
     async def _get_wa_by_kid(self, jwt_kid: str) -> Optional[WACertificate]:
@@ -344,31 +364,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             row = cursor.fetchone()
 
             if row:
-                # Map database fields to schema fields
-                row_dict = dict(row)
-                wa_dict = {
-                    "wa_id": row_dict["wa_id"],
-                    "name": row_dict["name"],
-                    "role": row_dict["role"],
-                    "pubkey": row_dict["pubkey"],
-                    "jwt_kid": row_dict["jwt_kid"],
-                    "password_hash": row_dict.get("password_hash"),
-                    "api_key_hash": row_dict.get("api_key_hash"),
-                    "oauth_provider": row_dict.get("oauth_provider"),
-                    "oauth_external_id": row_dict.get("oauth_external_id"),
-                    "auto_minted": bool(row_dict.get("auto_minted", 0)),
-                    "veilid_id": row_dict.get("veilid_id"),
-                    "parent_wa_id": row_dict.get("parent_wa_id"),
-                    "parent_signature": row_dict.get("parent_signature"),
-                    "scopes_json": row_dict["scopes_json"],
-                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
-                    "adapter_id": row_dict.get("adapter_id"),
-                    "adapter_name": row_dict.get("adapter_name"),
-                    "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
-                    "created_at": row_dict["created"],
-                    "last_auth": row_dict.get("last_login"),
-                }
-                return WACertificate(**wa_dict)
+                return self._row_to_wa(dict(row))
             return None
 
     async def get_wa_by_oauth(self, provider: str, external_id: str) -> Optional[WACertificate]:
@@ -382,31 +378,15 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             row = cursor.fetchone()
 
             if row:
-                # Map database fields to schema fields
-                row_dict = dict(row)
-                wa_dict = {
-                    "wa_id": row_dict["wa_id"],
-                    "name": row_dict["name"],
-                    "role": row_dict["role"],
-                    "pubkey": row_dict["pubkey"],
-                    "jwt_kid": row_dict["jwt_kid"],
-                    "password_hash": row_dict.get("password_hash"),
-                    "api_key_hash": row_dict.get("api_key_hash"),
-                    "oauth_provider": row_dict.get("oauth_provider"),
-                    "oauth_external_id": row_dict.get("oauth_external_id"),
-                    "auto_minted": bool(row_dict.get("auto_minted", 0)),
-                    "veilid_id": row_dict.get("veilid_id"),
-                    "parent_wa_id": row_dict.get("parent_wa_id"),
-                    "parent_signature": row_dict.get("parent_signature"),
-                    "scopes_json": row_dict["scopes_json"],
-                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
-                    "adapter_id": row_dict.get("adapter_id"),
-                    "adapter_name": row_dict.get("adapter_name"),
-                    "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
-                    "created_at": row_dict["created"],
-                    "last_auth": row_dict.get("last_login"),
-                }
-                return WACertificate(**wa_dict)
+                return self._row_to_wa(dict(row))
+
+            # Fallback: search linked identities stored in JSON
+            cursor = conn.execute("SELECT * FROM wa_cert WHERE oauth_links_json IS NOT NULL AND active = 1")
+            for link_row in cursor.fetchall():
+                wa = self._row_to_wa(dict(link_row))
+                for link in wa.oauth_links:
+                    if link.provider == provider and link.external_id == external_id:
+                        return wa
             return None
 
     async def _get_wa_by_adapter(self, adapter_id: str) -> Optional[WACertificate]:
@@ -417,32 +397,97 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             row = cursor.fetchone()
 
             if row:
-                # Map database fields to schema fields
-                row_dict = dict(row)
-                wa_dict = {
-                    "wa_id": row_dict["wa_id"],
-                    "name": row_dict["name"],
-                    "role": row_dict["role"],
-                    "pubkey": row_dict["pubkey"],
-                    "jwt_kid": row_dict["jwt_kid"],
-                    "password_hash": row_dict.get("password_hash"),
-                    "api_key_hash": row_dict.get("api_key_hash"),
-                    "oauth_provider": row_dict.get("oauth_provider"),
-                    "oauth_external_id": row_dict.get("oauth_external_id"),
-                    "auto_minted": bool(row_dict.get("auto_minted", 0)),
-                    "veilid_id": row_dict.get("veilid_id"),
-                    "parent_wa_id": row_dict.get("parent_wa_id"),
-                    "parent_signature": row_dict.get("parent_signature"),
-                    "scopes_json": row_dict["scopes_json"],
-                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
-                    "adapter_id": row_dict.get("adapter_id"),
-                    "adapter_name": row_dict.get("adapter_name"),
-                    "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
-                    "created_at": row_dict["created"],
-                    "last_auth": row_dict.get("last_login"),
-                }
-                return WACertificate(**wa_dict)
+                return self._row_to_wa(dict(row))
             return None
+
+    async def link_oauth_identity(
+        self,
+        wa_id: str,
+        provider: str,
+        external_id: str,
+        *,
+        account_name: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+        primary: bool = False,
+    ) -> Optional[WACertificate]:
+        existing = await self.get_wa(wa_id)
+        if not existing:
+            return None
+
+        # Prevent linking to a provider that already belongs to another WA
+        match = await self.get_wa_by_oauth(provider, external_id)
+        if match and match.wa_id != wa_id:
+            raise ValueError(f"OAuth identity {provider}:{external_id} already linked to another WA")
+
+        links = list(existing.oauth_links)
+        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        found = False
+        for idx, link in enumerate(links):
+            if link.provider == provider and link.external_id == external_id:
+                links[idx] = link.model_copy(
+                    update={
+                        "account_name": account_name or link.account_name,
+                        "metadata": metadata or link.metadata,
+                        "linked_at": link.linked_at or timestamp,
+                    }
+                )
+                found = True
+                break
+
+        if not found:
+            links.append(
+                OAuthIdentityLink(
+                    provider=provider,
+                    external_id=external_id,
+                    account_name=account_name,
+                    metadata=metadata or {},
+                    linked_at=timestamp,
+                    is_primary=False,
+                )
+            )
+
+        if primary or (not existing.oauth_provider and not existing.oauth_external_id):
+            existing = existing.model_copy(
+                update={"oauth_provider": provider, "oauth_external_id": external_id}
+            )
+            for link in links:
+                link.is_primary = link.provider == provider and link.external_id == external_id
+
+        payload = {
+            "oauth_provider": existing.oauth_provider,
+            "oauth_external_id": existing.oauth_external_id,
+            "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in links]) if links else None,
+        }
+
+        await self.update_wa(wa_id, **payload)
+        return await self.get_wa(wa_id)
+
+    async def unlink_oauth_identity(self, wa_id: str, provider: str, external_id: str) -> Optional[WACertificate]:
+        existing = await self.get_wa(wa_id)
+        if not existing:
+            return None
+
+        links = [link for link in existing.oauth_links if not (link.provider == provider and link.external_id == external_id)]
+
+        payload: Dict[str, Any] = {
+            "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in links]) if links else None,
+        }
+
+        # If unlinking the primary mapping, fall back to remaining links or clear
+        if existing.oauth_provider == provider and existing.oauth_external_id == external_id:
+            if links:
+                new_primary = next((link for link in links if link.is_primary), links[0])
+                payload["oauth_provider"] = new_primary.provider
+                payload["oauth_external_id"] = new_primary.external_id
+                for link in links:
+                    link.is_primary = link is new_primary
+                payload["oauth_links_json"] = json.dumps([link.model_dump(mode="json") for link in links])
+            else:
+                payload["oauth_provider"] = None
+                payload["oauth_external_id"] = None
+
+        await self.update_wa(wa_id, **payload)
+        return await self.get_wa(wa_id)
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
         """Store a WA certificate in the database."""
@@ -462,6 +507,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "oauth_provider": wa_dict.get("oauth_provider"),
                 "oauth_external_id": wa_dict.get("oauth_external_id"),
                 "veilid_id": wa_dict.get("veilid_id"),
+                "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in wa_dict.get("oauth_links", [])])
+                if wa_dict.get("oauth_links")
+                else None,
                 "auto_minted": int(wa_dict.get("auto_minted", False)),
                 "parent_wa_id": wa_dict.get("parent_wa_id"),
                 "parent_signature": wa_dict.get("parent_signature"),
@@ -593,31 +641,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
             result = []
             for row in rows:
-                # Map database fields to schema fields
-                row_dict = dict(row)
-                wa_dict = {
-                    "wa_id": row_dict["wa_id"],
-                    "name": row_dict["name"],
-                    "role": row_dict["role"],
-                    "pubkey": row_dict["pubkey"],
-                    "jwt_kid": row_dict["jwt_kid"],
-                    "password_hash": row_dict.get("password_hash"),
-                    "api_key_hash": row_dict.get("api_key_hash"),
-                    "oauth_provider": row_dict.get("oauth_provider"),
-                    "oauth_external_id": row_dict.get("oauth_external_id"),
-                    "auto_minted": bool(row_dict.get("auto_minted", 0)),
-                    "veilid_id": row_dict.get("veilid_id"),
-                    "parent_wa_id": row_dict.get("parent_wa_id"),
-                    "parent_signature": row_dict.get("parent_signature"),
-                    "scopes_json": row_dict["scopes_json"],
-                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
-                    "adapter_id": row_dict.get("adapter_id"),
-                    "adapter_name": row_dict.get("adapter_name"),
-                    "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
-                    "created_at": row_dict["created"],
-                    "last_auth": row_dict.get("last_login"),
-                }
-                result.append(WACertificate(**wa_dict))
+                result.append(self._row_to_wa(dict(row)))
 
             return result
 

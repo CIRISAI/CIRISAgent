@@ -5,10 +5,11 @@ Tests the new helper methods added to reduce complexity in recall() and search()
 """
 
 import json
-import pytest
 from datetime import datetime, timedelta
 from typing import Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -18,13 +19,20 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 @pytest.fixture
 def memory_service(tmp_path):
     """Create memory service instance."""
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+
     db_path = tmp_path / "test.db"
+    time_service = TimeService()
+    time_service.start()
+
     service = LocalGraphMemoryService(
-        db_path=str(db_path)
+        db_path=str(db_path),
+        time_service=time_service
     )
     service.start()
     yield service
     service.stop()
+    time_service.stop()
 
 
 @pytest.fixture
@@ -40,7 +48,7 @@ def sample_node():
         },
         version=1,
         updated_by="test",
-        updated_at=datetime.now()
+        updated_at=datetime.now(),
     )
 
 
@@ -49,18 +57,20 @@ def sample_nodes():
     """Create multiple sample nodes for testing."""
     nodes = []
     for i in range(5):
-        nodes.append(GraphNode(
-            id=f"test-node-{i}",
-            type=NodeType.CONCEPT if i % 2 == 0 else NodeType.CONFIG,
-            scope=GraphScope.LOCAL,
-            attributes={
-                "content": f"Content {i}",
-                "tags": ["test"] if i % 2 == 0 else ["sample"],
-            },
-            version=1,
-            updated_by="test",
-            updated_at=datetime.now() - timedelta(hours=i)
-        ))
+        nodes.append(
+            GraphNode(
+                id=f"test-node-{i}",
+                type=NodeType.CONCEPT if i % 2 == 0 else NodeType.CONFIG,
+                scope=GraphScope.LOCAL,
+                attributes={
+                    "content": f"Content {i}",
+                    "tags": ["test"] if i % 2 == 0 else ["sample"],
+                },
+                version=1,
+                updated_by="test",
+                updated_at=datetime.now() - timedelta(hours=i),
+            )
+        )
     return nodes
 
 
@@ -83,7 +93,7 @@ class TestMemoryServiceHelpers:
                     target="test-node-2",
                     relationship="RELATES_TO",
                     weight=1.0,
-                    attributes={"test": "attr"}
+                    attributes={"test": "attr"},
                 )
             ]
             mock_get_edges.return_value = mock_edges
@@ -103,8 +113,9 @@ class TestMemoryServiceHelpers:
         assert result[0].id == sample_node.id
 
         # Test depth > 0 with mock edges and nodes
-        with patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node") as mock_get_edges, \
-             patch("ciris_engine.logic.persistence.models.graph.get_graph_node") as mock_get_node:
+        with patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node") as mock_get_edges, patch(
+            "ciris_engine.logic.persistence.models.graph.get_graph_node"
+        ) as mock_get_node:
 
             # Setup mocks
             mock_edges = [
@@ -114,7 +125,7 @@ class TestMemoryServiceHelpers:
                     relationship="RELATES_TO",
                     weight=1.0,
                     scope=GraphScope.LOCAL,
-                    attributes={}
+                    attributes={},
                 )
             ]
             mock_get_edges.return_value = mock_edges
@@ -126,7 +137,7 @@ class TestMemoryServiceHelpers:
                 attributes={"content": "Connected node"},
                 version=1,
                 updated_by="test",
-                updated_at=datetime.now()
+                updated_at=datetime.now(),
             )
             mock_get_node.return_value = connected_node
 
@@ -250,15 +261,11 @@ class TestMemoryServiceHelpers:
                     attributes={"content": "test"},
                     version=1,
                     updated_by="test",
-                    updated_at=datetime.now()
+                    updated_at=datetime.now(),
                 )
             ]
 
-            query = MemoryQuery(
-                node_id="*",
-                scope=GraphScope.LOCAL,
-                include_edges=False
-            )
+            query = MemoryQuery(node_id="*", scope=GraphScope.LOCAL, include_edges=False)
 
             result = await memory_service._recall_wildcard(query)
             assert len(result) == 1
@@ -271,11 +278,7 @@ class TestMemoryServiceHelpers:
         with patch("ciris_engine.logic.persistence.models.graph.get_graph_node") as mock_get:
             mock_get.return_value = sample_node
 
-            query = MemoryQuery(
-                node_id="test-node-1",
-                scope=GraphScope.LOCAL,
-                include_edges=False
-            )
+            query = MemoryQuery(node_id="test-node-1", scope=GraphScope.LOCAL, include_edges=False)
 
             result = await memory_service._recall_single_node(query)
             assert len(result) == 1
@@ -298,8 +301,9 @@ class TestMemoryServiceHelpers:
     @pytest.mark.asyncio
     async def test_fetch_nodes_for_search(self, memory_service):
         """Test _fetch_nodes_for_search helper method."""
-        with patch("ciris_engine.logic.persistence.get_nodes_by_type") as mock_by_type, \
-             patch("ciris_engine.logic.persistence.get_all_graph_nodes") as mock_all:
+        with patch("ciris_engine.logic.persistence.get_nodes_by_type") as mock_by_type, patch(
+            "ciris_engine.logic.persistence.get_all_graph_nodes"
+        ) as mock_all:
 
             # Test with node_type
             mock_by_type.return_value = []
@@ -347,7 +351,7 @@ class TestRefactoredIntegration:
             attributes={"test": "data"},
             version=1,
             updated_by="test",
-            updated_at=datetime.now()
+            updated_at=datetime.now(),
         )
         await memory_service.memorize(node)
 
@@ -374,7 +378,7 @@ class TestRefactoredIntegration:
                 attributes={"content": f"Search content {i}"},
                 version=1,
                 updated_by="test",
-                updated_at=datetime.now()
+                updated_at=datetime.now(),
             )
             await memory_service.memorize(node)
 

@@ -226,14 +226,11 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _fetch_messages_from_bus(self, channel_id: str, limit: int):
         """Fetch messages from communication bus."""
-        from ciris_engine.schemas.runtime.enums import ServiceType
-
-        comm_bus = self.bus_manager.get_bus(ServiceType.COMMUNICATION)
-        if not comm_bus:
+        if not self.bus_manager or not hasattr(self.bus_manager, 'communication'):
             logger.warning("No communication bus available for channel history")
             return []
 
-        return await comm_bus.fetch_messages(channel_id, limit, "DiscordAdapter")
+        return await self.bus_manager.communication.fetch_messages(channel_id, limit, "DiscordAdapter")
 
     async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[Dict[str, Any]]:
         """Get message history from channel using communication bus."""

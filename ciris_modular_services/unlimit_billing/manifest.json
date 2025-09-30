@@ -1,0 +1,76 @@
+{
+  "module": {
+    "name": "unlimit_billing",
+    "version": "0.1.0",
+    "description": "Unlimit billing integration for CIRIS",
+    "author": "CIRIS Team",
+    "MOCK": false
+  },
+  "services": [
+    {
+      "type": "tool",
+      "priority": "HIGH",
+      "class": "unlimit_billing.service.UnlimitBillingService",
+      "capabilities": ["check_billing_credits", "spend_billing_credits"]
+    },
+    {
+      "type": "tool",
+      "priority": "HIGH",
+      "class": "unlimit_billing.commerce_service.UnlimitCommerceService",
+      "capabilities": [
+        "create_payment",
+        "create_invoice",
+        "refund_payment",
+        "create_payout",
+        "get_payment",
+        "get_reports"
+      ]
+    },
+    {
+      "type": "tool",
+      "priority": "HIGH",
+      "class": "unlimit_billing.tool_service.UnlimitBillingToolService",
+      "capabilities": [
+        "execute_tool",
+        "get_tool_schema",
+        "get_tool_info",
+        "get_available_tools",
+        "validate_parameters",
+        "get_tool_result"
+      ]
+    }
+  ],
+  "capabilities": [
+    "check_billing_credits",
+    "spend_billing_credits"
+  ],
+  "dependencies": {
+    "protocols": [],
+    "schemas": []
+  },
+  "configuration": {
+    "base_url": {
+      "type": "string",
+      "default": "https://api.unlimit.com",
+      "description": "Unlimit API base URL"
+    },
+    "timeout_seconds": {
+      "type": "float",
+      "default": 5.0,
+      "description": "HTTP timeout in seconds"
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "default": 15,
+      "description": "Cache TTL for billing checks"
+    },
+    "fail_open": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow interactions when Unlimit is unreachable"
+    }
+  },
+  "requirements": [
+    "httpx>=0.25.0,<1.0.0"
+  ]
+}

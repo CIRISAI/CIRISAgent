@@ -126,21 +126,53 @@ class CIRISRuntime:
         self.agent_processor: Optional["AgentProcessor"] = None
         self._adapter_tasks: List[asyncio.Task] = []
 
-        for adapter_name in adapter_types:
-            try:
-                base_adapter = adapter_name.split(":")[0]
-                adapter_class = load_adapter(base_adapter)
+        # Use bootstrap.adapters if available, otherwise fall back to adapter_types
+        if bootstrap and bootstrap.adapters:
+            # Use the new AdapterLoadRequest from bootstrap
+            for load_request in bootstrap.adapters:
+                try:
+                    adapter_class = load_adapter(load_request.adapter_type)
 
-                adapter_kwargs = kwargs.copy()
-                if adapter_name in self.adapter_configs:
-                    adapter_kwargs["adapter_config"] = self.adapter_configs[adapter_name]
+                    # Create AdapterStartupContext
+                    from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+                    context = AdapterStartupContext(
+                        essential_config=essential_config,
+                        modules_to_load=self.modules,
+                        startup_channel_id=self.startup_channel_id or "",
+                        debug=self.debug,
+                        bus_manager=None,  # Will be set after initialization
+                        time_service=None,  # Will be set after initialization
+                        service_registry=None,  # Will be set after initialization
+                    )
 
-                # Adapters expect runtime as first positional argument
-                adapter_instance = adapter_class(self, **adapter_kwargs)
-                self.adapters.append(adapter_instance)
-                logger.info(f"Successfully loaded and initialized adapter: {adapter_name}")
-            except Exception as e:
-                logger.error(f"Failed to load or initialize adapter '{adapter_name}': {e}", exc_info=True)
+                    # Apply overrides if present
+                    config = load_request.config or AdapterConfig(adapter_type=load_request.adapter_type)
+                    if load_request.adapter_id in self.adapter_configs:
+                        config = self.adapter_configs[load_request.adapter_id]
+
+                    # Create adapter with context
+                    adapter_instance = adapter_class(self, context=context, **config.settings)
+                    self.adapters.append(adapter_instance)
+                    logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
+                except Exception as e:
+                    logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
+        else:
+            # Legacy path for backward compatibility
+            for adapter_name in adapter_types:
+                try:
+                    base_adapter = adapter_name.split(":")[0]
+                    adapter_class = load_adapter(base_adapter)
+
+                    adapter_kwargs = kwargs.copy()
+                    if adapter_name in self.adapter_configs:
+                        adapter_kwargs["adapter_config"] = self.adapter_configs[adapter_name]
+
+                    # Adapters expect runtime as first positional argument
+                    adapter_instance = adapter_class(self, **adapter_kwargs)
+                    self.adapters.append(adapter_instance)
+                    logger.info(f"Successfully loaded and initialized adapter: {adapter_name}")
+                except Exception as e:
+                    logger.error(f"Failed to load or initialize adapter '{adapter_name}': {e}", exc_info=True)
 
         if not self.adapters:
             raise RuntimeError("No valid adapters specified, shutting down")

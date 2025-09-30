@@ -517,10 +517,9 @@ class TestRuntimeAdapterManager:
         # Setup mock config service on service_initializer
         mock_config = AsyncMock()
         mock_config.set_config = AsyncMock()
-        mock_config.list_configs = AsyncMock(return_value={
-            "adapter.test_id.config": {"test": "value"},
-            "adapter.test_id.type": "cli"
-        })
+        mock_config.list_configs = AsyncMock(
+            return_value={"adapter.test_id.config": {"test": "value"}, "adapter.test_id.type": "cli"}
+        )
 
         mock_initializer = Mock()
         mock_initializer.config_service = mock_config

@@ -22,6 +22,7 @@ from ciris_engine.logic.config import ConfigBootstrap
 from ciris_engine.logic.registries.base import Priority, SelectionStrategy
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.registration import AdapterServiceRegistration
+from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 from ciris_engine.schemas.infrastructure.base import ServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
@@ -126,9 +127,32 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             adapter_class = load_adapter(adapter_type)
 
+            # Create AdapterStartupContext for the adapter
+            from ciris_engine.schemas.config.essential import EssentialConfig
+
+            # Get essential_config - it must exist
+            essential_config = getattr(self.runtime, "essential_config", None)
+            if not essential_config:
+                # Create minimal essential config if not present
+                essential_config = EssentialConfig(
+                    agent_name=getattr(self.runtime, "agent_name", "ciris"),
+                    agent_version=getattr(self.runtime, "agent_version", "1.0.0")
+                )
+
+            startup_context = AdapterStartupContext(
+                essential_config=essential_config,
+                modules_to_load=getattr(self.runtime, "modules", []),
+                startup_channel_id=getattr(self.runtime, "startup_channel_id", ""),
+                debug=getattr(self.runtime, "debug", False),
+                bus_manager=getattr(self.runtime, "bus_manager", None),
+                time_service=self.time_service,
+                service_registry=getattr(self.runtime, "service_registry", None),
+            )
+
             adapter_kwargs = config_params.settings if config_params else {}
-            # Adapters expect runtime as first argument, then kwargs
-            adapter = adapter_class(self.runtime, **adapter_kwargs)  # type: ignore[call-arg]
+
+            # All adapters must support context - no fallback
+            adapter = adapter_class(self.runtime, context=startup_context, **adapter_kwargs)
 
             instance = AdapterInstance(
                 adapter_id=adapter_id,

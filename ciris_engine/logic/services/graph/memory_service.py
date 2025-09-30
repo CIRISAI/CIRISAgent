@@ -646,9 +646,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             logger.exception(f"Error searching graph: {e}")
             return []
 
-    async def _fetch_nodes_for_search(
-        self, scope: GraphScope, node_type: Optional[str], limit: int
-    ) -> List[GraphNode]:
+    async def _fetch_nodes_for_search(self, scope: GraphScope, node_type: Optional[str], limit: int) -> List[GraphNode]:
         """Fetch nodes for search based on scope and type."""
         from ciris_engine.logic.persistence import get_all_graph_nodes, get_nodes_by_type
 
@@ -830,9 +828,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
     # REFACTORED HELPER METHODS TO REDUCE COMPLEXITY
     # ============================================================================
 
-    async def _process_node_with_edges(
-        self, node: GraphNode, include_edges: bool = False
-    ) -> GraphNode:
+    async def _process_node_with_edges(self, node: GraphNode, include_edges: bool = False) -> GraphNode:
         """Process a node and optionally attach its edges."""
         if not include_edges:
             return node
@@ -851,9 +847,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 "relationship": edge.relationship,
                 "weight": edge.weight,
                 "attributes": (
-                    edge.attributes.model_dump()
-                    if hasattr(edge.attributes, "model_dump")
-                    else edge.attributes
+                    edge.attributes.model_dump() if hasattr(edge.attributes, "model_dump") else edge.attributes
                 ),
             }
             for edge in edges
@@ -881,9 +875,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return node
 
-    async def _fetch_connected_nodes(
-        self, start_node: GraphNode, depth: int
-    ) -> List[GraphNode]:
+    async def _fetch_connected_nodes(self, start_node: GraphNode, depth: int) -> List[GraphNode]:
         """Fetch nodes connected to start_node up to specified depth."""
         if depth <= 0:
             return [start_node]
@@ -902,23 +894,17 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 continue
 
             # Get edges for current node
-            current_edges = get_edges_for_node(
-                current_node.id, current_node.scope, db_path=self.db_path
-            )
+            current_edges = get_edges_for_node(current_node.id, current_node.scope, db_path=self.db_path)
 
             for edge in current_edges:
                 # Determine the connected node ID
-                connected_id = (
-                    edge.target if edge.source == current_node.id else edge.source
-                )
+                connected_id = edge.target if edge.source == current_node.id else edge.source
 
                 if connected_id in visited_nodes:
                     continue
 
                 # Fetch the connected node
-                connected_node = persistence.get_graph_node(
-                    connected_id, edge.scope, db_path=self.db_path
-                )
+                connected_node = persistence.get_graph_node(connected_id, edge.scope, db_path=self.db_path)
 
                 if not connected_node:
                     continue
@@ -927,9 +913,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
                 # Process secrets if needed
                 if connected_node.attributes:
-                    processed_attrs = await self._process_secrets_for_recall(
-                        connected_node.attributes, "recall"
-                    )
+                    processed_attrs = await self._process_secrets_for_recall(connected_node.attributes, "recall")
                     connected_node = GraphNode(
                         id=connected_node.id,
                         type=connected_node.type,
@@ -941,18 +925,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                     )
 
                 # Process edges for the connected node
-                connected_node = await self._process_node_with_edges(
-                    connected_node, include_edges=True
-                )
+                connected_node = await self._process_node_with_edges(connected_node, include_edges=True)
 
                 all_nodes.append(connected_node)
                 nodes_to_process.append((connected_node, current_depth + 1))
 
         return all_nodes
 
-    def _apply_time_filters(
-        self, nodes: List[GraphNode], filters: Optional[dict]
-    ) -> List[GraphNode]:
+    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[dict]) -> List[GraphNode]:
         """Apply time-based filters to a list of nodes."""
         if not filters:
             return nodes
@@ -963,6 +943,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             since = filters["since"]
             if isinstance(since, str):
                 from datetime import datetime
+
                 since = datetime.fromisoformat(since)
             filtered = [n for n in filtered if n.updated_at and n.updated_at >= since]
 
@@ -970,14 +951,13 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             until = filters["until"]
             if isinstance(until, str):
                 from datetime import datetime
+
                 until = datetime.fromisoformat(until)
             filtered = [n for n in filtered if n.updated_at and n.updated_at <= until]
 
         return filtered
 
-    def _apply_tag_filters(
-        self, nodes: List[GraphNode], filters: Optional[dict]
-    ) -> List[GraphNode]:
+    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[dict]) -> List[GraphNode]:
         """Apply tag-based filters to a list of nodes."""
         if not filters or "tags" not in filters:
             return nodes
@@ -1023,9 +1003,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return search_terms, node_type, scope
 
-    def _filter_nodes_by_content(
-        self, nodes: List[GraphNode], search_terms: List[str]
-    ) -> List[GraphNode]:
+    def _filter_nodes_by_content(self, nodes: List[GraphNode], search_terms: List[str]) -> List[GraphNode]:
         """Filter nodes by search terms in content."""
         if not search_terms:
             return nodes
@@ -1039,9 +1017,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             # Search in attributes
             if node.attributes:
-                attrs_str = json.dumps(
-                    node.attributes, cls=DateTimeEncoder
-                ).lower()
+                attrs_str = json.dumps(node.attributes, cls=DateTimeEncoder).lower()
                 if any(term in attrs_str for term in search_terms):
                     filtered.append(node)
 

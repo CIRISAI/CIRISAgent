@@ -13,6 +13,7 @@ from ciris_engine.schemas.config.essential import EssentialConfig
 
 if TYPE_CHECKING:
     from ciris_engine.logic.buses.bus_manager import BusManager
+    from ciris_engine.logic.registries.base import ServiceRegistry
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
 
@@ -31,11 +32,10 @@ class AdapterStartupContext(BaseModel):
     startup_channel_id: str = Field("", description="Channel ID for startup messages (may be empty string)")
     debug: bool = Field(False, description="Debug mode enabled")
 
-    # Service references - these are runtime objects, not serializable
-    # We mark them as Optional[Any] to allow None during testing
-    bus_manager: Optional[Any] = Field(None, description="Message bus manager for inter-service communication")
-    time_service: Optional[Any] = Field(None, description="Time service for consistent timestamps")
-    service_registry: Optional[Any] = Field(None, description="Service registry for service discovery")
+    # Service references - using forward references for proper typing
+    bus_manager: Optional["BusManager"] = Field(None, description="Message bus manager for inter-service communication")
+    time_service: Optional["TimeServiceProtocol"] = Field(None, description="Time service for consistent timestamps")
+    service_registry: Optional["ServiceRegistry"] = Field(None, description="Service registry for service discovery")
 
     class Config:
         """Pydantic configuration."""

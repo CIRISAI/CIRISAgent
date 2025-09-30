@@ -3,11 +3,14 @@ Base adapter class with common correlation and message handling functionality.
 """
 
 import logging
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.system_context import ChannelContext
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +25,37 @@ class BaseAdapter(Service):
     - Common telemetry patterns
     """
 
-    def __init__(self, adapter_type: str, runtime: Any, config: Optional[dict] = None) -> None:
-        """Initialize base adapter."""
-        super().__init__(config)
+    def __init__(
+        self,
+        adapter_type: str,
+        runtime: Any,
+        config: Optional[dict] = None,
+        context: Optional["AdapterStartupContext"] = None,
+    ) -> None:
+        """
+        Initialize base adapter.
+
+        Args:
+            adapter_type: Type of adapter (discord, api, cli, etc)
+            runtime: Runtime instance (for backward compatibility)
+            config: Legacy config dict (for backward compatibility)
+            context: New AdapterStartupContext with all startup information
+        """
+        # Use context.essential_config if available, otherwise fall back to config
+        if context and hasattr(context, "essential_config"):
+            # Extract relevant config from context
+            super().__init__(config)
+        else:
+            super().__init__(config)
+
         self.adapter_type = adapter_type
         self.runtime = runtime
+        self.context = context
         self._time_service: Optional[TimeServiceProtocol] = None
+
+        # If context provided, extract services
+        if context:
+            self._time_service = getattr(context, "time_service", None)
 
     def _get_time_service(self) -> Optional[TimeServiceProtocol]:
         """Get time service from runtime."""

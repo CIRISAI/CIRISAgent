@@ -411,3 +411,165 @@ class TestTaskSigning:
         # Verify the task passed to persistence is the same mock_task
         # without any signing attributes set on it
         assert mock_add_task.call_args[0][0] == mock_task
+
+
+class TestChannelHistoryFetch:
+    """Test channel history fetch functionality - validates fix for bus_manager.get_bus() issue."""
+
+    @pytest.fixture
+    def time_service(self):
+        """Create a time service."""
+        return TimeService()
+
+    @pytest.fixture
+    def mock_memory_service(self):
+        """Create mock memory service."""
+        memory = AsyncMock()
+        memory.recall = AsyncMock(return_value=[])
+        return memory
+
+    @pytest.fixture
+    def mock_bus_manager(self):
+        """Create mock bus manager with communication bus."""
+        from datetime import datetime, timezone
+
+        from ciris_engine.schemas.runtime.messages import FetchedMessage
+
+        # Create mock messages for channel history
+        timestamp_str = datetime.now(timezone.utc).isoformat()
+        mock_messages = [
+            FetchedMessage(
+                message_id="hist1",
+                content="Previous message 1",
+                author_id="user1",
+                author_name="User1",
+                timestamp=timestamp_str,
+                is_bot=False,
+                channel_id="test_channel",
+            ),
+            FetchedMessage(
+                message_id="hist2",
+                content="Previous message 2",
+                author_id="bot",
+                author_name="CIRIS",
+                timestamp=timestamp_str,
+                is_bot=True,
+                channel_id="test_channel",
+            ),
+        ]
+
+        bus_manager = Mock()
+        bus_manager.communication = AsyncMock()
+        bus_manager.communication.fetch_messages = AsyncMock(return_value=mock_messages)
+        return bus_manager
+
+    @pytest.fixture
+    def observer(self, time_service, mock_memory_service, mock_bus_manager):
+        """Create observer instance with mocked bus manager."""
+        return ConcreteObserver(
+            on_observe=AsyncMock(),
+            bus_manager=mock_bus_manager,
+            memory_service=mock_memory_service,
+            time_service=time_service,
+            origin_service="test",
+        )
+
+    @pytest.mark.asyncio
+    async def test_fetch_messages_from_bus_success(self, observer, mock_bus_manager):
+        """Test successful message fetching via bus_manager.communication."""
+        # Fetch messages
+        messages = await observer._fetch_messages_from_bus("test_channel", 10)
+
+        # Verify communication bus was called with correct parameters
+        mock_bus_manager.communication.fetch_messages.assert_called_once_with("test_channel", 10, "DiscordAdapter")
+
+        # Verify messages were returned
+        assert len(messages) == 2
+        assert messages[0].content == "Previous message 1"
+        assert messages[1].is_bot is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_messages_no_bus_manager(self, time_service, mock_memory_service):
+        """Test handling when bus_manager is None."""
+        observer = ConcreteObserver(
+            on_observe=AsyncMock(),
+            bus_manager=None,  # No bus manager
+            memory_service=mock_memory_service,
+            time_service=time_service,
+            origin_service="test",
+        )
+
+        # Fetch messages should return empty list
+        messages = await observer._fetch_messages_from_bus("test_channel", 10)
+        assert messages == []
+
+    @pytest.mark.asyncio
+    async def test_get_channel_history_success(self, observer, mock_bus_manager):
+        """Test full channel history retrieval with message formatting."""
+        # Get channel history
+        history = await observer._get_channel_history("test_channel", 10)
+
+        # Verify communication bus was called
+        mock_bus_manager.communication.fetch_messages.assert_called_once()
+
+        # Verify history format
+        assert len(history) == 2
+        assert history[0]["content"] is not None
+        assert history[0]["author"] in ["User1", "CIRIS"]
+        assert history[0]["author_id"] is not None
+        assert history[0]["is_agent"] is not None
+
+    @pytest.mark.asyncio
+    async def test_get_channel_history_empty_channel(self, observer, mock_bus_manager):
+        """Test channel history from empty channel."""
+        # Mock empty channel
+        mock_bus_manager.communication.fetch_messages = AsyncMock(return_value=[])
+
+        # Get channel history
+        history = await observer._get_channel_history("test_channel", 10)
+
+        # Verify empty history
+        assert len(history) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_channel_history_exception_handling(self, observer, mock_bus_manager):
+        """Test exception handling in channel history fetch."""
+        # Mock exception
+        mock_bus_manager.communication.fetch_messages = AsyncMock(side_effect=Exception("Communication error"))
+
+        # Get channel history - should handle exception gracefully
+        history = await observer._get_channel_history("test_channel", 10)
+
+        # Verify empty history returned on error
+        assert history == []
+
+    @pytest.mark.asyncio
+    async def test_channel_history_integration_with_observation(self, observer, time_service):
+        """Test channel history is included in passive observation."""
+        test_msg = DiscordMessage(
+            message_id="msg123",
+            author_id="123456789",
+            author_name="CurrentUser",
+            content="Current message",
+            channel_id="test_channel",
+            is_bot=False,
+        )
+
+        captured_thought = None
+
+        def capture_thought(thought):
+            nonlocal captured_thought
+            captured_thought = thought
+
+        # Patch persistence
+        with patch("ciris_engine.logic.persistence.add_task"):
+            with patch("ciris_engine.logic.persistence.add_thought", side_effect=capture_thought):
+                await observer._create_passive_observation_result(test_msg)
+
+        # Verify thought includes channel history context
+        assert captured_thought is not None
+        thought_content = captured_thought.content
+
+        # Should include both historical messages
+        assert "Previous message 1" in thought_content or "User1" in thought_content
+        assert len(thought_content) > len("Current message")  # Has more than just current message

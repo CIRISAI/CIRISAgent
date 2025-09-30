@@ -99,10 +99,33 @@ class TestCommunicationBus:
 
     async def test_fetch_messages(self, communication_bus, mock_registry):
         """Test fetching messages from a channel."""
+        from ciris_engine.schemas.runtime.messages import FetchedMessage
+
+        # Create realistic FetchedMessage objects with ISO timestamp strings
+        timestamp_str = datetime.now(timezone.utc).isoformat()
+        mock_messages = [
+            FetchedMessage(
+                message_id="msg1",
+                content="Hello, how are you?",
+                author_id="user123",
+                author_name="TestUser",
+                timestamp=timestamp_str,
+                is_bot=False,
+                channel_id="test_channel",
+            ),
+            FetchedMessage(
+                message_id="msg2",
+                content="I'm doing well, thanks!",
+                author_id="bot456",
+                author_name="CIRIS",
+                timestamp=timestamp_str,
+                is_bot=True,
+                channel_id="test_channel",
+            ),
+        ]
+
         mock_service = AsyncMock()
-        mock_service.fetch_messages = AsyncMock(
-            return_value=[{"content": "test", "timestamp": "2024-01-01T00:00:00Z", "author": "user"}]
-        )
+        mock_service.fetch_messages = AsyncMock(return_value=mock_messages)
         mock_service.get_capabilities = MagicMock(return_value=MagicMock(actions=["fetch_messages"]))
 
         mock_registry.get_services_by_type.return_value = [mock_service]
@@ -111,7 +134,60 @@ class TestCommunicationBus:
         # Fetch messages
         messages = await communication_bus.fetch_messages("test_channel", 10, "test_handler")
 
-        assert len(messages) == 1
+        assert len(messages) == 2
+        assert messages[0].content == "Hello, how are you?"
+        assert messages[1].is_bot is True
+        # Check call with keyword argument since that's how the bus calls it
+        mock_service.fetch_messages.assert_called_once()
+
+    async def test_fetch_messages_empty_channel(self, communication_bus, mock_registry):
+        """Test fetching messages from an empty channel."""
+        mock_service = AsyncMock()
+        mock_service.fetch_messages = AsyncMock(return_value=[])
+        mock_service.get_capabilities = MagicMock(return_value=MagicMock(actions=["fetch_messages"]))
+
+        mock_registry.get_services_by_type.return_value = [mock_service]
+        mock_registry.get_service = AsyncMock(return_value=mock_service)
+
+        # Fetch messages from empty channel
+        messages = await communication_bus.fetch_messages("empty_channel", 10, "test_handler")
+
+        assert len(messages) == 0
+        mock_service.fetch_messages.assert_called_once()
+
+    async def test_fetch_messages_with_large_history(self, communication_bus, mock_registry):
+        """Test fetching a large number of messages."""
+        from ciris_engine.schemas.runtime.messages import FetchedMessage
+
+        # Create 50 mock messages with ISO timestamp strings
+        timestamp_str = datetime.now(timezone.utc).isoformat()
+        mock_messages = [
+            FetchedMessage(
+                message_id=f"msg{i}",
+                content=f"Message {i}",
+                author_id=f"user{i % 3}",
+                author_name=f"User{i % 3}",
+                timestamp=timestamp_str,
+                is_bot=(i % 4 == 0),
+                channel_id="test_channel",
+            )
+            for i in range(50)
+        ]
+
+        mock_service = AsyncMock()
+        mock_service.fetch_messages = AsyncMock(return_value=mock_messages)
+        mock_service.get_capabilities = MagicMock(return_value=MagicMock(actions=["fetch_messages"]))
+
+        mock_registry.get_services_by_type.return_value = [mock_service]
+        mock_registry.get_service = AsyncMock(return_value=mock_service)
+
+        # Fetch 50 messages
+        messages = await communication_bus.fetch_messages("test_channel", 50, "test_handler")
+
+        assert len(messages) == 50
+        # Verify first and last messages
+        assert messages[0].message_id == "msg0"
+        assert messages[49].message_id == "msg49"
         mock_service.fetch_messages.assert_called_once()
 
     async def test_get_default_channel(self, communication_bus, mock_registry):

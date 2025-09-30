@@ -202,6 +202,7 @@ ResourceMonitorService(
 3. **Signal emission**: Send protective signals when limits exceeded
 4. **Historical tracking**: Maintain rolling windows of usage data
 5. **Health reporting**: Provide system health status
+6. **Credit Gating (optional)**: Delegate to configured credit provider before allowing gated interactions
 
 ### Integration Points
 
@@ -209,11 +210,24 @@ ResourceMonitorService(
 - **Time Service**: Timestamp generation for rate limiting
 - **Database Connection**: SQLite for active thought counting
 - **Signal Handlers**: Other services register for resource events
+- **Optional Credit Provider**: Implements `CreditGateProtocol` to gate interactions on external credits
 
 #### API Integration
 - Health endpoint integration via `is_healthy()`
-- Telemetry metrics via `_collect_custom_metrics()`
+- Telemetry metrics via `_collect_custom_metrics()` (includes credit provider telemetry when configured)
 - Status reporting through `get_status()`
+- Credit management via `check_credit()` and `spend_credit()` when a provider is attached
+
+#### Unlimit Credit Provider
+- Implemented by `UnlimitCreditProvider`
+- Supports `check_credit` + `spend_credit` with short-lived caching
+- Configurable fail-open behaviour for emergency operation (disabled by default)
+- Reuses httpx for async network I/O and integrates with resource monitor lifecycle
+- Automatically enabled when `UNLIMIT_API_KEY` is present; optional env overrides:
+  - `UNLIMIT_API_BASE_URL`
+  - `UNLIMIT_API_TIMEOUT_SECONDS`
+  - `UNLIMIT_CACHE_TTL_SECONDS`
+  - `UNLIMIT_FAIL_OPEN`
 
 ## 🧪 Testing Strategy
 
@@ -243,8 +257,9 @@ test_health_status_reporting()      # Status integration
 1. **Predictive Monitoring**: ML-based resource usage forecasting
 2. **Dynamic Limits**: Adaptive thresholds based on historical patterns  
 3. **Cross-Service Coordination**: Resource sharing negotiations
-4. **Enhanced Metrics**: More granular performance tracking
-5. **Module Conversion**: Convert from single .py file to proper module structure
+4. **Enhanced Credit Providers**: Support additional providers beyond Unlimit
+5. **Enhanced Metrics**: More granular performance tracking
+6. **Module Conversion**: Convert from single .py file to proper module structure
 
 ### v1.5.0 Roadmap
 - [ ] Convert to module directory structure

@@ -861,20 +861,31 @@ class AgentProcessor:
             logger.info("Executing single step point via pipeline controller")
             step_result = await self._pipeline_controller.execute_single_step_point()
 
-            if not step_result or not isinstance(step_result, dict):
-                raise ValueError(f"Invalid step result from pipeline controller: {step_result}")
+            if not step_result:
+                raise ValueError("Pipeline controller returned None")
+
+            # Support both dict and Pydantic SingleStepResult models
+            from ciris_engine.protocols.pipeline_control import SingleStepResult
+
+            if isinstance(step_result, SingleStepResult):
+                # Convert Pydantic model to dict for uniform access
+                step_result_dict = step_result.model_dump()
+            elif isinstance(step_result, dict):
+                step_result_dict = step_result
+            else:
+                raise ValueError(f"Invalid step result type from pipeline controller: {type(step_result)}")
 
             processing_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000
 
             return {
                 "success": True,
-                "step_point": step_result["step_point"],  # Fail if missing
-                "step_results": step_result["step_results"],  # Fail if missing
-                "thoughts_processed": len(step_result["step_results"]),
+                "step_point": step_result_dict["step_point"],  # Fail if missing
+                "step_results": step_result_dict["step_results"],  # Fail if missing
+                "thoughts_processed": len(step_result_dict["step_results"]),
                 "processing_time_ms": processing_time_ms,
-                "pipeline_state": step_result["pipeline_state"],  # Fail if missing
-                "current_round": step_result.get("current_round"),
-                "pipeline_empty": step_result.get("pipeline_empty", False),
+                "pipeline_state": step_result_dict["pipeline_state"],  # Fail if missing
+                "current_round": step_result_dict.get("current_round"),
+                "pipeline_empty": step_result_dict.get("pipeline_empty", False),
             }
 
         finally:

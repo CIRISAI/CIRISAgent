@@ -160,7 +160,7 @@ class EmergencyResource:
         command.signature = self._sign_command(command, private_key)
 
         # Send to emergency endpoint (note: NOT under /v1/)
-        result = await self._transport.request("POST", "/emergency/shutdown", json=command.dict())
+        result = await self._transport.request("POST", "/emergency/shutdown", json=command.model_dump())
 
         return EmergencyShutdownResponse(**result)
 

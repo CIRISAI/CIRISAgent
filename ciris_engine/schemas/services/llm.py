@@ -7,7 +7,7 @@ Provides typed schemas for LLM service operations.
 from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TokenUsageStats(BaseModel):
@@ -17,8 +17,7 @@ class TokenUsageStats(BaseModel):
     completion_tokens: int = Field(0, description="Number of tokens in the completion")
     total_tokens: int = Field(0, description="Total tokens used")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class CircuitBreakerStats(BaseModel):
@@ -64,8 +63,7 @@ class ExtractedJSONData(BaseModel):
     result: Optional[str] = Field(None, description="Result value")
     status: Optional[str] = Field(None, description="Status indicator")
 
-    class Config:
-        extra = "allow"  # Allow additional fields
+    model_config = ConfigDict(extra="allow")
 
 
 class JSONExtractionResult(BaseModel):
@@ -115,8 +113,7 @@ class CachedResponseData(BaseModel):
     model: str = Field(..., description="Model used")
     finish_reason: Optional[str] = Field(None, description="Finish reason")
 
-    class Config:
-        extra = "allow"  # Allow additional fields for different response types
+    model_config = ConfigDict(extra="allow")
 
 
 class CachedLLMResponse(BaseModel):

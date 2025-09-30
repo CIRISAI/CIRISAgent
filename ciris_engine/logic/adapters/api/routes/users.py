@@ -6,11 +6,11 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.api.auth import AuthContext, PermissionRequestResponse, PermissionRequestUser, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
-from ciris_engine.schemas.services.authority_core import WARole
+from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WARole
 
 from ..dependencies.auth import check_permissions, get_auth_context, get_auth_service
 from ..services.auth_service import (
@@ -71,6 +71,7 @@ class UserSummary(BaseModel):
     created_at: datetime
     last_login: Optional[datetime] = None
     is_active: bool = True
+    linked_oauth_accounts: List["LinkedOAuthAccount"] = Field(default_factory=list)
 
 
 class UserDetail(UserSummary):
@@ -82,6 +83,62 @@ class UserDetail(UserSummary):
     wa_parent_id: Optional[str] = None
     wa_auto_minted: bool = False
     api_keys_count: int = 0
+
+
+class LinkedOAuthAccount(BaseModel):
+    """Linked OAuth identity summary."""
+
+    provider: str
+    external_id: str
+    account_name: Optional[str] = None
+    linked_at: Optional[datetime] = None
+    is_primary: bool = False
+    metadata: Dict[str, str] = Field(default_factory=dict)
+
+
+def _build_linked_accounts(user) -> List[LinkedOAuthAccount]:
+    accounts: List[LinkedOAuthAccount] = []
+    seen = set()
+
+    for link in getattr(user, "oauth_links", []) or []:
+        key = (link.provider, link.external_id)
+        seen.add(key)
+        accounts.append(
+            LinkedOAuthAccount(
+                provider=link.provider,
+                external_id=link.external_id,
+                account_name=getattr(link, "account_name", None),
+                linked_at=getattr(link, "linked_at", None),
+                is_primary=getattr(link, "is_primary", False),
+                metadata=getattr(link, "metadata", {}) or {},
+            )
+        )
+
+    if user.oauth_provider and user.oauth_external_id:
+        key = (user.oauth_provider, user.oauth_external_id)
+        if key not in seen:
+            accounts.append(
+                LinkedOAuthAccount(
+                    provider=user.oauth_provider,
+                    external_id=user.oauth_external_id,
+                    account_name=getattr(user, "oauth_name", None),
+                    linked_at=None,
+                    is_primary=True,
+                    metadata={},
+                )
+            )
+
+    primary_found = False
+    for account in accounts:
+        if account.is_primary and not primary_found:
+            primary_found = True
+        else:
+            account.is_primary = account.is_primary and primary_found
+
+    if accounts and not any(account.is_primary for account in accounts):
+        accounts[0].is_primary = True
+
+    return accounts
 
 
 class UpdateUserRequest(BaseModel):
@@ -98,6 +155,16 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class LinkOAuthAccountRequest(BaseModel):
+    """Request payload to link an OAuth account to a user."""
+
+    provider: str = Field(..., description="OAuth provider identifier")
+    external_id: str = Field(..., description="Provider-scoped user identifier")
+    account_name: Optional[str] = Field(None, description="Display name provided by the provider")
+    metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata from the provider")
+    primary: bool = Field(False, description="Promote this identity to the primary mapping")
+
+
 class CreateUserRequest(BaseModel):
     """Request to create a new user."""
 
@@ -109,21 +176,21 @@ class CreateUserRequest(BaseModel):
 class MintWARequest(BaseModel):
     """Request to mint user as Wise Authority."""
 
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"wa_role": "AUTHORITY", "signature": "base64_encoded_signature"}}
+    )
+
     wa_role: WARole = Field(description="Role to grant: AUTHORITY or OBSERVER")
     signature: Optional[str] = Field(None, description="Ed25519 signature from ROOT private key")
     private_key_path: Optional[str] = Field(None, description="Path to ROOT private key for auto-signing")
-
-    class Config:
-        schema_extra = {"example": {"wa_role": "AUTHORITY", "signature": "base64_encoded_signature"}}
 
 
 class UpdatePermissionsRequest(BaseModel):
     """Request to update user's custom permissions."""
 
-    permissions: List[str] = Field(description="List of permission strings to grant")
+    model_config = ConfigDict(json_schema_extra={"example": {"permissions": ["send_messages", "custom_permission_1"]}})
 
-    class Config:
-        schema_extra = {"example": {"permissions": ["send_messages", "custom_permission_1"]}}
+    permissions: List[str] = Field(description="List of permission strings to grant")
 
 
 class WAKeyCheckResponse(BaseModel):
@@ -200,6 +267,7 @@ async def list_users(
                 created_at=user.created_at,
                 last_login=user.last_login,
                 is_active=user.is_active,
+                linked_oauth_accounts=_build_linked_accounts(user),
             )
         )
 
@@ -381,6 +449,7 @@ async def get_user(
         wa_parent_id=user.wa_parent_id,
         wa_auto_minted=user.wa_auto_minted,
         api_keys_count=len(api_keys),
+        linked_oauth_accounts=_build_linked_accounts(user),
     )
 
 
@@ -443,6 +512,49 @@ async def change_password(
         raise HTTPException(status_code=400, detail=ERROR_CHANGE_PASSWORD_FAILED)
 
     return {"message": "Password changed successfully"}
+
+
+@router.post("/{user_id}/oauth-links", response_model=UserDetail)
+async def link_oauth_account(
+    user_id: str,
+    request: LinkOAuthAccountRequest,
+    auth: AuthContext = Depends(get_auth_context),
+    auth_service: APIAuthService = Depends(get_auth_service),
+    _: None = Depends(check_permissions([PERMISSION_USERS_WRITE])),
+) -> UserDetail:
+    """Link an OAuth identity to an existing user."""
+
+    user = await auth_service.link_user_oauth(
+        wa_id=user_id,
+        provider=request.provider,
+        external_id=request.external_id,
+        account_name=request.account_name,
+        metadata=request.metadata,
+        primary=request.primary,
+    )
+
+    if not user:
+        raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
+
+    return await get_user(user_id, auth, auth_service, None)
+
+
+@router.delete("/{user_id}/oauth-links/{provider}/{external_id}", response_model=UserDetail)
+async def unlink_oauth_account(
+    user_id: str,
+    provider: str,
+    external_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+    auth_service: APIAuthService = Depends(get_auth_service),
+    _: None = Depends(check_permissions([PERMISSION_USERS_WRITE])),
+) -> UserDetail:
+    """Remove a linked OAuth identity from a user."""
+
+    user = await auth_service.unlink_user_oauth(user_id, provider, external_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
+
+    return await get_user(user_id, auth, auth_service, None)
 
 
 @router.post("/{user_id}/mint-wa", response_model=UserDetail)

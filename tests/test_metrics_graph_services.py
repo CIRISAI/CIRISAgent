@@ -91,8 +91,8 @@ class TestMemoryServiceMetrics(BaseMetricsTest):
         yield db_path
         os.unlink(db_path)
 
-    @pytest_asyncio.fixture
-    async def memory_service(self, temp_db, secrets_service, time_service):
+    @pytest.fixture
+    def memory_service(self, temp_db, secrets_service, time_service):
         """Create memory service."""
         service = LocalGraphMemoryService(db_path=temp_db, secrets_service=secrets_service, time_service=time_service)
         service.start()
@@ -363,9 +363,9 @@ class TestIncidentServiceMetrics(BaseMetricsTest):
     async def incident_service(self, mock_memory_bus, time_service):
         """Create incident service."""
         service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=time_service)
-        service.start()
+        await service.start()
         yield service
-        service.stop()
+        await service.stop()
 
     @pytest.mark.asyncio
     async def test_incident_service_base_metrics(self, incident_service):

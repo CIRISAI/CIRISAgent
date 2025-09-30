@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..transport import Transport
 
@@ -21,8 +21,7 @@ class WAStatus(BaseModel):
     active_was: int = Field(..., description="Number of active WAs")
     pending_deferrals: int = Field(..., description="Number of pending deferrals")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class WAGuidance(BaseModel):
@@ -32,8 +31,7 @@ class WAGuidance(BaseModel):
     wa_id: str = Field(..., description="WA that provided guidance")
     confidence: float = Field(..., description="Confidence score")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class WiseAuthorityResource:

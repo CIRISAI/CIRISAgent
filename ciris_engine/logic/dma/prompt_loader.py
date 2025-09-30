@@ -96,7 +96,7 @@ class DMAPromptLoader:
             for key, value in template_data.items():
                 if "_mode_" in key and isinstance(value, str):
                     prompt_collection.agent_variations[key] = value
-                elif key not in prompt_collection.model_fields and isinstance(value, str):
+                elif key not in PromptCollection.model_fields and isinstance(value, str):
                     prompt_collection.custom_prompts[key] = value
 
             return prompt_collection

@@ -186,7 +186,7 @@ class TestSingleStepHangValidation:
             # Mock pipeline controller methods
             agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
             agent_processor._pipeline_controller.get_pipeline_state = Mock(
-                return_value=Mock(thoughts_by_step={}, dict=Mock(return_value={}))
+                return_value=Mock(thoughts_by_step={}, model_dump=Mock(return_value={}))
             )
 
             # ACT: Call single_step - this should NOT hang now that the bug is fixed
@@ -235,7 +235,7 @@ class TestSingleStepHangValidation:
         # Mock empty pipeline and no pending thoughts - this should trigger fallback
         agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
         agent_processor._pipeline_controller.get_pipeline_state = Mock(
-            return_value=Mock(thoughts_by_step={}, dict=Mock(return_value={}))
+            return_value=Mock(thoughts_by_step={}, model_dump=Mock(return_value={}))
         )
 
         with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get_thoughts:

@@ -32,7 +32,7 @@ from ciris_engine.schemas.services.graph_core import ConnectedNodeInfo, GraphNod
 from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
 
-from .secrets_snapshot import build_secrets_snapshot
+from .secrets_snapshot import ERROR_KEY, build_secrets_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -508,10 +508,17 @@ async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> Secret
             secrets_service
         )  # NOQA - build_secrets_snapshot returns Dict[str, Any] for compatibility
 
+        # Check if there was an error
+        error_message = snapshot_data.get(ERROR_KEY)
+        filter_status = "active" if not error_message else "error"
+
+        if error_message:
+            logger.warning("Secrets snapshot reported an internal error in secrets service. See monitoring for details.")
+
         # Convert to typed schema
         return SecretsData(
             secrets_count=snapshot_data.get("total_secrets_stored", 0),
-            filter_status="active",  # Default status
+            filter_status=filter_status,
             last_updated=None,  # Not provided by build_secrets_snapshot
             detected_secrets=snapshot_data.get("detected_secrets", []),
             secrets_filter_version=snapshot_data.get("secrets_filter_version", 0),

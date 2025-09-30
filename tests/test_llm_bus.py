@@ -28,8 +28,8 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 
 
-class TestResponse(BaseModel):
-    """Test response model"""
+class MockResponseModel(BaseModel):
+    """Mock response model for testing (not a test class - renamed to avoid pytest collection)"""
 
     message: str
     confidence: float = 1.0
@@ -85,7 +85,7 @@ class MockLLMService:
             raise RuntimeError(f"{self.name} simulated failure")
 
         # Return test response
-        response = TestResponse(message=f"Response from {self.name}")
+        response = MockResponseModel(message=f"Response from {self.name}")
         usage = ResourceUsage(
             tokens_used=100,
             tokens_input=50,
@@ -175,10 +175,10 @@ class TestLLMBusBasics:
         # Make a call
         messages = [{"role": "user", "content": "Test"}]
         result, usage = await llm_bus.call_llm_structured(
-            messages=messages, response_model=TestResponse, handler_name="test"
+            messages=messages, response_model=MockResponseModel, handler_name="test"
         )
 
-        assert isinstance(result, TestResponse)
+        assert isinstance(result, MockResponseModel)
         assert result.message == "Response from TestLLM"
         assert usage.tokens_used == 100
         assert mock_service.call_count == 1
@@ -188,7 +188,7 @@ class TestLLMBusBasics:
         """Test error when no providers available"""
         with pytest.raises(RuntimeError, match="No LLM services available"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}], response_model=TestResponse, handler_name="test"
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel, handler_name="test"
             )
 
     @pytest.mark.asyncio
@@ -216,7 +216,7 @@ class TestLLMBusBasics:
 
         # Make a call - should use healthy service despite lower priority
         result, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
         )
 
         assert result.message == "Response from HealthyLLM"
@@ -252,7 +252,7 @@ class TestDistributionStrategies:
         # Make multiple calls
         for i in range(6):
             result, _ = await bus.call_llm_structured(
-                messages=[{"role": "user", "content": f"Test {i}"}], response_model=TestResponse
+                messages=[{"role": "user", "content": f"Test {i}"}], response_model=MockResponseModel
             )
             # Should cycle through services
             expected_service = services[i % 3]
@@ -289,7 +289,7 @@ class TestDistributionStrategies:
         # Make initial calls to build up latency metrics
         for i in range(2):
             await bus.call_llm_structured(
-                messages=[{"role": "user", "content": f"Test warmup {i}"}], response_model=TestResponse
+                messages=[{"role": "user", "content": f"Test warmup {i}"}], response_model=MockResponseModel
             )
 
         # Reset call counts
@@ -300,7 +300,7 @@ class TestDistributionStrategies:
         fast_service_calls = 0
         for i in range(5):
             result, _ = await bus.call_llm_structured(
-                messages=[{"role": "user", "content": f"Test {i+2}"}], response_model=TestResponse
+                messages=[{"role": "user", "content": f"Test {i+2}"}], response_model=MockResponseModel
             )
             if "FastLLM" in result.message:
                 fast_service_calls += 1
@@ -333,7 +333,7 @@ class TestDistributionStrategies:
         # Make calls - should distribute evenly
         for i in range(6):
             await bus.call_llm_structured(
-                messages=[{"role": "user", "content": f"Test {i}"}], response_model=TestResponse
+                messages=[{"role": "user", "content": f"Test {i}"}], response_model=MockResponseModel
             )
 
         # All services should have equal call counts
@@ -359,7 +359,7 @@ class TestCircuitBreaker:
         for i in range(3):
             with pytest.raises(RuntimeError, match="All LLM services failed"):
                 await llm_bus.call_llm_structured(
-                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=TestResponse
+                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=MockResponseModel
                 )
 
         # Circuit breaker should be open
@@ -370,7 +370,7 @@ class TestCircuitBreaker:
         initial_count = failing_service.call_count
         with pytest.raises(RuntimeError):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
             )
         assert failing_service.call_count == initial_count  # No new calls
 
@@ -395,7 +395,7 @@ class TestCircuitBreaker:
         for i in range(3):
             with pytest.raises(RuntimeError):
                 await llm_bus.call_llm_structured(
-                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=TestResponse
+                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=MockResponseModel
                 )
 
         # Verify circuit is open
@@ -410,7 +410,7 @@ class TestCircuitBreaker:
         with patch("time.time", return_value=original_time() + 6.0):
             # Circuit should allow half-open attempts
             result, _ = await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test recovery"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "Test recovery"}], response_model=MockResponseModel
             )
 
             assert result.message == "Response from RecoveringLLM"
@@ -418,7 +418,7 @@ class TestCircuitBreaker:
             # After successful calls, circuit should close
             for i in range(2):
                 await llm_bus.call_llm_structured(
-                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=TestResponse
+                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=MockResponseModel
                 )
 
             assert cb.state == CircuitState.CLOSED
@@ -459,7 +459,7 @@ class TestPriorityFailover:
 
         # Call should try high priority first, fail, then use normal priority
         result, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
         )
 
         assert result.message == "Response from NormalPriority"
@@ -484,7 +484,7 @@ class TestPriorityFailover:
         # Should try all and fail
         with pytest.raises(RuntimeError, match="All LLM services failed"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
             )
 
 
@@ -508,7 +508,7 @@ class TestConcurrentAccess:
         tasks = []
         for i in range(10):
             task = llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": f"Concurrent test {i}"}], response_model=TestResponse
+                messages=[{"role": "user", "content": f"Concurrent test {i}"}], response_model=MockResponseModel
             )
             tasks.append(task)
 
@@ -518,7 +518,7 @@ class TestConcurrentAccess:
         # All should succeed
         assert len(results) == 10
         for result, _ in results:
-            assert isinstance(result, TestResponse)
+            assert isinstance(result, MockResponseModel)
 
         # Calls should be distributed
         total_calls = sum(s.call_count for s in services)
@@ -549,7 +549,7 @@ class TestConcurrentAccess:
 
         # Should be able to use any of them
         result, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
         )
         assert "Concurrent" in result.message
 
@@ -573,7 +573,7 @@ class TestTelemetry:
         for i in range(3):
             await llm_bus.call_llm_structured(
                 messages=[{"role": "user", "content": f"Test {i}"}],
-                response_model=TestResponse,
+                response_model=MockResponseModel,
                 handler_name="test_handler",
             )
 
@@ -617,7 +617,7 @@ class TestTelemetry:
         for i in range(10):
             try:
                 await llm_bus.call_llm_structured(
-                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=TestResponse
+                    messages=[{"role": "user", "content": f"Test {i}"}], response_model=MockResponseModel
                 )
                 success_count += 1
             except RuntimeError:
@@ -667,7 +667,7 @@ class TestEdgeCases:
         # Should fail as no service has call_llm_structured capability
         with pytest.raises(RuntimeError, match="No LLM services available"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
             )
 
     @pytest.mark.asyncio
@@ -776,7 +776,7 @@ class TestServiceUnavailableFailover:
 
         # First call should fail on primary, succeed on secondary
         result, usage = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test failover"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Test failover"}], response_model=MockResponseModel
         )
 
         # Should get response from secondary service
@@ -792,7 +792,7 @@ class TestServiceUnavailableFailover:
         for i in range(4):
             try:
                 await llm_bus.call_llm_structured(
-                    messages=[{"role": "user", "content": f"Trigger failure {i}"}], response_model=TestResponse
+                    messages=[{"role": "user", "content": f"Trigger failure {i}"}], response_model=MockResponseModel
                 )
             except:
                 pass  # Expected to succeed on secondary after primary fails
@@ -806,7 +806,7 @@ class TestServiceUnavailableFailover:
         secondary_service.call_count = 0
 
         result2, usage2 = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Test circuit breaker"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Test circuit breaker"}], response_model=MockResponseModel
         )
 
         assert result2.message == "Response from Lambda.AI"
@@ -845,7 +845,7 @@ class TestServiceUnavailableFailover:
         # Should fail with appropriate error after trying both providers
         with pytest.raises(RuntimeError) as exc_info:
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "Test all failing"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "Test all failing"}], response_model=MockResponseModel
             )
 
         # Should indicate all services failed
@@ -892,7 +892,7 @@ class TestServiceUnavailableFailover:
 
         # Initial call fails over to secondary
         result1, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Initial call"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Initial call"}], response_model=MockResponseModel
         )
         assert result1.message == "Response from Lambda.AI"
 
@@ -911,7 +911,7 @@ class TestServiceUnavailableFailover:
         secondary_service.call_count = 0
 
         result2, _ = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "Recovery test"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "Recovery test"}], response_model=MockResponseModel
         )
 
         assert result2.message == "Response from Together.AI"

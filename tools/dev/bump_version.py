@@ -100,7 +100,7 @@ def bump_version(bump_type: str):
         f.write(content)
 
     # Update GUI package.json
-    gui_package_file = Path(__file__).parent.parent / "CIRISGUI" / "apps" / "agui" / "package.json"
+    gui_package_file = Path(__file__).parent.parent.parent / "CIRISGUI" / "apps" / "agui" / "package.json"
     if gui_package_file.exists():
         with open(gui_package_file, "r") as f:
             package_data = json.load(f)
@@ -111,7 +111,9 @@ def bump_version(bump_type: str):
         print(f"  Updated GUI package.json to {new_version}")
 
     # Update SDK version.ts
-    sdk_version_file = Path(__file__).parent.parent / "CIRISGUI" / "apps" / "agui" / "lib" / "ciris-sdk" / "version.ts"
+    sdk_version_file = (
+        Path(__file__).parent.parent.parent / "CIRISGUI" / "apps" / "agui" / "lib" / "ciris-sdk" / "version.ts"
+    )
     if sdk_version_file.exists():
         with open(sdk_version_file, "r") as f:
             sdk_content = f.read()
@@ -121,7 +123,7 @@ def bump_version(bump_type: str):
         print(f"  Updated SDK version.ts to {new_version}")
 
     # Update README.md
-    readme_file = Path(__file__).parent.parent / "README.md"
+    readme_file = Path(__file__).parent.parent.parent / "README.md"
     if readme_file.exists():
         with open(readme_file, "r") as f:
             readme_content = f.read()

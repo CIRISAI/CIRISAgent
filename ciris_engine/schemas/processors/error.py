@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErrorSeverity(str, Enum):
@@ -33,8 +33,7 @@ class AdditionalErrorContext(BaseModel):
         default_factory=dict, description="Custom error context data"
     )
 
-    class Config:
-        extra = "allow"  # Allow additional fields for extensibility
+    model_config = ConfigDict(extra="allow")
 
 
 class ErrorContext(BaseModel):
@@ -98,8 +97,7 @@ class ProcessorConfigOverrides(BaseModel):
         default_factory=dict, description="Custom configuration values"
     )
 
-    class Config:
-        extra = "forbid"  # Strict validation for config overrides
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProcessorConfig(BaseModel):

@@ -97,7 +97,7 @@ class TestAuthServiceOAuthWAFix:
     async def test_load_users_from_db_oauth_wa_no_duplicates(
         self, api_auth_service, oauth_user, oauth_wa_certificate, mock_auth_service
     ):
-        """Test that _load_users_from_db doesn't create duplicate records for OAuth WAs."""
+        """Test that _load_users_from_db stores OAuth WAs under both WA ID and OAuth keys."""
         # Setup: Add OAuth user first (simulates user creation during OAuth login)
         oauth_user_id = "google:110265575142761676421"
         api_auth_service._users[oauth_user_id] = oauth_user
@@ -108,9 +108,13 @@ class TestAuthServiceOAuthWAFix:
         # Test: Load users from database
         await api_auth_service._load_users_from_db()
 
-        # Verify: Should still have only one user record (no duplicate created)
-        assert len(api_auth_service._users) == 1
+        # Verify: Should have user stored under BOTH keys (WA ID and OAuth key) pointing to same User object
+        assert len(api_auth_service._users) == 2  # Both wa_id and oauth keys point to same user
         assert oauth_user_id in api_auth_service._users
+        assert "wa-2025-09-10-T123AB" in api_auth_service._users
+
+        # Verify: Both keys point to the same user object
+        assert api_auth_service._users[oauth_user_id] is api_auth_service._users["wa-2025-09-10-T123AB"]
 
         # Verify: OAuth user record is updated with WA information
         updated_user = api_auth_service._users[oauth_user_id]
@@ -123,18 +127,21 @@ class TestAuthServiceOAuthWAFix:
     async def test_load_users_from_db_oauth_wa_without_existing_user(
         self, api_auth_service, oauth_wa_certificate, mock_auth_service
     ):
-        """Test that _load_users_from_db creates user with OAuth user_id key for OAuth WAs."""
+        """Test that _load_users_from_db creates user under both OAuth and WA ID keys."""
         # Setup: Mock list_was to return OAuth WA certificate, no existing user
         mock_auth_service.list_was.return_value = [oauth_wa_certificate]
 
         # Test: Load users from database
         await api_auth_service._load_users_from_db()
 
-        # Verify: Should create user with OAuth user_id as key, not wa_id
+        # Verify: Should create user with BOTH OAuth key and WA ID key
         oauth_user_id = "google:110265575142761676421"
-        assert len(api_auth_service._users) == 1
+        assert len(api_auth_service._users) == 2  # Both keys present
         assert oauth_user_id in api_auth_service._users
-        assert "wa-2025-09-10-T123AB" not in api_auth_service._users  # Should NOT use wa_id as key
+        assert "wa-2025-09-10-T123AB" in api_auth_service._users  # WA ID key also present
+
+        # Verify: Both keys point to same user object
+        assert api_auth_service._users[oauth_user_id] is api_auth_service._users["wa-2025-09-10-T123AB"]
 
         # Verify: User has correct WA information
         user = api_auth_service._users[oauth_user_id]
@@ -181,10 +188,14 @@ class TestAuthServiceOAuthWAFix:
         # Test: Load users from database
         await api_auth_service._load_users_from_db()
 
-        # Verify: Should have 2 users with correct keys
-        assert len(api_auth_service._users) == 2
-        assert oauth_user_id in api_auth_service._users  # OAuth user keeps OAuth user_id
+        # Verify: Should have 3 keys (OAuth WA has 2 keys: wa_id + oauth key, non-OAuth has 1 key: wa_id)
+        assert len(api_auth_service._users) == 3
+        assert oauth_user_id in api_auth_service._users  # OAuth user OAuth key
+        assert "wa-2025-09-10-T123AB" in api_auth_service._users  # OAuth user WA ID key
         assert "wa-2025-09-10-P123AB" in api_auth_service._users  # Non-OAuth user uses wa_id
+
+        # Verify: OAuth user keys point to same object
+        assert api_auth_service._users[oauth_user_id] is api_auth_service._users["wa-2025-09-10-T123AB"]
 
         # Verify: OAuth user updated correctly
         oauth_user_record = api_auth_service._users[oauth_user_id]

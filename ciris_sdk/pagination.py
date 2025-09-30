@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any, AsyncIterator, Callable, Dict, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
     cursor: Optional[str] = Field(None, description="Cursor for next page")
     has_more: bool = Field(..., description="Whether more items exist")
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class PageIterator(Generic[T]):

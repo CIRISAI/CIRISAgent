@@ -23,8 +23,8 @@ from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
 
-class TestResponse(BaseModel):
-    """Test response model for structured output."""
+class MockResponseForDomainTesting(BaseModel):
+    """Mock response model for structured output (not a test class - renamed to avoid pytest collection)"""
 
     answer: str = Field(..., description="The answer")
     confidence: float = Field(..., ge=0.0, le=1.0)
@@ -76,7 +76,9 @@ class MockLLMService(LLMService):
         """Generate structured output."""
         self.call_count += 1
 
-        response = TestResponse(answer=f"Response from {self.domain} model ({self.model})", confidence=0.95)
+        response = MockResponseForDomainTesting(
+            answer=f"Response from {self.domain} model ({self.model})", confidence=0.95
+        )
 
         usage = ResourceUsage(
             tokens_used=100,
@@ -158,7 +160,7 @@ class TestDomainAwareLLMRouting:
 
         response, usage = await llm_bus.call_llm_structured(
             messages=messages,
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="medical_handler",
             domain="medical",  # Request medical domain
         )
@@ -188,7 +190,7 @@ class TestDomainAwareLLMRouting:
 
         response, usage = await llm_bus.call_llm_structured(
             messages=messages,
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="legal_handler",
             domain="legal",  # Request legal domain (not available)
         )
@@ -223,7 +225,7 @@ class TestDomainAwareLLMRouting:
 
         response, usage = await llm_bus.call_llm_structured(
             messages=messages,
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="general_handler",
             # No domain specified
         )
@@ -266,7 +268,10 @@ class TestDomainAwareLLMRouting:
         messages = [{"role": "user", "content": "Medical analysis"}]
 
         response, usage = await llm_bus.call_llm_structured(
-            messages=messages, response_model=TestResponse, handler_name="medical_handler", domain="medical"
+            messages=messages,
+            response_model=MockResponseForDomainTesting,
+            handler_name="medical_handler",
+            domain="medical",
         )
 
         # With domain boost, medical services should be preferred
@@ -303,7 +308,10 @@ class TestDomainAwareLLMRouting:
         messages = [{"role": "user", "content": "Medical question"}]
 
         response, usage = await llm_bus.call_llm_structured(
-            messages=messages, response_model=TestResponse, handler_name="medical_handler", domain="medical"
+            messages=messages,
+            response_model=MockResponseForDomainTesting,
+            handler_name="medical_handler",
+            domain="medical",
         )
 
         # Should failover to backup
@@ -325,7 +333,7 @@ class TestDomainAwareLLMRouting:
             fail_count += 1
             if fail_count <= 5:  # Fail first 5 times
                 raise Exception("Medical LLM error")
-            return TestResponse(answer="Recovery", confidence=0.9), ResourceUsage(
+            return MockResponseForDomainTesting(answer="Recovery", confidence=0.9), ResourceUsage(
                 tokens_used=100, model_used="llama3-medical-70b"
             )
 
@@ -353,7 +361,7 @@ class TestDomainAwareLLMRouting:
             try:
                 await llm_bus.call_llm_structured(
                     messages=[{"role": "user", "content": f"Medical Q{i}"}],
-                    response_model=TestResponse,
+                    response_model=MockResponseForDomainTesting,
                     handler_name="medical_handler",
                     domain="medical",
                 )
@@ -363,7 +371,7 @@ class TestDomainAwareLLMRouting:
         # General domain should still work
         response, usage = await llm_bus.call_llm_structured(
             messages=[{"role": "user", "content": "General question"}],
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="general_handler",
             domain="general",
         )
@@ -389,7 +397,7 @@ class TestDomainAwareLLMRouting:
 
         response, usage = await llm_bus.call_llm_structured(
             messages=messages,
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="handler",
             # No domain parameter - backward compatibility
         )
@@ -434,7 +442,7 @@ class TestDomainAwareLLMRouting:
             # Make domain-specific request
             response, usage = await llm_bus.call_llm_structured(
                 messages=[{"role": "user", "content": content}],
-                response_model=TestResponse,
+                response_model=MockResponseForDomainTesting,
                 handler_name=f"{domain}_handler",
                 domain=domain,
             )
@@ -474,7 +482,7 @@ class TestDomainAwareLLMRouting:
         # Request medical domain
         response, usage = await llm_bus.call_llm_structured(
             messages=[{"role": "user", "content": "Medical question"}],
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="medical_handler",
             domain="medical",
         )
@@ -491,7 +499,9 @@ class TestDomainAwareLLMRouting:
 
         with pytest.raises(RuntimeError, match="No LLM services available"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "test"}], response_model=TestResponse, handler_name="test_handler"
+                messages=[{"role": "user", "content": "test"}],
+                response_model=MockResponseForDomainTesting,
+                handler_name="test_handler",
             )
 
     @pytest.mark.asyncio
@@ -508,7 +518,9 @@ class TestDomainAwareLLMRouting:
 
         # Make a call
         await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "test"}], response_model=TestResponse, domain="medical"
+            messages=[{"role": "user", "content": "test"}],
+            response_model=MockResponseForDomainTesting,
+            domain="medical",
         )
 
         # Verify telemetry was called
@@ -523,7 +535,9 @@ class TestDomainAwareLLMRouting:
             service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
         )
 
-        await llm_bus.call_llm_structured(messages=[{"role": "user", "content": "test"}], response_model=TestResponse)
+        await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
+        )
 
         stats = llm_bus.get_stats()
         assert "service_stats" in stats
@@ -563,7 +577,7 @@ class TestDomainAwareLLMRouting:
         # Make multiple calls
         for _ in range(5):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
             )
 
         # At least one service should have been called
@@ -594,7 +608,9 @@ class TestDomainAwareLLMRouting:
             )
 
         # Make calls
-        await llm_bus.call_llm_structured(messages=[{"role": "user", "content": "test"}], response_model=TestResponse)
+        await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
+        )
 
         # Should use least loaded
         assert services[0].call_count == 1 or services[1].call_count == 1
@@ -645,7 +661,7 @@ class TestDomainRoutingIntegration:
         # Medical DSDMA would call with domain="medical"
         response, usage = await llm_bus.call_llm_structured(
             messages=messages,
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="medical_dsdma",
             domain="medical",  # Critical: Routes to medical LLM
             temperature=0.0,  # Medical needs deterministic responses
@@ -687,7 +703,7 @@ class TestDomainRoutingIntegration:
         # Legal document analysis request
         response, usage = await llm_bus.call_llm_structured(
             messages=[{"role": "user", "content": "Review this contract clause"}],
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             handler_name="legal_analyzer",
             domain="legal",
         )
@@ -729,7 +745,7 @@ class TestDomainRoutingEdgeCases:
 
         # Should still work (defaults to general domain)
         response, usage = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
         )
         assert service.call_count == 1
 
@@ -746,7 +762,7 @@ class TestDomainRoutingEdgeCases:
 
         with pytest.raises(RuntimeError, match="All LLM services failed"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
             )
 
     @pytest.mark.asyncio
@@ -761,7 +777,7 @@ class TestDomainRoutingEdgeCases:
 
         with pytest.raises(RuntimeError, match="No LLM services available"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "test"}], response_model=TestResponse
+                messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
             )
 
     @pytest.mark.asyncio
@@ -774,7 +790,7 @@ class TestDomainRoutingEdgeCases:
 
         # Empty domain should work like no domain
         response, usage = await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "test"}], response_model=TestResponse, domain=""
+            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting, domain=""
         )
         assert service.call_count == 1
 
@@ -791,7 +807,7 @@ class TestDomainRoutingEdgeCases:
 
         response, usage = await llm_bus.call_llm_structured(
             messages=[{"role": "user", "content": "test"}],
-            response_model=TestResponse,
+            response_model=MockResponseForDomainTesting,
             domain="domain-with-dashes_and_underscores",
         )
         assert service.call_count == 1

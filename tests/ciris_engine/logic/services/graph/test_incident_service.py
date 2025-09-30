@@ -445,7 +445,7 @@ async def test_get_metrics(mock_memory_bus: Mock, mock_time_service: Mock) -> No
     """Test getting telemetry data from incident management service."""
     # Create service and start it
     service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=mock_time_service)
-    service.start()
+    await service.start()
 
     # Create some test incidents
     current_time = mock_time_service.now()
@@ -475,7 +475,7 @@ async def test_get_metrics(mock_memory_bus: Mock, mock_time_service: Mock) -> No
 async def test_get_metrics_no_incidents(mock_memory_bus: Mock, mock_time_service: Mock) -> None:
     """Test telemetry when no incidents exist."""
     service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=mock_time_service)
-    service.start()
+    await service.start()
 
     # Mock empty incident list
     mock_memory_service = mock_memory_bus.service_registry.get_services_by_type("memory")[0]
@@ -489,7 +489,7 @@ async def test_get_metrics_no_incidents(mock_memory_bus: Mock, mock_time_service
 async def test_get_metrics_error_handling(mock_memory_bus: Mock, mock_time_service: Mock) -> None:
     """Test telemetry handles errors gracefully."""
     service = IncidentManagementService(memory_bus=mock_memory_bus, time_service=mock_time_service)
-    service.start()
+    await service.start()
 
     # Mock get_incident_count to raise an exception
     service.get_incident_count = AsyncMock(side_effect=Exception("Database error"))

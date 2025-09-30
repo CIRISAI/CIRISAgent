@@ -9,6 +9,7 @@ from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 
+from .channel_resolution import resolve_channel_id_and_context
 from .secrets_snapshot import build_secrets_snapshot as _secrets_snapshot
 from .system_snapshot import build_system_snapshot as _build_snapshot
 
@@ -64,141 +65,22 @@ class ContextBuilder:
         identity_context_str = self.memory_service.export_identity_context() if self.memory_service else None
 
         # --- Mission-Critical Channel ID Resolution ---
-        channel_id = None
-        resolution_source = "none"
+        # Use centralized channel resolution to avoid duplication
+        channel_id, _channel_context = await resolve_channel_id_and_context(
+            task=task, thought=thought, memory_service=self.memory_service, app_config=self.app_config
+        )
 
-        # First check if task.context has system_snapshot with channel_id
-        if (
-            task
-            and task.context
-            and hasattr(task.context, "system_snapshot")
-            and task.context.system_snapshot
-            and hasattr(task.context.system_snapshot, "channel_id")
-        ):
-            channel_id = task.context.system_snapshot.channel_id
-            if channel_id:
-                resolution_source = "task.context.system_snapshot.channel_id"
-                logger.debug(f"Resolved channel_id '{channel_id}' from task.context.system_snapshot")
-
-        def safe_extract_channel_id(context: Any, source_name: str) -> Optional[str]:
-            """Type-safe channel_id extraction from nested context structures."""
-            if not context:
-                return None
-
-            try:
-                # Direct channel_id attribute
-                if isinstance(context, dict):
-                    cid = context.get("channel_id")
-                    if cid is not None:
-                        return str(cid)
-                elif hasattr(context, "channel_id"):
-                    cid = getattr(context, "channel_id", None)
-                    if cid is not None:
-                        return str(cid)
-
-                # Check initial_task_context.channel_context.channel_id
-                if hasattr(context, "initial_task_context") and context.initial_task_context:
-                    task_ctx = context.initial_task_context
-                    if hasattr(task_ctx, "channel_context") and task_ctx.channel_context:
-                        channel_ctx = task_ctx.channel_context
-                        if hasattr(channel_ctx, "channel_id") and channel_ctx.channel_id:
-                            return str(channel_ctx.channel_id)
-
-                # Check system_snapshot.channel_context.channel_id
-                if hasattr(context, "system_snapshot") and context.system_snapshot:
-                    snapshot = context.system_snapshot
-                    if hasattr(snapshot, "channel_context") and snapshot.channel_context:
-                        channel_ctx = snapshot.channel_context
-                        if hasattr(channel_ctx, "channel_id") and channel_ctx.channel_id:
-                            return str(channel_ctx.channel_id)
-
-            except Exception as e:
-                logger.error(f"Error extracting channel_id from {source_name}: {e}")
-
-            return None
-
-        # PRIORITY: Check thought's simple context FIRST (most direct)
-        if thought and hasattr(thought, "context") and thought.context:
-            # Check if it's a simple ThoughtContext with direct channel_id field
-            if hasattr(thought.context, "channel_id") and thought.context.channel_id:
-                channel_id = str(thought.context.channel_id)
-                resolution_source = "thought.context.channel_id"
-                logger.debug(f"Resolved channel_id '{channel_id}' from thought.context.channel_id")
-            else:
-                # Try the complex extraction for ProcessingThoughtContext
-                channel_id = safe_extract_channel_id(thought.context, "thought.context")
-                if channel_id:
-                    resolution_source = "thought.context (complex)"
-                    logger.debug(f"Resolved channel_id '{channel_id}' from thought.context (complex extraction)")
-                else:
-                    logger.warning(
-                        f"Thought {getattr(thought, 'thought_id', 'unknown')} has context but no channel_id found in it"
-                    )
-        elif thought:
-            logger.warning(f"Thought {getattr(thought, 'thought_id', 'unknown')} has no context at all")
-
-        # If thought doesn't have channel_id, check task's direct channel_id field (it's required on Task model)
-        if not channel_id and task and hasattr(task, "channel_id") and task.channel_id:
-            channel_id = str(task.channel_id)
-            resolution_source = "task.channel_id"
-            logger.warning(
-                f"Thought missing channel_id, falling back to task.channel_id '{channel_id}' from task {task.task_id}"
-            )
-
-        # Then check task context if thought didn't have it
-        if not channel_id and task and task.context:
-            channel_id = safe_extract_channel_id(task.context, "task.context")
-            if channel_id:
-                resolution_source = "task.context"
-
-        if not channel_id and self.app_config and hasattr(self.app_config, "home_channel"):
-            home_channel = getattr(self.app_config, "home_channel", None)
-            if home_channel:
-                channel_id = str(home_channel)
-                resolution_source = "app_config.home_channel"
-
-        if not channel_id:
-            env_channel_id = get_env_var("DISCORD_CHANNEL_ID")
-            if env_channel_id:
-                channel_id = env_channel_id
-                resolution_source = "DISCORD_CHANNEL_ID env var"
-
-        if not channel_id and self.app_config:
-            config_attrs = ["discord_channel_id", "cli_channel_id", "api_channel_id"]
-            for attr in config_attrs:
-                if hasattr(self.app_config, attr):
-                    config_channel_id = getattr(self.app_config, attr, None)
-                    if config_channel_id:
-                        channel_id = str(config_channel_id)
-                        resolution_source = f"app_config.{attr}"
-                        break
-
-        if not channel_id and self.app_config:
-            mode = getattr(self.app_config, "agent_mode", "")
-            mode_lower = mode.lower() if mode else ""
-            if mode_lower == "cli":
-                channel_id = "CLI"
-                resolution_source = "CLI mode fallback"
-            elif mode_lower == "api":
-                channel_id = "API"
-                resolution_source = "API mode fallback"
-            elif mode == "discord":
-                channel_id = "DISCORD_DEFAULT"
-                resolution_source = "Discord mode fallback"
-
-        # Check if system_snapshot_data already has a channel_id
-        if not channel_id and hasattr(system_snapshot_data, "channel_id") and system_snapshot_data.channel_id:
-            channel_id = system_snapshot_data.channel_id
-            resolution_source = "system_snapshot_data.channel_id"
-            logger.debug(f"Using existing channel_id '{channel_id}' from system snapshot")
-
-        if not channel_id:
-            logger.warning("CRITICAL: Channel ID could not be resolved from any source - consciences may receive None")
-            channel_id = "UNKNOWN"
-            resolution_source = "emergency fallback"
+        # Override with system snapshot's channel_id if present
+        if hasattr(system_snapshot_data, "channel_id") and system_snapshot_data.channel_id:
+            if channel_id != system_snapshot_data.channel_id:
+                logger.debug(
+                    f"[CONTEXT] Overriding resolved channel_id '{channel_id}' with "
+                    f"system_snapshot channel_id '{system_snapshot_data.channel_id}'"
+                )
+                channel_id = system_snapshot_data.channel_id
 
         # Log final channel resolution
-        logger.info(f"[CONTEXT] Channel ID resolved: '{channel_id}' (source: {resolution_source})")
+        logger.info(f"[CONTEXT] Channel ID resolved: '{channel_id}'")
 
         # Only set channel_id if it's not already set in system_snapshot
         if channel_id and hasattr(system_snapshot_data, "channel_id"):
@@ -209,9 +91,7 @@ class ContextBuilder:
                     f"System snapshot already has channel_id '{system_snapshot_data.channel_id}', not overwriting with '{channel_id}'"
                 )
 
-        channel_context_str = (
-            f"Our assigned channel is {channel_id} (resolved from {resolution_source})" if channel_id else None
-        )
+        channel_context_str = f"Our assigned channel is {channel_id}" if channel_id else None
         if identity_context_str and channel_context_str:
             identity_context_str = f"{identity_context_str}\n{channel_context_str}"
         elif channel_context_str:

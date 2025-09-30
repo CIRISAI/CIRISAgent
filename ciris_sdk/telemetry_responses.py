@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from .telemetry_models import MetricAggregate, MetricData, MetricTrend, ThoughtData
 
@@ -43,8 +43,7 @@ class TelemetryOverviewResponse(BaseModel):
     active_deferrals: int = Field(default=0, description="Active deferrals")
     recent_incidents: int = Field(default=0, description="Recent incidents")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class DetailedMetric(BaseModel):
@@ -59,8 +58,7 @@ class DetailedMetric(BaseModel):
     by_service: Dict[str, float] = Field(default_factory=dict, description="Values by service")
     recent_data: List[MetricData] = Field(default_factory=list, description="Recent data points")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TelemetryMetricsResponse(BaseModel):
@@ -70,8 +68,7 @@ class TelemetryMetricsResponse(BaseModel):
     summary: MetricAggregate = Field(..., description="Summary statistics")
     period: str = Field(..., description="Time period")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class ReasoningTrace(BaseModel):
@@ -88,8 +85,9 @@ class ReasoningTrace(BaseModel):
     thoughts: List[ThoughtData] = Field(default_factory=list, description="Thought details")
     outcome: Optional[str] = Field(None, description="Trace outcome")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("start_time")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class TelemetryTracesResponse(BaseModel):
@@ -99,8 +97,7 @@ class TelemetryTracesResponse(BaseModel):
     total_count: int = Field(..., description="Total matching traces")
     has_more: bool = Field(default=False, description="More traces available")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class LogEntry(BaseModel):
@@ -113,8 +110,9 @@ class LogEntry(BaseModel):
     trace_id: Optional[str] = Field(None, description="Associated trace ID")
     context: Dict[str, str] = Field(default_factory=dict, description="Additional context")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("timestamp")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class TelemetryLogsResponse(BaseModel):
@@ -124,8 +122,7 @@ class TelemetryLogsResponse(BaseModel):
     total_count: int = Field(..., description="Total matching logs")
     has_more: bool = Field(default=False, description="More logs available")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TelemetryQueryResult(BaseModel):
@@ -136,8 +133,7 @@ class TelemetryQueryResult(BaseModel):
     returned_results: int = Field(..., description="Results returned")
     execution_time_ms: float = Field(..., description="Query execution time")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class MetricsQueryResult(TelemetryQueryResult):
@@ -170,8 +166,9 @@ class IncidentData(BaseModel):
     resolved: bool = Field(..., description="Whether resolved")
     resolved_at: Optional[datetime] = Field(None, description="Resolution time")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("timestamp", "resolved_at")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class IncidentsQueryResult(TelemetryQueryResult):
@@ -191,8 +188,9 @@ class InsightData(BaseModel):
     recommendations: List[str] = Field(default_factory=list, description="Recommendations")
     severity: str = Field(..., description="Severity: info|warning|critical")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("timestamp")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class InsightsQueryResult(TelemetryQueryResult):

@@ -218,7 +218,7 @@ class WebSocketResource:
         channel_filters = {}
         for channel, filter_obj in channels.items():
             if filter_obj:
-                channel_filters[channel] = filter_obj.dict(exclude_none=True)
+                channel_filters[channel] = filter_obj.model_dump(exclude_none=True)
             else:
                 channel_filters[channel] = {}
 

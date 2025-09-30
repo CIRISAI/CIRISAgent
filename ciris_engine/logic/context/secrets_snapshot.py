@@ -1,13 +1,22 @@
 import logging
-from typing import List
+from typing import Any, Dict, List
 
 from ciris_engine.logic.secrets.service import SecretsService
 
 logger = logging.getLogger(__name__)
 
+# Key for error metadata in the returned dictionary
+ERROR_KEY = "error"
 
-async def build_secrets_snapshot(secrets_service: SecretsService) -> dict:
-    """Build secrets information for SystemSnapshot."""
+
+async def build_secrets_snapshot(secrets_service: SecretsService) -> Dict[str, Any]:
+    """Build secrets information for SystemSnapshot.
+
+    Returns a legacy dictionary structure for compatibility with existing
+    callers. When an error occurs, the payload includes an ``error`` key so
+    downstream consumers can distinguish between an empty dataset and a
+    failure.
+    """
     try:
         # Get recent secrets (limit to last 10 for context)
         all_secrets = await secrets_service.store.list_all_secrets()
@@ -30,9 +39,10 @@ async def build_secrets_snapshot(secrets_service: SecretsService) -> dict:
         }
 
     except Exception as e:  # pragma: no cover - defensive
-        logger.error(f"Error building secrets snapshot: {e}")
+        logger.exception("Error building secrets snapshot")
         return {
             "detected_secrets": [],
             "secrets_filter_version": 0,
             "total_secrets_stored": 0,
+            ERROR_KEY: f"Failed to build secrets snapshot: {type(e).__name__}: {e}",
         }

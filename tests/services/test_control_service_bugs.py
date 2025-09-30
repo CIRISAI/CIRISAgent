@@ -129,13 +129,14 @@ class TestSingleStepBugs:
         Always returns success=True if no exception is raised.
         """
         mock_runtime = Mock()
-        mock_processor = AsyncMock()
+        # Use Mock with specific async methods rather than AsyncMock for everything
+        mock_processor = Mock()
 
-        # Mock the is_paused check - must be paused to single step
+        # Mock the is_paused check - must be paused to single step (sync method)
         mock_processor.is_paused.return_value = True
 
-        # Simulate processor returning a failure result
-        mock_processor.single_step.return_value = {"success": False, "error": "Processing failed"}
+        # Simulate processor returning a failure result (async method)
+        mock_processor.single_step = AsyncMock(return_value={"success": False, "error": "Processing failed"})
 
         mock_runtime.agent_processor = mock_processor
 
@@ -247,8 +248,10 @@ class TestMetricsTrackingBugs:
         BUG: Many metrics are initialized but never properly updated.
         """
         mock_runtime = Mock()
-        mock_processor = AsyncMock()
-        mock_processor.single_step.return_value = {"success": True}
+        # Use Mock with specific async methods to avoid all methods being async
+        mock_processor = Mock()
+        mock_processor.is_paused.return_value = True
+        mock_processor.single_step = AsyncMock(return_value={"success": True})
         mock_runtime.agent_processor = mock_processor
 
         service = RuntimeControlService(runtime=mock_runtime)

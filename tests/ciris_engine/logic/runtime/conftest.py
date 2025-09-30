@@ -145,11 +145,14 @@ def mock_agent_processor():
     """Mock agent processor with state manager based on real AgentState schema."""
     processor = Mock()
 
-    # Mock state manager with schema-based behavior
-    state_manager = AsyncMock()
+    # Mock state manager with schema-based behavior matching real StateManager:
+    # - get_state() is synchronous (returns AgentState directly)
+    # - can_transition_to() is async (returns bool)
+    # - transition_to() is async (returns bool)
+    state_manager = Mock()
     state_manager.get_state.return_value = AgentState.WORK
-    state_manager.can_transition_to.return_value = True
-    state_manager.transition_to = AsyncMock()
+    state_manager.can_transition_to = AsyncMock(return_value=True)
+    state_manager.transition_to = AsyncMock(return_value=True)
     processor.state_manager = state_manager
 
     # Mock processing task - None initially (no active processing)

@@ -7,7 +7,7 @@ This enables cleaner adapter initialization and testing.
 
 from typing import TYPE_CHECKING, Any, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.config.essential import EssentialConfig
 
@@ -45,8 +45,4 @@ class AdapterStartupContext(BaseModel):
         None, description="Service registry for service discovery (ServiceRegistry)"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        arbitrary_types_allowed = True  # Allow service protocol types
-        extra = "forbid"  # No additional parameters allowed
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")

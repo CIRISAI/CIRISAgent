@@ -165,11 +165,7 @@ class AgentResource:
             context = InteractionContext(**context)
         request = InteractRequest(message=message, context=context)
 
-        # Handle both Pydantic v1 (dict) and v2 (model_dump)
-        if hasattr(request, "model_dump"):
-            request_data = request.model_dump()
-        else:
-            request_data = request.dict()
+        request_data = request.model_dump()
 
         result = await self._transport.request("POST", "/v1/agent/interact", json=request_data)
 

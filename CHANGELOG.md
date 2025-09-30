@@ -5,6 +5,48 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.9] - 2025-09-30
+
+### Fixed
+- **🔧 SonarCloud Issues**: Resolved 7 code quality issues
+  - Reduced channel resolution cognitive complexity from 27 to ~10 by extracting 4 helper functions
+  - Fixed 6 pipeline control return types from dict to Pydantic SingleStepResult/ThoughtProcessingResult
+  - Updated main_processor to support both dict and Pydantic model responses
+- **🐛 Production Channel History Bug**: Fixed BusManager API misuse causing empty conversation history
+  - Changed from `bus_manager.get_bus()` (non-existent) to `bus_manager.communication` (direct property access)
+  - Fixed production Datum agent empty conversation history issue
+- **🔧 Runtime Errors**: Fixed NameError in context builder (undefined `resolution_source` variable)
+- **🔒 Security Updates**: Fixed Dependabot vulnerabilities
+  - Upgraded pypdf from 4.x to 6.x (CVE RAM exhaustion fix)
+  - Upgraded SonarQube action from v5 to v6 (argument injection fix)
+- **✨ Pydantic v2 Migration**: Complete migration reducing warnings by 86% (1834→262)
+  - Migrated all `.dict()` calls to `.model_dump()` across codebase
+  - Updated test mocks to match Pydantic v2 API
+  - Fixed async test warnings by aligning mocks with actual service interfaces
+  - Renamed test helper classes to avoid pytest collection warnings (TestService→MockServiceForTesting)
+
+### Added
+- **💳 Credit Gating System**: Unlimit commerce integration for usage-based billing
+  - New schemas: CreditAccount, CreditContext, CreditCheckResult, CreditSpendRequest/Result
+  - CreditGateProtocol for multi-provider support with async operations
+  - UnlimitCreditProvider with 15s TTL caching and fail-open/fail-closed modes
+  - BaseObserver credit enforcement with CreditCheckFailed/CreditDenied exceptions
+  - API credit gating on `/v1/agent/interact` (402 Payment Required on denial)
+- **🔗 OAuth Identity Linking**: Link multiple OAuth providers to single user account
+  - `POST /v1/users/oauth-links` - Link OAuth account
+  - `DELETE /v1/users/oauth-links/{provider}` - Unlink OAuth account
+  - Dual-key user storage (both wa_id and oauth:provider keys point to same User object)
+
+### Enhanced
+- **✅ Test Coverage**: Added 29 new tests (26 channel resolution, 10 pipeline control, 9 integration)
+  - Enhanced test_buses_coverage.py with 3 fetch_messages tests
+  - Created TestChannelHistoryFetch with 6 comprehensive tests validating BusManager fix
+  - All tests updated for new billing dual-key OAuth user storage behavior
+
+### Tested
+- **✅ Complete Test Suite**: 75/75 QA tests passing (100% success rate)
+- **✅ Integration Tests**: 20 billing tests passing (credit gate, OAuth linking, resource monitor)
+
 ## [1.1.8] - 2025-09-30
 
 ### Major Runtime Refactoring & Type Safety Improvements - "Beast Conquered" 🐉→✨

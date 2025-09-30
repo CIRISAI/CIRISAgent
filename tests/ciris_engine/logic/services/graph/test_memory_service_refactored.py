@@ -10,6 +10,7 @@ from typing import Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType

@@ -7,7 +7,7 @@ Follows CIRIS philosophy: No Untyped Dicts, No Bypass Patterns, No Exceptions.
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, AdapterLoadRequest
 
@@ -30,7 +30,4 @@ class RuntimeBootstrapConfig(BaseModel):
     debug: bool = Field(False, description="Enable debug mode")
     preload_tasks: List[str] = Field(default_factory=list, description="Tasks to preload after WORK state transition")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"  # No additional parameters allowed - all must be declared explicitly
+    model_config = ConfigDict(extra="forbid")  # No additional parameters allowed - all must be declared explicitly

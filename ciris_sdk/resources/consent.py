@@ -126,7 +126,7 @@ class ConsentResource:
             metadata=metadata or {},
         )
 
-        result = await self._transport.request("POST", "/v1/consent/manage", json=payload.dict(exclude_none=True))
+        result = await self._transport.request("POST", "/v1/consent/manage", json=payload.model_dump(exclude_none=True))
 
         if isinstance(result, dict) and "data" in result:
             return ConsentResponse(**result["data"])
@@ -149,7 +149,7 @@ class ConsentResource:
         """
         payload = ConsentRequest(user_id=user_id, action=ConsentAction.REVOKE)
 
-        result = await self._transport.request("POST", "/v1/consent/manage", json=payload.dict(exclude_none=True))
+        result = await self._transport.request("POST", "/v1/consent/manage", json=payload.model_dump(exclude_none=True))
 
         if isinstance(result, dict) and "data" in result:
             return ConsentResponse(**result["data"])

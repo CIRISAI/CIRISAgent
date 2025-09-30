@@ -218,12 +218,16 @@ CREATE TABLE IF NOT EXISTS wa_cert (
   api_key_hash       TEXT,
   oauth_provider     TEXT,
   oauth_external_id  TEXT,
+  oauth_links_json   TEXT,
   veilid_id          TEXT,
   auto_minted        INTEGER DEFAULT 0,          -- 1 = OAuth observer
   parent_wa_id       TEXT,
   parent_signature   TEXT,
   scopes_json        TEXT NOT NULL,
+  custom_permissions_json TEXT,                  -- Additional permissions beyond scopes
   adapter_id         TEXT,                       -- for adapter observers
+  adapter_name       TEXT,                       -- Name of the adapter (Discord, CLI, etc)
+  adapter_metadata_json TEXT,                    -- Platform-specific metadata
   token_type         TEXT DEFAULT 'standard',    -- 'channel'|'oauth'|'standard'
   created            TEXT NOT NULL,
   last_login         TEXT,

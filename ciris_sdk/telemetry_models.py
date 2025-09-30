@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 # Resource Models
@@ -26,8 +26,7 @@ class ResourceUsage(BaseModel):
     open_files: Optional[int] = Field(None, description="Open file descriptors")
     threads: Optional[int] = Field(None, description="Active threads")
 
-    class Config:
-        extra = "allow"  # Allow additional fields for extensibility
+    model_config = ConfigDict(extra="allow")
 
 
 class ResourceLimits(BaseModel):
@@ -39,8 +38,7 @@ class ResourceLimits(BaseModel):
     max_connections: Optional[int] = Field(None, description="Maximum network connections")
     max_open_files: Optional[int] = Field(None, description="Maximum open files")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class ResourceHealth(BaseModel):
@@ -54,8 +52,7 @@ class ResourceHealth(BaseModel):
     memory_health: Optional[str] = Field(None, description="Memory health status")
     disk_health: Optional[str] = Field(None, description="Disk health status")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class ResourceHistoryPoint(BaseModel):
@@ -65,8 +62,9 @@ class ResourceHistoryPoint(BaseModel):
     value: float = Field(..., description="Measured value")
     unit: Optional[str] = Field(None, description="Unit of measurement")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("timestamp")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Metric Models
@@ -80,8 +78,9 @@ class MetricData(BaseModel):
     tags: Dict[str, str] = Field(default_factory=dict, description="Metric tags")
     service: Optional[str] = Field(None, description="Service that produced metric")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("timestamp")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class MetricAggregate(BaseModel):
@@ -114,8 +113,7 @@ class QueryFilter(BaseModel):
     operator: str = Field(..., description="Comparison operator: eq|ne|gt|lt|gte|lte|contains|in")
     value: Union[str, int, float, bool, List[Union[str, int, float]]] = Field(..., description="Filter value")
 
-    class Config:
-        extra = "forbid"  # Strict validation
+    model_config = ConfigDict(extra="forbid")
 
 
 class QueryFilters(BaseModel):
@@ -124,8 +122,7 @@ class QueryFilters(BaseModel):
     filters: List[QueryFilter] = Field(default_factory=list, description="List of filters")
     logic: str = Field(default="AND", description="Filter logic: AND|OR")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # Thought Models for Traces
@@ -140,8 +137,9 @@ class ThoughtData(BaseModel):
     status: str = Field(..., description="Status: PENDING|PROCESSING|COMPLETED|FAILED")
     result: Optional[str] = Field(None, description="Processing result")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("created_at", "completed_at")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Lineage Models
@@ -154,9 +152,11 @@ class LineageInfo(BaseModel):
     parent_version: Optional[str] = Field(None, description="Parent version")
     environment: Optional[str] = Field(None, description="Deployment environment")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer("build_date")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Processor State Models
@@ -171,9 +171,11 @@ class ProcessorStateData(BaseModel):
     last_activity: Optional[datetime] = Field(None, description="Last activity time")
     idle_rounds: int = Field(..., description="Consecutive idle rounds")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer("last_activity")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Configuration Models
@@ -186,8 +188,7 @@ class ConfigurationData(BaseModel):
     log_level: str = Field(..., description="Logging level")
     features: Dict[str, bool] = Field(default_factory=dict, description="Feature flags")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 # Service Metadata Models
@@ -200,9 +201,11 @@ class ServiceMetadata(BaseModel):
     restart_count: Optional[int] = Field(None, description="Number of restarts")
     error_count: Optional[int] = Field(None, description="Error count")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer("last_restart")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Context Models
@@ -214,8 +217,7 @@ class InteractionContext(BaseModel):
     session_id: Optional[str] = Field(None, description="Session identifier")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class AuditContext(BaseModel):
@@ -227,8 +229,7 @@ class AuditContext(BaseModel):
     session_id: Optional[str] = Field(None, description="Session identifier")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class DeferralContext(BaseModel):
@@ -239,8 +240,7 @@ class DeferralContext(BaseModel):
     priority: str = Field(..., description="Deferral priority")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 # Verification Models
@@ -252,5 +252,6 @@ class VerificationResult(BaseModel):
     method: str = Field(..., description="Verification method used")
     details: Dict[str, str] = Field(default_factory=dict, description="Verification details")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("verified_at")
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None

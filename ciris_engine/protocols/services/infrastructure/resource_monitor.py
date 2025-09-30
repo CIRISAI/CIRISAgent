@@ -5,6 +5,8 @@ Monitors system resources, enforces limits, and triggers protective actions
 for 1000-year sustainable operation.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
 
 from ...runtime.base import ServiceProtocol
@@ -12,6 +14,13 @@ from ...runtime.base import ServiceProtocol
 # Import forward references
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+    from ciris_engine.schemas.services.credit_gate import (
+        CreditAccount,
+        CreditCheckResult,
+        CreditContext,
+        CreditSpendRequest,
+        CreditSpendResult,
+    )
     from ciris_engine.schemas.services.infrastructure.resource_monitor import ResourceBudget, ResourceSnapshot
 
 
@@ -54,4 +63,21 @@ class ResourceMonitorServiceProtocol(ServiceProtocol, Protocol):
         Returns:
             True if resource is available, False if would exceed warning threshold
         """
+        ...
+
+    async def check_credit(
+        self,
+        account: "CreditAccount",
+        context: "CreditContext" | None = None,
+    ) -> "CreditCheckResult":
+        """Check whether a credit account currently has available balance."""
+        ...
+
+    async def spend_credit(
+        self,
+        account: "CreditAccount",
+        request: "CreditSpendRequest",
+        context: "CreditContext" | None = None,
+    ) -> "CreditSpendResult":
+        """Spend credit for an account when an interaction is approved."""
         ...

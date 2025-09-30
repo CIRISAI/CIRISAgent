@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 
-def convert_to_prometheus(data: Dict) -> str:
+def convert_to_prometheus(data: Dict[str, Any]) -> str:
     """
     Convert telemetry data to Prometheus format.
 
@@ -16,7 +16,7 @@ def convert_to_prometheus(data: Dict) -> str:
     return converter.convert(data)
 
 
-def convert_to_graphite(data: Dict) -> str:
+def convert_to_graphite(data: Dict[str, Any]) -> str:
     """
     Convert telemetry data to Graphite format.
 
@@ -29,16 +29,16 @@ def convert_to_graphite(data: Dict) -> str:
 class PrometheusConverter:
     """Converter for Prometheus format with reduced complexity."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.lines: List[str] = []
-        self.metrics_seen: set = set()
+        self.metrics_seen: set[str] = set()
 
-    def convert(self, data: Dict) -> str:
+    def convert(self, data: Dict[str, Any]) -> str:
         """Convert data to Prometheus format."""
         self._process_dict(data, "")
         return "\n".join(self.lines)
 
-    def _process_dict(self, data: Dict, prefix: str) -> None:
+    def _process_dict(self, data: Dict[str, Any], prefix: str) -> None:
         """Process a dictionary recursively."""
         for key, value in data.items():
             if self._should_skip_key(key):
@@ -103,16 +103,16 @@ class PrometheusConverter:
 class GraphiteConverter:
     """Converter for Graphite format with reduced complexity."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.lines: List[str] = []
         self.timestamp = int(datetime.now(timezone.utc).timestamp())
 
-    def convert(self, data: Dict) -> str:
+    def convert(self, data: Dict[str, Any]) -> str:
         """Convert data to Graphite format."""
         self._process_dict(data, "ciris")
         return "\n".join(self.lines)
 
-    def _process_dict(self, data: Dict, prefix: str) -> None:
+    def _process_dict(self, data: Dict[str, Any], prefix: str) -> None:
         """Process a dictionary recursively."""
         for key, value in data.items():
             if self._should_skip_key(key):

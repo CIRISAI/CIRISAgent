@@ -3,7 +3,7 @@ Tests for Data Subject Access Request (DSAR) endpoint.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -189,7 +189,7 @@ class TestDSAREndpoint:
 
         # Check estimated completion
         estimated = datetime.strptime(data["data"]["estimated_completion"], "%Y-%m-%d")
-        expected = datetime.utcnow().date() + timedelta(days=14)
+        expected = datetime.now(timezone.utc).date() + timedelta(days=14)
 
         # Allow 1 day variance for timezone differences
         assert abs((estimated.date() - expected).days) <= 1

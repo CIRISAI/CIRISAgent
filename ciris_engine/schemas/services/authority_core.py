@@ -36,6 +36,17 @@ class JWTSubType(str, Enum):
     AUTHORITY = "authority"
 
 
+class OAuthIdentityLink(BaseModel):
+    """Linked OAuth identity for a Wise Authority."""
+
+    provider: str = Field(..., description="OAuth provider identifier (e.g., google, discord)")
+    external_id: str = Field(..., description="Provider-scoped user identifier")
+    account_name: Optional[str] = Field(None, description="Display name supplied by the provider")
+    linked_at: Optional[datetime] = Field(None, description="Timestamp when the link was created")
+    metadata: Dict[str, str] = Field(default_factory=dict, description="Provider-specific metadata")
+    is_primary: bool = Field(False, description="Whether this identity is the primary OAuth mapping")
+
+
 class WACertificate(BaseModel):
     """Wise Authority certificate record."""
 
@@ -54,6 +65,7 @@ class WACertificate(BaseModel):
     # OAuth integration
     oauth_provider: Optional[str] = None
     oauth_external_id: Optional[str] = None
+    oauth_links: List[OAuthIdentityLink] = Field(default_factory=list, description="Additional linked OAuth identities")
     auto_minted: bool = Field(default=False, description="True if auto-created via OAuth")
 
     # Veilid integration
@@ -169,6 +181,7 @@ class WACertificateRequest(BaseModel):
     scopes: List[str] = Field(default_factory=list)
     oauth_provider: Optional[str] = None
     oauth_external_id: Optional[str] = None
+    oauth_links: List[OAuthIdentityLink] = Field(default_factory=list)
     adapter_id: Optional[str] = None
     adapter_name: Optional[str] = None
     adapter_metadata: Dict[str, str] = Field(default_factory=dict)

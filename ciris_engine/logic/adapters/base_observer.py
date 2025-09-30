@@ -1,6 +1,7 @@
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, cast
 
 from pydantic import BaseModel
 
@@ -9,10 +10,12 @@ from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
+from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
+from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 
 logger = logging.getLogger(__name__)
@@ -21,6 +24,22 @@ logger = logging.getLogger(__name__)
 
 PASSIVE_CONTEXT_LIMIT = 20
 PRIORITY_CONTEXT_LIMIT = 30  # More context for high-priority messages
+
+
+class CreditCheckFailed(Exception):
+    """Raised when the credit provider cannot be reached or fails."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class CreditDenied(Exception):
+    """Raised when a credit provider denies the interaction."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 def detect_and_replace_spoofed_markers(content: str) -> str:
@@ -102,6 +121,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         observer_wa_id: Optional[str] = None,
         *,
         origin_service: str = "unknown",
+        resource_monitor: Optional[ResourceMonitorServiceProtocol] = None,
     ) -> None:
         self.on_observe = on_observe
         self.bus_manager = bus_manager
@@ -113,6 +133,8 @@ class BaseObserver[MessageT: BaseModel](ABC):
         self.auth_service = auth_service
         self.observer_wa_id = observer_wa_id
         self.origin_service = origin_service
+        self.resource_monitor = resource_monitor
+        self._credit_log_cache: Dict[str, float] = {}
 
         # Initialize document parser for all adapters
         self._document_parser = DocumentParser()
@@ -226,14 +248,11 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _fetch_messages_from_bus(self, channel_id: str, limit: int):
         """Fetch messages from communication bus."""
-        from ciris_engine.schemas.runtime.enums import ServiceType
-
-        comm_bus = self.bus_manager.get_bus(ServiceType.COMMUNICATION)
-        if not comm_bus:
+        if not self.bus_manager or not hasattr(self.bus_manager, "communication"):
             logger.warning("No communication bus available for channel history")
             return []
 
-        return await comm_bus.fetch_messages(channel_id, limit, "DiscordAdapter")
+        return await self.bus_manager.communication.fetch_messages(channel_id, limit, "DiscordAdapter")
 
     async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[Dict[str, Any]]:
         """Get message history from channel using communication bus."""
@@ -619,6 +638,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
 
+        # Enforce credit policy if configured
+        await self._enforce_credit_policy(msg)
+
         # Process message for secrets detection and replacement
         processed_msg = await self._process_message_secrets(msg)
 
@@ -677,6 +699,82 @@ class BaseObserver[MessageT: BaseModel](ABC):
             await self._create_passive_observation_result(msg)
         else:
             logger.debug(f"Ignoring passive message from channel {getattr(msg, 'channel_id', 'unknown')}")
+
+    async def _enforce_credit_policy(self, msg: MessageT) -> None:
+        """Ensure external credit policy allows processing of this message."""
+
+        if not self.resource_monitor or not getattr(self.resource_monitor, "credit_provider", None):
+            return
+
+        envelope = self._resolve_credit_envelope(msg)
+        if envelope is None:
+            return
+
+        account, context = envelope
+        try:
+            result = await self.resource_monitor.check_credit(account, context)
+        except Exception as exc:  # pragma: no cover - provider failure is rare
+            if self._should_log_credit_event(f"provider_error:{account.cache_key()}"):
+                logger.warning(
+                    "Credit provider error for message %s: %s",
+                    getattr(msg, "message_id", "unknown"),
+                    exc,
+                )
+            raise CreditCheckFailed(str(exc)) from exc
+
+        if not result.has_credit:
+            reason = result.reason or "Insufficient credits"
+            cache_key = f"denied:{account.cache_key()}:{reason}"
+            if self._should_log_credit_event(cache_key):
+                logger.warning(
+                    "Credit denied for message %s (channel %s): %s",
+                    getattr(msg, "message_id", "unknown"),
+                    getattr(msg, "channel_id", "unknown"),
+                    reason,
+                )
+            raise CreditDenied(reason)
+
+    def _resolve_credit_envelope(self, msg: MessageT) -> Optional[Tuple[CreditAccount, CreditContext]]:
+        """Extract credit account/context metadata from the message."""
+
+        raw_account: Any = getattr(msg, "credit_account", None)
+        raw_context: Any = getattr(msg, "credit_context", None)
+
+        if raw_account is None:
+            envelope = getattr(msg, "credit_envelope", None)
+            if isinstance(envelope, dict):
+                raw_account = envelope.get("account")
+                raw_context = envelope.get("context")
+
+        if raw_account is None:
+            return None
+
+        account = raw_account if isinstance(raw_account, CreditAccount) else CreditAccount(**raw_account)
+
+        context: CreditContext
+        if raw_context is None:
+            context = CreditContext()
+        elif isinstance(raw_context, CreditContext):
+            context = raw_context
+        else:
+            context = CreditContext(**raw_context)
+
+        return account, context
+
+    def _should_log_credit_event(self, key: str, *, ttl_seconds: float = 60.0) -> bool:
+        """Throttle credit-related log messages to avoid audit spam."""
+
+        now = self._current_timestamp()
+        last_logged = self._credit_log_cache.get(key)
+        if last_logged is not None and now - last_logged < ttl_seconds:
+            return False
+        self._credit_log_cache[key] = now
+        return True
+
+    def _current_timestamp(self) -> float:
+        if self.time_service:
+            return self.time_service.now().timestamp()
+        return time.time()
 
     async def _should_process_message(self, msg: MessageT) -> bool:
         """Check if this observer should process the message - to be overridden by subclasses."""

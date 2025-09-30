@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.core.runtime import (
@@ -75,26 +75,8 @@ class SingleStepResponse(RuntimeControlResponse):
     pipeline state, and demo-ready data for transparent AI operation visibility.
     """
 
-    # Step Point Information
-    step_point: Optional[StepPoint] = Field(None, description="The step point that was just executed")
-    step_result: Optional[Dict[str, Any]] = Field(None, description="Complete step result data with full context")
-
-    # Pipeline State
-    pipeline_state: Optional[PipelineState] = Field(None, description="Current pipeline state with all thoughts")
-
-    # Performance Metrics
-    processing_time_ms: float = Field(0.0, description="Total processing time for this step in milliseconds")
-    tokens_used: Optional[int] = Field(None, description="LLM tokens consumed during this step")
-
-    # Transparency Data
-    transparency_data: Optional[Dict[str, Any]] = Field(
-        None, description="Detailed reasoning and system state data for transparency"
-    )
-
-    class Config:
-        """Pydantic configuration."""
-
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "success": True,
                 "message": "Single step completed: Processed PERFORM_DMAS for thought_001",
@@ -126,6 +108,23 @@ class SingleStepResponse(RuntimeControlResponse):
                 },
             }
         }
+    )
+
+    # Step Point Information
+    step_point: Optional[StepPoint] = Field(None, description="The step point that was just executed")
+    step_result: Optional[Dict[str, Any]] = Field(None, description="Complete step result data with full context")
+
+    # Pipeline State
+    pipeline_state: Optional[PipelineState] = Field(None, description="Current pipeline state with all thoughts")
+
+    # Performance Metrics
+    processing_time_ms: float = Field(0.0, description="Total processing time for this step in milliseconds")
+    tokens_used: Optional[int] = Field(None, description="LLM tokens consumed during this step")
+
+    # Transparency Data
+    transparency_data: Optional[Dict[str, Any]] = Field(
+        None, description="Detailed reasoning and system state data for transparency"
+    )
 
 
 # Helper functions for single-step processor

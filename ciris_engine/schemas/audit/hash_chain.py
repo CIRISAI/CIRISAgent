@@ -20,7 +20,6 @@ class HashChainAuditEntry(BaseModel):
     sequence_number: int = Field(..., description="Sequence number in chain")
     previous_hash: str = Field(..., description="Hash of previous entry or 'genesis'")
     entry_hash: Optional[str] = Field(None, description="Hash of this entry")
-    additional_fields: dict = Field(default_factory=dict, description="Additional audit fields")
 
 
 class HashChainVerificationResult(BaseModel):

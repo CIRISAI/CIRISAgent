@@ -91,9 +91,7 @@ class ContextBuilder:
                     f"System snapshot already has channel_id '{system_snapshot_data.channel_id}', not overwriting with '{channel_id}'"
                 )
 
-        channel_context_str = (
-            f"Our assigned channel is {channel_id} (resolved from {resolution_source})" if channel_id else None
-        )
+        channel_context_str = f"Our assigned channel is {channel_id}" if channel_id else None
         if identity_context_str and channel_context_str:
             identity_context_str = f"{identity_context_str}\n{channel_context_str}"
         elif channel_context_str:

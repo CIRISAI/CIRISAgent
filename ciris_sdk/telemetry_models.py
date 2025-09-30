@@ -62,7 +62,7 @@ class ResourceHistoryPoint(BaseModel):
     value: float = Field(..., description="Measured value")
     unit: Optional[str] = Field(None, description="Unit of measurement")
 
-    @field_serializer('timestamp')
+    @field_serializer("timestamp")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -78,7 +78,7 @@ class MetricData(BaseModel):
     tags: Dict[str, str] = Field(default_factory=dict, description="Metric tags")
     service: Optional[str] = Field(None, description="Service that produced metric")
 
-    @field_serializer('timestamp')
+    @field_serializer("timestamp")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -137,7 +137,7 @@ class ThoughtData(BaseModel):
     status: str = Field(..., description="Status: PENDING|PROCESSING|COMPLETED|FAILED")
     result: Optional[str] = Field(None, description="Processing result")
 
-    @field_serializer('created_at', 'completed_at')
+    @field_serializer("created_at", "completed_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -154,7 +154,7 @@ class LineageInfo(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    @field_serializer('build_date')
+    @field_serializer("build_date")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -173,7 +173,7 @@ class ProcessorStateData(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    @field_serializer('last_activity')
+    @field_serializer("last_activity")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -203,7 +203,7 @@ class ServiceMetadata(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    @field_serializer('last_restart')
+    @field_serializer("last_restart")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -252,6 +252,6 @@ class VerificationResult(BaseModel):
     method: str = Field(..., description="Verification method used")
     details: Dict[str, str] = Field(default_factory=dict, description="Verification details")
 
-    @field_serializer('verified_at')
+    @field_serializer("verified_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None

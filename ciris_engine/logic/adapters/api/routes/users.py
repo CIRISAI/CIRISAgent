@@ -188,9 +188,7 @@ class MintWARequest(BaseModel):
 class UpdatePermissionsRequest(BaseModel):
     """Request to update user's custom permissions."""
 
-    model_config = ConfigDict(
-        json_schema_extra={"example": {"permissions": ["send_messages", "custom_permission_1"]}}
-    )
+    model_config = ConfigDict(json_schema_extra={"example": {"permissions": ["send_messages", "custom_permission_1"]}})
 
     permissions: List[str] = Field(description="List of permission strings to grant")
 

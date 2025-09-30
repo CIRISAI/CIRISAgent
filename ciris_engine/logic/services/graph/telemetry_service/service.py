@@ -1494,7 +1494,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 behavioral_data = BehavioralData(
                     data_type="task",
                     content=(
-                        snapshot.current_task_details.model_dump() if hasattr(snapshot.current_task_details, "model_dump") else {}
+                        snapshot.current_task_details.model_dump()
+                        if hasattr(snapshot.current_task_details, "model_dump")
+                        else {}
                     ),
                     metadata={"thought_id": thought_id},
                 )

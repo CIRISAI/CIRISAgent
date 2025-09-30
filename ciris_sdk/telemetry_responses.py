@@ -85,7 +85,7 @@ class ReasoningTrace(BaseModel):
     thoughts: List[ThoughtData] = Field(default_factory=list, description="Thought details")
     outcome: Optional[str] = Field(None, description="Trace outcome")
 
-    @field_serializer('start_time')
+    @field_serializer("start_time")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -110,7 +110,7 @@ class LogEntry(BaseModel):
     trace_id: Optional[str] = Field(None, description="Associated trace ID")
     context: Dict[str, str] = Field(default_factory=dict, description="Additional context")
 
-    @field_serializer('timestamp')
+    @field_serializer("timestamp")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -166,7 +166,7 @@ class IncidentData(BaseModel):
     resolved: bool = Field(..., description="Whether resolved")
     resolved_at: Optional[datetime] = Field(None, description="Resolution time")
 
-    @field_serializer('timestamp', 'resolved_at')
+    @field_serializer("timestamp", "resolved_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -188,7 +188,7 @@ class InsightData(BaseModel):
     recommendations: List[str] = Field(default_factory=list, description="Recommendations")
     severity: str = Field(..., description="Severity: info|warning|critical")
 
-    @field_serializer('timestamp')
+    @field_serializer("timestamp")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 

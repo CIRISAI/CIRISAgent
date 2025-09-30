@@ -85,7 +85,11 @@ class TestPDMARedaction:
         from ciris_engine.logic.adapters.api.routes.agent import ConversationMessage
 
         message = ConversationMessage(
-            id="msg_123", author="user", content="What is the weather?", timestamp=datetime.now(timezone.utc), is_agent=False
+            id="msg_123",
+            author="user",
+            content="What is the weather?",
+            timestamp=datetime.now(timezone.utc),
+            is_agent=False,
         )
 
         # Should only have public fields

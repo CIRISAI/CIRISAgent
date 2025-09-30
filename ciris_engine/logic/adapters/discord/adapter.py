@@ -78,9 +78,7 @@ class DiscordPlatform(Service):
             if template and hasattr(template, "discord_config") and template.discord_config:
                 try:
                     config_dict = (
-                        template.discord_config.model_dump()
-                        if hasattr(template.discord_config, "model_dump")
-                        else {}
+                        template.discord_config.model_dump() if hasattr(template.discord_config, "model_dump") else {}
                     )
                     for key, value in config_dict.items():
                         if hasattr(self.config, key):

@@ -325,6 +325,7 @@ def _attach_credit_metadata(
         }
     )
 
+
 def _get_runtime_processor(request: Request):
     """Get runtime processor if available and valid."""
     runtime = getattr(request.app.state, "runtime", None)

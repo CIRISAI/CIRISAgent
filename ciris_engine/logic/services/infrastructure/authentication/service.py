@@ -447,9 +447,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
 
         if primary or (not existing.oauth_provider and not existing.oauth_external_id):
-            existing = existing.model_copy(
-                update={"oauth_provider": provider, "oauth_external_id": external_id}
-            )
+            existing = existing.model_copy(update={"oauth_provider": provider, "oauth_external_id": external_id})
             for link in links:
                 link.is_primary = link.provider == provider and link.external_id == external_id
 
@@ -467,7 +465,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not existing:
             return None
 
-        links = [link for link in existing.oauth_links if not (link.provider == provider and link.external_id == external_id)]
+        links = [
+            link for link in existing.oauth_links if not (link.provider == provider and link.external_id == external_id)
+        ]
 
         payload: Dict[str, Any] = {
             "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in links]) if links else None,
@@ -507,9 +507,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "oauth_provider": wa_dict.get("oauth_provider"),
                 "oauth_external_id": wa_dict.get("oauth_external_id"),
                 "veilid_id": wa_dict.get("veilid_id"),
-                "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in wa_dict.get("oauth_links", [])])
-                if wa_dict.get("oauth_links")
-                else None,
+                "oauth_links_json": (
+                    json.dumps([link.model_dump(mode="json") for link in wa_dict.get("oauth_links", [])])
+                    if wa_dict.get("oauth_links")
+                    else None
+                ),
                 "auto_minted": int(wa_dict.get("auto_minted", False)),
                 "parent_wa_id": wa_dict.get("parent_wa_id"),
                 "parent_signature": wa_dict.get("parent_signature"),

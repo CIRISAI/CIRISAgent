@@ -1,6 +1,6 @@
 import logging
-from abc import ABC, abstractmethod
 import time
+from abc import ABC, abstractmethod
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, cast
 
 from pydantic import BaseModel
@@ -10,8 +10,8 @@ from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
-from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
+from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext

@@ -49,7 +49,7 @@ class GraphNode(BaseModel):
 
     model_config = ConfigDict()
 
-    @field_serializer('updated_at')
+    @field_serializer("updated_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 

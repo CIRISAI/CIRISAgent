@@ -22,7 +22,7 @@ class BaseAttributes(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    @field_serializer('created_at', 'updated_at')
+    @field_serializer("created_at", "updated_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -100,7 +100,7 @@ class LineageInfo(BaseModel):
     environment: str = Field(default="production", description="Deployment environment")
     features: List[str] = Field(default_factory=list, description="Enabled features")
 
-    @field_serializer('build_date')
+    @field_serializer("build_date")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -115,7 +115,7 @@ class CognitiveStateInfo(BaseModel):
     previous_state: Optional[str] = Field(None, description="Previous state")
     transition_reason: Optional[str] = Field(None, description="Reason for transition")
 
-    @field_serializer('entered_at')
+    @field_serializer("entered_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -156,7 +156,7 @@ class ServiceMetadata(BaseModel):
     success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Success rate")
     average_response_ms: Optional[float] = Field(None, description="Average response time")
 
-    @field_serializer('last_restart')
+    @field_serializer("last_restart")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -171,7 +171,7 @@ class BaseContext(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    @field_serializer('timestamp')
+    @field_serializer("timestamp")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None
 
@@ -233,7 +233,7 @@ class VerificationResult(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    @field_serializer('verified_at')
+    @field_serializer("verified_at")
     def serialize_datetime(self, dt: Union[str, datetime, None], _info):
         if isinstance(dt, datetime):
             return dt.isoformat()
@@ -253,6 +253,6 @@ class ThoughtContent(BaseModel):
     result: Optional[str] = Field(None, description="Processing result")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
-    @field_serializer('created_at', 'completed_at')
+    @field_serializer("created_at", "completed_at")
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return dt.isoformat() if dt else None

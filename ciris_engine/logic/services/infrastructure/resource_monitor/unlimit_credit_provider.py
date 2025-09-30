@@ -244,12 +244,7 @@ class UnlimitCreditProvider(CreditGateProtocol):
         try:
             body = response.json()
             if isinstance(body, dict):
-                value = (
-                    body.get("reason")
-                    or body.get("detail")
-                    or body.get("message")
-                    or body.get("error")
-                )
+                value = body.get("reason") or body.get("detail") or body.get("message") or body.get("error")
                 if isinstance(value, str) and value:
                     return value
             return response.text

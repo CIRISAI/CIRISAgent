@@ -8,9 +8,9 @@ from fastapi import HTTPException
 from ciris_engine.logic.adapters.api.api_observer import APIObserver
 from ciris_engine.logic.adapters.api.routes.agent import (
     InteractRequest,
-    interact,
     _message_responses,
     _response_events,
+    interact,
 )
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
 from ciris_engine.schemas.api.auth import AuthContext, Permission, UserRole

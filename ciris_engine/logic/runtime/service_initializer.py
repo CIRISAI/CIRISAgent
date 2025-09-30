@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiofiles
-import os
 
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor

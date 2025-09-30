@@ -4,7 +4,7 @@ Schemas for Time Service.
 Provides configuration and data structures for time operations.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -25,6 +25,20 @@ class TimeSnapshot(BaseModel):
     current_timestamp: float = Field(..., description="Current Unix timestamp")
     is_mocked: bool = Field(..., description="Whether time is mocked")
     mock_time: Optional[datetime] = Field(None, description="Mock time if set")
+
+
+class LocalizedTimeData(BaseModel):
+    """Localized time information for multiple timezones - flexible for future time sources."""
+
+    utc: str = Field(..., description="UTC time in ISO format")
+    london: str = Field(..., description="London time in ISO format")
+    chicago: str = Field(..., description="Chicago time in ISO format")
+    tokyo: str = Field(..., description="Tokyo time in ISO format")
+    source_service: str = Field(default="TimeService", description="Time service that provided this data")
+    generated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When this data was generated"
+    )
+    timezone_data: Optional[dict] = Field(None, description="Additional timezone data from future sources")
 
 
 class TimeServiceStatus(BaseModel):

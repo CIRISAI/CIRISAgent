@@ -103,3 +103,15 @@ class RootAnchorVerificationResult(BaseModel):
     total_count: int = Field(0, description="Total number of anchors")
     errors: List[str] = Field(default_factory=list, description="Verification errors")
     message: Optional[str] = Field(None, description="Status message")
+
+
+class RefutationProof(BaseModel):
+    """Proof for refuting disputed content claims."""
+
+    timestamp: str = Field(..., description="When proof was created (ISO format)")
+    stored_hash: str = Field(..., description="Hash we have stored")
+    claimed_content_hash: str = Field(..., description="Hash of claimed content")
+    matches_stored: bool = Field(..., description="Whether claimed content matches stored hash")
+    actual_content_hash: Optional[str] = Field(None, description="Hash of actual content if available")
+    actual_matches_stored: Optional[bool] = Field(None, description="Whether actual content matches stored hash")
+    claimed_matches_actual: Optional[bool] = Field(None, description="Whether claimed content matches actual content")

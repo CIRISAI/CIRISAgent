@@ -105,7 +105,7 @@ async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds
         if timeout:
             # Create task and handle timeout manually to allow graceful shutdown
             logger.info(f"[DEBUG] Setting up timeout for {timeout} seconds")
-            runtime_task = asyncio.create_task(runtime.run(num_rounds=num_rounds))
+            runtime_task = asyncio.create_task(runtime.run(num_rounds))
 
             try:
                 # Wait for either the task to complete or timeout
@@ -136,7 +136,7 @@ async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds
         else:
             # Run without timeout
             logger.info("[DEBUG] Running without timeout")
-            await runtime.run(num_rounds=num_rounds)
+            await runtime.run(num_rounds)
     except KeyboardInterrupt:
         logger.info("Received interrupt signal, shutting down gracefully...")
         runtime.request_shutdown("User interrupt")
@@ -317,6 +317,9 @@ def main(
             modules_to_load.append("mock_llm")
             logger.info("Mock LLM module will be loaded")
 
+        # Import AdapterConfig for proper type conversion
+        from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
         # Create adapter configurations for each adapter type and determine startup channel
         adapter_configs = {}
         startup_channel_id = getattr(app_config, "startup_channel_id", None)
@@ -336,7 +339,10 @@ def main(
                 if api_port:
                     api_config.port = api_port
 
-                adapter_configs[adapter_type] = api_config
+                # Convert APIAdapterConfig to generic AdapterConfig
+                adapter_configs[adapter_type] = AdapterConfig(
+                    adapter_type="api", enabled=True, settings=api_config.model_dump()  # Convert all fields to dict
+                )
                 api_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
                 if not startup_channel_id:
                     startup_channel_id = api_channel_id
@@ -352,7 +358,12 @@ def main(
                 # Load environment variables into the config
                 discord_config.load_env_vars()
 
-                adapter_configs[adapter_type] = discord_config
+                # Convert DiscordAdapterConfig to generic AdapterConfig
+                adapter_configs[adapter_type] = AdapterConfig(
+                    adapter_type="discord",
+                    enabled=True,
+                    settings=discord_config.model_dump(),  # Convert all fields to dict
+                )
                 discord_channel_id = discord_config.get_home_channel_id()
                 if discord_channel_id and not startup_channel_id:
                     # For Discord, use formatted channel ID with discord_ prefix
@@ -371,7 +382,10 @@ def main(
                 if not cli_interactive:
                     cli_config.interactive = False
 
-                adapter_configs[adapter_type] = cli_config
+                # Convert CLIAdapterConfig to generic AdapterConfig
+                adapter_configs[adapter_type] = AdapterConfig(
+                    adapter_type="cli", enabled=True, settings=cli_config.model_dump()  # Convert all fields to dict
+                )
                 cli_channel_id = cli_config.get_home_channel_id()
                 if not startup_channel_id:
                     startup_channel_id = cli_channel_id

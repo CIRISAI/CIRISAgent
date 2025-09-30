@@ -32,6 +32,7 @@ class QARunner:
         self.token: Optional[str] = None
         self.server_manager = APIServerManager(self.config)
         self.results: Dict[str, Dict] = {}
+        self._startup_incidents_position = 0
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
@@ -43,6 +44,10 @@ class QARunner:
                 title="🧪 Starting QA Tests",
             )
         )
+
+        # Show initial incidents log status and record baseline
+        self._show_incidents_status("STARTUP")
+        self._record_startup_incidents_position()
 
         # Start API server if needed
         if self.config.auto_start_server:
@@ -71,8 +76,11 @@ class QARunner:
         else:
             success = self._run_sequential(all_tests)
 
-        # Check incidents log for errors
-        self._check_incidents_log()
+        # MANDATORY: Always show incidents log status after tests
+        self._show_incidents_status("POST-TEST")
+
+        # Check if any incidents occurred during testing
+        has_incidents = self._has_incidents_occurred()
 
         # Generate reports
         self._generate_reports()
@@ -83,7 +91,17 @@ class QARunner:
 
         # Print summary
         elapsed = time.time() - start_time
-        self._print_summary(elapsed)
+        self._print_summary(elapsed, has_incidents)
+
+        # Final incidents reminder - CANNOT be missed
+        if has_incidents:
+            self.console.print("\n" + "=" * 60)
+            self.console.print("[bold red]🚨 CRITICAL: INCIDENTS DETECTED DURING TESTING! 🚨[/bold red]")
+            self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
+            self.console.print("=" * 60)
+            return False  # Force failure if incidents occurred
+        else:
+            self.console.print("\n[bold green]✅ No critical incidents - tests completed cleanly![/bold green]")
 
         return success
 
@@ -107,8 +125,6 @@ class QARunner:
             "Edge already exists",
             "duplicate edge",
             "TSDB consolidation",
-            "APIToolService not started",
-            "APICommunicationService not started",
         ]
 
         critical_errors = []
@@ -148,11 +164,23 @@ class QARunner:
 
         return critical_errors
 
-    def _check_incidents_log(self):
-        """Check incidents log for critical errors."""
+    def _show_incidents_status(self, phase: str):
+        """ALWAYS show incidents log status - prominent and mandatory."""
         incidents_log = Path("logs/incidents_latest.log")
 
+        self.console.print(f"\n[bold cyan]📋 INCIDENTS LOG STATUS ({phase}):[/bold cyan]")
+
         if not incidents_log.exists():
+            self.console.print("[bold red]❌ NO INCIDENTS LOG FOUND[/bold red]")
+            return
+
+        # Show log file info
+        try:
+            log_size = incidents_log.stat().st_size
+            self.console.print(f"   📁 Log: {incidents_log.resolve()}")
+            self.console.print(f"   📊 Size: {log_size:,} bytes")
+        except Exception as e:
+            self.console.print(f"[red]❌ Cannot read log file: {e}[/red]")
             return
 
         # Patterns to ignore (non-critical)
@@ -165,50 +193,115 @@ class QARunner:
             "Edge already exists",
             "duplicate edge",
             "TSDB consolidation",
-            "APIToolService not started",
-            "APICommunicationService not started",
         ]
 
         critical_errors = []
+        warning_count = 0
+        error_count = 0
+        critical_count = 0
 
         try:
             with open(incidents_log, "r") as f:
                 for line in f:
-                    # Check if line contains ERROR or CRITICAL
-                    if "ERROR" in line or "CRITICAL" in line:
-                        # Skip if it matches an ignore pattern
-                        if any(pattern in line for pattern in ignore_patterns):
-                            continue
-
-                        # Extract the error message
-                        if " - ERROR - " in line:
-                            parts = line.split(" - ERROR - ")
-                            if len(parts) > 1:
-                                error_msg = parts[-1].strip()
-                                # Skip very long errors (likely stack traces)
-                                if len(error_msg) < 500:
-                                    critical_errors.append(error_msg)
-                        elif " - CRITICAL - " in line:
-                            parts = line.split(" - CRITICAL - ")
-                            if len(parts) > 1:
-                                error_msg = parts[-1].strip()
-                                if len(error_msg) < 500:
-                                    critical_errors.append(error_msg)
+                    if "WARNING" in line:
+                        warning_count += 1
+                    elif "ERROR" in line:
+                        error_count += 1
+                        # Check if it's a critical error we should report
+                        if not any(pattern in line for pattern in ignore_patterns):
+                            if " - ERROR - " in line:
+                                parts = line.split(" - ERROR - ")
+                                if len(parts) > 1:
+                                    error_msg = parts[-1].strip()
+                                    if len(error_msg) < 500:
+                                        critical_errors.append(error_msg)
+                    elif "CRITICAL" in line:
+                        critical_count += 1
+                        # Check if it's a critical error we should report
+                        if not any(pattern in line for pattern in ignore_patterns):
+                            if " - CRITICAL - " in line:
+                                parts = line.split(" - CRITICAL - ")
+                                if len(parts) > 1:
+                                    error_msg = parts[-1].strip()
+                                    if len(error_msg) < 500:
+                                        critical_errors.append(error_msg)
 
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Could not read incidents log: {e}[/yellow]")
+            self.console.print(f"[red]❌ Could not read incidents log: {e}[/red]")
             return
 
-        # Report unique errors
-        if critical_errors:
-            unique_errors = list(dict.fromkeys(critical_errors))  # Remove duplicates while preserving order
-            self.console.print("\n[bold red]⚠️  Critical Errors Found in Incidents Log:[/bold red]")
-            for i, error in enumerate(unique_errors[:5], 1):  # Show max 5 errors
-                self.console.print(f"  {i}. {error[:200]}")  # Truncate long messages
+        # ALWAYS show counts - even if zero
+        self.console.print(f"   ⚠️  Warnings: {warning_count}")
+        self.console.print(f"   🚫 Errors: {error_count}")
+        self.console.print(f"   💥 Critical: {critical_count}")
 
-            if len(unique_errors) > 5:
-                self.console.print(f"  ... and {len(unique_errors) - 5} more errors")
-            self.console.print()
+        # Report critical errors prominently
+        if critical_errors:
+            unique_errors = list(dict.fromkeys(critical_errors))
+            self.console.print(f"\n[bold red]🚨 CRITICAL ISSUES FOUND ({len(unique_errors)}):[/bold red]")
+            for i, error in enumerate(unique_errors[:10], 1):  # Show more errors
+                self.console.print(f"   {i:2d}. {error[:250]}")  # Show more of each error
+
+            if len(unique_errors) > 10:
+                self.console.print(f"   ... and {len(unique_errors) - 10} more critical errors")
+
+            # Make it impossible to miss
+            self.console.print(f"\n[bold red]🚨 {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! 🚨[/bold red]")
+        else:
+            self.console.print("[bold green]✅ No critical issues found[/bold green]")
+
+        self.console.print()  # Extra spacing
+
+    def _record_startup_incidents_position(self):
+        """Record the incidents log position at startup for comparison."""
+        incidents_log = Path("logs/incidents_latest.log")
+
+        if incidents_log.exists():
+            try:
+                self._startup_incidents_position = incidents_log.stat().st_size
+            except Exception:
+                self._startup_incidents_position = 0
+        else:
+            self._startup_incidents_position = 0
+
+    def _has_incidents_occurred(self) -> bool:
+        """Check if any NEW incidents occurred during testing."""
+        incidents_log = Path("logs/incidents_latest.log")
+
+        if not incidents_log.exists():
+            return False
+
+        # Only check for new content added since startup
+        try:
+            current_size = incidents_log.stat().st_size
+            if current_size <= self._startup_incidents_position:
+                return False  # No new content
+
+            # Check only the new content
+            ignore_patterns = [
+                "MOCK_MODULE_LOADED",
+                "MOCK LLM",
+                "RUNTIME SHUTDOWN",
+                "SYSTEM SHUTDOWN",
+                "GRACEFUL SHUTDOWN",
+                "Edge already exists",
+                "duplicate edge",
+                "TSDB consolidation",
+            ]
+
+            with open(incidents_log, "r") as f:
+                f.seek(self._startup_incidents_position)  # Start from where we left off
+
+                for line in f:
+                    if ("ERROR" in line or "CRITICAL" in line) and not any(
+                        pattern in line for pattern in ignore_patterns
+                    ):
+                        return True
+
+        except Exception:
+            return False
+
+        return False
 
     def _authenticate(self) -> bool:
         """Get authentication token."""
@@ -788,7 +881,7 @@ class QARunner:
             "success_rate": (passed / total * 100) if total > 0 else 0,
         }
 
-    def _print_summary(self, elapsed: float):
+    def _print_summary(self, elapsed: float, has_incidents: bool = False):
         """Print test summary."""
         summary = self._get_summary()
 

@@ -264,12 +264,16 @@ class TestIdentityManagement:
     @pytest.mark.asyncio
     async def test_extract_agent_identity_with_none_memory_service(self):
         """Test extracting agent identity with None memory service."""
-        identity_data, purpose, capabilities, restrictions = await _extract_agent_identity(None)
+        identity_data, identity_summary = await _extract_agent_identity(None)
 
-        assert identity_data == {}
-        assert purpose is None
-        assert capabilities == []
-        assert restrictions == []
+        # Check the typed objects
+        assert identity_data.agent_id == "unknown"
+        assert identity_data.description == "No identity data available"
+        assert identity_data.role == "Unknown"
+        assert identity_data.trust_level == 0.5
+        assert identity_summary.identity_purpose is None
+        assert identity_summary.identity_capabilities == []
+        assert identity_summary.identity_restrictions == []
 
     @pytest.mark.asyncio
     async def test_extract_agent_identity_with_valid_identity_node(self):
@@ -287,16 +291,16 @@ class TestIdentityManagement:
         }
         memory_service.recall = AsyncMock(return_value=[identity_node])
 
-        identity_data, purpose, capabilities, restrictions = await _extract_agent_identity(memory_service)
+        identity_data, identity_summary = await _extract_agent_identity(memory_service)
 
-        assert identity_data["agent_id"] == "test_agent_123"
-        assert identity_data["description"] == "Test agent description"
-        assert identity_data["role"] == "Test agent role"
-        assert identity_data["trust_level"] == 0.8
-        assert identity_data["stewardship"] == "responsible_ai"
-        assert purpose == "Test agent role"
-        assert capabilities == ["read", "write"]
-        assert restrictions == ["admin"]
+        assert identity_data.agent_id == "test_agent_123"
+        assert identity_data.description == "Test agent description"
+        assert identity_data.role == "Test agent role"
+        assert identity_data.trust_level == 0.8
+        assert identity_data.stewardship == "responsible_ai"
+        assert identity_summary.identity_purpose == "Test agent role"
+        assert identity_summary.identity_capabilities == ["read", "write"]
+        assert identity_summary.identity_restrictions == ["admin"]
 
     @pytest.mark.asyncio
     async def test_extract_agent_identity_with_pydantic_attributes(self):
@@ -312,10 +316,10 @@ class TestIdentityManagement:
         identity_node.attributes = attrs_model
         memory_service.recall = AsyncMock(return_value=[identity_node])
 
-        identity_data, purpose, capabilities, restrictions = await _extract_agent_identity(memory_service)
+        identity_data, identity_summary = await _extract_agent_identity(memory_service)
 
-        assert identity_data["agent_id"] == "pydantic_agent"
-        assert purpose == "Pydantic agent"
+        assert identity_data.agent_id == "pydantic_agent"
+        assert identity_summary.identity_purpose == "Pydantic agent"
 
     @pytest.mark.asyncio
     async def test_extract_agent_identity_with_unexpected_attributes_type(self, caplog):
@@ -325,10 +329,13 @@ class TestIdentityManagement:
         identity_node.attributes = "unexpected_string"  # Invalid type
         memory_service.recall = AsyncMock(return_value=[identity_node])
 
-        identity_data, purpose, capabilities, restrictions = await _extract_agent_identity(memory_service)
+        identity_data, identity_summary = await _extract_agent_identity(memory_service)
 
-        assert identity_data == {"agent_id": "", "description": "", "role": "", "trust_level": 0.5}
-        assert "Unexpected graph node attributes type" in caplog.text
+        # Should return defaults when attributes can't be extracted
+        assert identity_data.agent_id == "unknown"
+        assert identity_data.description == "No identity data available"
+        assert identity_data.role == "Unknown"
+        assert identity_data.trust_level == 0.5
 
     @pytest.mark.asyncio
     async def test_extract_agent_identity_with_no_identity_node(self):
@@ -336,12 +343,16 @@ class TestIdentityManagement:
         memory_service = Mock()
         memory_service.recall = AsyncMock(return_value=[])
 
-        identity_data, purpose, capabilities, restrictions = await _extract_agent_identity(memory_service)
+        identity_data, identity_summary = await _extract_agent_identity(memory_service)
 
-        assert identity_data == {}
-        assert purpose is None
-        assert capabilities == []
-        assert restrictions == []
+        # Should return defaults when no identity node found
+        assert identity_data.agent_id == "unknown"
+        assert identity_data.description == "No identity data available"
+        assert identity_data.role == "Unknown"
+        assert identity_data.trust_level == 0.5
+        assert identity_summary.identity_purpose is None
+        assert identity_summary.identity_capabilities == []
+        assert identity_summary.identity_restrictions == []
 
     @pytest.mark.asyncio
     async def test_extract_agent_identity_with_exception(self, caplog):
@@ -349,9 +360,13 @@ class TestIdentityManagement:
         memory_service = Mock()
         memory_service.recall = AsyncMock(side_effect=Exception("Identity error"))
 
-        identity_data, purpose, capabilities, restrictions = await _extract_agent_identity(memory_service)
+        identity_data, identity_summary = await _extract_agent_identity(memory_service)
 
-        assert identity_data == {}
+        # Should return defaults when exception occurs
+        assert identity_data.agent_id == "unknown"
+        assert identity_data.description == "No identity data available"
+        assert identity_data.role == "Unknown"
+        assert identity_data.trust_level == 0.5
         assert "Failed to retrieve agent identity from graph: Identity error" in caplog.text
 
 
@@ -486,19 +501,31 @@ class TestSystemContext:
     async def test_get_secrets_data_with_none_service(self):
         """Test getting secrets data with None service."""
         result = await _get_secrets_data(None)
-        assert result == {}
+        # Should return default SecretsData object
+        assert result.secrets_count == 0
+        assert result.filter_status == "unknown"
+        assert result.source_service == "SecretsService"
 
     @pytest.mark.asyncio
     async def test_get_secrets_data_with_valid_service(self):
         """Test getting secrets data with valid service."""
         secrets_service = Mock()
-        expected_data = {"secrets_count": 5, "filter_version": 2}
+        expected_data = {
+            "total_secrets_stored": 5,
+            "secrets_filter_version": 2,
+            "detected_secrets": ["API_KEY_*", "TOKEN_*"],
+        }
 
         with patch("ciris_engine.logic.context.system_snapshot_helpers.build_secrets_snapshot") as mock_build:
             mock_build.return_value = expected_data
             result = await _get_secrets_data(secrets_service)
 
-        assert result == expected_data
+        # Should return SecretsData object with expected values
+        assert result.secrets_count == 5
+        assert result.secrets_filter_version == 2
+        assert result.detected_secrets == ["API_KEY_*", "TOKEN_*"]
+        assert result.additional_data["total_secrets_stored"] == 5
+        assert result.source_service == "SecretsService"
         mock_build.assert_called_once_with(secrets_service)
 
     def test_get_shutdown_context_with_none_runtime(self):

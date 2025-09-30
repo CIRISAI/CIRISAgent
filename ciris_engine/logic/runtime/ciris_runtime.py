@@ -6,8 +6,12 @@ New simplified runtime that properly orchestrates all components.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters import load_adapter
@@ -26,6 +30,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.operations import InitializationPhase
 
@@ -53,8 +58,9 @@ class CIRISRuntime:
         self,
         adapter_types: List[str],
         essential_config: Optional[EssentialConfig] = None,
+        bootstrap: Optional["RuntimeBootstrapConfig"] = None,
         startup_channel_id: Optional[str] = None,
-        adapter_configs: Optional[dict] = None,
+        adapter_configs: Optional[Dict[str, AdapterConfig]] = None,
         **kwargs: Any,
     ) -> None:
         # CRITICAL: Prevent runtime creation during module imports
@@ -67,20 +73,19 @@ class CIRISRuntime:
                 "This prevents side effects and unwanted process creation. "
                 "Call prevent_sideeffects.allow_runtime_creation() before creating runtime."
             )
-        self.essential_config = essential_config
-        # Store startup_channel_id, may be None or empty string
-        self.startup_channel_id = startup_channel_id or ""
-        self.adapter_configs = adapter_configs or {}
+
+        # Import RuntimeBootstrapConfig here to avoid circular imports
+        from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
+
+        # Use bootstrap config if provided, otherwise construct from legacy parameters
+        self._parse_bootstrap_config(
+            bootstrap, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
+        )
+
         self.adapters: List[BaseAdapterProtocol] = []
-        self.modules_to_load = kwargs.get("modules", [])
-        self.debug = kwargs.get("debug", False)
 
         # CRITICAL: Check for mock LLM environment variable
-        if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
-            logger.warning("CIRIS_MOCK_LLM environment variable detected in CIRISRuntime")
-            if "mock_llm" not in self.modules_to_load:
-                self.modules_to_load.append("mock_llm")
-                logger.info("Added mock_llm to modules to load")
+        self._check_mock_llm()
 
         # Initialize managers
         self.identity_manager: Optional[IdentityManager] = None
@@ -89,20 +94,8 @@ class CIRISRuntime:
         self.agent_processor: Optional["AgentProcessor"] = None
         self._adapter_tasks: List[asyncio.Task] = []
 
-        for adapter_name in adapter_types:
-            try:
-                base_adapter = adapter_name.split(":")[0]
-                adapter_class = load_adapter(base_adapter)
-
-                adapter_kwargs = kwargs.copy()
-                if adapter_name in self.adapter_configs:
-                    adapter_kwargs["adapter_config"] = self.adapter_configs[adapter_name]
-
-                # Adapters expect runtime as first positional argument
-                self.adapters.append(adapter_class(self, **adapter_kwargs))  # type: ignore[call-arg]
-                logger.info(f"Successfully loaded and initialized adapter: {adapter_name}")
-            except Exception as e:
-                logger.error(f"Failed to load or initialize adapter '{adapter_name}': {e}", exc_info=True)
+        # Load adapters from bootstrap config
+        self._load_adapters_from_bootstrap()
 
         if not self.adapters:
             raise RuntimeError("No valid adapters specified, shutting down")
@@ -113,7 +106,6 @@ class CIRISRuntime:
         self._shutdown_event: Optional[asyncio.Event] = None
         self._shutdown_reason: Optional[str] = None
         self._agent_task: Optional[asyncio.Task] = None
-        self._preload_tasks: List[str] = []
         self._shutdown_complete = False
 
         # Identity - will be loaded during initialization
@@ -960,95 +952,28 @@ class CIRISRuntime:
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""
-        logger.info("Starting adapter connections...")
+        from .ciris_runtime_helpers import (
+            create_adapter_lifecycle_tasks,
+            log_adapter_configuration_details,
+            verify_adapter_service_registration,
+            wait_for_adapter_readiness,
+        )
 
-        # Report adapter configuration details
-        for adapter in self.adapters:
-            adapter_name = adapter.__class__.__name__
+        # Log adapter configuration details
+        log_adapter_configuration_details(self.adapters)
 
-            # Report adapter details for Discord
-            if adapter_name == "DiscordPlatform" and hasattr(adapter, "config"):
-                config = adapter.config
-                if hasattr(config, "monitored_channel_ids"):
-                    logger.info(f"  → {adapter_name} configuration:")
-                    logger.info(f"    Monitored channels: {config.monitored_channel_ids}")
-                if hasattr(config, "server_id"):
-                    logger.info(f"    Target server: {config.server_id}")
-                if hasattr(config, "bot_token") and config.bot_token:
-                    logger.info(f"    Bot token: ...{config.bot_token[-10:]}")
-
-        # Create the real agent task upfront instead of using placeholders
-        # This eliminates race conditions and simplifies the architecture
-        logger.info("Creating agent processor task...")
+        # Create agent processor task and adapter lifecycle tasks
         agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
+        self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
 
-        # Start adapter lifecycles with the real agent task
-        self._adapter_tasks = []
-        for adapter in self.adapters:
-            adapter_name = adapter.__class__.__name__
+        # Wait for adapters to be ready
+        adapters_ready = await wait_for_adapter_readiness(self.adapters)
+        if not adapters_ready:
+            raise RuntimeError("Adapters failed to become ready within timeout")
 
-            if hasattr(adapter, "run_lifecycle"):
-                lifecycle_task = asyncio.create_task(
-                    adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask"
-                )
-                self._adapter_tasks.append(lifecycle_task)
-                logger.info(f"  → Starting {adapter_name} lifecycle...")
-
-        # Wait for adapters to connect and register services with retries
-        logger.info("  ⏳ Waiting for adapter connections to establish...")
-        start_time = asyncio.get_event_loop().time()
-        timeout = 30.0
-        services_registered = False
-
-        while (asyncio.get_event_loop().time() - start_time) < timeout:
-            # Check if Discord adapters are ready
-            all_adapters_ready = True
-            for adapter in self.adapters:
-                adapter_name = adapter.__class__.__name__
-                if "Discord" in adapter_name:
-                    # Check health directly on the adapter (DiscordPlatform)
-                    if hasattr(adapter, "is_healthy"):
-                        try:
-                            is_healthy = await adapter.is_healthy()
-                            if not is_healthy:
-                                all_adapters_ready = False
-                                logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
-                            else:
-                                logger.info(f"  ✓ {adapter_name} is healthy and connected")
-                        except Exception as e:
-                            all_adapters_ready = False
-                            logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
-                    else:
-                        all_adapters_ready = False
-                        logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
-
-            if all_adapters_ready and not services_registered:
-                # Register adapter services once adapters are ready
-                logger.info("  → Registering adapter services...")
-                await self._register_adapter_services()
-                services_registered = True
-                # Give services a moment to settle after registration
-                await asyncio.sleep(0.1)
-                # Continue to wait for services to be available in registry
-
-            if services_registered:
-                # Check if services are actually available
-                service_available = False
-                if self.service_registry:
-                    test_service = await self.service_registry.get_service(
-                        handler="test", service_type=ServiceType.COMMUNICATION, required_capabilities=["send_message"]
-                    )
-                    if test_service:
-                        service_available = True
-
-                if service_available:
-                    logger.info("  ✅ All adapters connected and services registered!")
-                    break
-
-            # Wait a bit before checking again
-            await asyncio.sleep(0.5)
-
-        if not services_registered:
+        # Register services and verify availability
+        services_available = await verify_adapter_service_registration(self)
+        if not services_available:
             raise RuntimeError("Failed to establish adapter connections within timeout")
 
         # Final verification with the existing wait method
@@ -1122,40 +1047,24 @@ class CIRISRuntime:
             secrets_service=self.secrets_service,
         )
 
-    async def run(self, num_rounds: Optional[int] = None) -> None:
+    async def run(self, _: Optional[int] = None) -> None:
         """Run the agent processing loop with shutdown monitoring."""
+        from .ciris_runtime_helpers import (
+            finalize_runtime_execution,
+            handle_runtime_agent_task_completion,
+            handle_runtime_task_failures,
+            monitor_runtime_shutdown_signals,
+            setup_runtime_monitoring_tasks,
+        )
+
         if not self._initialized:
             await self.initialize()
 
         try:
-            # Agent task is already running from initialization, just monitor it
-            adapter_tasks = getattr(self, "_adapter_tasks", [])
-            if not adapter_tasks:
-                logger.warning("No adapter tasks found - this may indicate a problem with initialization")
-                return
-
-            logger.info(f"Monitoring {len(adapter_tasks)} adapter lifecycle tasks...")
-
-            # Find the agent task that was created during initialization
-            agent_task = None
-            for task in asyncio.all_tasks():
-                if task.get_name() == "AgentProcessorTask":
-                    agent_task = task
-                    break
-
+            # Set up runtime monitoring tasks
+            agent_task, adapter_tasks, all_tasks = setup_runtime_monitoring_tasks(self)
             if not agent_task:
-                raise RuntimeError("Agent processor task not found - initialization may have failed")
-
-            # Monitor agent_task, all adapter_tasks, and shutdown events
-            self._ensure_shutdown_event()
-            shutdown_event_task = None
-            if self._shutdown_event:
-                shutdown_event_task = asyncio.create_task(self._shutdown_event.wait(), name="ShutdownEventWait")
-
-            global_shutdown_task = asyncio.create_task(wait_for_global_shutdown_async(), name="GlobalShutdownWait")
-            all_tasks: List[asyncio.Task[Any]] = [agent_task, *adapter_tasks, global_shutdown_task]
-            if shutdown_event_task:
-                all_tasks.append(shutdown_event_task)
+                return
 
             # Keep monitoring until agent task completes
             shutdown_logged = False
@@ -1165,58 +1074,29 @@ class CIRISRuntime:
                 # Remove completed tasks from all_tasks to avoid re-processing
                 all_tasks = [t for t in all_tasks if t not in done]
 
-                # Handle task completion and cancellation logic
+                # Monitor shutdown signals
+                shutdown_logged = monitor_runtime_shutdown_signals(self, shutdown_logged)
+
+                # Handle task completion based on type
                 if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                    if not shutdown_logged:
-                        shutdown_reason = (
-                            self._shutdown_reason or self._shutdown_manager.get_shutdown_reason() or "Unknown reason"
-                        )
-                        logger.critical(f"GRACEFUL SHUTDOWN TRIGGERED: {shutdown_reason}")
-                        shutdown_logged = True
-                    # Don't cancel anything! Let the graceful shutdown process handle it
-                    # The agent processor will transition to SHUTDOWN state and handle everything
-                    # Continue the loop - wait for agent to finish its shutdown process
+                    # Continue loop - let graceful shutdown process handle everything
+                    continue
                 elif agent_task in done:
-                    logger.info(
-                        f"Agent processing task completed. Result: {agent_task.result() if not agent_task.cancelled() else 'Cancelled'}"
-                    )
-                    # If agent task finishes (e.g. num_rounds reached), signal shutdown for adapters
-                    self.request_shutdown("Agent processing completed normally.")
-                    for (
-                        ad_task
-                    ) in (
-                        adapter_tasks
-                    ):  # Adapters should react to agent_task completion via its cancellation or by observing shutdown event
-                        if not ad_task.done():
-                            ad_task.cancel()  # Or rely on their run_lifecycle to exit when agent_task is done
+                    handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
                     break  # Exit the while loop
-                else:  # One of the adapter tasks finished, or an unexpected task completion
-                    for task in done:
-                        if task not in [shutdown_event_task, global_shutdown_task]:  # Don't log for event tasks
-                            task_name = task.get_name() if hasattr(task, "get_name") else "Unnamed task"
-                            logger.info(
-                                f"Task '{task_name}' completed. Result: {task.result() if not task.cancelled() else 'Cancelled'}"
-                            )
-                            if task.exception():
-                                logger.error(
-                                    f"Task '{task_name}' raised an exception: {task.exception()}",
-                                    exc_info=task.exception(),
-                                )
-                                self.request_shutdown(f"Task {task_name} failed: {task.exception()}")
+                else:
+                    # Handle other task completions/failures
+                    excluded_tasks = {
+                        t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]
+                    }
+                    handle_runtime_task_failures(self, done, excluded_tasks)
 
-            # Await all pending tasks (including cancellations)
-            if pending:
-                await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
-
-            # Execute any pending global shutdown handlers
-            if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                await self._shutdown_manager.execute_async_handlers()
+            # Finalize execution
+            await finalize_runtime_execution(self, pending)
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal. Requesting shutdown.")
             self.request_shutdown("KeyboardInterrupt")
-            # Re-raise to allow outer event loop (if any) to catch it, or ensure finally block runs
-            # For this structure, self.request_shutdown and then letting it flow to finally is fine.
         except Exception as e:
             logger.error(f"Runtime error: {e}", exc_info=True)
         finally:
@@ -1226,371 +1106,53 @@ class CIRISRuntime:
 
     async def shutdown(self) -> None:
         """Gracefully shutdown all services with consciousness preservation."""
-        # Prevent double shutdown
-        if hasattr(self, "_shutdown_complete") and self._shutdown_complete:
-            logger.debug("Shutdown already completed, skipping...")
+        from .ciris_runtime_helpers import (
+            cleanup_runtime_resources,
+            execute_final_maintenance_tasks,
+            execute_service_shutdown_sequence,
+            finalize_shutdown_logging,
+            handle_adapter_shutdown_cleanup,
+            handle_agent_processor_shutdown,
+            prepare_shutdown_maintenance_tasks,
+            preserve_critical_system_state,
+            validate_shutdown_completion,
+            validate_shutdown_preconditions,
+        )
+
+        # 1. Validate preconditions and early exit if needed
+        if not validate_shutdown_preconditions(self):
             return
 
         logger.info("Shutting down CIRIS Runtime...")
 
-        # Set flag to indicate we're in shutdown mode
-        # This prevents services from being marked unhealthy during shutdown
-        if self.service_registry:
-            self.service_registry._shutdown_mode = True
+        # 2. Prepare maintenance and stop scheduled services
+        await prepare_shutdown_maintenance_tasks(self)
 
-        # Import and use the graceful shutdown manager
-        from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
+        # 3. Execute final maintenance tasks
+        await execute_final_maintenance_tasks(self)
 
-        shutdown_manager = get_shutdown_manager()
+        # 4. Preserve critical system state
+        await preserve_critical_system_state(self)
 
-        # First, stop all scheduled services and feedback loops
-        # This prevents them from trying to use services during shutdown
-        logger.info("Stopping scheduled services and feedback loops...")
-        scheduled_services = []
-        if self.service_registry:
-            all_services = self.service_registry.get_all_services()
-            for service in all_services:
-                # Check if it's a scheduled service (has _task attribute from BaseScheduledService)
-                # or has _scheduler attribute (other scheduled services)
-                if hasattr(service, "_task") or hasattr(service, "_scheduler"):
-                    scheduled_services.append(service)
-
-        # Stop all scheduled services first
-        for service in scheduled_services:
-            try:
-                service_name = service.__class__.__name__
-                logger.info(f"Stopping scheduled tasks for {service_name}")
-                if hasattr(service, "_task") and service._task:
-                    # Cancel the task directly
-                    service._task.cancel()
-                    try:
-                        await service._task
-                    except asyncio.CancelledError:
-                        # Only re-raise if we're being cancelled ourselves
-                        if asyncio.current_task() and asyncio.current_task().cancelled():
-                            raise
-                        # Otherwise, this is a normal stop - don't propagate the cancellation
-                elif hasattr(service, "stop_scheduler"):
-                    await service.stop_scheduler()
-            except Exception as e:
-                logger.error(f"Error stopping scheduled tasks for {service.__class__.__name__}: {e}")
-
-        # Give scheduled tasks a moment to stop
-        if scheduled_services:
-            logger.info(f"Stopped {len(scheduled_services)} scheduled services, waiting for tasks to complete...")
-            await asyncio.sleep(0.5)
-
-        # Register our final maintenance as a shutdown handler
-        async def run_final_maintenance() -> None:
-            """Run final maintenance and consolidation before services stop."""
-            logger.info("=" * 60)
-            logger.info("Running final maintenance tasks...")
-
-            # 1. Run final database maintenance
-            if hasattr(self, "maintenance_service") and self.maintenance_service:
-                try:
-                    logger.info("Running final database maintenance before shutdown...")
-                    await self.maintenance_service.perform_startup_cleanup()
-                    logger.info("Final database maintenance completed")
-                except Exception as e:
-                    logger.error(f"Failed to run final database maintenance: {e}")
-
-            # 2. Run final TSDB consolidation
-            if hasattr(self, "service_initializer") and self.service_initializer:
-                tsdb_service = getattr(self.service_initializer, "tsdb_consolidation_service", None)
-                if tsdb_service:
-                    try:
-                        logger.info("Running final TSDB consolidation before shutdown...")
-                        await tsdb_service._run_consolidation()
-                        logger.info("Final TSDB consolidation completed")
-                    except Exception as e:
-                        logger.error(f"Failed to run final TSDB consolidation: {e}")
-
-            logger.info("Final maintenance tasks completed")
-            logger.info("=" * 60)
-
-        # First run our maintenance handler
-        await run_final_maintenance()
-
-        # Execute any other registered async shutdown handlers
-        try:
-            await shutdown_manager.execute_async_handlers()
-        except Exception as e:
-            logger.error(f"Error executing shutdown handlers: {e}")
-
-        # Preserve agent consciousness if identity exists
-        if hasattr(self, "agent_identity") and self.agent_identity:
-            try:
-                await self._preserve_shutdown_consciousness()
-            except Exception as e:
-                logger.error(f"Failed to preserve consciousness during shutdown: {e}")
-
+        # 5. Handle agent processor shutdown
         logger.info("Initiating shutdown sequence for CIRIS Runtime...")
         self._ensure_shutdown_event()
         if self._shutdown_event:
-            self._shutdown_event.set()  # Ensure event is set for any waiting components
-
-        # Initiate graceful shutdown negotiation
-        if self.agent_processor and hasattr(self.agent_processor, "state_manager"):
-            current_state = self.agent_processor.state_manager.get_state()
-
-            # Only do negotiation if not already in SHUTDOWN state
-            if current_state != AgentState.SHUTDOWN:
-                try:
-                    logger.info("Initiating graceful shutdown negotiation...")
-
-                    # Check if we can transition to shutdown state
-                    if await self.agent_processor.state_manager.can_transition_to(AgentState.SHUTDOWN):
-                        logger.info(f"Transitioning from {current_state} to SHUTDOWN state")
-                        # Use the state manager directly to transition
-                        await self.agent_processor.state_manager.transition_to(AgentState.SHUTDOWN)
-
-                        # If processing loop is running, just signal it to stop
-                        # It will handle the SHUTDOWN state in its next iteration
-                        if self.agent_processor._processing_task and not self.agent_processor._processing_task.done():
-                            logger.info("Processing loop is running, signaling stop")
-                            # Just set the stop event, don't call stop_processing yet
-                            if hasattr(self.agent_processor, "_stop_event") and self.agent_processor._stop_event:
-                                self.agent_processor._stop_event.set()
-                        else:
-                            # Processing loop not running, we need to handle shutdown ourselves
-                            logger.info("Processing loop not running, executing shutdown processor directly")
-                            if (
-                                hasattr(self.agent_processor, "shutdown_processor")
-                                and self.agent_processor.shutdown_processor
-                            ):
-                                # Run a few rounds of shutdown processing
-                                for round_num in range(5):
-                                    try:
-                                        result = await self.agent_processor.shutdown_processor.process(round_num)
-                                        if self.agent_processor.shutdown_processor.shutdown_complete:
-                                            break
-                                    except Exception as e:
-                                        logger.error(f"Error in shutdown processor: {e}", exc_info=True)
-                                        break
-                                    await asyncio.sleep(0.1)
-                    else:
-                        logger.error(f"Cannot transition from {current_state} to SHUTDOWN state")
-
-                    # Wait a bit for ShutdownProcessor to complete
-                    # The processor will set shutdown_complete flag
-                    max_wait = 5.0  # Reduced from 30s to 5s for faster shutdown
-                    start_time = asyncio.get_event_loop().time()
-
-                    while (asyncio.get_event_loop().time() - start_time) < max_wait:
-                        if (
-                            hasattr(self.agent_processor, "shutdown_processor")
-                            and self.agent_processor.shutdown_processor
-                        ):
-                            if self.agent_processor.shutdown_processor.shutdown_complete:
-                                result = self.agent_processor.shutdown_processor.shutdown_result  # type: ignore[assignment]
-                                if result and hasattr(result, "get") and result.get("status") == "rejected":
-                                    logger.warning(f"Shutdown rejected by agent: {result.get('reason')}")
-                                    # Proceed with shutdown - emergency shutdown API provides override mechanism
-                                break
-                        await asyncio.sleep(0.1)  # Reduced from 0.5s to 0.1s for faster response
-
-                    logger.debug("Shutdown negotiation complete or timed out")
-                except Exception as e:
-                    logger.error(f"Error during shutdown negotiation: {e}")
-
-        # Stop multi-service sink
-        if self.bus_manager:
-            try:
-                logger.debug("Stopping multi-service sink...")
-                # Add timeout to prevent hanging forever
-                await asyncio.wait_for(self.bus_manager.stop(), timeout=10.0)
-                logger.debug("Multi-service sink stopped.")
-            except asyncio.TimeoutError:
-                logger.error("Timeout stopping multi-service sink after 10 seconds")
-            except Exception as e:
-                logger.error(f"Error stopping multi-service sink: {e}")
-
-        logger.debug(f"Stopping {len(self.adapters)} adapters...")
-        adapter_stop_results = await asyncio.gather(
-            *(adapter.stop() for adapter in self.adapters if hasattr(adapter, "stop")), return_exceptions=True
-        )
-        for i, stop_result in enumerate(adapter_stop_results):
-            if isinstance(stop_result, Exception):
-                logger.error(
-                    f"Error stopping adapter {self.adapters[i].__class__.__name__}: {stop_result}", exc_info=stop_result
-                )
-        logger.debug("Adapters stopped.")
-
-        logger.debug("Stopping core services...")
-
-        # Get all registered services dynamically
-        all_registered_services = []
-        if self.service_registry:
-            all_registered_services = self.service_registry.get_all_services()
-            logger.info(f"Found {len(all_registered_services)} registered services to stop")
-
-        # Build a comprehensive list of services to stop
-        # This includes both registered services and direct references
-        services_to_stop = []
-        seen_ids = set()
-
-        # Add all registered services
-        for service in all_registered_services:
-            service_id = id(service)
-            if service_id not in seen_ids and hasattr(service, "stop"):
-                seen_ids.add(service_id)
-                services_to_stop.append(service)
-
-        # Also add any services we have direct references to (in case they weren't registered)
-        # This ensures backward compatibility
-        direct_services = [
-            # From service_initializer
-            getattr(self.service_initializer, "tsdb_consolidation_service", None),
-            getattr(self.service_initializer, "task_scheduler_service", None),
-            getattr(self.service_initializer, "incident_management_service", None),
-            getattr(self.service_initializer, "resource_monitor_service", None),
-            getattr(self.service_initializer, "config_service", None),
-            getattr(self.service_initializer, "auth_service", None),
-            getattr(self.service_initializer, "runtime_control_service", None),
-            getattr(self.service_initializer, "self_observation_service", None),
-            getattr(self.service_initializer, "visibility_service", None),
-            getattr(self.service_initializer, "core_tool_service", None),
-            getattr(self.service_initializer, "wa_auth_system", None),
-            getattr(self.service_initializer, "initialization_service", None),
-            getattr(self.service_initializer, "shutdown_service", None),
-            getattr(self.service_initializer, "time_service", None),
-            # From runtime
-            self.maintenance_service,
-            self.transaction_orchestrator,
-            self.agent_config_service,
-            self.adaptive_filter_service,
-            self.telemetry_service,
-            self.audit_service,
-            self.llm_service,
-            self.secrets_service,
-            self.memory_service,
-        ]
-
-        for service in direct_services:
-            if service:
-                service_id = id(service)
-                if service_id not in seen_ids and hasattr(service, "stop"):
-                    seen_ids.add(service_id)
-                    services_to_stop.append(service)
-
-        # Sort services by priority for shutdown (reverse order)
-        # Infrastructure services should be stopped last
-        def get_shutdown_priority(service: Any) -> int:
-            service_name = service.__class__.__name__
-            # Priority 0: Services that depend on others
-            if "TSDB" in service_name or "Consolidation" in service_name:
-                return 0
-            elif "Task" in service_name or "Scheduler" in service_name:
-                return 1
-            elif "Incident" in service_name or "Monitor" in service_name:
-                return 2
-            # Priority 3: Application services
-            elif "Adaptive" in service_name or "Filter" in service_name:
-                return 3
-            elif "Tool" in service_name or "Control" in service_name:
-                return 4
-            elif "Observation" in service_name or "Visibility" in service_name:
-                return 5
-            # Priority 6: Core services
-            elif "Telemetry" in service_name or "Audit" in service_name:
-                return 6
-            elif "LLM" in service_name or "Auth" in service_name:
-                return 7
-            elif "Config" in service_name:
-                return 8
-            # Priority 9: Fundamental services
-            elif "Memory" in service_name or "Secrets" in service_name:
-                return 9
-            # Priority 10: Infrastructure services (stop last)
-            elif "Time" in service_name:
-                return 11
-            elif "Shutdown" in service_name:
-                return 12
-            elif "Initialization" in service_name:
-                return 10
-            else:
-                return 5  # Default priority
-
-        services_to_stop.sort(key=get_shutdown_priority)
-
-        # Stop services that have a stop method
-        stop_tasks = []
-        service_names = []
-        for service in services_to_stop:
-            if service and hasattr(service, "stop"):
-                # Check if stop is async or sync
-                stop_method = service.stop()
-                if asyncio.iscoroutine(stop_method):
-                    # Async stop method
-                    task = asyncio.create_task(stop_method)
-                    stop_tasks.append(task)
-                else:
-                    # Sync stop method - already completed
-                    # No need to add to tasks
-                    pass
-                service_names.append(service.__class__.__name__)
-
-        if stop_tasks:
-            logger.info(f"Stopping {len(stop_tasks)} services: {', '.join(service_names)}")
-
-            # Use wait with timeout instead of wait_for to better track individual tasks
-            done, pending = await asyncio.wait(stop_tasks, timeout=10.0)
-
-            if pending:
-                # Some tasks didn't complete
-                logger.error(f"Service shutdown timed out after 10 seconds. {len(pending)} services still running.")
-                hanging_services = []
-
-                for task in pending:
-                    # Find which service this task belongs to
-                    try:
-                        idx = stop_tasks.index(task)
-                        service_name = service_names[idx]
-                        hanging_services.append(service_name)
-                        logger.warning(f"Service {service_name} did not stop in time")
-                    except ValueError:
-                        logger.warning("Unknown service task did not stop in time")
-
-                    # Cancel the hanging task
-                    task.cancel()
-
-                logger.error(f"Hanging services: {', '.join(hanging_services)}")
-
-                # Try to await cancelled tasks to clean up properly
-                if pending:
-                    await asyncio.gather(*pending, return_exceptions=True)
-            else:
-                logger.info(
-                    f"All {len(stop_tasks)} services stopped successfully (Total services: {len(services_to_stop)})"
-                )
-
-            # Check for any errors in completed tasks
-            for task in done:
-                if task.done() and not task.cancelled():
-                    try:
-                        result = task.result()
-                        if isinstance(result, Exception):
-                            idx = stop_tasks.index(task)
-                            logger.error(f"Service {service_names[idx]} stop error: {result}")
-                    except Exception as e:
-                        logger.error(f"Error checking task result: {e}")
-
-        # Clear service registry
-        if self.service_registry:
-            try:
-                self.service_registry.clear_all()
-                logger.debug("Service registry cleared.")
-            except Exception as e:
-                logger.error(f"Error clearing service registry: {e}")
-
-        logger.info("CIRIS Runtime shutdown complete")
-
-        # Mark shutdown as truly complete
-        self._shutdown_complete = True
-        # If there's a shutdown event, set it to signal completion
-        if hasattr(self, "_shutdown_event"):
             self._shutdown_event.set()
+
+        await handle_agent_processor_shutdown(self)
+
+        # 6. Handle adapter cleanup
+        await handle_adapter_shutdown_cleanup(self)
+
+        # 7. Execute service shutdown sequence
+        logger.debug("Stopping core services...")
+        await execute_service_shutdown_sequence(self)
+
+        # 8. Finalize logging and cleanup resources
+        await finalize_shutdown_logging(self)
+        await cleanup_runtime_resources(self)
+        validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
 
     async def _preserve_shutdown_consciousness(self) -> None:
@@ -1652,3 +1214,97 @@ class CIRISRuntime:
 
         except Exception as e:
             logger.error(f"Failed to preserve shutdown consciousness: {e}")
+
+    def _parse_bootstrap_config(
+        self,
+        bootstrap: Optional["RuntimeBootstrapConfig"],
+        essential_config: Optional[EssentialConfig],
+        startup_channel_id: Optional[str],
+        adapter_types: List[str],
+        adapter_configs: Optional[dict],
+        kwargs: dict,
+    ) -> None:
+        """Parse bootstrap configuration or create from legacy parameters."""
+        if bootstrap is not None:
+            self.bootstrap = bootstrap
+            self.essential_config = essential_config or EssentialConfig()
+            self.startup_channel_id = bootstrap.startup_channel_id or ""
+            self.adapter_configs = bootstrap.adapter_overrides
+            self.modules_to_load = bootstrap.modules
+            self.debug = bootstrap.debug
+            self._preload_tasks = bootstrap.preload_tasks
+        else:
+            self._create_bootstrap_from_legacy(
+                essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
+            )
+
+    def _create_bootstrap_from_legacy(
+        self,
+        essential_config: Optional[EssentialConfig],
+        startup_channel_id: Optional[str],
+        adapter_types: List[str],
+        adapter_configs: Optional[dict],
+        kwargs: dict,
+    ) -> None:
+        """Create bootstrap config from legacy parameters."""
+        self.essential_config = essential_config
+        self.startup_channel_id = startup_channel_id or ""
+        self.adapter_configs = adapter_configs or {}
+        self.modules_to_load = kwargs.get("modules", [])
+        self.debug = kwargs.get("debug", False)
+        self._preload_tasks = []
+
+        from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
+        from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
+
+        adapter_load_requests = [
+            AdapterLoadRequest(adapter_type=atype, adapter_id=atype, auto_start=True) for atype in adapter_types
+        ]
+        self.bootstrap = RuntimeBootstrapConfig(
+            adapters=adapter_load_requests,
+            adapter_overrides=self.adapter_configs,
+            modules=self.modules_to_load,
+            startup_channel_id=self.startup_channel_id,
+            debug=self.debug,
+            preload_tasks=self._preload_tasks,
+        )
+
+    def _check_mock_llm(self) -> None:
+        """Check for mock LLM environment variable and add to modules if needed."""
+        if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
+            logger.warning("CIRIS_MOCK_LLM environment variable detected in CIRISRuntime")
+            if "mock_llm" not in self.modules_to_load:
+                self.modules_to_load.append("mock_llm")
+                logger.info("Added mock_llm to modules to load")
+
+    def _load_adapters_from_bootstrap(self) -> None:
+        """Load adapters from bootstrap configuration."""
+        for load_request in self.bootstrap.adapters:
+            try:
+                adapter_class = load_adapter(load_request.adapter_type)
+
+                # Create AdapterStartupContext
+                from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
+                context = AdapterStartupContext(
+                    essential_config=self.essential_config or EssentialConfig(),
+                    modules_to_load=self.modules_to_load,
+                    startup_channel_id=self.startup_channel_id or "",
+                    debug=self.debug,
+                    bus_manager=None,  # Will be set after initialization
+                    time_service=None,  # Will be set after initialization
+                    service_registry=None,  # Will be set after initialization
+                )
+
+                # Apply overrides if present
+                config = load_request.config or AdapterConfig(adapter_type=load_request.adapter_type)
+                if load_request.adapter_id in self.adapter_configs:
+                    config = self.adapter_configs[load_request.adapter_id]
+
+                # Create adapter with context
+                # Pass the settings as adapter_config so adapters can find them
+                adapter_instance = adapter_class(self, context=context, adapter_config=config.settings)
+                self.adapters.append(adapter_instance)
+                logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
+            except Exception as e:
+                logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)

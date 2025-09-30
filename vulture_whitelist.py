@@ -1744,7 +1744,7 @@ _.add_resource  # unused method (ciris_engine/schemas/resources/crisis.py:143)
 _.get_by_type  # unused method (ciris_engine/schemas/resources/crisis.py:159)
 _.validate_all_resources  # unused method (ciris_engine/schemas/resources/crisis.py:195)
 get_crisis_response_text  # unused function (ciris_engine/schemas/resources/crisis.py:302)
-parameters_schema  # unused variable (ciris_engine/schemas/runtime/adapter_management.py:23)
+# parameters_schema  # REMOVED - duplicate ToolInfo schema consolidated
 AdapterLoadRequest  # unused class (ciris_engine/schemas/runtime/adapter_management.py:36)
 last_error_time  # unused variable (ciris_engine/schemas/runtime/adapter_management.py:63)
 ServiceRegistrationInfo  # unused class (ciris_engine/schemas/runtime/adapter_management.py:90)

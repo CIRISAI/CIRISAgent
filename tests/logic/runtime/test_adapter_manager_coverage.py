@@ -12,6 +12,7 @@ import pytest
 
 from ciris_engine.logic.runtime.adapter_manager import AdapterInstance, RuntimeAdapterManager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
     AdapterMetrics,
@@ -23,8 +24,9 @@ from ciris_engine.schemas.runtime.adapter_management import (
 class MockAdapter:
     """Mock adapter for testing."""
 
-    def __init__(self, runtime, **kwargs):
+    def __init__(self, runtime, context=None, **kwargs):
         self.runtime = runtime
+        self.context = context
         self.kwargs = kwargs
         self.started = False
         self.stopped = False
@@ -61,10 +63,20 @@ class TestRuntimeAdapterManager:
     @pytest.fixture
     def mock_runtime(self):
         """Create a mock runtime."""
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
         mock = Mock()
         mock.service_registry = Mock()
         mock.config_service = None
         mock.adapters = []
+        # Add required attributes for AdapterStartupContext
+        mock.essential_config = EssentialConfig()  # Use defaults
+        mock.modules_to_load = []
+        mock.startup_channel_id = "test_channel"
+        mock.debug = False
+        mock.bus_manager = None
+        mock.agent_name = "test"
+        mock.agent_version = "1.0.0"
         return mock
 
     @pytest.fixture
@@ -372,11 +384,17 @@ class TestRuntimeAdapterManager:
         # Setup adapter with tool service
         adapter = MockAdapter(None)
         tool_service = Mock()
-        # Create proper mock tool info objects with string names
-        tool1 = Mock()
-        tool1.name = "tool1"  # Set as string attribute, not Mock
-        tool2 = Mock()
-        tool2.name = "tool2"
+        # Create proper ToolInfo objects
+        tool1 = ToolInfo(
+            name="tool1",
+            description="Test tool 1",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+        )
+        tool2 = ToolInfo(
+            name="tool2",
+            description="Test tool 2",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+        )
         tool_service.get_all_tool_info = AsyncMock(return_value=[tool1, tool2])
         adapter.tool_service = tool_service
 
@@ -395,7 +413,12 @@ class TestRuntimeAdapterManager:
 
         # Verify
         assert len(result) == 1
-        assert result[0].tools == ["tool1", "tool2"]
+        assert result[0].tools is not None
+        assert len(result[0].tools) == 2
+        assert isinstance(result[0].tools[0], ToolInfo)
+        assert isinstance(result[0].tools[1], ToolInfo)
+        assert result[0].tools[0].name == "tool1"
+        assert result[0].tools[1].name == "tool2"
 
     @pytest.mark.asyncio
     async def test_list_adapters_exception_handling(self, adapter_manager, mock_time_service):
@@ -505,8 +528,9 @@ class TestRuntimeAdapterManager:
         # Setup mock config service on service_initializer
         mock_config = AsyncMock()
         mock_config.set_config = AsyncMock()
-        mock_config.delete = AsyncMock()
-        mock_config.get_all = AsyncMock(return_value=[])
+        mock_config.list_configs = AsyncMock(
+            return_value={"adapter.test_id.config": {"test": "value"}, "adapter.test_id.type": "cli"}
+        )
 
         mock_initializer = Mock()
         mock_initializer.config_service = mock_config
@@ -518,9 +542,11 @@ class TestRuntimeAdapterManager:
         await adapter_manager._save_adapter_config_to_graph("test_id", "cli", config)
         mock_config.set_config.assert_called()
 
-        # Test remove
+        # Test remove - now uses list_configs and set_config to None
         await adapter_manager._remove_adapter_config_from_graph("test_id")
-        mock_config.get_all.assert_called_once()
+        mock_config.list_configs.assert_called_once_with(prefix="adapter.test_id")
+        # Should set each config to None to clear it
+        assert mock_config.set_config.call_count >= 2  # At least 2 configs to clear
 
     @pytest.mark.asyncio
     async def test_config_listener_registration(self, adapter_manager, mock_runtime):
@@ -633,3 +659,526 @@ class TestRuntimeAdapterManager:
         # Execute and expect CancelledError to be re-raised
         with pytest.raises(asyncio.CancelledError):
             await adapter_manager.unload_adapter("cancel_test")
+
+    # Tests for new helper functions created during refactoring
+    def test_create_adapter_operation_result_success(self, adapter_manager):
+        """Test _create_adapter_operation_result for success case."""
+        result = adapter_manager._create_adapter_operation_result(
+            success=True, adapter_id="test_id", adapter_type="cli", message="Success message", details={"key": "value"}
+        )
+
+        assert result.success is True
+        assert result.adapter_id == "test_id"
+        assert result.adapter_type == "cli"
+        assert result.message == "Success message"
+        assert result.error is None
+        assert result.details == {"key": "value"}
+
+    def test_create_adapter_operation_result_failure(self, adapter_manager):
+        """Test _create_adapter_operation_result for failure case."""
+        result = adapter_manager._create_adapter_operation_result(
+            success=False, adapter_id="test_id", adapter_type="api", message="Failure message", error="Error details"
+        )
+
+        assert result.success is False
+        assert result.adapter_id == "test_id"
+        assert result.adapter_type == "api"
+        assert result.message == "Failure message"
+        assert result.error == "Error details"
+        # details can be None or empty dict when not provided
+        assert result.details is None or result.details == {}
+
+    def test_validate_adapter_unload_eligibility_not_found(self, adapter_manager):
+        """Test _validate_adapter_unload_eligibility for non-existent adapter."""
+        result = adapter_manager._validate_adapter_unload_eligibility("nonexistent")
+
+        assert result is not None
+        assert result.success is False
+        assert "not found" in result.message
+        assert result.error == "Adapter with ID 'nonexistent' not found"
+
+    def test_validate_adapter_unload_eligibility_last_communication_adapter(self, adapter_manager, mock_time_service):
+        """Test _validate_adapter_unload_eligibility for last communication adapter."""
+        # Setup - add only one communication adapter
+        instance = AdapterInstance(
+            adapter_id="last_comm",
+            adapter_type="discord",
+            adapter=MockAdapter(None),
+            config_params=AdapterConfig(adapter_type="discord"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+        adapter_manager.loaded_adapters["last_comm"] = instance
+
+        result = adapter_manager._validate_adapter_unload_eligibility("last_comm")
+
+        assert result is not None
+        assert result.success is False
+        assert "last communication-capable adapters" in result.message
+
+    def test_validate_adapter_unload_eligibility_success(self, adapter_manager, mock_time_service):
+        """Test _validate_adapter_unload_eligibility for valid unload."""
+        # Setup - add multiple communication adapters
+        instance1 = AdapterInstance(
+            adapter_id="comm1",
+            adapter_type="discord",
+            adapter=MockAdapter(None),
+            config_params=AdapterConfig(adapter_type="discord"),
+            loaded_at=mock_time_service.now(),
+        )
+        instance2 = AdapterInstance(
+            adapter_id="comm2",
+            adapter_type="api",
+            adapter=MockAdapter(None),
+            config_params=AdapterConfig(adapter_type="api"),
+            loaded_at=mock_time_service.now(),
+        )
+        adapter_manager.loaded_adapters["comm1"] = instance1
+        adapter_manager.loaded_adapters["comm2"] = instance2
+
+        result = adapter_manager._validate_adapter_unload_eligibility("comm1")
+
+        assert result is None  # No validation error means success
+
+    @pytest.mark.asyncio
+    async def test_cancel_adapter_lifecycle_tasks_with_tasks(self, adapter_manager, mock_time_service):
+        """Test _cancel_adapter_lifecycle_tasks with existing tasks."""
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="discord",
+            adapter=MockDiscordAdapter(None),
+            config_params=AdapterConfig(adapter_type="discord"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        # Create mock tasks
+        instance.lifecycle_task = asyncio.create_task(asyncio.sleep(10))
+        instance.lifecycle_runner = asyncio.create_task(asyncio.sleep(10))
+
+        await adapter_manager._cancel_adapter_lifecycle_tasks("test_id", instance)
+
+        # Tasks should be cancelled but not set to None (they just become cancelled tasks)
+        assert instance.lifecycle_task.cancelled()
+        assert instance.lifecycle_runner.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_cancel_adapter_lifecycle_tasks_no_tasks(self, adapter_manager, mock_time_service):
+        """Test _cancel_adapter_lifecycle_tasks with no tasks."""
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=MockAdapter(None),
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        # Should not raise any errors
+        await adapter_manager._cancel_adapter_lifecycle_tasks("test_id", instance)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_adapter_from_runtime_in_runtime_list(self, adapter_manager, mock_runtime, mock_time_service):
+        """Test _cleanup_adapter_from_runtime when adapter is in runtime list."""
+        adapter = MockAdapter(mock_runtime)
+        mock_runtime.adapters = [adapter]
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            services_registered=["service1", "service2"],
+            is_running=True,
+        )
+
+        # Add the instance to loaded_adapters so it can be deleted
+        adapter_manager.loaded_adapters["test_id"] = instance
+
+        # Mock the service unregistration and config removal
+        with patch.object(adapter_manager, "_unregister_adapter_services") as mock_unreg, patch.object(
+            adapter_manager, "_remove_adapter_config_from_graph"
+        ) as mock_config:
+
+            await adapter_manager._cleanup_adapter_from_runtime("test_id", instance)
+
+            # Verify adapter was stopped
+            assert instance.is_running is False
+            assert adapter.stopped is True
+
+            # Verify adapter was removed from runtime list
+            assert adapter not in mock_runtime.adapters
+
+            # Verify cleanup methods were called
+            mock_unreg.assert_called_once_with(instance)
+            mock_config.assert_called_once_with("test_id")
+
+            # Verify adapter was removed from loaded_adapters
+            assert "test_id" not in adapter_manager.loaded_adapters
+
+    @pytest.mark.asyncio
+    async def test_cleanup_adapter_from_runtime_not_in_list(self, adapter_manager, mock_runtime, mock_time_service):
+        """Test _cleanup_adapter_from_runtime when adapter not in runtime list."""
+        adapter = MockAdapter(mock_runtime)
+        mock_runtime.adapters = []  # Empty list
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            services_registered=["service1"],
+            is_running=True,
+        )
+
+        # Add the instance to loaded_adapters so it can be deleted
+        adapter_manager.loaded_adapters["test_id"] = instance
+
+        # Mock the service unregistration and config removal
+        with patch.object(adapter_manager, "_unregister_adapter_services") as mock_unreg, patch.object(
+            adapter_manager, "_remove_adapter_config_from_graph"
+        ) as mock_config:
+
+            # Should not raise any errors
+            await adapter_manager._cleanup_adapter_from_runtime("test_id", instance)
+
+            # Verify adapter was stopped
+            assert instance.is_running is False
+            assert adapter.stopped is True
+
+            # Verify cleanup methods were called
+            mock_unreg.assert_called_once_with(instance)
+            mock_config.assert_called_once_with("test_id")
+
+            # Verify adapter was removed from loaded_adapters
+            assert "test_id" not in adapter_manager.loaded_adapters
+
+    @pytest.mark.asyncio
+    async def test_determine_adapter_health_status_healthy(self, adapter_manager, mock_time_service):
+        """Test _determine_adapter_health_status for healthy adapter."""
+        adapter = MockAdapter(None)
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+
+        health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
+
+        assert health_status == "healthy"
+        assert health_details == {}
+
+    @pytest.mark.asyncio
+    async def test_determine_adapter_health_status_unhealthy(self, adapter_manager, mock_time_service):
+        """Test _determine_adapter_health_status for unhealthy adapter."""
+        adapter = MockAdapter(None)
+        adapter.is_healthy = AsyncMock(return_value=False)
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+
+        health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
+
+        assert health_status == "error"
+        assert health_details == {}
+
+    @pytest.mark.asyncio
+    async def test_determine_adapter_health_status_exception(self, adapter_manager, mock_time_service):
+        """Test _determine_adapter_health_status with exception."""
+        adapter = MockAdapter(None)
+        adapter.is_healthy = AsyncMock(side_effect=Exception("Health check failed"))
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+
+        health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
+
+        assert health_status == "error"
+        assert health_details["error"] == "Health check failed"
+
+    @pytest.mark.asyncio
+    async def test_determine_adapter_health_status_no_health_method_running(self, adapter_manager, mock_time_service):
+        """Test _determine_adapter_health_status for adapter without health method but running."""
+
+        # Create a simple class without is_healthy method
+        class SimpleAdapter:
+            def __init__(self):
+                self.started = False
+                self.stopped = False
+
+            async def start(self):
+                self.started = True
+
+            async def stop(self):
+                self.stopped = True
+
+        adapter = SimpleAdapter()
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+
+        health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
+
+        assert health_status == "active"
+        assert health_details == {}
+
+    @pytest.mark.asyncio
+    async def test_determine_adapter_health_status_no_health_method_stopped(self, adapter_manager, mock_time_service):
+        """Test _determine_adapter_health_status for stopped adapter without health method."""
+
+        # Create a simple class without is_healthy method
+        class SimpleAdapter:
+            def __init__(self):
+                self.started = False
+                self.stopped = False
+
+            async def start(self):
+                self.started = True
+
+            async def stop(self):
+                self.stopped = True
+
+        adapter = SimpleAdapter()
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+            is_running=False,
+        )
+
+        health_status, health_details = await adapter_manager._determine_adapter_health_status(instance)
+
+        assert health_status == "stopped"
+        assert health_details == {}
+
+    def test_extract_adapter_service_details_with_services(self, adapter_manager, mock_time_service):
+        """Test _extract_adapter_service_details with service registrations."""
+        adapter = MockAdapter(None)
+
+        # Mock service registration data
+        from ciris_engine.logic.registries.base import Priority
+        from ciris_engine.schemas.adapters.registration import AdapterServiceRegistration
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_registration = Mock()
+        mock_registration.service_type = ServiceType.COMMUNICATION
+        mock_registration.priority = Priority.NORMAL
+        mock_registration.handlers = ["handler1"]
+        mock_registration.capabilities = ["capability1"]
+
+        adapter.get_services_to_register = Mock(return_value=[mock_registration])
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        service_details = adapter_manager._extract_adapter_service_details(instance)
+
+        assert len(service_details) == 1
+        assert service_details[0]["service_type"] == ServiceType.COMMUNICATION.value
+        assert service_details[0]["priority"] == "NORMAL"
+        assert service_details[0]["handlers"] == ["handler1"]
+        assert service_details[0]["capabilities"] == ["capability1"]
+
+    def test_extract_adapter_service_details_no_services(self, adapter_manager, mock_time_service):
+        """Test _extract_adapter_service_details without service registration method."""
+        adapter = MockAdapter(None)
+        # No get_services_to_register method
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        service_details = adapter_manager._extract_adapter_service_details(instance)
+
+        assert len(service_details) == 1
+        assert "info" in service_details[0]
+        assert "does not provide service registration details" in service_details[0]["info"]
+
+    def test_extract_adapter_service_details_exception(self, adapter_manager, mock_time_service):
+        """Test _extract_adapter_service_details with exception."""
+        adapter = MockAdapter(None)
+        adapter.get_services_to_register = Mock(side_effect=Exception("Service registration failed"))
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        service_details = adapter_manager._extract_adapter_service_details(instance)
+
+        assert len(service_details) == 1
+        assert "error" in service_details[0]
+        assert "Failed to get service registrations" in service_details[0]["error"]
+
+    @pytest.mark.asyncio
+    async def test_get_adapter_tools_info_with_get_all_tool_info(self, adapter_manager, mock_time_service):
+        """Test _get_adapter_tools_info with get_all_tool_info method."""
+        adapter = MockAdapter(None)
+        tool_service = Mock()
+
+        tool1 = ToolInfo(
+            name="tool1",
+            description="Test tool 1",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+        )
+        tool2 = ToolInfo(
+            name="tool2",
+            description="Test tool 2",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+        )
+
+        tool_service.get_all_tool_info = AsyncMock(return_value=[tool1, tool2])
+        adapter.tool_service = tool_service
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        tools = await adapter_manager._get_adapter_tools_info("test_id", instance)
+
+        assert tools is not None
+        assert len(tools) == 2
+        assert tools[0].name == "tool1"
+        assert tools[1].name == "tool2"
+
+    @pytest.mark.asyncio
+    async def test_get_adapter_tools_info_with_list_tools(self, adapter_manager, mock_time_service):
+        """Test _get_adapter_tools_info with list_tools method."""
+        adapter = MockAdapter(None)
+
+        # Create a tool service that only has list_tools, not get_all_tool_info
+        class ToolServiceWithListTools:
+            async def list_tools(self):
+                return ["tool1", "tool2"]
+
+        tool_service = ToolServiceWithListTools()
+        adapter.tool_service = tool_service
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        tools = await adapter_manager._get_adapter_tools_info("test_id", instance)
+
+        assert tools is not None
+        assert len(tools) == 2
+        assert isinstance(tools[0], ToolInfo)
+        assert isinstance(tools[1], ToolInfo)
+        assert tools[0].name == "tool1"
+        assert tools[1].name == "tool2"
+        assert tools[0].description == ""  # Default description
+
+    @pytest.mark.asyncio
+    async def test_get_adapter_tools_info_no_tool_service(self, adapter_manager, mock_time_service):
+        """Test _get_adapter_tools_info without tool service."""
+        adapter = MockAdapter(None)
+        # No tool_service
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        tools = await adapter_manager._get_adapter_tools_info("test_id", instance)
+
+        assert tools is None
+
+    @pytest.mark.asyncio
+    async def test_get_adapter_tools_info_exception(self, adapter_manager, mock_time_service):
+        """Test _get_adapter_tools_info with exception."""
+        adapter = MockAdapter(None)
+        tool_service = Mock()
+        tool_service.get_all_tool_info = AsyncMock(side_effect=Exception("Tool retrieval failed"))
+        adapter.tool_service = tool_service
+
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        tools = await adapter_manager._get_adapter_tools_info("test_id", instance)
+
+        assert tools is None  # Exception handled gracefully
+
+    def test_create_adapter_metrics_healthy(self, adapter_manager, mock_time_service):
+        """Test _create_adapter_metrics for healthy adapter."""
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=MockAdapter(None),
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        metrics = adapter_manager._create_adapter_metrics(instance, "healthy")
+
+        assert metrics is not None
+        assert isinstance(metrics, AdapterMetrics)
+        assert metrics.uptime_seconds >= 0
+        assert metrics.messages_processed == 0
+        assert metrics.errors_count == 0
+        assert metrics.last_error is None
+
+    def test_create_adapter_metrics_unhealthy(self, adapter_manager, mock_time_service):
+        """Test _create_adapter_metrics for unhealthy adapter."""
+        instance = AdapterInstance(
+            adapter_id="test_id",
+            adapter_type="cli",
+            adapter=MockAdapter(None),
+            config_params=AdapterConfig(adapter_type="cli"),
+            loaded_at=mock_time_service.now(),
+        )
+
+        metrics = adapter_manager._create_adapter_metrics(instance, "error")
+
+        assert metrics is None  # No metrics for unhealthy adapters

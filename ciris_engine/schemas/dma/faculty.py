@@ -4,9 +4,28 @@ Faculty-related schemas for DMA system.
 Replaces Dict[str, Any] with properly typed structures for faculty integration.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
+
+class ThoughtMetadata(BaseModel):
+    """Metadata about a thought being analyzed by faculties."""
+
+    thought_id: Optional[str] = Field(None, description="Unique thought identifier")
+    thought_type: Optional[str] = Field(None, description="Type of thought")
+    processing_depth: Optional[int] = Field(None, description="Current processing depth")
+    round_number: Optional[int] = Field(None, description="Processing round number")
+    task_id: Optional[str] = Field(None, description="Associated task ID")
+    created_at: Optional[str] = Field(None, description="When thought was created (ISO format)")
+    content_length: Optional[int] = Field(None, description="Length of thought content")
+    previous_actions: Optional[List[str]] = Field(None, description="Previous actions taken")
+    priority: Optional[int] = Field(None, description="Thought priority level")
+    tags: Optional[List[str]] = Field(None, description="Thought classification tags")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class FacultyContext(BaseModel):
@@ -16,12 +35,12 @@ class FacultyContext(BaseModel):
     evaluation_context: str = Field(..., description="Type of evaluation (e.g., 'faculty_enhanced_action_selection')")
 
     # Thought metadata
-    thought_metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Metadata about the thought being analyzed"
+    thought_metadata: ThoughtMetadata = Field(
+        default_factory=ThoughtMetadata, description="Metadata about the thought being analyzed"
     )
 
     # Identity context for decision faculties
-    agent_identity: Optional[Dict[str, Any]] = Field(None, description="Agent identity information")
+    agent_identity: Optional[IdentityData] = Field(None, description="Agent identity information")
     identity_purpose: Optional[str] = Field(None, description="Agent's purpose statement")
     identity_capabilities: Optional[List[str]] = Field(None, description="Agent capabilities")
     identity_restrictions: Optional[List[str]] = Field(None, description="Agent restrictions")
@@ -75,40 +94,29 @@ class FacultyEvaluationSet(BaseModel):
     has_optimization_veto: bool = Field(False, description="Optimization veto was triggered")
     requires_humility: bool = Field(False, description="Epistemic humility is advised")
 
-    def add_result(self, faculty_name: str, result: Dict[str, Any]) -> None:
+    def add_result(self, faculty_name: str, result: FacultyResult) -> None:
         """Add a faculty result to the evaluation set."""
-        # Convert dict to FacultyResult
-        faculty_result = FacultyResult(
-            faculty_name=faculty_name,
-            analysis_type=result.get("analysis_type", "general"),
-            score=result.get("score"),
-            assessment=result.get("assessment", str(result)),
-            confidence=result.get("confidence", 0.8),
-            findings=result.get("findings", []),
-            concerns=result.get("concerns", []),
-            recommendations=result.get("recommendations", []),
-            processing_time_ms=result.get("processing_time_ms"),
-            error=result.get("error"),
-        )
+        # Ensure faculty name matches
+        result.faculty_name = faculty_name
 
-        self.evaluations[faculty_name] = faculty_result
+        self.evaluations[faculty_name] = result
         self.total_faculties_run += 1
 
-        if faculty_result.error:
+        if result.error:
             self.failed_evaluations += 1
         else:
             self.successful_evaluations += 1
 
         # Update flags based on faculty type and results
-        if faculty_name == "optimization_veto" and faculty_result.score and faculty_result.score > 0.7:
+        if faculty_name == "optimization_veto" and result.score and result.score > 0.7:
             self.has_optimization_veto = True
-        elif faculty_name == "epistemic_humility" and faculty_result.score and faculty_result.score > 0.6:
+        elif faculty_name == "epistemic_humility" and result.score and result.score > 0.6:
             self.requires_humility = True
-        elif faculty_name in ["entropy", "coherence"] and faculty_result.concerns:
+        elif faculty_name in ["entropy", "coherence"] and result.concerns:
             self.has_ethical_concerns = True
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format for backward compatibility."""
+    def to_dict(self) -> Dict[str, Dict[str, Union[str, float, List[str], None]]]:
+        """Convert to dictionary format with proper typing."""
         return {
             name: {
                 "analysis_type": result.analysis_type,

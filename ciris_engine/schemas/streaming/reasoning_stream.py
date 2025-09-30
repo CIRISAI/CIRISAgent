@@ -17,6 +17,7 @@ from ciris_engine.schemas.services.runtime_control import (
     StepPoint,
     StepResultActionComplete,
     StepResultConscienceExecution,
+    StepResultData,
     StepResultFinalizeAction,
     StepResultGatherContext,
     StepResultPerformAction,
@@ -78,6 +79,19 @@ class StepCategory(str, Enum):
     COMPLETION = "completion"  # Final steps and cleanup
 
 
+# Constants for reusable field descriptions
+STEP_CATEGORY_DESCRIPTION = "Step category for UI grouping"
+
+
+class StepMetadata(BaseModel):
+    """UI metadata for a step point."""
+
+    name: str = Field(..., description="Human-readable step name")
+    description: str = Field(..., description="Step description for tooltips")
+    category: StepCategory = Field(..., description=STEP_CATEGORY_DESCRIPTION)
+    svg_position: Dict[str, float] = Field(..., description="X,Y coordinates for SVG visualization")
+
+
 class ThoughtStreamData(BaseModel):
     """Individual thought's current state in the pipeline."""
 
@@ -87,7 +101,7 @@ class ThoughtStreamData(BaseModel):
 
     # Current state
     current_step: StepPoint = Field(..., description="Current step point")
-    step_category: StepCategory = Field(..., description="Step category for UI grouping")
+    step_category: StepCategory = Field(..., description=STEP_CATEGORY_DESCRIPTION)
     status: ThoughtStatus = Field(..., description="Current processing status")
 
     # Progress tracking
@@ -115,7 +129,7 @@ class StepPointSummary(BaseModel):
     """Summary of all thoughts at a specific step point."""
 
     step_point: StepPoint = Field(..., description="Step point identifier")
-    step_category: StepCategory = Field(..., description="Step category for UI grouping")
+    step_category: StepCategory = Field(..., description=STEP_CATEGORY_DESCRIPTION)
     step_name: str = Field(..., description="Human-readable step name")
     step_description: str = Field(..., description="Step description for tooltips")
 
@@ -201,93 +215,136 @@ class ReasoningStreamUpdate(BaseModel):
     notification_messages: List[str] = Field(default_factory=list, description="User-facing status messages")
 
 
-def _create_typed_step_result(raw_result: Dict[str, Any], step_point: StepPoint, step_data: Dict[str, Any]):
-    """Create typed step result from raw data."""
+def _enrich_gather_context_data(raw_result: StepResultData, combined_data: dict) -> None:
+    """Enrich combined_data with GATHER_CONTEXT specific fields."""
+    context_data = getattr(raw_result.step_data, "context", "")
+    if "summary" not in combined_data and context_data:
+        combined_data["summary"] = context_data[:200] + "..." if len(context_data) > 200 else context_data
+    if "context_size" not in combined_data:
+        combined_data["context_size"] = len(context_data.split()) if context_data else 0
+
+
+def _enrich_perform_dmas_data(raw_result: StepResultData, combined_data: dict) -> None:
+    """Enrich combined_data with PERFORM_DMAS specific fields."""
+    dma_results = getattr(raw_result.step_data, "dma_results", "")
+    if "result_count" not in combined_data and dma_results:
+        # Count decision points, approvals, rejections for debugging
+        combined_data["result_count"] = len([r for r in dma_results.split() if r in ["approve", "reject", "defer"]])
+
+
+def _enrich_conscience_execution_data(raw_result: StepResultData, combined_data: dict) -> None:
+    """Enrich combined_data with CONSCIENCE_EXECUTION specific fields."""
+    if not hasattr(raw_result.step_data, "conscience_result"):
+        return
+
+    conscience_result = raw_result.step_data.conscience_result
+    if hasattr(conscience_result, "severity"):
+        combined_data["severity_level"] = conscience_result.severity
+    if hasattr(conscience_result, "details") and isinstance(conscience_result.details, dict):
+        combined_data["details_count"] = len(conscience_result.details)
+
+
+def _create_typed_step_result(raw_result: StepResultData, step_point: StepPoint):
+    """Create typed step result from raw data with intelligent field mapping for rich analysis."""
     import logging
 
     logger = logging.getLogger(__name__)
 
     step_result_model = STEP_RESULT_MAP.get(step_point)
-    if not step_result_model or not (step_data or raw_result):
+    if not step_result_model or not raw_result:
         return None
 
     try:
         combined_data = {
             "step_point": step_point,
-            "success": raw_result.get("success", True),
+            "success": raw_result.success,
             "timestamp": datetime.now().isoformat(),
-            "thought_id": raw_result.get("thought_id", ""),
-            "task_id": raw_result.get("task_id"),
-            "processing_time_ms": raw_result.get("processing_time_ms", 0.0),
-            "error": raw_result.get("error") if not raw_result.get("success", True) else None,
-            **step_data,
+            "thought_id": raw_result.thought_id,
+            "task_id": raw_result.task_id,
+            "processing_time_ms": raw_result.processing_time_ms,
+            "error": getattr(raw_result, "error", None) if not raw_result.success else None,
+            **raw_result.step_data.model_dump(),
         }
+
+        # Use dispatch pattern for step-specific enrichment
+        enrichment_functions = {
+            StepPoint.GATHER_CONTEXT: _enrich_gather_context_data,
+            StepPoint.PERFORM_DMAS: _enrich_perform_dmas_data,
+            StepPoint.CONSCIENCE_EXECUTION: _enrich_conscience_execution_data,
+        }
+
+        enrichment_func = enrichment_functions.get(step_point)
+        if enrichment_func:
+            enrichment_func(raw_result, combined_data)
+
         return step_result_model(**combined_data)
     except Exception as e:
-        logger.warning(f"Could not create typed step result for {step_point.value}: {e}. " f"Raw data: {step_data}")
+        logger.warning(
+            f"Could not create typed step result for {step_point.value}: {e}. Raw data: {raw_result.step_data}"
+        )
         return None
 
 
-def _create_thought_stream_data(raw_result: Dict[str, Any]) -> ThoughtStreamData:
+def _create_thought_stream_data(raw_result: StepResultData) -> ThoughtStreamData:
     """Create ThoughtStreamData from raw result."""
     import logging
 
     logger = logging.getLogger(__name__)
 
     logger.debug(
-        f"Stream update for step {raw_result.get('step_point')}: task_id={raw_result.get('task_id')}, thought_id={raw_result.get('thought_id')}"
+        f"Stream update for step {raw_result.step_point}: task_id={raw_result.task_id}, thought_id={raw_result.thought_id}"
     )
 
-    step_point = StepPoint(raw_result.get("step_point", StepPoint.FINALIZE_ACTION))
-    step_data = raw_result.get("step_data", {})
-    typed_step_result = _create_typed_step_result(raw_result, step_point, step_data)
+    step_point = StepPoint(raw_result.step_point)
+    # step_data is already typed in StepResultData
+    typed_step_result = _create_typed_step_result(raw_result, step_point)
 
     return ThoughtStreamData(
-        thought_id=raw_result.get("thought_id", ""),
-        task_id=raw_result.get("task_id", ""),
-        round_number=raw_result.get("round_id", 1),
+        thought_id=raw_result.thought_id,
+        task_id=raw_result.task_id,
+        round_number=1,  # Default since round_id not in StepResultData
         current_step=step_point,
-        step_category=get_step_metadata(step_point)["category"],
-        status=ThoughtStatus.PROCESSING if raw_result.get("success", True) else ThoughtStatus.FAILED,
+        step_category=get_step_metadata(step_point).category,
+        status=ThoughtStatus.PROCESSING if raw_result.success else ThoughtStatus.FAILED,
         steps_completed=[],
         steps_remaining=get_remaining_steps(step_point),
         progress_percentage=calculate_progress_percentage([], step_point),
         started_at=datetime.now(),
         current_step_started_at=datetime.now(),
-        processing_time_ms=raw_result.get("processing_time_ms", 0.0),
-        total_processing_time_ms=raw_result.get("processing_time_ms", 0.0),
-        content_preview=str(step_data.get("thought_content", ""))[:200],
-        thought_type=step_data.get("thought_type") or "task_execution",
+        processing_time_ms=raw_result.processing_time_ms,
+        total_processing_time_ms=raw_result.processing_time_ms,
+        content_preview=str(getattr(raw_result.step_data, "thought_content", ""))[:200],
+        thought_type=getattr(raw_result.step_data, "thought_type", "task_execution"),
         step_result=typed_step_result,
-        last_error=raw_result.get("error") if not raw_result.get("success", True) else None,
+        last_error=getattr(raw_result, "error", None) if not raw_result.success else None,
     )
 
 
-def _create_step_summary(step_point: StepPoint, step_results: List[Dict[str, Any]]) -> StepPointSummary:
+def _create_step_summary(step_point: StepPoint, step_results: List[StepResultData]) -> StepPointSummary:
     """Create step summary for a specific step point."""
     metadata = get_step_metadata(step_point)
-    step_results_for_point = [r for r in step_results if r.get("step_point") == step_point.value]
+    step_results_for_point = [r for r in step_results if r.step_point == step_point.value]
 
     return StepPointSummary(
         step_point=step_point,
-        step_category=metadata["category"],
-        step_name=metadata["name"],
-        step_description=metadata["description"],
+        step_category=metadata.category,
+        step_name=metadata.name,
+        step_description=metadata.description,
         total_thoughts=len(step_results_for_point),
         queued_count=0,
-        processing_count=len([r for r in step_results_for_point if r.get("success", True)]),
-        completed_count=len([r for r in step_results_for_point if r.get("success", True)]),
-        failed_count=len([r for r in step_results_for_point if not r.get("success", True)]),
+        processing_count=len([r for r in step_results_for_point if r.success]),
+        completed_count=len([r for r in step_results_for_point if r.success]),
+        failed_count=len([r for r in step_results_for_point if not r.success]),
         blocked_count=0,
-        average_processing_time_ms=sum(r.get("processing_time_ms", 0) for r in step_results_for_point)
+        average_processing_time_ms=sum(r.processing_time_ms for r in step_results_for_point)
         / max(len(step_results_for_point), 1),
         throughput_per_minute=0.0,
-        svg_position=metadata["svg_position"],
+        svg_position=metadata.svg_position,
     )
 
 
 def create_stream_update_from_step_results(
-    step_results: List[Dict[str, Any]], stream_sequence: int
+    step_results: List[StepResultData], stream_sequence: int
 ) -> ReasoningStreamUpdate:
     """
     Create a ReasoningStreamUpdate from raw pipeline step results.
@@ -312,8 +369,8 @@ def create_stream_update_from_step_results(
         stream_sequence=stream_sequence,
         timestamp=datetime.now(),
         update_type="step_complete",
-        current_round=max([r.get("round_id", 1) for r in step_results], default=1),
-        total_rounds=max([r.get("round_id", 1) for r in step_results], default=1),
+        current_round=1,  # Default since round_id not in StepResultData
+        total_rounds=1,  # Default since round_id not in StepResultData
         pipeline_active=True,
         step_results=[],  # TODO: Convert to typed StepResults
         updated_thoughts=updated_thoughts,
@@ -333,85 +390,85 @@ def create_stream_update_from_step_results(
 
 # Step metadata for UI display
 STEP_METADATA = {
-    StepPoint.START_ROUND: {
-        "name": "Start Round",
-        "description": "Initialize processing round",
-        "category": StepCategory.PREPARATION,
-        "svg_position": {"x": 50, "y": 100},
-    },
-    StepPoint.GATHER_CONTEXT: {
-        "name": "Gather Context",
-        "description": "Building comprehensive context for analysis",
-        "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 150, "y": 100},
-    },
-    StepPoint.PERFORM_DMAS: {
-        "name": "Perform DMAs",
-        "description": "Multi-perspective decision-making analysis",
-        "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 250, "y": 100},
-    },
-    StepPoint.PERFORM_ASPDMA: {
-        "name": "Perform ASPDMA",
-        "description": "LLM-powered action selection",
-        "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 350, "y": 100},
-    },
-    StepPoint.CONSCIENCE_EXECUTION: {
-        "name": "Conscience Execution",
-        "description": "Ethical safety and alignment checks",
-        "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 450, "y": 100},
-    },
-    StepPoint.RECURSIVE_ASPDMA: {
-        "name": "Recursive ASPDMA",
-        "description": "Optional re-analysis if conscience failed",
-        "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 250, "y": 200},
-    },
-    StepPoint.RECURSIVE_CONSCIENCE: {
-        "name": "Recursive Conscience",
-        "description": "Optional re-check if conscience failed",
-        "category": StepCategory.ANALYSIS,
-        "svg_position": {"x": 350, "y": 200},
-    },
-    StepPoint.FINALIZE_ACTION: {
-        "name": "Finalize Action",
-        "description": "Final action determination and validation",
-        "category": StepCategory.DECISION,
-        "svg_position": {"x": 50, "y": 300},
-    },
-    StepPoint.PERFORM_ACTION: {
-        "name": "Perform Action",
-        "description": "Execute the selected action",
-        "category": StepCategory.EXECUTION,
-        "svg_position": {"x": 150, "y": 300},
-    },
-    StepPoint.ACTION_COMPLETE: {
-        "name": "Action Complete",
-        "description": "Action execution completed",
-        "category": StepCategory.COMPLETION,
-        "svg_position": {"x": 250, "y": 300},
-    },
-    StepPoint.ROUND_COMPLETE: {
-        "name": "Round Complete",
-        "description": "Finalizing round and updating metrics",
-        "category": StepCategory.COMPLETION,
-        "svg_position": {"x": 350, "y": 300},
-    },
+    StepPoint.START_ROUND: StepMetadata(
+        name="Start Round",
+        description="Initialize processing round",
+        category=StepCategory.PREPARATION,
+        svg_position={"x": 50, "y": 100},
+    ),
+    StepPoint.GATHER_CONTEXT: StepMetadata(
+        name="Gather Context",
+        description="Building comprehensive context for analysis",
+        category=StepCategory.ANALYSIS,
+        svg_position={"x": 150, "y": 100},
+    ),
+    StepPoint.PERFORM_DMAS: StepMetadata(
+        name="Perform DMAs",
+        description="Multi-perspective decision-making analysis",
+        category=StepCategory.ANALYSIS,
+        svg_position={"x": 250, "y": 100},
+    ),
+    StepPoint.PERFORM_ASPDMA: StepMetadata(
+        name="Perform ASPDMA",
+        description="LLM-powered action selection",
+        category=StepCategory.ANALYSIS,
+        svg_position={"x": 350, "y": 100},
+    ),
+    StepPoint.CONSCIENCE_EXECUTION: StepMetadata(
+        name="Conscience Execution",
+        description="Ethical safety and alignment checks",
+        category=StepCategory.ANALYSIS,
+        svg_position={"x": 450, "y": 100},
+    ),
+    StepPoint.RECURSIVE_ASPDMA: StepMetadata(
+        name="Recursive ASPDMA",
+        description="Optional re-analysis if conscience failed",
+        category=StepCategory.ANALYSIS,
+        svg_position={"x": 250, "y": 200},
+    ),
+    StepPoint.RECURSIVE_CONSCIENCE: StepMetadata(
+        name="Recursive Conscience",
+        description="Optional re-check if conscience failed",
+        category=StepCategory.ANALYSIS,
+        svg_position={"x": 350, "y": 200},
+    ),
+    StepPoint.FINALIZE_ACTION: StepMetadata(
+        name="Finalize Action",
+        description="Final action determination and validation",
+        category=StepCategory.DECISION,
+        svg_position={"x": 50, "y": 300},
+    ),
+    StepPoint.PERFORM_ACTION: StepMetadata(
+        name="Perform Action",
+        description="Execute the selected action",
+        category=StepCategory.EXECUTION,
+        svg_position={"x": 150, "y": 300},
+    ),
+    StepPoint.ACTION_COMPLETE: StepMetadata(
+        name="Action Complete",
+        description="Action execution completed",
+        category=StepCategory.COMPLETION,
+        svg_position={"x": 250, "y": 300},
+    ),
+    StepPoint.ROUND_COMPLETE: StepMetadata(
+        name="Round Complete",
+        description="Finalizing round and updating metrics",
+        category=StepCategory.COMPLETION,
+        svg_position={"x": 350, "y": 300},
+    ),
 }
 
 
-def get_step_metadata(step_point: StepPoint) -> Dict[str, Any]:
+def get_step_metadata(step_point: StepPoint) -> StepMetadata:
     """Get UI metadata for a step point."""
     return STEP_METADATA.get(
         step_point,
-        {
-            "name": step_point.value.replace("_", " ").title(),
-            "description": f"Processing {step_point.value}",
-            "category": StepCategory.EXECUTION,
-            "svg_position": {"x": 0, "y": 0},
-        },
+        StepMetadata(
+            name=step_point.value.replace("_", " ").title(),
+            description=f"Processing {step_point.value}",
+            category=StepCategory.EXECUTION,
+            svg_position={"x": 0, "y": 0},
+        ),
     )
 
 

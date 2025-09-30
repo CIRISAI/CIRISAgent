@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.conscience.results import ConscienceResult
+from ciris_engine.schemas.dma.faculty import FacultyEvaluationSet
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot, ThoughtState
@@ -35,7 +36,7 @@ class DMAInputData(BaseModel):
     round_number: int = Field(0, description="Current round number")
 
     # conscience feedback (formerly faculty evaluations)
-    faculty_evaluations: Optional[Dict[str, Any]] = Field(
+    faculty_evaluations: Optional[FacultyEvaluationSet] = Field(
         None, description="conscience feedback for ASPDMA retry (legacy field name retained for compatibility)"
     )
 

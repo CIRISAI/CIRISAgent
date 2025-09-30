@@ -99,7 +99,9 @@ class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
     type: NodeType = Field(..., description="Type of node")
     scope: GraphScope = Field(..., description="Scope of the node")
-    attributes: Union[GraphNodeAttributes, Dict[str, Any]] = Field(..., description="Node attributes")
+    attributes: Union[GraphNodeAttributes, Dict[str, Any]] = Field(
+        ..., description="Node attributes"
+    )  # NOQA - Graph flexibility pattern
     version: int = Field(default=1, ge=1, description="Version number")
     updated_by: Optional[str] = Field(None, description="Who last updated")
     updated_at: Optional[datetime] = Field(None, description="When last updated")
@@ -138,6 +140,41 @@ class GraphEdge(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ConnectedNodeInfo(BaseModel):
+    """Flexible schema for connected node information - supports multiple graph sources."""
+
+    node_id: str = Field(..., description="Connected node identifier")
+    node_type: str = Field(..., description="Type of connected node")
+    relationship: str = Field(..., description="Relationship type to the source node")
+    attributes: Dict[str, Any] = Field(
+        default_factory=dict, description="Connected node attributes"
+    )  # NOQA - Graph integration pattern
+    source_service: str = Field(default="MemoryService", description="Service that provided connection info")
+    retrieved_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When connection was retrieved"
+    )
+    edge_metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Additional edge metadata from future sources"
+    )  # NOQA - Future source extensibility
+
+
+class SecretsData(BaseModel):
+    """Flexible schema for secrets snapshot data - supports multiple secrets sources."""
+
+    secrets_count: int = Field(0, description="Number of secrets stored")
+    filter_status: str = Field("unknown", description="Secrets filter status")
+    last_updated: Optional[datetime] = Field(None, description="When secrets were last updated")
+    detected_secrets: List[str] = Field(default_factory=list, description="List of detected secret patterns")
+    secrets_filter_version: int = Field(0, description="Version of the secrets filter being used")
+    source_service: str = Field(default="SecretsService", description="Service that provided secrets data")
+    retrieved_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When secrets data was retrieved"
+    )
+    additional_data: Dict[str, Any] = Field(  # NOQA - Future source extensibility
+        default_factory=dict, description="Additional secrets data from future sources"
+    )
+
+
 __all__ = [
     "GraphScope",
     "NodeType",
@@ -147,4 +184,6 @@ __all__ = [
     "GraphNodeAttributes",
     "GraphEdge",
     "GraphEdgeAttributes",
+    "ConnectedNodeInfo",
+    "SecretsData",
 ]

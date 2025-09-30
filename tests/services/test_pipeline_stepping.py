@@ -14,6 +14,7 @@ import pytest
 from ciris_engine.logic.processors.core.main_processor import AgentProcessor
 from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
 from ciris_engine.protocols.pipeline_control import PipelineController
+from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.models import Task, TaskStatus, Thought, ThoughtStatus
 from ciris_engine.schemas.services.core.runtime import ProcessorControlResponse, ProcessorStatus
@@ -526,14 +527,15 @@ class TestEndToEndPipelineStepping:
             thought_type="standard",
             current_step=StepPoint.GATHER_CONTEXT,
             entered_step_at=datetime.now(timezone.utc),
-            context_built={"test": "data"},
+            context_built=DMAContext(domain_knowledge={"test": "data"}, similar_decisions=[]),
         )
 
         controller._paused_thoughts[thought_id] = thought
 
         # Verify we can track it through the pipeline
         assert thought.current_step == StepPoint.GATHER_CONTEXT
-        assert thought.context_built == {"test": "data"}
+        assert isinstance(thought.context_built, DMAContext)
+        assert thought.context_built.domain_knowledge == {"test": "data"}
 
 
 if __name__ == "__main__":

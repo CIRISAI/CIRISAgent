@@ -24,9 +24,12 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.memory_service import LocalGraphMemoryService
 from ciris_engine.schemas.adapters.tools import ToolInfo
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, IdentitySummary
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ChannelContext, TaskSummary, ThoughtSummary, UserProfile
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.services.graph.attributes import NodeAttributes
+from ciris_engine.schemas.services.graph_core import ConnectedNodeInfo, GraphNode, GraphScope, NodeType, SecretsData
+from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
 
 from .secrets_snapshot import build_secrets_snapshot
@@ -70,7 +73,9 @@ def _extract_thought_summary(thought: Any) -> Optional[ThoughtSummary]:
 # =============================================================================
 
 
-def extract_node_attributes(node: Any) -> Optional[Dict[str, Any]]:
+def extract_node_attributes(
+    node: Any,
+) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes dictionary from any GraphNode - standardized and reusable.
 
     This function handles all the different ways GraphNode attributes can be stored
@@ -90,7 +95,9 @@ def extract_node_attributes(node: Any) -> Optional[Dict[str, Any]]:
         return {}
 
 
-def collect_memorized_attributes(attrs: Dict[str, Any], known_fields: Set[str]) -> Dict[str, str]:
+def collect_memorized_attributes(
+    attrs: Dict[str, Any], known_fields: Set[str]
+) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Collect arbitrary attributes as memorized_attributes - standardized and reusable.
 
     This function extracts all attributes that aren't in the known_fields set
@@ -113,7 +120,9 @@ def collect_memorized_attributes(attrs: Dict[str, Any], known_fields: Set[str]) 
     return memorized_attributes
 
 
-def get_channel_id_from_node(node: Any, attrs: Dict[str, Any]) -> str:
+def get_channel_id_from_node(
+    node: Any, attrs: Dict[str, Any]
+) -> str:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract channel_id from node, with fallback to node.id."""
     return attrs.get("channel_id", node.id.split("/")[-1] if "/" in node.id else node.id)
 
@@ -230,7 +239,9 @@ def _extract_channel_from_search_results(search_results: List[Any], channel_id: 
 
 
 # Legacy function - now uses standardized extract_node_attributes
-def _extract_channel_node_attributes(node: Any) -> Optional[Dict[str, Any]]:
+def _extract_channel_node_attributes(
+    node: Any,
+) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes dictionary from channel GraphNode."""
     return extract_node_attributes(node)
 
@@ -252,7 +263,9 @@ def _get_known_channel_fields() -> Set[str]:
     }
 
 
-def _build_required_channel_fields(attrs: Dict[str, Any], node: Any) -> Dict[str, Any]:
+def _build_required_channel_fields(
+    attrs: Dict[str, Any], node: Any
+) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
     """Build required ChannelContext fields with defaults."""
     return {
         "channel_id": get_channel_id_from_node(node, attrs),
@@ -261,7 +274,9 @@ def _build_required_channel_fields(attrs: Dict[str, Any], node: Any) -> Dict[str
     }
 
 
-def _build_optional_channel_fields(attrs: Dict[str, Any]) -> Dict[str, Any]:
+def _build_optional_channel_fields(
+    attrs: Dict[str, Any],
+) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
     """Build optional ChannelContext fields with defaults."""
     return {
         "channel_name": attrs.get("channel_name", None),
@@ -276,7 +291,9 @@ def _build_optional_channel_fields(attrs: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Legacy function - now uses standardized collect_memorized_attributes
-def _collect_memorized_attributes(attrs: Dict[str, Any], known_fields: Set[str]) -> Dict[str, str]:
+def _collect_memorized_attributes(
+    attrs: Dict[str, Any], known_fields: Set[str]
+) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Collect arbitrary attributes the agent memorized about this channel."""
     return collect_memorized_attributes(attrs, known_fields)
 
@@ -351,55 +368,59 @@ async def _resolve_channel_context(
 
 async def _extract_agent_identity(
     memory_service: Optional[LocalGraphMemoryService],
-) -> Tuple[Dict, Optional[str], List[str], List[str]]:
+) -> Tuple[IdentityData, IdentitySummary]:
     """Extract agent identity data from graph memory."""
-    identity_data: dict = {}
-    identity_purpose: Optional[str] = None
-    identity_capabilities: List[str] = []
-    identity_restrictions: List[str] = []
+    # Default values for when no memory service or identity is available
+    default_identity_data = IdentityData(
+        agent_id="unknown",
+        description="No identity data available",
+        role="Unknown",
+        trust_level=0.5,
+    )
+    default_identity_summary = IdentitySummary()
 
-    if memory_service:
-        try:
-            # Query for the agent's identity node from the graph
-            identity_query = MemoryQuery(
-                node_id="agent/identity", scope=GraphScope.IDENTITY, type=NodeType.AGENT, include_edges=False, depth=1
-            )
-            logger.info("[DEBUG DB TIMING] About to query memory service for agent/identity")
-            identity_nodes = await memory_service.recall(identity_query)
-            logger.info("[DEBUG DB TIMING] Completed memory service query for agent/identity")
-            identity_result = identity_nodes[0] if identity_nodes else None
+    if not memory_service:
+        return default_identity_data, default_identity_summary
 
-            if identity_result and identity_result.attributes:
-                # The identity is stored as a TypedGraphNode (IdentityNode)
-                # Handle both dict and Pydantic model attributes
-                if isinstance(identity_result.attributes, dict):
-                    attrs_dict = identity_result.attributes
-                elif hasattr(identity_result.attributes, "model_dump"):
-                    attrs_dict = identity_result.attributes.model_dump()
-                else:
-                    # Log warning but continue with empty dict instead of raising
-                    logger.warning(
-                        f"Unexpected graph node attributes type: {type(identity_result.attributes)}, using empty dict"
-                    )
-                    attrs_dict = {}
+    try:
+        # Query for the agent's identity node from the graph
+        identity_query = MemoryQuery(
+            node_id="agent/identity", scope=GraphScope.IDENTITY, type=NodeType.AGENT, include_edges=False, depth=1
+        )
+        logger.info("[DEBUG DB TIMING] About to query memory service for agent/identity")
+        identity_nodes = await memory_service.recall(identity_query)
+        logger.info("[DEBUG DB TIMING] Completed memory service query for agent/identity")
+        identity_result = identity_nodes[0] if identity_nodes else None
 
-                identity_data = {
-                    "agent_id": attrs_dict.get("agent_id", ""),
-                    "description": attrs_dict.get("description", ""),
-                    "role": attrs_dict.get("role_description", ""),
-                    "trust_level": attrs_dict.get("trust_level", 0.5),
-                }
-                # Include stewardship if present (Book VI compliance)
-                if "stewardship" in attrs_dict:
-                    identity_data["stewardship"] = attrs_dict["stewardship"]
+        if not identity_result or not identity_result.attributes:
+            return default_identity_data, default_identity_summary
 
-                identity_purpose = attrs_dict.get("role_description", "")
-                identity_capabilities = attrs_dict.get("permitted_actions", [])
-                identity_restrictions = attrs_dict.get("restricted_capabilities", [])
-        except Exception as e:
-            logger.warning(f"Failed to retrieve agent identity from graph: {e}")
+        # Extract attributes using the standardized helper
+        attrs_dict = extract_node_attributes(identity_result)
+        if not attrs_dict:
+            return default_identity_data, default_identity_summary
 
-    return identity_data, identity_purpose, identity_capabilities, identity_restrictions
+        # Create typed identity data
+        identity_data = IdentityData(
+            agent_id=attrs_dict.get("agent_id", "unknown"),
+            description=attrs_dict.get("description", "No description available"),
+            role=attrs_dict.get("role_description", "Unknown"),
+            trust_level=attrs_dict.get("trust_level", 0.5),
+            stewardship=attrs_dict.get("stewardship"),
+        )
+
+        # Create typed identity summary
+        identity_summary = IdentitySummary(
+            identity_purpose=attrs_dict.get("role_description"),
+            identity_capabilities=attrs_dict.get("permitted_actions", []),
+            identity_restrictions=attrs_dict.get("restricted_capabilities", []),
+        )
+
+        return identity_data, identity_summary
+
+    except Exception as e:
+        logger.warning(f"Failed to retrieve agent identity from graph: {e}")
+        return default_identity_data, default_identity_summary
 
 
 # =============================================================================
@@ -479,11 +500,25 @@ def _build_current_task_summary(task: Optional[Task]) -> Optional[TaskSummary]:
 # =============================================================================
 
 
-async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> Dict:
+async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> SecretsData:
     """Get secrets snapshot data."""
     if secrets_service:
-        return await build_secrets_snapshot(secrets_service)
-    return {}
+        # Get the raw snapshot data
+        snapshot_data = await build_secrets_snapshot(
+            secrets_service
+        )  # NOQA - build_secrets_snapshot returns Dict[str, Any] for compatibility
+
+        # Convert to typed schema
+        return SecretsData(
+            secrets_count=snapshot_data.get("total_secrets_stored", 0),
+            filter_status="active",  # Default status
+            last_updated=None,  # Not provided by build_secrets_snapshot
+            detected_secrets=snapshot_data.get("detected_secrets", []),
+            secrets_filter_version=snapshot_data.get("secrets_filter_version", 0),
+            additional_data=snapshot_data,  # Store full data for backwards compatibility
+        )
+
+    return SecretsData()
 
 
 def _get_shutdown_context(runtime: Optional[Any]) -> Optional[Any]:
@@ -595,7 +630,10 @@ async def _process_single_service(
 
 
 async def _process_services_group(
-    services_group: Dict[str, Any], prefix: str, service_health: Dict[str, bool], circuit_breaker_status: Dict[str, str]
+    services_group: Dict[str, Any],
+    prefix: str,
+    service_health: Dict[str, bool],
+    circuit_breaker_status: Dict[str, str],  # NOQA - Service registry data is Dict[str, Any] by design
 ) -> None:
     """Process a group of services (handlers or global services)."""
     for service_type, services in services_group.items():
@@ -1008,7 +1046,7 @@ async def _enrich_user_profiles(
 # =============================================================================
 
 
-def _get_localized_times(time_service) -> Dict[str, str]:
+def _get_localized_times(time_service) -> LocalizedTimeData:
     """Get current time localized to LONDON, CHICAGO, and TOKYO timezones.
 
     FAILS FAST AND LOUD if time_service is None.
@@ -1041,7 +1079,12 @@ def _get_localized_times(time_service) -> Dict[str, str]:
     chicago_time = utc_time.astimezone(chicago_tz).isoformat()
     tokyo_time = utc_time.astimezone(tokyo_tz).isoformat()
 
-    return {"utc": utc_iso, "london": london_time, "chicago": chicago_time, "tokyo": tokyo_time}
+    return LocalizedTimeData(
+        utc=utc_iso,
+        london=london_time,
+        chicago=chicago_time,
+        tokyo=tokyo_time,
+    )
 
 
 # =============================================================================
@@ -1077,8 +1120,8 @@ def get_known_user_fields() -> Set[str]:
 
 def build_user_profile_from_node(
     user_id: str,
-    attrs: Dict[str, Any],
-    connected_nodes_info: List[Dict[str, Any]],
+    attrs: Dict[str, Any],  # NOQA - Node attributes are Dict[str, Any] by design for graph flexibility
+    connected_nodes_info: List[ConnectedNodeInfo],
     last_interaction: Optional[datetime],
     created_at: Optional[datetime],
 ) -> UserProfile:
@@ -1092,7 +1135,9 @@ def build_user_profile_from_node(
     # Create connected nodes summary for notes
     notes_content = ""
     if connected_nodes_info:
-        notes_content = f"Connected nodes: {json.dumps(connected_nodes_info, default=_json_serial_for_users)}"
+        # Convert typed objects to dict for JSON serialization
+        connected_data = [node.model_dump() for node in connected_nodes_info]
+        notes_content = f"Connected nodes: {json.dumps(connected_data, default=_json_serial_for_users)}"
 
     # Parse consent information from node attributes
     consent_expires_at = _parse_datetime_safely(attrs.get("consent_expires_at"), "consent_expires_at", user_id)
@@ -1126,7 +1171,9 @@ def build_user_profile_from_node(
 
 
 # Legacy function - now uses standardized extract_node_attributes
-def _extract_node_attributes(node: GraphNode) -> Dict[str, Any]:
+def _extract_node_attributes(
+    node: GraphNode,
+) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes from a graph node, handling both dict and Pydantic models."""
     attrs = extract_node_attributes(node)
     return attrs if attrs is not None else {}
@@ -1155,7 +1202,7 @@ def _parse_datetime_safely(raw_value: Any, field_name: str, user_id: str) -> Opt
         return None
 
 
-async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user_id: str) -> List[Dict[str, Any]]:
+async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user_id: str) -> List[ConnectedNodeInfo]:
     """Collect connected nodes for a user node from the memory graph."""
     connected_nodes_info = []
     try:
@@ -1173,16 +1220,17 @@ async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user
             connected_results = await memory_service.recall(connected_query)
             if connected_results:
                 connected_node = connected_results[0]
-                # Extract attributes using our helper
-                connected_attrs = _extract_node_attributes(connected_node)
-                connected_nodes_info.append(
-                    {
-                        "node_id": connected_node.id,
-                        "node_type": connected_node.type,
-                        "relationship": edge.relationship,
-                        "attributes": connected_attrs,
-                    }
+                # Extract attributes using our standardized helper
+                connected_attrs = extract_node_attributes(connected_node)
+
+                # Create typed connected node info
+                connected_info = ConnectedNodeInfo(
+                    node_id=connected_node.id,
+                    node_type=connected_node.type,
+                    relationship=edge.relationship,
+                    attributes=connected_attrs or {},
                 )
+                connected_nodes_info.append(connected_info)
     except Exception as e:
         logger.warning(f"Failed to get connected nodes for user {user_id}: {e}")
 
@@ -1192,8 +1240,8 @@ async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user
 # Legacy function - now uses standardized build_user_profile_from_node
 def _create_user_profile_from_node(
     user_id: str,
-    attrs: Dict[str, Any],
-    connected_nodes_info: List[Dict[str, Any]],
+    attrs: Dict[str, Any],  # NOQA - Node attributes are Dict[str, Any] by design for graph flexibility
+    connected_nodes_info: List[ConnectedNodeInfo],
     last_interaction: Optional[datetime],
     created_at: Optional[datetime],
 ) -> UserProfile:
@@ -1201,7 +1249,9 @@ def _create_user_profile_from_node(
     return build_user_profile_from_node(user_id, attrs, connected_nodes_info, last_interaction, created_at)
 
 
-async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[Dict[str, Any]]:
+async def _collect_cross_channel_messages(
+    user_id: str, channel_id: str
+) -> List[Dict[str, Any]]:  # NOQA - Database query results are Dict[str, Any] by design
     """Collect recent messages from this user in other channels."""
     recent_messages = []
     try:

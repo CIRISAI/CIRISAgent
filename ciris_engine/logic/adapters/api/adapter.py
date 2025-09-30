@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, List
+from typing import Any, Awaitable, Callable, List, Optional
 
 import uvicorn
 from fastapi import FastAPI
@@ -46,8 +46,10 @@ class ApiPlatform(Service):
 
     config: APIAdapterConfig  # type: ignore[assignment]
 
-    def __init__(self, runtime: Any, **kwargs: Any) -> None:
+    def __init__(self, runtime: Any, context: Optional["AdapterStartupContext"] = None, **kwargs: Any) -> None:
         """Initialize API adapter."""
+        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
 

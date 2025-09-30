@@ -9,18 +9,12 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.adapters.tools import ToolInfo
+
 # Constants for field descriptions to avoid duplication
 ADAPTER_ID_DESC = "Adapter ID"
 ADAPTER_TYPE_DESC = "Adapter type"
 IS_RUNNING_DESC = "Whether adapter is running"
-
-
-class ToolInfo(BaseModel):
-    """Information about a tool provided by an adapter."""
-
-    name: str = Field(..., description="Tool name")
-    description: str = Field(..., description="Tool description")
-    parameters_schema: Dict[str, Any] = Field(default_factory=dict, description="Tool parameter schema", alias="schema")
 
 
 class AdapterConfig(BaseModel):
@@ -74,9 +68,7 @@ class RuntimeAdapterStatus(BaseModel):
     config_params: AdapterConfig = Field(..., description="Adapter configuration")
     metrics: Optional[AdapterMetrics] = Field(None, description="Adapter metrics")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
-    tools: Optional[List[Union[str, ToolInfo, Dict[str, Any]]]] = Field(
-        None, description="Tools provided by adapter (names, ToolInfo objects, or raw dicts)"
-    )
+    tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
 
 
 class AdapterListResponse(BaseModel):

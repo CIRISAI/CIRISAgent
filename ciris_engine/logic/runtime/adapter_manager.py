@@ -22,6 +22,7 @@ from ciris_engine.logic.config import ConfigBootstrap
 from ciris_engine.logic.registries.base import Priority, SelectionStrategy
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.registration import AdapterServiceRegistration
+from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 from ciris_engine.schemas.infrastructure.base import ServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
@@ -126,9 +127,32 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             adapter_class = load_adapter(adapter_type)
 
+            # Create AdapterStartupContext for the adapter
+            from ciris_engine.schemas.config.essential import EssentialConfig
+
+            # Get essential_config - it must exist
+            essential_config = getattr(self.runtime, "essential_config", None)
+            if not essential_config:
+                # Create minimal essential config if not present
+                essential_config = EssentialConfig(
+                    agent_name=getattr(self.runtime, "agent_name", "ciris"),
+                    agent_version=getattr(self.runtime, "agent_version", "1.0.0"),
+                )
+
+            startup_context = AdapterStartupContext(
+                essential_config=essential_config,
+                modules_to_load=getattr(self.runtime, "modules_to_load", []),
+                startup_channel_id=getattr(self.runtime, "startup_channel_id", ""),
+                debug=getattr(self.runtime, "debug", False),
+                bus_manager=getattr(self.runtime, "bus_manager", None),
+                time_service=self.time_service,
+                service_registry=getattr(self.runtime, "service_registry", None),
+            )
+
             adapter_kwargs = config_params.settings if config_params else {}
-            # Adapters expect runtime as first argument, then kwargs
-            adapter = adapter_class(self.runtime, **adapter_kwargs)  # type: ignore[call-arg]
+
+            # All adapters must support context - no fallback
+            adapter = adapter_class(self.runtime, context=startup_context, **adapter_kwargs)
 
             instance = AdapterInstance(
                 adapter_id=adapter_id,
@@ -191,110 +215,152 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 details={},
             )
 
+    def _create_adapter_operation_result(
+        self,
+        success: bool,
+        adapter_id: str,
+        adapter_type: str,
+        message: str,
+        error: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> AdapterOperationResult:
+        """Factory method for consistent AdapterOperationResult creation with strict typing."""
+        return AdapterOperationResult(
+            success=success,
+            adapter_id=adapter_id,
+            adapter_type=adapter_type,
+            message=message,
+            error=error,
+            details=details or {},
+        )
+
+    def _validate_adapter_unload_eligibility(self, adapter_id: str) -> Optional[AdapterOperationResult]:
+        """Check if adapter can be safely unloaded - fail fast if not eligible.
+
+        Returns None if eligible, AdapterOperationResult with error if not eligible.
+        """
+        if adapter_id not in self.loaded_adapters:
+            return self._create_adapter_operation_result(
+                success=False,
+                adapter_id=adapter_id,
+                adapter_type="unknown",
+                message=f"Adapter with ID '{adapter_id}' not found",
+                error=f"Adapter with ID '{adapter_id}' not found",
+            )
+
+        instance = self.loaded_adapters[adapter_id]
+        communication_adapter_types = {"discord", "api", "cli"}
+
+        if instance.adapter_type not in communication_adapter_types:
+            return None  # Non-communication adapters are always eligible
+
+        # Count remaining communication adapters
+        remaining_comm_adapters = sum(
+            1
+            for aid, inst in self.loaded_adapters.items()
+            if aid != adapter_id and inst.adapter_type in communication_adapter_types
+        )
+
+        if remaining_comm_adapters == 0:
+            return self._create_adapter_operation_result(
+                success=False,
+                adapter_id=adapter_id,
+                adapter_type=instance.adapter_type,
+                message=f"Cannot unload {adapter_id}: it is one of the last communication-capable adapters",
+                error=f"Cannot unload {adapter_id}: it is one of the last communication-capable adapters",
+            )
+
+        return None  # Eligible for unload
+
+    async def _cancel_adapter_lifecycle_tasks(self, adapter_id: str, instance: AdapterInstance) -> None:
+        """Cancel all lifecycle tasks for an adapter instance - no fallbacks, strict cancellation."""
+        if hasattr(instance, "lifecycle_runner") and instance.lifecycle_runner is not None:
+            logger.debug(f"Cancelling lifecycle runner for {adapter_id}")
+            instance.lifecycle_runner.cancel()
+            try:
+                await instance.lifecycle_runner
+            except asyncio.CancelledError:
+                # Expected when we cancel the task - this is the only acceptable exception
+                pass
+
+        if hasattr(instance, "lifecycle_task") and instance.lifecycle_task is not None:
+            logger.debug(f"Cancelling lifecycle task for {adapter_id}")
+            instance.lifecycle_task.cancel()
+            try:
+                await instance.lifecycle_task
+            except asyncio.CancelledError:
+                # Expected when we cancel the task - this is the only acceptable exception
+                pass
+
+    async def _cleanup_adapter_from_runtime(self, adapter_id: str, instance: AdapterInstance) -> None:
+        """Remove adapter from runtime.adapters list and clean up references - fail fast on issues."""
+        # Stop adapter if running
+        if instance.is_running:
+            await instance.adapter.stop()
+            instance.is_running = False
+
+        # Unregister services
+        self._unregister_adapter_services(instance)
+
+        # Remove from runtime adapters list (if present)
+        if hasattr(self.runtime, "adapters"):
+            for i, adapter in enumerate(self.runtime.adapters):
+                if adapter is instance.adapter:
+                    self.runtime.adapters.pop(i)
+                    break
+
+        # Remove adapter config from graph
+        await self._remove_adapter_config_from_graph(adapter_id)
+
+        # Remove from loaded adapters
+        del self.loaded_adapters[adapter_id]
+
     async def unload_adapter(self, adapter_id: str) -> AdapterOperationResult:
-        """Stop and unload an adapter instance
+        """Stop and unload an adapter instance using helper functions for reduced complexity.
 
         Args:
             adapter_id: Unique identifier of the adapter to unload
 
         Returns:
-            Dict with success status and details
+            AdapterOperationResult with success status and details
         """
         try:
-            if adapter_id not in self.loaded_adapters:
-                return AdapterOperationResult(
-                    success=False,
-                    adapter_id=adapter_id,
-                    adapter_type="unknown",
-                    message=f"Adapter with ID '{adapter_id}' not found",
-                    error=f"Adapter with ID '{adapter_id}' not found",
-                    details={},
-                )
+            # Validate adapter eligibility - fail fast if not eligible
+            eligibility_error = self._validate_adapter_unload_eligibility(adapter_id)
+            if eligibility_error is not None:
+                return eligibility_error
 
+            # Get instance (guaranteed to exist after validation)
             instance = self.loaded_adapters[adapter_id]
-
-            communication_adapter_types = {"discord", "api", "cli"}
-            if instance.adapter_type in communication_adapter_types:
-                remaining_comm_adapters = sum(
-                    1
-                    for aid, inst in self.loaded_adapters.items()
-                    if aid != adapter_id and inst.adapter_type in communication_adapter_types
-                )
-
-                if remaining_comm_adapters == 0:
-                    return AdapterOperationResult(
-                        success=False,
-                        adapter_id=adapter_id,
-                        adapter_type=instance.adapter_type,
-                        message=f"Cannot unload {adapter_id}: it is one of the last communication-capable adapters",
-                        error=f"Cannot unload {adapter_id}: it is one of the last communication-capable adapters",
-                        details={},
-                    )
-
             logger.info(f"Unloading adapter {adapter_id}")
 
-            # Cancel lifecycle tasks for Discord adapters
-            if hasattr(instance, "lifecycle_runner") and instance.lifecycle_runner is not None:
-                logger.debug(f"Cancelling lifecycle runner for {adapter_id}")
-                instance.lifecycle_runner.cancel()
-                try:
-                    await instance.lifecycle_runner
-                except asyncio.CancelledError:
-                    # This is expected when we cancel the task
-                    pass  # NOSONAR - Intentionally not re-raising in unload_adapter()
+            # Cancel lifecycle tasks
+            await self._cancel_adapter_lifecycle_tasks(adapter_id, instance)
 
-            if hasattr(instance, "lifecycle_task") and instance.lifecycle_task is not None:
-                logger.debug(f"Cancelling lifecycle task for {adapter_id}")
-                instance.lifecycle_task.cancel()
-                try:
-                    await instance.lifecycle_task
-                except asyncio.CancelledError:
-                    # This is expected when we cancel the task
-                    pass  # NOSONAR - Intentionally not re-raising in unload_adapter()
-
-            if instance.is_running:
-                await instance.adapter.stop()
-                instance.is_running = False
-
-            self._unregister_adapter_services(instance)
-
-            # Remove adapter from runtime adapters list (if it was added there)
-            # Note: Dynamically loaded adapters are no longer added to runtime.adapters
-            # to avoid duplicate bootstrap entries
-            if hasattr(self.runtime, "adapters"):
-                for i, adapter in enumerate(self.runtime.adapters):
-                    if adapter is instance.adapter:
-                        self.runtime.adapters.pop(i)
-                        break
-
-            # Remove adapter config from graph
-            await self._remove_adapter_config_from_graph(adapter_id)
-
-            del self.loaded_adapters[adapter_id]
+            # Clean up adapter from runtime
+            await self._cleanup_adapter_from_runtime(adapter_id, instance)
 
             logger.info(f"Successfully unloaded adapter {adapter_id}")
-            return AdapterOperationResult(
+            return self._create_adapter_operation_result(
                 success=True,
                 adapter_id=adapter_id,
                 adapter_type=instance.adapter_type,
                 message=f"Successfully unloaded adapter with {len(instance.services_registered)} services unregistered",
-                error=None,
                 details={"services_unregistered": len(instance.services_registered), "was_running": True},
             )
 
         except asyncio.CancelledError:
-            # Re-raise CancelledError to properly propagate cancellation
+            # Re-raise CancelledError to properly propagate cancellation - no logging needed
             logger.debug(f"Adapter unload for {adapter_id} was cancelled")
             raise
         except Exception as e:
             logger.error(f"Failed to unload adapter {adapter_id}: {e}", exc_info=True)
-            return AdapterOperationResult(
+            return self._create_adapter_operation_result(
                 success=False,
                 adapter_id=adapter_id,
                 adapter_type="unknown",
                 message=f"Failed to unload adapter: {str(e)}",
                 error=str(e),
-                details={},
             )
 
     async def reload_adapter(
@@ -384,10 +450,13 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         tool_service = instance.adapter.tool_service
                         if hasattr(tool_service, "get_all_tool_info"):
                             tool_infos = await tool_service.get_all_tool_info()
-                            tools = [info.name for info in tool_infos]
+                            tools = tool_infos  # Pass ToolInfo objects directly, not just names
                         elif hasattr(tool_service, "list_tools"):
                             tool_names = await tool_service.list_tools()
-                            tools = tool_names
+                            # Convert string names to ToolInfo objects for schema compliance
+                            from ciris_engine.schemas.adapters.tools import ToolInfo
+
+                            tools = [ToolInfo(name=name, description="") for name in tool_names]
                 except Exception as e:
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
@@ -415,6 +484,91 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             logger.error(f"Failed to list adapters: {e}", exc_info=True)
             return []
 
+    async def _determine_adapter_health_status(self, instance: AdapterInstance) -> tuple[str, Dict[str, Any]]:
+        """Determine adapter health status and details - fail fast on issues."""
+        health_details: Dict[str, Any] = {}
+
+        try:
+            if hasattr(instance.adapter, "is_healthy"):
+                is_healthy = await instance.adapter.is_healthy()
+                health_status = "healthy" if is_healthy else "error"
+            elif instance.is_running:
+                health_status = "active"
+            else:
+                health_status = "stopped"
+        except Exception as e:
+            health_status = "error"
+            health_details["error"] = str(e)
+
+        return health_status, health_details
+
+    def _extract_adapter_service_details(self, instance: AdapterInstance) -> List[Dict[str, Any]]:
+        """Extract service registration details from adapter - fail fast on invalid data."""
+        try:
+            if not hasattr(instance.adapter, "get_services_to_register"):
+                return [{"info": "Adapter does not provide service registration details"}]
+
+            registrations = instance.adapter.get_services_to_register()
+            service_details = []
+
+            for reg in registrations:
+                service_details.append(
+                    {
+                        "service_type": (
+                            reg.service_type.value if hasattr(reg.service_type, "value") else str(reg.service_type)
+                        ),
+                        "priority": reg.priority.name if hasattr(reg.priority, "name") else str(reg.priority),
+                        "handlers": reg.handlers,
+                        "capabilities": reg.capabilities,
+                    }
+                )
+
+            return service_details
+
+        except Exception as e:
+            return [{"error": f"Failed to get service registrations: {e}"}]
+
+    async def _get_adapter_tools_info(self, adapter_id: str, instance: AdapterInstance) -> Optional[List]:
+        """Get tool information from adapter if available - strict typing, no fallbacks."""
+        try:
+            if not (hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service):
+                return None
+
+            tool_service = instance.adapter.tool_service
+
+            if hasattr(tool_service, "get_all_tool_info"):
+                tool_infos = await tool_service.get_all_tool_info()
+                return tool_infos  # Pass ToolInfo objects directly
+            elif hasattr(tool_service, "list_tools"):
+                tool_names = await tool_service.list_tools()
+                # Convert string names to ToolInfo objects for schema compliance
+                from ciris_engine.schemas.adapters.tools import ToolInfo
+
+                return [
+                    ToolInfo(name=name, description="", parameters={"type": "object", "properties": {}, "required": []})
+                    for name in tool_names
+                ]
+            else:
+                return None
+
+        except Exception as e:
+            logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
+            return None
+
+    def _create_adapter_metrics(self, instance: AdapterInstance, health_status: str) -> Optional[AdapterMetrics]:
+        """Create adapter metrics based on health status - strict typing."""
+        if health_status != "healthy":
+            return None
+
+        uptime_seconds = (self.time_service.now() - instance.loaded_at).total_seconds()
+
+        return AdapterMetrics(
+            uptime_seconds=uptime_seconds,
+            messages_processed=0,  # Would need to track this in real implementation
+            errors_count=0,  # Would need to track this in real implementation
+            last_error=None,
+        )
+
     async def get_adapter_status(self, adapter_id: str) -> Optional[RuntimeAdapterStatus]:
         """Get detailed status of a specific adapter
 
@@ -430,66 +584,17 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         try:
             instance = self.loaded_adapters[adapter_id]
 
-            health_status = "unknown"
-            health_details = {}
-            try:
-                if hasattr(instance.adapter, "is_healthy"):
-                    is_healthy = await instance.adapter.is_healthy()
-                    health_status = "healthy" if is_healthy else "error"
-                elif instance.is_running:
-                    health_status = "active"
-                else:
-                    health_status = "stopped"
-            except Exception as e:
-                health_status = "error"
-                health_details["error"] = str(e)
+            # Determine health status using helper
+            health_status, _ = await self._determine_adapter_health_status(instance)
 
-            service_details = []
-            try:
-                if hasattr(instance.adapter, "get_services_to_register"):
-                    registrations = instance.adapter.get_services_to_register()
-                    for reg in registrations:
-                        service_details.append(
-                            {
-                                "service_type": (
-                                    reg.service_type.value
-                                    if hasattr(reg.service_type, "value")
-                                    else str(reg.service_type)
-                                ),
-                                "priority": reg.priority.name if hasattr(reg.priority, "name") else str(reg.priority),
-                                "handlers": reg.handlers,
-                                "capabilities": reg.capabilities,
-                            }
-                        )
-                else:
-                    service_details = [{"info": "Adapter does not provide service registration details"}]
-            except Exception as e:
-                service_details = [{"error": f"Failed to get service registrations: {e}"}]
+            # Extract service details using helper
+            _ = self._extract_adapter_service_details(instance)
 
-            uptime_seconds = (self.time_service.now() - instance.loaded_at).total_seconds()
+            # Get tools information using helper
+            tools = await self._get_adapter_tools_info(adapter_id, instance)
 
-            metrics: Optional[AdapterMetrics] = None
-            if health_status == "healthy":
-                metrics = AdapterMetrics(
-                    uptime_seconds=uptime_seconds,
-                    messages_processed=0,  # Would need to track this
-                    errors_count=0,  # Would need to track this
-                    last_error=None,
-                )
-
-            # Get tools from adapter if it has a tool service
-            tools = None
-            try:
-                if hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service:
-                    tool_service = instance.adapter.tool_service
-                    if hasattr(tool_service, "get_all_tool_info"):
-                        tool_infos = await tool_service.get_all_tool_info()
-                        tools = [info.name for info in tool_infos]
-                    elif hasattr(tool_service, "list_tools"):
-                        tool_names = await tool_service.list_tools()
-                        tools = tool_names
-            except Exception as e:
-                logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
+            # Create metrics using helper
+            metrics = self._create_adapter_metrics(instance, health_status)
 
             return RuntimeAdapterStatus(
                 adapter_id=adapter_id,
@@ -793,15 +898,15 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 logger.warning(f"Cannot remove adapter config for {adapter_id} - GraphConfigService not available")
                 return
 
-            # Get all config keys for this adapter
-            all_configs = await config_service.get_all()
-            adapter_prefix = f"adapter.{adapter_id}."
+            # List all configs with adapter prefix
+            adapter_prefix = f"adapter.{adapter_id}"
+            all_configs = await config_service.list_configs(prefix=adapter_prefix)
 
-            # Remove all config entries for this adapter
-            for config in all_configs:
-                if config.key.startswith(adapter_prefix) or config.key == f"adapter.{adapter_id}.config":
-                    await config_service.delete(config.key)
-                    logger.debug(f"Removed config key: {config.key}")
+            # Remove all config entries for this adapter by setting them to None
+            # Note: GraphConfigService doesn't have delete, so we set to None to clear
+            for config_key in all_configs.keys():
+                await config_service.set_config(config_key, None, updated_by="adapter_manager")
+                logger.debug(f"Removed config key: {config_key}")
 
             logger.info(f"Removed adapter config for {adapter_id} from graph")
 

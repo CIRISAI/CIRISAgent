@@ -7,12 +7,14 @@ in the runtime control service, ensuring full type safety and validation.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.conscience.results import ConscienceResult
+from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 
 
@@ -90,27 +92,70 @@ class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
 
     key: str = Field(..., description="Attribute key")
-    value: Dict[str, Any] = Field(..., description="Attribute value in OTLP format")
+    value: Dict[str, Any] = Field(
+        ..., description="Attribute value in OTLP format"
+    )  # NOQA - OTLP standard requires Dict[str, Any]
 
 
 class ConfigValueMap(BaseModel):
     """Typed map for configuration values."""
 
-    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    configs: Dict[str, str | int | float | bool | list | dict] = Field(
         default_factory=dict, description="Configuration key-value pairs with typed values"
     )
 
-    def get(
-        self, key: str, default: Optional[Union[str, int, float, bool, list, dict]] = None
-    ) -> Optional[Union[str, int, float, bool, list, dict]]:
+    def get(self, key: str, default=None):
         """Get a configuration value with optional default."""
         return self.configs.get(key, default)
 
-    def set(self, key: str, value: Union[str, int, float, bool, list, dict]) -> None:
+    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: Dict[str, Union[str, int, float, bool, list, dict]]) -> None:
+    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
+        """Update multiple configuration values."""
+        self.configs.update(values)
+
+    def keys(self):
+        """Get all configuration keys."""
+        return self.configs.keys()
+
+    def items(self):
+        """Get all key-value pairs."""
+        return self.configs.items()
+
+    def values(self):
+        """Get all configuration values."""
+        return self.configs.values()
+
+
+class TaskSelectionCriteria(BaseModel):
+    """Criteria used for task selection in processing rounds."""
+
+    max_priority: Optional[int] = Field(None, description="Maximum priority threshold")
+    min_priority: Optional[int] = Field(None, description="Minimum priority threshold")
+    max_age_hours: Optional[float] = Field(None, description="Maximum age in hours")
+    channel_filter: Optional[str] = Field(None, description="Channel ID filter")
+    task_type_filter: Optional[str] = Field(None, description="Task type filter")
+    exclude_failed: bool = Field(True, description="Whether to exclude previously failed tasks")
+    max_retry_count: int = Field(3, description="Maximum retry count for tasks")
+    user_id_filter: Optional[str] = Field(None, description="User ID filter")
+    batch_size: int = Field(10, description="Maximum number of tasks to select")
+    configs: Dict[str, str | int | float | bool | list | dict] = Field(
+        default_factory=dict, description="Additional configuration key-value pairs with typed values"
+    )
+
+    def get(
+        self, key: str, default: Optional[str | int | float | bool | list | dict] = None
+    ) -> Optional[str | int | float | bool | list | dict]:
+        """Get a configuration value with optional default."""
+        return self.configs.get(key, default)
+
+    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
+        """Set a configuration value."""
+        self.configs[key] = value
+
+    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
@@ -164,10 +209,10 @@ class ServiceProviderInfo(BaseModel):
     priority: str = Field(..., description="Priority level name")
     priority_group: int = Field(..., description="Priority group number")
     strategy: str = Field(..., description="Selection strategy")
-    capabilities: Optional[Dict[str, Union[str, int, float, bool, list]]] = Field(
+    capabilities: Optional[Dict[str, str | int | float | bool | list]] = Field(
         None, description="Provider capabilities"
     )
-    metadata: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Provider metadata")
+    metadata: Optional[Dict[str, str | int | float | bool]] = Field(None, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state if available")
 
 
@@ -220,7 +265,7 @@ class WAPublicKeyMap(BaseModel):
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 
-    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    configs: Dict[str, str | int | float | bool | list | dict] = Field(
         ..., description="Backed up configuration values"
     )
     backup_timestamp: datetime = Field(
@@ -262,9 +307,7 @@ class ProcessingQueueItem(BaseModel):
     started_at: Optional[datetime] = Field(None, description="When processing started")
     status: str = Field("pending", description="Item status: pending, processing, completed, failed")
     source: Optional[str] = Field(None, description="Source of the queue item")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(
-        default_factory=dict, description="Additional item metadata"
-    )
+    metadata: Dict[str, str | int | float | bool] = Field(default_factory=dict, description="Additional item metadata")
 
 
 class QueuedThought(BaseModel):
@@ -302,14 +345,14 @@ class ThoughtInPipeline(BaseModel):
     processing_time_ms: float = Field(0.0, description="Total processing time so far")
 
     # Data accumulated at each step - using existing schemas
-    context_built: Optional[Dict[str, Any]] = Field(None, description="Context built for DMAs")
+    context_built: Optional[DMAContext] = Field(None, description="Context built for DMAs")
     ethical_dma: Optional[EthicalDMAResult] = Field(None, description="Ethical DMA result")
     common_sense_dma: Optional[CSDMAResult] = Field(None, description="Common sense DMA result")
     domain_dma: Optional[DSDMAResult] = Field(None, description="Domain DMA result")
     aspdma_result: Optional[ActionSelectionDMAResult] = Field(None, description="ASPDMA result")
     conscience_results: Optional[List[ConscienceResult]] = Field(None, description="Conscience evaluations")
     selected_action: Optional[str] = Field(None, description="Final selected action")
-    handler_result: Optional[Dict[str, Any]] = Field(None, description="Handler execution result")
+    handler_result: Optional[HandlerResult] = Field(None, description="Handler execution result")
     bus_operations: Optional[List[str]] = Field(None, description="Bus operations performed")
 
     # Tracking recursion
@@ -401,8 +444,9 @@ class ThoughtProcessingResult(BaseModel):
     tasks_deferred: List[Dict[str, str]] = Field(default_factory=list, description="Tasks deferred with reasons")
 
     # Selection criteria used
-    selection_criteria: Dict[str, Any] = Field(
-        default_factory=dict, description="Criteria used to select tasks (priority, age, channel, etc.)"
+    selection_criteria: TaskSelectionCriteria = Field(
+        default_factory=TaskSelectionCriteria,
+        description="Criteria used to select tasks (priority, age, channel, etc.)",
     )
 
     # Metrics
@@ -610,17 +654,17 @@ class StepResultRoundComplete(BaseModel):
 
 
 # Union type for all step results
-StepResultUnion = Union[
-    StepResultGatherContext,
-    StepResultPerformDMAs,
-    StepResultPerformASPDMA,
-    StepResultConscienceExecution,
-    StepResultRecursiveASPDMA,
-    StepResultRecursiveConscience,
-    StepResultFinalizeAction,
-    StepResultPerformAction,
-    StepResultActionComplete,
-]
+StepResultUnion = (
+    StepResultGatherContext
+    | StepResultPerformDMAs
+    | StepResultPerformASPDMA
+    | StepResultConscienceExecution
+    | StepResultRecursiveASPDMA
+    | StepResultRecursiveConscience
+    | StepResultFinalizeAction
+    | StepResultPerformAction
+    | StepResultActionComplete
+)
 
 
 # Step Data Schemas for type-safe step processing
@@ -672,7 +716,7 @@ class ConscienceExecutionStepData(BaseStepData):
     conscience_passed: bool = Field(..., description="Whether conscience validation passed")
     action_result: str = Field(..., description="Complete action result")
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
-    conscience_result: Dict[str, Any] = Field(..., description="Complete conscience evaluation result")
+    conscience_result: ConscienceResult = Field(..., description="Complete conscience evaluation result")
 
 
 class RecursiveASPDMAStepData(BaseStepData):
@@ -723,19 +767,19 @@ class RoundCompleteStepData(BaseStepData):
 
 
 # Union type for all step data
-StepDataUnion = Union[
-    StartRoundStepData,
-    GatherContextStepData,
-    PerformDMAsStepData,
-    PerformASPDMAStepData,
-    ConscienceExecutionStepData,
-    RecursiveASPDMAStepData,
-    RecursiveConscienceStepData,
-    FinalizeActionStepData,
-    PerformActionStepData,
-    ActionCompleteStepData,
-    RoundCompleteStepData,
-]
+StepDataUnion = (
+    StartRoundStepData
+    | GatherContextStepData
+    | PerformDMAsStepData
+    | PerformASPDMAStepData
+    | ConscienceExecutionStepData
+    | RecursiveASPDMAStepData
+    | RecursiveConscienceStepData
+    | FinalizeActionStepData
+    | PerformActionStepData
+    | ActionCompleteStepData
+    | RoundCompleteStepData
+)
 
 
 class StepResultData(BaseModel):
@@ -746,7 +790,7 @@ class StepResultData(BaseModel):
     processing_time_ms: float = Field(0.0, description="Step processing time")
     thought_id: str = Field("", description="Thought identifier")
     task_id: str = Field("", description="Task identifier")
-    step_data: Dict[str, Any] = Field(..., description="Typed step data")
+    step_data: StepDataUnion = Field(..., description="Typed step data")
     trace_context: TraceContext = Field(..., description="OTLP trace context")
     span_attributes: List[SpanAttribute] = Field(..., description="OTLP span attributes")
     otlp_compatible: bool = Field(True, description="OTLP compatibility flag")

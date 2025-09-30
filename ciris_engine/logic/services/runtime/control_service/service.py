@@ -440,7 +440,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             # Get shutdown service from registry if available
             if self.runtime and hasattr(self.runtime, "service_registry"):
-                shutdown_service = self.runtime.service_registry.get_service("ShutdownService")
+                # Fix: Provide both handler and service_type parameters
+                shutdown_service = await self.runtime.service_registry.get_service(
+                    handler="default", service_type=ServiceType.SHUTDOWN
+                )
                 if shutdown_service:
                     shutdown_service.request_shutdown(shutdown_reason)
                     status.shutdown_completed = self._now()
@@ -738,7 +741,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         if hasattr(tool_service, "get_tool_schema"):
             schema = await tool_service.get_tool_schema(tool_name)
             if schema:
-                tool_info["schema"] = schema.dict() if hasattr(schema, "dict") else schema
+                # ToolInfo expects 'parameters', not 'schema'
+                tool_info["parameters"] = schema.dict() if hasattr(schema, "dict") else schema
 
         return tool_info
 

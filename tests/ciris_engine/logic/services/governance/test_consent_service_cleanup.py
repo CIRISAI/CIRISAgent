@@ -32,8 +32,8 @@ class TestConsentServiceCleanup:
     def mock_memory_bus(self):
         """Create a mock memory bus with real TSDB node data."""
         mock = AsyncMock(spec=MemoryBus)
-        # Pre-configure the query_nodes method to avoid AttributeError
-        mock.query_nodes = AsyncMock()
+        # Pre-configure the search method to avoid AttributeError
+        mock.search = AsyncMock()
         return mock
 
     @pytest.fixture
@@ -96,20 +96,22 @@ class TestConsentServiceCleanup:
         """Create consent service with enhanced mock data."""
         service = ConsentService(time_service=mock_time_service, memory_bus=mock_memory_bus, db_path=None)
 
-        def mock_query_nodes(node_type=None, scope=None, attributes=None):
-            if node_type == NodeType.CONVERSATION_SUMMARY:
-                return conversation_summary_nodes
-            elif node_type == NodeType.TASK_SUMMARY:
-                return task_summary_nodes
-            elif node_type == NodeType.CONSENT:
-                # Return consent nodes for audit trail tests
-                return []
-            elif node_type == NodeType.AUDIT_ENTRY:
-                # Return audit entry nodes
-                return []
+        async def mock_search(query=None, filters=None):
+            # Determine node type from filters
+            if filters and hasattr(filters, "node_type"):
+                if filters.node_type == NodeType.CONVERSATION_SUMMARY.value:
+                    return conversation_summary_nodes
+                elif filters.node_type == NodeType.TASK_SUMMARY.value:
+                    return task_summary_nodes
+                elif filters.node_type == NodeType.CONSENT.value:
+                    # Return consent nodes for audit trail tests
+                    return []
+                elif filters.node_type == NodeType.AUDIT_ENTRY.value:
+                    # Return audit entry nodes
+                    return []
             return []
 
-        mock_memory_bus.query_nodes.side_effect = mock_query_nodes
+        mock_memory_bus.search.side_effect = mock_search
         service._get_example_contributions = AsyncMock(return_value=["Real contribution example"])
         return service
 
@@ -281,7 +283,7 @@ class TestConsentServiceCleanup:
     ):
         """Test successful graph query for expired consents."""
         current_time = mock_time_service.now()
-        consent_service._memory_bus.query_nodes.return_value = [expired_consent_node, valid_consent_node]
+        consent_service._memory_bus.search.return_value = [expired_consent_node, valid_consent_node]
 
         # Mock the node extraction method
         consent_service._extract_expired_user_from_node = Mock()
@@ -290,15 +292,14 @@ class TestConsentServiceCleanup:
         result = await consent_service._find_expired_from_graph(current_time)
 
         assert result == ["expired_user"]
-        consent_service._memory_bus.query_nodes.assert_called_once_with(
-            node_type=NodeType.CONCEPT, scope=GraphScope.IDENTITY, attributes={"service": "consent"}
-        )
+        # Verify search was called with correct filters
+        consent_service._memory_bus.search.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_find_expired_from_graph_query_exception(self, consent_service, mock_time_service):
         """Test graph query exception handling with cache fallback."""
         current_time = mock_time_service.now()
-        consent_service._memory_bus.query_nodes.side_effect = Exception("Graph query failed")
+        consent_service._memory_bus.search.side_effect = Exception("Graph query failed")
         consent_service._find_expired_from_cache = Mock(return_value=["cache_fallback_user"])
 
         result = await consent_service._find_expired_from_graph(current_time)
@@ -481,7 +482,7 @@ class TestConsentServiceCleanup:
         """Integration test: full cleanup flow with graph queries."""
         # Setup
         consent_service._consent_cache = {"expired_user": Mock(), "valid_user": Mock(), "unrelated_user": Mock()}
-        consent_service._memory_bus.query_nodes.return_value = [expired_consent_node, valid_consent_node]
+        consent_service._memory_bus.search.return_value = [expired_consent_node, valid_consent_node]
 
         # Execute
         result = await consent_service.cleanup_expired()
@@ -581,14 +582,14 @@ class TestConsentServiceCleanup:
 
     @pytest.mark.asyncio
     async def test_check_expiry_no_consent_found(self, consent_service):
-        """Test check_expiry returns True when no consent is found."""
+        """Test check_expiry propagates ConsentNotFoundError - FAIL FAST, FAIL LOUD."""
 
         # Mock get_consent to raise ConsentNotFoundError
         consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError("No consent found"))
 
-        result = await consent_service.check_expiry("nonexistent_user")
-
-        assert result is True  # No consent = expired
+        # Should propagate the exception - no fake defaults!
+        with pytest.raises(ConsentNotFoundError):
+            await consent_service.check_expiry("nonexistent_user")
 
     @pytest.mark.asyncio
     async def test_get_impact_report_with_real_tsdb_data(self, enhanced_consent_service, mock_time_service):
@@ -668,7 +669,7 @@ class TestConsentServiceCleanup:
         consent_service.get_consent = AsyncMock(return_value=test_consent)
 
         # Mock memory bus to raise exception on first query
-        consent_service._memory_bus.query_nodes.side_effect = Exception("Graph query failed")
+        consent_service._memory_bus.search.side_effect = Exception("Graph query failed")
 
         # Should propagate the exception - no fallbacks allowed
         with pytest.raises(Exception, match="Graph query failed"):

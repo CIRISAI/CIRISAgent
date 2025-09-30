@@ -197,7 +197,47 @@ def mock_api_runtime_control_service():
     mock.get_processor_queue_status = AsyncMock(return_value=api_queue_status)
 
     # Add single step functionality for single step endpoint tests
-    from ciris_engine.schemas.services.runtime_control import StepPoint
+    from datetime import datetime
+
+    from ciris_engine.schemas.services.runtime_control import (
+        PerformDMAsStepData,
+        SpanAttribute,
+        StepPoint,
+        StepResultData,
+        TraceContext,
+    )
+
+    # Create proper StepResultData with required fields
+    step_data = PerformDMAsStepData(
+        timestamp=datetime.now().isoformat(),
+        thought_id="task_001",
+        task_id="task_001",
+        processing_time_ms=250.0,
+        success=True,
+        dma_results="ethical,common_sense",
+        context="test context for DMA execution",
+    )
+
+    trace_context = TraceContext(
+        trace_id="test-trace-123",
+        span_id="test-span-456",
+        span_name="perform_dmas",
+        operation_name="single_step_perform_dmas",
+        start_time_ns=1000000000,
+        end_time_ns=1000250000,
+        duration_ns=250000,
+    )
+
+    step_result = StepResultData(
+        step_point=StepPoint.PERFORM_DMAS.value,
+        success=True,
+        processing_time_ms=250.0,
+        thought_id="task_001",
+        task_id="task_001",
+        step_data=step_data,
+        trace_context=trace_context,
+        span_attributes=[SpanAttribute(key="dmas_executed", value={"stringValue": "ethical,common_sense"})],
+    )
 
     single_step_response = ProcessorControlResponse(
         success=True,
@@ -206,9 +246,7 @@ def mock_api_runtime_control_service():
         new_status=ProcessorStatus.PAUSED,
         error=None,
         step_point=StepPoint.PERFORM_DMAS.value,  # Use enum value
-        step_results=[
-            {"round_number": 2, "task_id": "task_001", "step_data": {"dmas_executed": ["ethical", "common_sense"]}}
-        ],
+        step_results=[step_result],
         thoughts_processed=1,
         processing_time_ms=850.0,
         pipeline_state={"current_round": 2, "thoughts_in_pipeline": 1, "is_paused": True},
@@ -223,7 +261,48 @@ def mock_api_runtime_control_service():
 @pytest.fixture
 def single_step_control_response():
     """Create a ProcessorControlResponse for single step operation with H3ERE data."""
-    from ciris_engine.schemas.services.runtime_control import StepPoint
+    from ciris_engine.schemas.services.runtime_control import (
+        PerformDMAsStepData,
+        SpanAttribute,
+        StepPoint,
+        StepResultData,
+        TraceContext,
+    )
+
+    # Create proper StepResultData with required fields
+    step_data = PerformDMAsStepData(
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        thought_id="test_thought_1",
+        task_id="test_task_1",
+        processing_time_ms=150.0,
+        success=True,
+        dma_results="ethical:PROCEED:0.85",
+        context="test ethical DMA context",
+    )
+
+    trace_context = TraceContext(
+        trace_id="test-trace-fixture",
+        span_id="test-span-fixture",
+        span_name="perform_dmas_fixture",
+        operation_name="single_step_perform_dmas_fixture",
+        start_time_ns=1000000000,
+        end_time_ns=1000150000,
+        duration_ns=150000,
+    )
+
+    step_result = StepResultData(
+        step_point=StepPoint.PERFORM_DMAS.value,
+        success=True,
+        processing_time_ms=150.0,
+        thought_id="test_thought_1",
+        task_id="test_task_1",
+        step_data=step_data,
+        trace_context=trace_context,
+        span_attributes=[
+            SpanAttribute(key="ethical_dma_decision", value={"stringValue": "PROCEED"}),
+            SpanAttribute(key="ethical_dma_confidence", value={"doubleValue": 0.85}),
+        ],
+    )
 
     return ProcessorControlResponse(
         success=True,
@@ -233,17 +312,7 @@ def single_step_control_response():
         error=None,
         # H3ERE step data - use string values as required by schema
         step_point=StepPoint.PERFORM_DMAS.value,  # "perform_dmas"
-        step_results=[
-            {
-                "step_point": StepPoint.PERFORM_DMAS.value,  # Use enum value for consistency
-                "thought_id": "test_thought_1",
-                "success": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "processing_time_ms": 150.0,
-                "ethical_dma": {"decision": "PROCEED", "confidence": 0.85},
-                "round_number": 1,
-            }
-        ],
+        step_results=[step_result],
         thoughts_processed=1,
         processing_time_ms=150.0,
         pipeline_state={"current_round": 1, "thoughts_in_flight": 1, "total_thoughts_processed": 1, "is_paused": True},

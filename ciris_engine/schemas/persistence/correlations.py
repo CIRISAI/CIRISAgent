@@ -18,9 +18,13 @@ class CorrelationRequestData(BaseModel):
     author_id: Optional[str] = Field(None, description="Author identifier")
     author_name: Optional[str] = Field(None, description="Author display name")
     content: Optional[str] = Field(None, description="Message content")
-    parameters: Dict[str, Any] = Field(default_factory=dict, description="Additional parameters")
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional parameters"
+    )  # NOQA - Extensible request parameters
     headers: Dict[str, str] = Field(default_factory=dict, description="Request headers")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Request metadata")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Request metadata"
+    )  # NOQA - Extensible request metadata
 
 
 class CorrelationResponseData(BaseModel):
@@ -33,7 +37,9 @@ class CorrelationResponseData(BaseModel):
     error_type: Optional[str] = Field(None, description="Type of error")
     result: Optional[Any] = Field(None, description="Operation result")
     resource_usage: Dict[str, float] = Field(default_factory=dict, description="Resource metrics")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Response metadata")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Response metadata"
+    )  # NOQA - Extensible response metadata
 
 
 class ChannelInfo(BaseModel):
@@ -48,7 +54,9 @@ class ChannelInfo(BaseModel):
     # Optional fields for enriched channel info
     channel_name: Optional[str] = Field(None, description="Human-readable channel name")
     participants: Optional[int] = Field(None, description="Number of participants")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional channel metadata")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional channel metadata"
+    )  # NOQA - Extensible channel metadata
 
 
 class ConversationSummaryData(BaseModel):

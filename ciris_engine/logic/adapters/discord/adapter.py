@@ -22,8 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 class DiscordPlatform(Service):
-    def __init__(self, runtime: Any, **kwargs: Any) -> None:
+    def __init__(self, runtime: Any, context: Optional["AdapterStartupContext"] = None, **kwargs: Any) -> None:
+        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
         self.runtime = runtime
+        self.context = context
         self.config: DiscordAdapterConfig  # type: ignore[assignment]
 
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:

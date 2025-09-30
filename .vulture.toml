@@ -1,15 +1,12 @@
 # Vulture configuration for CIRIS Engine
 
 [tool.vulture]
-min_confidence = 60
+min_confidence = 80
 paths = ["ciris_engine/"]
 exclude = ["tests/", "docs/", "scripts/", "__pycache__/", "*.pyc"]
 make_whitelist = false
 sort_by_size = true
 verbose = false
-
-# Include the whitelist file
-whitelist = ["vulture_whitelist.py"]
 
 # Ignore specific patterns
 ignore_names = [

@@ -5,7 +5,7 @@ These replace all Dict[str, Any] usage in wa_cli_oauth.py.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,7 @@ class OAuthProviderConfig(BaseModel):
     token_url: str = Field(..., description="OAuth token exchange URL")
     scopes: str = Field(..., description="OAuth scopes to request")
     created: datetime = Field(..., description="When provider was configured")
-    metadata: Optional[dict] = Field(None, description="Custom provider metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Custom provider metadata")
 
 
 class OAuthSetupRequest(BaseModel):
@@ -28,7 +28,7 @@ class OAuthSetupRequest(BaseModel):
     provider: str = Field(..., description="OAuth provider name")
     client_id: str = Field(..., description="OAuth client ID")
     client_secret: str = Field(..., description="OAuth client secret")
-    custom_metadata: Optional[dict] = Field(None, description="Custom metadata")
+    custom_metadata: Optional[Dict[str, Any]] = Field(None, description="Custom metadata")
 
 
 class OAuthOperationResult(BaseModel):
@@ -38,7 +38,7 @@ class OAuthOperationResult(BaseModel):
     provider: Optional[str] = Field(None, description="OAuth provider name")
     callback_url: Optional[str] = Field(None, description="OAuth callback URL")
     error: Optional[str] = Field(None, description="Error message if failed")
-    details: Optional[dict] = Field(None, description="Additional details")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional details")
 
 
 class OAuthLoginResult(BaseModel):
@@ -47,7 +47,7 @@ class OAuthLoginResult(BaseModel):
     status: str = Field(..., description="Login status")
     provider: str = Field(..., description="OAuth provider used")
     auth_url: Optional[str] = Field(None, description="Authorization URL")
-    certificate: Optional[dict] = Field(None, description="WA certificate if successful")
+    certificate: Optional[Dict[str, Any]] = Field(None, description="WA certificate if successful")
     error: Optional[str] = Field(None, description="Error message if failed")
 
 
@@ -104,7 +104,7 @@ class OAuthUserInfo(BaseModel):
     email: Optional[str] = Field(None, description="User email")
     name: Optional[str] = Field(None, description="User display name")
     picture: Optional[str] = Field(None, description="User avatar URL")
-    provider_data: dict = Field(default_factory=dict, description="Raw provider data")
+    provider_data: Dict[str, Any] = Field(default_factory=dict, description="Raw provider data")
 
 
 class OAuthProviderConfigDB(BaseModel):
@@ -136,7 +136,7 @@ class OAuthUserProfile(BaseModel):
     picture: Optional[str] = Field(None, description="User profile picture URL")
     locale: Optional[str] = Field(None, description="User locale/language")
     created_at: datetime = Field(..., description="When profile was created")
-    raw_data: dict = Field(default_factory=dict, description="Raw provider response")
+    raw_data: Dict[str, Any] = Field(default_factory=dict, description="Raw provider response")
 
 
 class OAuthProviderSummary(BaseModel):

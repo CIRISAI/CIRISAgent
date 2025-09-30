@@ -1302,7 +1302,8 @@ class CIRISRuntime:
                     config = self.adapter_configs[load_request.adapter_id]
 
                 # Create adapter with context
-                adapter_instance = adapter_class(self, context=context, **config.settings)
+                # Pass the settings as adapter_config so adapters can find them
+                adapter_instance = adapter_class(self, context=context, adapter_config=config.settings)
                 self.adapters.append(adapter_instance)
                 logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
             except Exception as e:

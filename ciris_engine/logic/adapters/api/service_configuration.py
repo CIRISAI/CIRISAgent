@@ -110,7 +110,7 @@ class ApiServiceConfiguration:
         Returns all mappings in the same format as the existing code.
         This ensures backward compatibility during the refactor.
         """
-        result = []
+        result: List[Tuple[str, str, Optional[str]]] = []
         all_mappings = (
             cls.GRAPH_SERVICES
             + cls.INFRASTRUCTURE_SERVICES
@@ -121,6 +121,8 @@ class ApiServiceConfiguration:
         )
 
         for mapping in all_mappings:
+            # app_state_name is guaranteed to be str after __post_init__
+            assert mapping.app_state_name is not None
             result.append((mapping.runtime_attr, mapping.app_state_name, mapping.special_handler))
 
         return result

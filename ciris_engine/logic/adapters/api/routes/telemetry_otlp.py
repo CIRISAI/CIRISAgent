@@ -20,7 +20,7 @@ SERVICE_NAMESPACE_KEY = "service.namespace"
 DEPLOYMENT_ENVIRONMENT_KEY = "deployment.environment"
 
 
-def safe_telemetry_get(data: Dict[str, Any], key: str, default=None):
+def safe_telemetry_get(data: Dict[str, Any], key: str, default: Any = None) -> Any:
     """Safely extract value from telemetry data with type checking."""
     return data.get(key, default) if isinstance(data, dict) else default
 
@@ -155,7 +155,7 @@ def _add_service_gauge_metric(
     unit: str,
     current_time_ns: int,
     service_attrs: List[Dict[str, Any]],
-    transform_value=None,
+    transform_value: Any = None,
 ) -> None:
     """Helper to add a gauge metric for a service field."""
     if hasattr(service_data, field_name):
@@ -203,7 +203,7 @@ def _add_service_counter_metric(
 
 def add_service_metrics(services_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
     """Extract and create service-level metrics from services data."""
-    metrics = []
+    metrics: List[Dict[str, Any]] = []
 
     if not isinstance(services_data, dict):
         return metrics

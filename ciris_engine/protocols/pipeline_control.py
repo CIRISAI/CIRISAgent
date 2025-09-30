@@ -283,7 +283,7 @@ class PipelineController:
     def _get_pipeline_state_dict(self):
         """Get pipeline state as dictionary with fallback."""
         pipeline_state = self.get_pipeline_state()
-        return pipeline_state.dict() if hasattr(pipeline_state, "dict") else {}
+        return pipeline_state.model_dump() if hasattr(pipeline_state, "model_dump") else {}
 
     def _calculate_processing_time(self, start_time) -> float:
         """Calculate processing time in milliseconds."""

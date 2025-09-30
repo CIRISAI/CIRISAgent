@@ -309,7 +309,24 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
     async def fetch_messages(
         self, channel_id: str, *, limit: int = 50, before: Optional[datetime] = None
     ) -> List[FetchedMessage]:
-        """Implementation of CommunicationService.fetch_messages - fetches from correlations"""
+        """Implementation of CommunicationService.fetch_messages - fetches from Discord API to include all messages"""
+        # Primary: Fetch directly from Discord API to include messages from all users and bots
+        if self._channel_manager.client:
+            try:
+                messages_result = await self._retry_discord_operation(
+                    self._message_handler.fetch_messages_from_channel,
+                    channel_id,
+                    limit,
+                    operation_name="fetch_messages",
+                    config_key="discord_api",
+                )
+                # Messages from handler are already FetchedMessage objects
+                if messages_result:
+                    return messages_result
+            except Exception as e:
+                logger.warning(f"Failed to fetch messages from Discord API for channel {channel_id}: {e}")
+
+        # Fallback: Try correlation database (only includes messages this agent observed/spoke)
         from ciris_engine.logic.persistence import get_correlations_by_channel
 
         try:
@@ -373,22 +390,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
         except Exception as e:
             logger.error(f"Failed to fetch messages from correlations for Discord channel {channel_id}: {e}")
-            # Fall back to Discord API if correlation fetch fails
-            if self._channel_manager.client:
-                try:
-                    messages_result = await self._retry_discord_operation(
-                        self._message_handler.fetch_messages_from_channel,
-                        channel_id,
-                        limit,
-                        operation_name="fetch_messages",
-                        config_key="discord_api",
-                    )
-                    # Messages from handler are already FetchedMessage objects
-                    if messages_result:
-                        return messages_result
-                    return []
-                except Exception as e2:
-                    logger.exception(f"Failed to fetch messages from Discord API: {e2}")
             return []
 
     # --- WiseAuthorityService ---

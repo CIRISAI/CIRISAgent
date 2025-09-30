@@ -80,8 +80,8 @@ class MockTimeService(TimeServiceProtocol):
         )
 
 
-# Test implementation of BaseService
-class TestService(BaseService):
+# Mock implementation of BaseService (not a test class - renamed to avoid pytest collection)
+class MockServiceForTesting(BaseService):
     def __init__(self, dependency=None, **kwargs):
         super().__init__(**kwargs)
         self.dependency = dependency
@@ -107,7 +107,7 @@ class TestService(BaseService):
         return {"custom_metric": 42.0}
 
 
-class TestScheduledService(BaseScheduledService):
+class MockScheduledServiceForTesting(BaseScheduledService):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.task_run_count = 0
@@ -135,7 +135,7 @@ class TestBaseService:
     async def test_service_initialization(self):
         """Test service initializes with correct defaults."""
         time_service = MockTimeService()
-        service = TestService(dependency="test", time_service=time_service, service_name="CustomName", version="2.0.0")
+        service = MockServiceForTesting(dependency="test", time_service=time_service, service_name="CustomName", version="2.0.0")
 
         assert service.service_name == "CustomName"
         assert service._version == "2.0.0"
@@ -146,7 +146,7 @@ class TestBaseService:
     @pytest.mark.asyncio
     async def test_service_lifecycle(self):
         """Test service start/stop lifecycle."""
-        service = TestService(dependency="test")
+        service = MockServiceForTesting(dependency="test")
 
         # Start service
         await service.start()
@@ -168,7 +168,7 @@ class TestBaseService:
     @pytest.mark.asyncio
     async def test_dependency_check(self):
         """Test dependency checking prevents start."""
-        service = TestService(dependency=None)  # No dependency
+        service = MockServiceForTesting(dependency=None)  # No dependency
 
         with pytest.raises(RuntimeError, match="Required dependencies not available"):
             await service.start()
@@ -178,7 +178,7 @@ class TestBaseService:
     @pytest.mark.asyncio
     async def test_health_check(self):
         """Test health checking."""
-        service = TestService(dependency="test")
+        service = MockServiceForTesting(dependency="test")
 
         # Not started = not healthy
         assert not await service.is_healthy()
@@ -194,10 +194,10 @@ class TestBaseService:
     @pytest.mark.asyncio
     async def test_capabilities(self):
         """Test service capabilities reporting."""
-        service = TestService(dependency="test")
+        service = MockServiceForTesting(dependency="test")
         caps = service.get_capabilities()
 
-        assert caps.service_name == "TestService"
+        assert caps.service_name == "MockServiceForTesting"
         assert caps.actions == ["test_action", "another_action"]
         assert caps.version == "1.0.0"
         assert "TimeService" not in caps.dependencies  # No time service provided
@@ -206,11 +206,11 @@ class TestBaseService:
     async def test_status_reporting(self):
         """Test service status reporting."""
         time_service = MockTimeService()
-        service = TestService(dependency="test", time_service=time_service)
+        service = MockServiceForTesting(dependency="test", time_service=time_service)
 
         # Get status before start
         status = service.get_status()
-        assert status.service_name == "TestService"
+        assert status.service_name == "MockServiceForTesting"
         assert status.service_type == ServiceType.LLM.value
         assert not status.is_healthy
         assert status.uptime_seconds == 0.0
@@ -230,7 +230,7 @@ class TestBaseService:
     @pytest.mark.asyncio
     async def test_error_tracking(self):
         """Test error tracking."""
-        service = TestService(dependency="test")
+        service = MockServiceForTesting(dependency="test")
         await service.start()
 
         # Track some errors
@@ -286,7 +286,7 @@ class TestScheduledServiceClass:
     @pytest.mark.asyncio
     async def test_scheduled_task_execution(self):
         """Test scheduled task runs periodically."""
-        service = TestScheduledService(run_interval_seconds=0.1)
+        service = MockScheduledServiceForTesting(run_interval_seconds=0.1)
 
         await service.start()
 

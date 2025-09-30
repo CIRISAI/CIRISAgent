@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🔒 Security Updates**: Fixed Dependabot vulnerabilities
   - Upgraded pypdf from 4.x to 6.x (CVE RAM exhaustion fix)
   - Upgraded SonarQube action from v5 to v6 (argument injection fix)
+- **✨ Pydantic v2 Migration**: Complete migration reducing warnings by 86% (1834→262)
+  - Migrated all `.dict()` calls to `.model_dump()` across codebase
+  - Updated test mocks to match Pydantic v2 API
+  - Fixed async test warnings by aligning mocks with actual service interfaces
+  - Renamed test helper classes to avoid pytest collection warnings (TestService→MockServiceForTesting)
 
 ### Added
 - **💳 Credit Gating System**: Unlimit commerce integration for usage-based billing

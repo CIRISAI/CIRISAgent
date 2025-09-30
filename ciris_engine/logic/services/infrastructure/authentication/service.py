@@ -283,6 +283,20 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(WA_CERT_TABLE_V1)
+
+            # Backfill newer columns when running against existing databases
+            cursor = conn.execute("PRAGMA table_info(wa_cert)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            column_migrations = {
+                "custom_permissions_json": "ALTER TABLE wa_cert ADD COLUMN custom_permissions_json TEXT",
+                "adapter_name": "ALTER TABLE wa_cert ADD COLUMN adapter_name TEXT",
+                "adapter_metadata_json": "ALTER TABLE wa_cert ADD COLUMN adapter_metadata_json TEXT",
+            }
+
+            for column_name, ddl in column_migrations.items():
+                if column_name not in existing_columns:
+                    conn.execute(ddl)
+
             conn.commit()
 
     # WAStore Protocol Implementation
@@ -312,6 +326,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     "parent_wa_id": row_dict.get("parent_wa_id"),
                     "parent_signature": row_dict.get("parent_signature"),
                     "scopes_json": row_dict["scopes_json"],
+                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
                     "adapter_id": row_dict.get("adapter_id"),
                     "adapter_name": row_dict.get("adapter_name"),
                     "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
@@ -346,6 +361,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     "parent_wa_id": row_dict.get("parent_wa_id"),
                     "parent_signature": row_dict.get("parent_signature"),
                     "scopes_json": row_dict["scopes_json"],
+                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
                     "adapter_id": row_dict.get("adapter_id"),
                     "adapter_name": row_dict.get("adapter_name"),
                     "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
@@ -383,6 +399,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     "parent_wa_id": row_dict.get("parent_wa_id"),
                     "parent_signature": row_dict.get("parent_signature"),
                     "scopes_json": row_dict["scopes_json"],
+                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
                     "adapter_id": row_dict.get("adapter_id"),
                     "adapter_name": row_dict.get("adapter_name"),
                     "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
@@ -417,6 +434,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     "parent_wa_id": row_dict.get("parent_wa_id"),
                     "parent_signature": row_dict.get("parent_signature"),
                     "scopes_json": row_dict["scopes_json"],
+                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
                     "adapter_id": row_dict.get("adapter_id"),
                     "adapter_name": row_dict.get("adapter_name"),
                     "adapter_metadata_json": row_dict.get("adapter_metadata_json"),
@@ -448,7 +466,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "parent_wa_id": wa_dict.get("parent_wa_id"),
                 "parent_signature": wa_dict.get("parent_signature"),
                 "scopes_json": wa_dict["scopes_json"],
+                "custom_permissions_json": wa_dict.get("custom_permissions_json"),
                 "adapter_id": wa_dict.get("adapter_id"),
+                "adapter_name": wa_dict.get("adapter_name"),
+                "adapter_metadata_json": wa_dict.get("adapter_metadata_json"),
                 "token_type": wa_dict.get("token_type", "standard"),
                 "created": (
                     wa_dict["created_at"].isoformat()
@@ -589,6 +610,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     "parent_wa_id": row_dict.get("parent_wa_id"),
                     "parent_signature": row_dict.get("parent_signature"),
                     "scopes_json": row_dict["scopes_json"],
+                    "custom_permissions_json": row_dict.get("custom_permissions_json"),
                     "adapter_id": row_dict.get("adapter_id"),
                     "adapter_name": row_dict.get("adapter_name"),
                     "adapter_metadata_json": row_dict.get("adapter_metadata_json"),

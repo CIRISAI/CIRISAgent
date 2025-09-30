@@ -150,9 +150,6 @@ class DiscordChannelManager:
         Args:
             message: The Discord message object
         """
-        if message.author.bot:
-            return
-
         # Format channel_id as discord_guildid_channelid for proper routing
         guild_id = str(message.guild.id) if hasattr(message, "guild") and message.guild else "dm"
         channel_id = f"discord_{guild_id}_{message.channel.id}"

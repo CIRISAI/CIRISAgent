@@ -4,7 +4,7 @@ Schemas for comprehensive telemetry collector operations.
 These replace all Dict[str, Any] usage in logic/telemetry/comprehensive_collector.py.
 """
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 

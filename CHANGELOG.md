@@ -15,9 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Real-time Observations**: Removed bot message filter from on_message handler
     - Agents now create passive observations for messages from other agents
     - Enables full multi-agent awareness in monitored Discord channels
-- **🔒 Security Logging**: Fixed CodeQL high-severity finding (ciris_engine/logic/context/system_snapshot_helpers.py:516)
-  - Changed from logging potentially sensitive error messages to generic internal error message
-  - Redirects to monitoring systems for sensitive error details
 
 ## [1.1.9] - 2025-09-30
 

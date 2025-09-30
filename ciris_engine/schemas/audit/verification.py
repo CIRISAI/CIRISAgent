@@ -5,9 +5,12 @@ These replace all Dict[str, Any] usage in verifier.py.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.audit.hash_chain import HashChainAuditEntry
 
 
 class ChainVerificationResult(BaseModel):
@@ -39,7 +42,7 @@ class CompleteVerificationResult(BaseModel):
     verification_time_ms: int = Field(..., description="Verification time in milliseconds")
     hash_chain_errors: List[str] = Field(default_factory=list, description="Hash chain errors")
     signature_errors: List[str] = Field(default_factory=list, description="Signature errors")
-    chain_summary: Optional[dict] = Field(None, description="Chain summary information")
+    chain_summary: Optional["ChainSummary"] = Field(None, description="Chain summary information")
     summary: Optional[str] = Field(None, description="Summary message")
     error: Optional[str] = Field(None, description="Error message if verification failed")
 
@@ -53,7 +56,7 @@ class EntryVerificationResult(BaseModel):
     signature_valid: Optional[bool] = Field(None, description="Whether signature is valid if present")
     previous_hash_valid: bool = Field(..., description="Whether link to previous entry is valid")
     errors: List[str] = Field(default_factory=list, description="List of validation errors")
-    entry_data: Optional[dict] = Field(None, description="Entry data if requested")
+    entry_data: Optional["HashChainAuditEntry"] = Field(None, description="Entry data if requested")
 
 
 class RangeVerificationResult(BaseModel):
@@ -67,6 +70,18 @@ class RangeVerificationResult(BaseModel):
     signatures_valid: bool = Field(..., description="Signatures validity in range")
     errors: List[str] = Field(default_factory=list, description="List of errors in range")
     verification_time_ms: int = Field(..., description="Verification time")
+
+
+class SigningKeyInfo(BaseModel):
+    """Information about an audit signing key."""
+
+    key_id: Optional[str] = Field(None, description="Key identifier")
+    algorithm: Optional[str] = Field(None, description="Signing algorithm")
+    key_size: Optional[int] = Field(None, description="Key size in bits")
+    created_at: Optional[str] = Field(None, description="When key was created")
+    revoked_at: Optional[str] = Field(None, description="When key was revoked if applicable")
+    active: Optional[bool] = Field(None, description="Whether key is currently active")
+    error: Optional[str] = Field(None, description="Error message if key info unavailable")
 
 
 class ChainSummary(BaseModel):
@@ -88,8 +103,8 @@ class VerificationReport(BaseModel):
 
     timestamp: datetime = Field(..., description="Report generation timestamp")
     verification_result: CompleteVerificationResult = Field(..., description="Verification results")
-    chain_summary: dict = Field(..., description="Chain summary")
-    signing_key_info: dict = Field(..., description="Signing key information")
+    chain_summary: ChainSummary = Field(..., description="Chain summary")
+    signing_key_info: SigningKeyInfo = Field(..., description="Signing key information")
     tampering_detected: bool = Field(..., description="Whether tampering was detected")
     first_tampered_sequence: Optional[int] = Field(None, description="First tampered sequence")
     recommendations: List[str] = Field(default_factory=list, description="Recommendations")

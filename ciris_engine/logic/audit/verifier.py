@@ -11,11 +11,13 @@ from typing import List, Optional
 
 from ciris_engine.protocols.services.lifecycle import TimeServiceProtocol
 from ciris_engine.schemas.audit.verification import (
+    ChainSummary,
     CompleteVerificationResult,
     EntryVerificationResult,
     RangeVerificationResult,
     RootAnchorVerificationResult,
     SignatureVerificationResult,
+    SigningKeyInfo,
     VerificationReport,
 )
 
@@ -314,14 +316,15 @@ class AuditVerifier:
 
         verification_result = self.verify_complete_chain()
 
-        key_info = self.signature_manager.get_key_info()
+        key_info_dict = self.signature_manager.get_key_info()
+        key_info = SigningKeyInfo(**key_info_dict)
 
         first_tampered = self.find_tampering_fast()
 
         report = VerificationReport(
             timestamp=self._time_service.now(),
             verification_result=verification_result,
-            chain_summary=chain_summary.model_dump() if chain_summary else {},
+            chain_summary=chain_summary,
             signing_key_info=key_info,
             tampering_detected=first_tampered is not None,
             first_tampered_sequence=first_tampered,
@@ -340,7 +343,7 @@ class AuditVerifier:
         if chain_summary.total_entries > 100000:
             report.recommendations.append("Large audit log - consider periodic archiving")
 
-        if not key_info.get("active", False):
+        if key_info.active is False:
             report.recommendations.append("WARNING: Signing key is revoked or inactive")
 
         return report

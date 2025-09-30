@@ -82,19 +82,46 @@ class TestDiscordChannelFiltering:
             assert mock_add_correlation.called, "Correlation should be created when monitoring all channels"
 
     @pytest.mark.asyncio
-    async def test_bot_messages_ignored(self, mock_message):
-        """Test that bot messages never create correlations."""
+    async def test_bot_own_messages_ignored(self, mock_message):
+        """Test that the bot's own messages never create correlations."""
+        # Set up mock client with bot user
+        mock_client = MagicMock()
+        mock_client.user = MagicMock()
+        mock_client.user.id = 987654321  # Same as message author
+
         mock_message.author.bot = True
+        mock_message.author.id = 987654321  # Bot's own message
 
         channel_manager = DiscordChannelManager(
-            token="test_token", client=None, on_message_callback=None, monitored_channel_ids=[]  # Monitor all
+            token="test_token", client=mock_client, on_message_callback=None, monitored_channel_ids=[]  # Monitor all
         )
 
         with patch("ciris_engine.logic.persistence.add_correlation") as mock_add_correlation:
             await channel_manager.on_message(mock_message)
 
-            # Correlation should NOT be created for bot messages
-            assert not mock_add_correlation.called, "Correlation should NOT be created for bot messages"
+            # Correlation should NOT be created for bot's own messages
+            assert not mock_add_correlation.called, "Correlation should NOT be created for bot's own messages"
+
+    @pytest.mark.asyncio
+    async def test_other_bot_messages_observed(self, mock_message):
+        """Test that other bots' messages DO create correlations."""
+        # Set up mock client with bot user
+        mock_client = MagicMock()
+        mock_client.user = MagicMock()
+        mock_client.user.id = 111111111  # Different from message author
+
+        mock_message.author.bot = True
+        mock_message.author.id = 987654321  # Different bot
+
+        channel_manager = DiscordChannelManager(
+            token="test_token", client=mock_client, on_message_callback=None, monitored_channel_ids=[]  # Monitor all
+        )
+
+        with patch("ciris_engine.logic.persistence.add_correlation") as mock_add_correlation:
+            await channel_manager.on_message(mock_message)
+
+            # Correlation SHOULD be created for other bots' messages
+            assert mock_add_correlation.called, "Correlation should be created for other bots' messages"
 
     @pytest.mark.asyncio
     async def test_callback_still_invoked_for_unmonitored(self, mock_message):

@@ -77,7 +77,7 @@ jobs:
 
       - name: SonarQube Scan
         if: steps.check_sonar.outputs.should_run == 'true'
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 

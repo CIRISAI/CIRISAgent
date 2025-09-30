@@ -41,12 +41,8 @@ class BaseAdapter(Service):
             config: Legacy config dict (for backward compatibility)
             context: New AdapterStartupContext with all startup information
         """
-        # Use context.essential_config if available, otherwise fall back to config
-        if context and hasattr(context, "essential_config"):
-            # Extract relevant config from context
-            super().__init__(config)
-        else:
-            super().__init__(config)
+        # Initialize parent class with config (same regardless of context)
+        super().__init__(config)
 
         self.adapter_type = adapter_type
         self.runtime = runtime

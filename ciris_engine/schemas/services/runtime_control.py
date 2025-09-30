@@ -7,7 +7,7 @@ in the runtime control service, ensuring full type safety and validation.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -100,7 +100,7 @@ class SpanAttribute(BaseModel):
 class ConfigValueMap(BaseModel):
     """Typed map for configuration values."""
 
-    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    configs: Dict[str, str | int | float | bool | list | dict] = Field(
         default_factory=dict, description="Configuration key-value pairs with typed values"
     )
 
@@ -108,11 +108,11 @@ class ConfigValueMap(BaseModel):
         """Get a configuration value with optional default."""
         return self.configs.get(key, default)
 
-    def set(self, key: str, value: Union[str, int, float, bool, list, dict]) -> None:
+    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: Dict[str, Union[str, int, float, bool, list, dict]]) -> None:
+    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
@@ -141,21 +141,21 @@ class TaskSelectionCriteria(BaseModel):
     max_retry_count: int = Field(3, description="Maximum retry count for tasks")
     user_id_filter: Optional[str] = Field(None, description="User ID filter")
     batch_size: int = Field(10, description="Maximum number of tasks to select")
-    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    configs: Dict[str, str | int | float | bool | list | dict] = Field(
         default_factory=dict, description="Additional configuration key-value pairs with typed values"
     )
 
     def get(
-        self, key: str, default: Optional[Union[str, int, float, bool, list, dict]] = None
-    ) -> Optional[Union[str, int, float, bool, list, dict]]:
+        self, key: str, default: Optional[str | int | float | bool | list | dict] = None
+    ) -> Optional[str | int | float | bool | list | dict]:
         """Get a configuration value with optional default."""
         return self.configs.get(key, default)
 
-    def set(self, key: str, value: Union[str, int, float, bool, list, dict]) -> None:
+    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: Dict[str, Union[str, int, float, bool, list, dict]]) -> None:
+    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
@@ -209,10 +209,10 @@ class ServiceProviderInfo(BaseModel):
     priority: str = Field(..., description="Priority level name")
     priority_group: int = Field(..., description="Priority group number")
     strategy: str = Field(..., description="Selection strategy")
-    capabilities: Optional[Dict[str, Union[str, int, float, bool, list]]] = Field(
+    capabilities: Optional[Dict[str, str | int | float | bool | list]] = Field(
         None, description="Provider capabilities"
     )
-    metadata: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Provider metadata")
+    metadata: Optional[Dict[str, str | int | float | bool]] = Field(None, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state if available")
 
 
@@ -265,7 +265,7 @@ class WAPublicKeyMap(BaseModel):
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 
-    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    configs: Dict[str, str | int | float | bool | list | dict] = Field(
         ..., description="Backed up configuration values"
     )
     backup_timestamp: datetime = Field(
@@ -307,7 +307,7 @@ class ProcessingQueueItem(BaseModel):
     started_at: Optional[datetime] = Field(None, description="When processing started")
     status: str = Field("pending", description="Item status: pending, processing, completed, failed")
     source: Optional[str] = Field(None, description="Source of the queue item")
-    metadata: Dict[str, Union[str, int, float, bool]] = Field(
+    metadata: Dict[str, str | int | float | bool] = Field(
         default_factory=dict, description="Additional item metadata"
     )
 
@@ -656,17 +656,17 @@ class StepResultRoundComplete(BaseModel):
 
 
 # Union type for all step results
-StepResultUnion = Union[
-    StepResultGatherContext,
-    StepResultPerformDMAs,
-    StepResultPerformASPDMA,
-    StepResultConscienceExecution,
-    StepResultRecursiveASPDMA,
-    StepResultRecursiveConscience,
-    StepResultFinalizeAction,
-    StepResultPerformAction,
-    StepResultActionComplete,
-]
+StepResultUnion = (
+    StepResultGatherContext
+    | StepResultPerformDMAs
+    | StepResultPerformASPDMA
+    | StepResultConscienceExecution
+    | StepResultRecursiveASPDMA
+    | StepResultRecursiveConscience
+    | StepResultFinalizeAction
+    | StepResultPerformAction
+    | StepResultActionComplete
+)
 
 
 # Step Data Schemas for type-safe step processing
@@ -769,19 +769,19 @@ class RoundCompleteStepData(BaseStepData):
 
 
 # Union type for all step data
-StepDataUnion = Union[
-    StartRoundStepData,
-    GatherContextStepData,
-    PerformDMAsStepData,
-    PerformASPDMAStepData,
-    ConscienceExecutionStepData,
-    RecursiveASPDMAStepData,
-    RecursiveConscienceStepData,
-    FinalizeActionStepData,
-    PerformActionStepData,
-    ActionCompleteStepData,
-    RoundCompleteStepData,
-]
+StepDataUnion = (
+    StartRoundStepData
+    | GatherContextStepData
+    | PerformDMAsStepData
+    | PerformASPDMAStepData
+    | ConscienceExecutionStepData
+    | RecursiveASPDMAStepData
+    | RecursiveConscienceStepData
+    | FinalizeActionStepData
+    | PerformActionStepData
+    | ActionCompleteStepData
+    | RoundCompleteStepData
+)
 
 
 class StepResultData(BaseModel):

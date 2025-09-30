@@ -857,11 +857,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         if isinstance(node.attributes, dict):
             node.attributes["_edges"] = edges_data
         else:
-            attrs_dict = (
-                node.attributes.model_dump()
-                if hasattr(node.attributes, "model_dump")
-                else dict(node.attributes) if node.attributes else {}
-            )
+            attrs_dict = self._get_attributes_dict(node.attributes)
             attrs_dict["_edges"] = edges_data
             node = GraphNode(
                 id=node.id,
@@ -880,7 +876,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         if depth <= 0:
             return [start_node]
 
-        from ciris_engine.logic.persistence.models import graph as persistence
         from ciris_engine.logic.persistence.models.graph import get_edges_for_node
 
         visited_nodes = {start_node.id}
@@ -897,40 +892,54 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             current_edges = get_edges_for_node(current_node.id, current_node.scope, db_path=self.db_path)
 
             for edge in current_edges:
-                # Determine the connected node ID
-                connected_id = edge.target if edge.source == current_node.id else edge.source
-
-                if connected_id in visited_nodes:
-                    continue
-
-                # Fetch the connected node
-                connected_node = persistence.get_graph_node(connected_id, edge.scope, db_path=self.db_path)
-
-                if not connected_node:
-                    continue
-
-                visited_nodes.add(connected_id)
-
-                # Process secrets if needed
-                if connected_node.attributes:
-                    processed_attrs = await self._process_secrets_for_recall(connected_node.attributes, "recall")
-                    connected_node = GraphNode(
-                        id=connected_node.id,
-                        type=connected_node.type,
-                        scope=connected_node.scope,
-                        attributes=processed_attrs,
-                        version=connected_node.version,
-                        updated_by=connected_node.updated_by,
-                        updated_at=connected_node.updated_at,
-                    )
-
-                # Process edges for the connected node
-                connected_node = await self._process_node_with_edges(connected_node, include_edges=True)
-
-                all_nodes.append(connected_node)
-                nodes_to_process.append((connected_node, current_depth + 1))
+                # Process this edge's connected node
+                result = await self._process_edge_connection(
+                    edge, current_node, visited_nodes, current_depth
+                )
+                if result:
+                    connected_node, should_continue = result
+                    all_nodes.append(connected_node)
+                    nodes_to_process.append((connected_node, current_depth + 1))
 
         return all_nodes
+
+    async def _process_edge_connection(
+        self, edge: Any, current_node: GraphNode, visited_nodes: set, current_depth: int
+    ) -> Optional[Tuple[GraphNode, bool]]:
+        """Process a single edge connection and return the connected node if valid."""
+        from ciris_engine.logic.persistence.models import graph as persistence
+
+        # Determine the connected node ID
+        connected_id = edge.target if edge.source == current_node.id else edge.source
+
+        if connected_id in visited_nodes:
+            return None
+
+        # Fetch the connected node
+        connected_node = persistence.get_graph_node(connected_id, edge.scope, db_path=self.db_path)
+
+        if not connected_node:
+            return None
+
+        visited_nodes.add(connected_id)
+
+        # Process secrets if needed
+        if connected_node.attributes:
+            processed_attrs = await self._process_secrets_for_recall(connected_node.attributes, "recall")
+            connected_node = GraphNode(
+                id=connected_node.id,
+                type=connected_node.type,
+                scope=connected_node.scope,
+                attributes=processed_attrs,
+                version=connected_node.version,
+                updated_by=connected_node.updated_by,
+                updated_at=connected_node.updated_at,
+            )
+
+        # Process edges for the connected node
+        connected_node = await self._process_node_with_edges(connected_node, include_edges=True)
+
+        return connected_node, True
 
     def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[dict]) -> List[GraphNode]:
         """Apply time-based filters to a list of nodes."""
@@ -1022,3 +1031,12 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                     filtered.append(node)
 
         return filtered
+
+    def _get_attributes_dict(self, attributes: Any) -> dict:
+        """Extract attributes as dictionary from various formats."""
+        if hasattr(attributes, "model_dump"):
+            return attributes.model_dump()
+        elif attributes:
+            return dict(attributes)
+        else:
+            return {}

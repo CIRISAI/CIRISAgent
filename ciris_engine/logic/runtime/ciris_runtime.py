@@ -77,47 +77,12 @@ class CIRISRuntime:
         from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
 
         # Use bootstrap config if provided, otherwise construct from legacy parameters
-        if bootstrap is not None:
-            self.bootstrap = bootstrap
-            # Extract values from bootstrap config
-            self.essential_config = essential_config or EssentialConfig()
-            self.startup_channel_id = bootstrap.startup_channel_id or ""
-            self.adapter_configs = bootstrap.adapter_overrides
-            self.modules_to_load = bootstrap.modules
-            self.debug = bootstrap.debug
-            self._preload_tasks = bootstrap.preload_tasks
-        else:
-            # Legacy parameter handling for backward compatibility
-            self.essential_config = essential_config
-            self.startup_channel_id = startup_channel_id or ""
-            self.adapter_configs = adapter_configs or {}
-            self.modules_to_load = kwargs.get("modules", [])
-            self.debug = kwargs.get("debug", False)
-            self._preload_tasks = []
-
-            # Create bootstrap config from legacy parameters for internal use
-            from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
-            adapter_load_requests = [
-                AdapterLoadRequest(adapter_type=atype, adapter_id=atype, auto_start=True)
-                for atype in adapter_types
-            ]
-            self.bootstrap = RuntimeBootstrapConfig(
-                adapters=adapter_load_requests,
-                adapter_overrides=self.adapter_configs,
-                modules=self.modules_to_load,
-                startup_channel_id=self.startup_channel_id,
-                debug=self.debug,
-                preload_tasks=self._preload_tasks,
-            )
+        self._parse_bootstrap_config(bootstrap, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs)
 
         self.adapters: List[BaseAdapterProtocol] = []
 
         # CRITICAL: Check for mock LLM environment variable
-        if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
-            logger.warning("CIRIS_MOCK_LLM environment variable detected in CIRISRuntime")
-            if "mock_llm" not in self.modules_to_load:
-                self.modules_to_load.append("mock_llm")
-                logger.info("Added mock_llm to modules to load")
+        self._check_mock_llm()
 
         # Initialize managers
         self.identity_manager: Optional[IdentityManager] = None
@@ -126,53 +91,8 @@ class CIRISRuntime:
         self.agent_processor: Optional["AgentProcessor"] = None
         self._adapter_tasks: List[asyncio.Task] = []
 
-        # Use bootstrap.adapters if available, otherwise fall back to adapter_types
-        if bootstrap and bootstrap.adapters:
-            # Use the new AdapterLoadRequest from bootstrap
-            for load_request in bootstrap.adapters:
-                try:
-                    adapter_class = load_adapter(load_request.adapter_type)
-
-                    # Create AdapterStartupContext
-                    from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
-                    context = AdapterStartupContext(
-                        essential_config=self.essential_config,
-                        modules_to_load=self.modules_to_load,
-                        startup_channel_id=self.startup_channel_id or "",
-                        debug=self.debug,
-                        bus_manager=None,  # Will be set after initialization
-                        time_service=None,  # Will be set after initialization
-                        service_registry=None,  # Will be set after initialization
-                    )
-
-                    # Apply overrides if present
-                    config = load_request.config or AdapterConfig(adapter_type=load_request.adapter_type)
-                    if load_request.adapter_id in self.adapter_configs:
-                        config = self.adapter_configs[load_request.adapter_id]
-
-                    # Create adapter with context
-                    adapter_instance = adapter_class(self, context=context, **config.settings)
-                    self.adapters.append(adapter_instance)
-                    logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
-                except Exception as e:
-                    logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
-        else:
-            # Legacy path for backward compatibility
-            for adapter_name in adapter_types:
-                try:
-                    base_adapter = adapter_name.split(":")[0]
-                    adapter_class = load_adapter(base_adapter)
-
-                    adapter_kwargs = kwargs.copy()
-                    if adapter_name in self.adapter_configs:
-                        adapter_kwargs["adapter_config"] = self.adapter_configs[adapter_name]
-
-                    # Adapters expect runtime as first positional argument
-                    adapter_instance = adapter_class(self, **adapter_kwargs)
-                    self.adapters.append(adapter_instance)
-                    logger.info(f"Successfully loaded and initialized adapter: {adapter_name}")
-                except Exception as e:
-                    logger.error(f"Failed to load or initialize adapter '{adapter_name}': {e}", exc_info=True)
+        # Load adapters from bootstrap config
+        self._load_adapters_from_bootstrap()
 
         if not self.adapters:
             raise RuntimeError("No valid adapters specified, shutting down")
@@ -1291,3 +1211,95 @@ class CIRISRuntime:
 
         except Exception as e:
             logger.error(f"Failed to preserve shutdown consciousness: {e}")
+
+    def _parse_bootstrap_config(
+        self,
+        bootstrap: Optional["RuntimeBootstrapConfig"],
+        essential_config: Optional[EssentialConfig],
+        startup_channel_id: Optional[str],
+        adapter_types: List[str],
+        adapter_configs: Optional[dict],
+        kwargs: dict
+    ) -> None:
+        """Parse bootstrap configuration or create from legacy parameters."""
+        if bootstrap is not None:
+            self.bootstrap = bootstrap
+            self.essential_config = essential_config or EssentialConfig()
+            self.startup_channel_id = bootstrap.startup_channel_id or ""
+            self.adapter_configs = bootstrap.adapter_overrides
+            self.modules_to_load = bootstrap.modules
+            self.debug = bootstrap.debug
+            self._preload_tasks = bootstrap.preload_tasks
+        else:
+            self._create_bootstrap_from_legacy(
+                essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
+            )
+
+    def _create_bootstrap_from_legacy(
+        self,
+        essential_config: Optional[EssentialConfig],
+        startup_channel_id: Optional[str],
+        adapter_types: List[str],
+        adapter_configs: Optional[dict],
+        kwargs: dict
+    ) -> None:
+        """Create bootstrap config from legacy parameters."""
+        self.essential_config = essential_config
+        self.startup_channel_id = startup_channel_id or ""
+        self.adapter_configs = adapter_configs or {}
+        self.modules_to_load = kwargs.get("modules", [])
+        self.debug = kwargs.get("debug", False)
+        self._preload_tasks = []
+
+        from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
+        adapter_load_requests = [
+            AdapterLoadRequest(adapter_type=atype, adapter_id=atype, auto_start=True)
+            for atype in adapter_types
+        ]
+        self.bootstrap = RuntimeBootstrapConfig(
+            adapters=adapter_load_requests,
+            adapter_overrides=self.adapter_configs,
+            modules=self.modules_to_load,
+            startup_channel_id=self.startup_channel_id,
+            debug=self.debug,
+            preload_tasks=self._preload_tasks,
+        )
+
+    def _check_mock_llm(self) -> None:
+        """Check for mock LLM environment variable and add to modules if needed."""
+        if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
+            logger.warning("CIRIS_MOCK_LLM environment variable detected in CIRISRuntime")
+            if "mock_llm" not in self.modules_to_load:
+                self.modules_to_load.append("mock_llm")
+                logger.info("Added mock_llm to modules to load")
+
+    def _load_adapters_from_bootstrap(self) -> None:
+        """Load adapters from bootstrap configuration."""
+        for load_request in self.bootstrap.adapters:
+            try:
+                adapter_class = load_adapter(load_request.adapter_type)
+
+                # Create AdapterStartupContext
+                from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+                context = AdapterStartupContext(
+                    essential_config=self.essential_config,
+                    modules_to_load=self.modules_to_load,
+                    startup_channel_id=self.startup_channel_id or "",
+                    debug=self.debug,
+                    bus_manager=None,  # Will be set after initialization
+                    time_service=None,  # Will be set after initialization
+                    service_registry=None,  # Will be set after initialization
+                )
+
+                # Apply overrides if present
+                config = load_request.config or AdapterConfig(adapter_type=load_request.adapter_type)
+                if load_request.adapter_id in self.adapter_configs:
+                    config = self.adapter_configs[load_request.adapter_id]
+
+                # Create adapter with context
+                adapter_instance = adapter_class(self, context=context, **config.settings)
+                self.adapters.append(adapter_instance)
+                logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
+            except Exception as e:
+                logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
+

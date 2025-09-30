@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 class CliPlatform(Service):
     config: CLIAdapterConfig  # type: ignore[assignment]
 
-    def __init__(self, runtime: Any, **kwargs: Any) -> None:
+    def __init__(self, runtime: Any, context: Optional["AdapterStartupContext"] = None, **kwargs: Any) -> None:
         # Initialize the parent Service class
+        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
 

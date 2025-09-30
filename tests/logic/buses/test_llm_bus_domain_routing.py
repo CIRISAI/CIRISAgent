@@ -76,7 +76,9 @@ class MockLLMService(LLMService):
         """Generate structured output."""
         self.call_count += 1
 
-        response = MockResponseForDomainTesting(answer=f"Response from {self.domain} model ({self.model})", confidence=0.95)
+        response = MockResponseForDomainTesting(
+            answer=f"Response from {self.domain} model ({self.model})", confidence=0.95
+        )
 
         usage = ResourceUsage(
             tokens_used=100,
@@ -266,7 +268,10 @@ class TestDomainAwareLLMRouting:
         messages = [{"role": "user", "content": "Medical analysis"}]
 
         response, usage = await llm_bus.call_llm_structured(
-            messages=messages, response_model=MockResponseForDomainTesting, handler_name="medical_handler", domain="medical"
+            messages=messages,
+            response_model=MockResponseForDomainTesting,
+            handler_name="medical_handler",
+            domain="medical",
         )
 
         # With domain boost, medical services should be preferred
@@ -303,7 +308,10 @@ class TestDomainAwareLLMRouting:
         messages = [{"role": "user", "content": "Medical question"}]
 
         response, usage = await llm_bus.call_llm_structured(
-            messages=messages, response_model=MockResponseForDomainTesting, handler_name="medical_handler", domain="medical"
+            messages=messages,
+            response_model=MockResponseForDomainTesting,
+            handler_name="medical_handler",
+            domain="medical",
         )
 
         # Should failover to backup
@@ -491,7 +499,9 @@ class TestDomainAwareLLMRouting:
 
         with pytest.raises(RuntimeError, match="No LLM services available"):
             await llm_bus.call_llm_structured(
-                messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting, handler_name="test_handler"
+                messages=[{"role": "user", "content": "test"}],
+                response_model=MockResponseForDomainTesting,
+                handler_name="test_handler",
             )
 
     @pytest.mark.asyncio
@@ -508,7 +518,9 @@ class TestDomainAwareLLMRouting:
 
         # Make a call
         await llm_bus.call_llm_structured(
-            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting, domain="medical"
+            messages=[{"role": "user", "content": "test"}],
+            response_model=MockResponseForDomainTesting,
+            domain="medical",
         )
 
         # Verify telemetry was called
@@ -523,7 +535,9 @@ class TestDomainAwareLLMRouting:
             service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
         )
 
-        await llm_bus.call_llm_structured(messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting)
+        await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
+        )
 
         stats = llm_bus.get_stats()
         assert "service_stats" in stats
@@ -594,7 +608,9 @@ class TestDomainAwareLLMRouting:
             )
 
         # Make calls
-        await llm_bus.call_llm_structured(messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting)
+        await llm_bus.call_llm_structured(
+            messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
+        )
 
         # Should use least loaded
         assert services[0].call_count == 1 or services[1].call_count == 1

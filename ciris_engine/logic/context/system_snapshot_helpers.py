@@ -513,7 +513,7 @@ async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> Secret
         filter_status = "active" if not error_message else "error"
 
         if error_message:
-            logger.warning("Secrets snapshot reported an error: %s", error_message)
+            logger.warning("Secrets snapshot reported an internal error in secrets service. See monitoring for details.")
 
         # Convert to typed schema
         return SecretsData(

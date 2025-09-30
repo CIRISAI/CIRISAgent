@@ -135,7 +135,9 @@ class TestBaseService:
     async def test_service_initialization(self):
         """Test service initializes with correct defaults."""
         time_service = MockTimeService()
-        service = MockServiceForTesting(dependency="test", time_service=time_service, service_name="CustomName", version="2.0.0")
+        service = MockServiceForTesting(
+            dependency="test", time_service=time_service, service_name="CustomName", version="2.0.0"
+        )
 
         assert service.service_name == "CustomName"
         assert service._version == "2.0.0"

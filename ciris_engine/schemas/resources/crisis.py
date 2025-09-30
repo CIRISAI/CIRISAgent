@@ -11,7 +11,7 @@ This module provides structured, validated crisis resources to ensure:
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 

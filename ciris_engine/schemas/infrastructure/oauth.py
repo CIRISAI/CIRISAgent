@@ -65,7 +65,7 @@ class OAuthProviderDetails(BaseModel):
     client_id: str = Field(..., description="OAuth client ID")
     created: datetime = Field(..., description="When configured")
     has_metadata: bool = Field(..., description="Whether custom metadata exists")
-    metadata: Optional[dict] = Field(None, description="Custom metadata if any")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Custom metadata if any")
 
 
 class OAuthCallbackData(BaseModel):
@@ -120,7 +120,7 @@ class OAuthProviderConfigDB(BaseModel):
     created_at: datetime = Field(..., description="When provider was configured")
     updated_at: datetime = Field(..., description="When provider was last updated")
     is_active: bool = Field(True, description="Whether provider is active")
-    custom_metadata: Optional[dict] = Field(None, description="Custom provider metadata")
+    custom_metadata: Optional[Dict[str, Any]] = Field(None, description="Custom provider metadata")
 
 
 class OAuthUserProfile(BaseModel):

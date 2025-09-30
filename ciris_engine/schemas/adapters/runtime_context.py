@@ -32,10 +32,12 @@ class AdapterStartupContext(BaseModel):
     startup_channel_id: str = Field("", description="Channel ID for startup messages (may be empty string)")
     debug: bool = Field(False, description="Debug mode enabled")
 
-    # Service references - using forward references for proper typing
-    bus_manager: Optional["BusManager"] = Field(None, description="Message bus manager for inter-service communication")
-    time_service: Optional["TimeServiceProtocol"] = Field(None, description="Time service for consistent timestamps")
-    service_registry: Optional["ServiceRegistry"] = Field(None, description="Service registry for service discovery")
+    # Service references - using Any but documented as specific types
+    # NOTE: We use Any here to avoid forward reference issues with Pydantic
+    # These are actually: BusManager, TimeServiceProtocol, ServiceRegistry
+    bus_manager: Optional[Any] = Field(None, description="Message bus manager for inter-service communication (BusManager)")
+    time_service: Optional[Any] = Field(None, description="Time service for consistent timestamps (TimeServiceProtocol)")
+    service_registry: Optional[Any] = Field(None, description="Service registry for service discovery (ServiceRegistry)")
 
     class Config:
         """Pydantic configuration."""

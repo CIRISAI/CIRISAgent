@@ -24,8 +24,9 @@ from ciris_engine.schemas.runtime.adapter_management import (
 class MockAdapter:
     """Mock adapter for testing."""
 
-    def __init__(self, runtime, **kwargs):
+    def __init__(self, runtime, context=None, **kwargs):
         self.runtime = runtime
+        self.context = context
         self.kwargs = kwargs
         self.started = False
         self.stopped = False
@@ -62,10 +63,20 @@ class TestRuntimeAdapterManager:
     @pytest.fixture
     def mock_runtime(self):
         """Create a mock runtime."""
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
         mock = Mock()
         mock.service_registry = Mock()
         mock.config_service = None
         mock.adapters = []
+        # Add required attributes for AdapterStartupContext
+        mock.essential_config = EssentialConfig()  # Use defaults
+        mock.modules_to_load = []
+        mock.startup_channel_id = "test_channel"
+        mock.debug = False
+        mock.bus_manager = None
+        mock.agent_name = "test"
+        mock.agent_version = "1.0.0"
         return mock
 
     @pytest.fixture

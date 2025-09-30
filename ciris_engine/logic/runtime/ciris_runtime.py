@@ -136,8 +136,8 @@ class CIRISRuntime:
                     # Create AdapterStartupContext
                     from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
                     context = AdapterStartupContext(
-                        essential_config=essential_config,
-                        modules_to_load=self.modules,
+                        essential_config=self.essential_config,
+                        modules_to_load=self.modules_to_load,
                         startup_channel_id=self.startup_channel_id or "",
                         debug=self.debug,
                         bus_manager=None,  # Will be set after initialization

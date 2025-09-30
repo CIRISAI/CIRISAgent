@@ -141,7 +141,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             startup_context = AdapterStartupContext(
                 essential_config=essential_config,
-                modules_to_load=getattr(self.runtime, "modules", []),
+                modules_to_load=getattr(self.runtime, "modules_to_load", []),
                 startup_channel_id=getattr(self.runtime, "startup_channel_id", ""),
                 debug=getattr(self.runtime, "debug", False),
                 bus_manager=getattr(self.runtime, "bus_manager", None),

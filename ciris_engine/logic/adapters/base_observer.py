@@ -226,7 +226,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _fetch_messages_from_bus(self, channel_id: str, limit: int):
         """Fetch messages from communication bus."""
-        if not self.bus_manager or not hasattr(self.bus_manager, 'communication'):
+        if not self.bus_manager or not hasattr(self.bus_manager, "communication"):
             logger.warning("No communication bus available for channel history")
             return []
 

@@ -893,9 +893,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             for edge in current_edges:
                 # Process this edge's connected node
-                result = await self._process_edge_connection(
-                    edge, current_node, visited_nodes, current_depth
-                )
+                result = await self._process_edge_connection(edge, current_node, visited_nodes, current_depth)
                 if result:
                     connected_node, should_continue = result
                     all_nodes.append(connected_node)

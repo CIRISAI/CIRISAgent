@@ -6,6 +6,7 @@ New simplified runtime that properly orchestrates all components.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -77,7 +78,9 @@ class CIRISRuntime:
         from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
 
         # Use bootstrap config if provided, otherwise construct from legacy parameters
-        self._parse_bootstrap_config(bootstrap, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs)
+        self._parse_bootstrap_config(
+            bootstrap, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
+        )
 
         self.adapters: List[BaseAdapterProtocol] = []
 
@@ -1219,7 +1222,7 @@ class CIRISRuntime:
         startup_channel_id: Optional[str],
         adapter_types: List[str],
         adapter_configs: Optional[dict],
-        kwargs: dict
+        kwargs: dict,
     ) -> None:
         """Parse bootstrap configuration or create from legacy parameters."""
         if bootstrap is not None:
@@ -1241,7 +1244,7 @@ class CIRISRuntime:
         startup_channel_id: Optional[str],
         adapter_types: List[str],
         adapter_configs: Optional[dict],
-        kwargs: dict
+        kwargs: dict,
     ) -> None:
         """Create bootstrap config from legacy parameters."""
         self.essential_config = essential_config
@@ -1252,9 +1255,10 @@ class CIRISRuntime:
         self._preload_tasks = []
 
         from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
+        from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
+
         adapter_load_requests = [
-            AdapterLoadRequest(adapter_type=atype, adapter_id=atype, auto_start=True)
-            for atype in adapter_types
+            AdapterLoadRequest(adapter_type=atype, adapter_id=atype, auto_start=True) for atype in adapter_types
         ]
         self.bootstrap = RuntimeBootstrapConfig(
             adapters=adapter_load_requests,
@@ -1281,8 +1285,9 @@ class CIRISRuntime:
 
                 # Create AdapterStartupContext
                 from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
                 context = AdapterStartupContext(
-                    essential_config=self.essential_config,
+                    essential_config=self.essential_config or EssentialConfig(),
                     modules_to_load=self.modules_to_load,
                     startup_channel_id=self.startup_channel_id or "",
                     debug=self.debug,
@@ -1302,4 +1307,3 @@ class CIRISRuntime:
                 logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
             except Exception as e:
                 logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
-

@@ -307,9 +307,7 @@ class ProcessingQueueItem(BaseModel):
     started_at: Optional[datetime] = Field(None, description="When processing started")
     status: str = Field("pending", description="Item status: pending, processing, completed, failed")
     source: Optional[str] = Field(None, description="Source of the queue item")
-    metadata: Dict[str, str | int | float | bool] = Field(
-        default_factory=dict, description="Additional item metadata"
-    )
+    metadata: Dict[str, str | int | float | bool] = Field(default_factory=dict, description="Additional item metadata")
 
 
 class QueuedThought(BaseModel):

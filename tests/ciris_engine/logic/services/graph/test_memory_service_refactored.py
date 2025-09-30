@@ -25,10 +25,7 @@ def memory_service(tmp_path):
     time_service = TimeService()
     time_service.start()
 
-    service = LocalGraphMemoryService(
-        db_path=str(db_path),
-        time_service=time_service
-    )
+    service = LocalGraphMemoryService(db_path=str(db_path), time_service=time_service)
     service.start()
     yield service
     service.stop()

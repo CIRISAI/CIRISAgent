@@ -136,7 +136,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 # Create minimal essential config if not present
                 essential_config = EssentialConfig(
                     agent_name=getattr(self.runtime, "agent_name", "ciris"),
-                    agent_version=getattr(self.runtime, "agent_version", "1.0.0")
+                    agent_version=getattr(self.runtime, "agent_version", "1.0.0"),
                 )
 
             startup_context = AdapterStartupContext(

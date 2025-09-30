@@ -49,6 +49,7 @@ class ApiPlatform(Service):
     def __init__(self, runtime: Any, context: Optional["AdapterStartupContext"] = None, **kwargs: Any) -> None:
         """Initialize API adapter."""
         from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
 

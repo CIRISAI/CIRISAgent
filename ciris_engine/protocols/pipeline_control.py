@@ -8,13 +8,43 @@ the thought processing pipeline.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 if TYPE_CHECKING:
-    from ciris_engine.schemas.telemetry.collector import SingleStepResult
-    from ciris_engine.schemas.services.runtime_control import ThoughtProcessingResult
+    from ciris_engine.schemas.telemetry.collector import SingleStepResult as SingleStepResultTelemetry
+    from ciris_engine.schemas.services.runtime_control import ThoughtProcessingResult as ThoughtProcessingResultModel
+
+from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResultUnion, ThoughtInPipeline
+
+
+# Pydantic models for pipeline control results
+class SingleStepResult(BaseModel):
+    """Result from executing a single step in the pipeline."""
+
+    success: bool = Field(..., description="Whether the step succeeded")
+    step_point: str = Field(..., description="Step point identifier")
+    message: str = Field(..., description="Result message")
+    thoughts_advanced: int = Field(default=0, description="Number of thoughts advanced")
+    thought_id: Optional[str] = Field(None, description="Thought ID if applicable")
+    step_results: List[Dict[str, Any]] = Field(default_factory=list, description="Step-specific results")
+    processing_time_ms: float = Field(..., description="Processing time in milliseconds")
+    pipeline_state: Dict[str, Any] = Field(default_factory=dict, description="Current pipeline state")
+
+
+class ThoughtProcessingResult(BaseModel):
+    """Result from processing a thought through a pipeline step."""
+
+    thought_id: str = Field(..., description="Unique thought ID")
+    round_id: int = Field(..., description="Round number")
+    task_id: str = Field(..., description="Source task ID")
+    step_point: str = Field(..., description="Step point identifier")
+    success: bool = Field(..., description="Whether processing succeeded")
+    step_data: Dict[str, Any] = Field(default_factory=dict, description="Step-specific data")
+    processing_time_ms: float = Field(..., description="Processing time in milliseconds")
+    timestamp: float = Field(..., description="Unix timestamp")
+
 
 # Alias for backwards compatibility
 StepResult = StepResultUnion
@@ -268,65 +298,65 @@ class PipelineController:
         result = await execute_all_steps()
         processing_time_ms = self._calculate_processing_time(start_time)
 
-        return {
-            "success": result["success"],
-            "step_point": "resume_paused_thoughts",
-            "message": result["message"],
-            "thoughts_advanced": result["thoughts_advanced"],
-            "step_results": [{"thoughts_advanced": result["thoughts_advanced"], "message": result["message"]}],
-            "processing_time_ms": processing_time_ms,
-            "pipeline_state": self._get_pipeline_state_dict(),
-        }
+        return SingleStepResult(
+            success=result["success"],
+            step_point="resume_paused_thoughts",
+            message=result["message"],
+            thoughts_advanced=result["thoughts_advanced"],
+            step_results=[{"thoughts_advanced": result["thoughts_advanced"], "message": result["message"]}],
+            processing_time_ms=processing_time_ms,
+            pipeline_state=self._get_pipeline_state_dict(),
+        )
 
     def _handle_no_pending_thoughts(self, start_time) -> SingleStepResult:
         """Handle case when no pending thoughts are available."""
         processing_time_ms = self._calculate_processing_time(start_time)
-        return {
-            "success": True,
-            "step_point": "no_work",
-            "message": "No pending thoughts to process",
-            "thoughts_advanced": 0,
-            "step_results": [],
-            "processing_time_ms": processing_time_ms,
-            "pipeline_state": self._get_pipeline_state_dict(),
-        }
+        return SingleStepResult(
+            success=True,
+            step_point="no_work",
+            message="No pending thoughts to process",
+            thoughts_advanced=0,
+            step_results=[],
+            processing_time_ms=processing_time_ms,
+            pipeline_state=self._get_pipeline_state_dict(),
+        )
 
     def _handle_successful_initiation(self, thought, start_time) -> SingleStepResult:
         """Handle successful thought processing initiation."""
         processing_time_ms = self._calculate_processing_time(start_time)
-        return {
-            "success": True,
-            "step_point": "initiate_processing",
-            "message": f"Initiated processing for thought {thought.thought_id} - will pause at first step",
-            "thought_id": thought.thought_id,
-            "step_results": [{"thought_id": thought.thought_id, "initiated": True}],
-            "processing_time_ms": processing_time_ms,
-            "pipeline_state": self._get_pipeline_state_dict(),
-        }
+        return SingleStepResult(
+            success=True,
+            step_point="initiate_processing",
+            message=f"Initiated processing for thought {thought.thought_id} - will pause at first step",
+            thought_id=thought.thought_id,
+            step_results=[{"thought_id": thought.thought_id, "initiated": True}],
+            processing_time_ms=processing_time_ms,
+            pipeline_state=self._get_pipeline_state_dict(),
+        )
 
     def _handle_initiation_error(self, error, start_time) -> SingleStepResult:
         """Handle error during thought processing initiation."""
         processing_time_ms = self._calculate_processing_time(start_time)
-        return {
-            "success": False,
-            "step_point": "error",
-            "message": f"Error initiating processing: {error}",
-            "step_results": [],
-            "processing_time_ms": processing_time_ms,
-            "pipeline_state": self._get_pipeline_state_dict(),
-        }
+        return SingleStepResult(
+            success=False,
+            step_point="error",
+            message=f"Error initiating processing: {error}",
+            step_results=[],
+            processing_time_ms=processing_time_ms,
+            pipeline_state=self._get_pipeline_state_dict(),
+        )
 
     def _handle_no_processor(self, start_time) -> SingleStepResult:
         """Handle case when no thought processor is available."""
         processing_time_ms = self._calculate_processing_time(start_time)
-        return {
-            "success": False,
-            "step_point": "error",
-            "message": "No thought processor available",
-            "step_results": [],
-            "processing_time_ms": processing_time_ms,
-            "pipeline_state": self._get_pipeline_state_dict(),
-        }
+        return SingleStepResult(
+            success=False,
+            step_point="error",
+            message="No thought processor available",
+            step_results=[],
+            processing_time_ms=processing_time_ms,
+            pipeline_state=self._get_pipeline_state_dict(),
+        )
 
     async def _initiate_thought_processing(self, thought, start_time) -> SingleStepResult:
         """Initiate processing for a pending thought."""
@@ -503,16 +533,20 @@ class PipelineController:
 
         processing_time_ms = (asyncio.get_event_loop().time() - processing_start) * 1000
 
-        step_result_dict = {
-            "thought_id": thought.thought_id if hasattr(thought, "thought_id") else str(thought),
-            "round_id": getattr(self, "_current_round", 1),
-            "task_id": getattr(thought, "task_id", getattr(thought, "source_task_id", None)),
-            "step_point": step_point.value,
-            "success": True,
-            "step_data": step_data,
-            "processing_time_ms": processing_time_ms,
-            "timestamp": asyncio.get_event_loop().time(),
-        }
+        # Create Pydantic result object
+        thought_id_str = thought.thought_id if hasattr(thought, "thought_id") else str(thought)
+        task_id_str = getattr(thought, "task_id", getattr(thought, "source_task_id", ""))
+
+        step_result = ThoughtProcessingResult(
+            thought_id=thought_id_str,
+            round_id=getattr(self, "_current_round", 1),
+            task_id=task_id_str,
+            step_point=step_point.value,
+            success=True,
+            step_data=step_data,
+            processing_time_ms=processing_time_ms,
+            timestamp=asyncio.get_event_loop().time(),
+        )
 
         # Always broadcast step results to connected clients
         try:
@@ -521,7 +555,7 @@ class PipelineController:
 
             # Create proper StepResultData object for streaming
             trace_context = TraceContext(
-                trace_id=f"trace_{thought.thought_id if hasattr(thought, 'thought_id') else str(thought)}",
+                trace_id=f"trace_{thought_id_str}",
                 span_id=f"span_{step_point.value}",
                 span_name=f"Step: {step_point.value}",
                 operation_name=step_point.value,
@@ -532,7 +566,7 @@ class PipelineController:
 
             span_attributes = [
                 SpanAttribute(key="step_point", value={"stringValue": step_point.value}),
-                SpanAttribute(key="thought_id", value={"stringValue": step_result_dict["thought_id"]}),
+                SpanAttribute(key="thought_id", value={"stringValue": thought_id_str}),
                 SpanAttribute(key="success", value={"boolValue": True}),
             ]
 
@@ -540,8 +574,8 @@ class PipelineController:
                 step_point=step_point.value,
                 success=True,
                 processing_time_ms=processing_time_ms,
-                thought_id=step_result_dict["thought_id"],
-                task_id=step_result_dict.get("task_id", ""),
+                thought_id=thought_id_str,
+                task_id=task_id_str,
                 step_data=step_data,
                 trace_context=trace_context,
                 span_attributes=span_attributes,
@@ -554,7 +588,7 @@ class PipelineController:
 
             logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
 
-        return step_result_dict
+        return step_result
 
     # Note: All step execution is now handled by step decorators in ThoughtProcessor phases
     # No manual step execution methods needed - decorators handle pause/resume automatically

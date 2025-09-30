@@ -19,6 +19,58 @@ from .system_snapshot_helpers import _resolve_channel_context
 logger = logging.getLogger(__name__)
 
 
+def _try_task_channel_id(task: Optional[Task]) -> Optional[str]:
+    """Try to get channel_id directly from task."""
+    if task and hasattr(task, "channel_id") and task.channel_id:
+        return str(task.channel_id)
+    return None
+
+
+def _try_app_config_home_channel(app_config: Optional[Any]) -> Optional[str]:
+    """Try to get channel_id from app_config home_channel."""
+    if app_config and hasattr(app_config, "home_channel"):
+        home_channel = getattr(app_config, "home_channel", None)
+        if home_channel:
+            return str(home_channel)
+    return None
+
+
+def _try_mode_specific_config(app_config: Optional[Any]) -> Optional[str]:
+    """Try mode-specific config attributes (discord_channel_id, cli_channel_id, api_channel_id)."""
+    if not app_config:
+        return None
+
+    config_attrs = ["discord_channel_id", "cli_channel_id", "api_channel_id"]
+    for attr in config_attrs:
+        if hasattr(app_config, attr):
+            config_channel_id = getattr(app_config, attr, None)
+            if config_channel_id:
+                logger.debug(f"Resolved channel_id '{config_channel_id}' from app_config.{attr}")
+                return str(config_channel_id)
+    return None
+
+
+def _try_mode_based_fallback(app_config: Optional[Any]) -> Optional[str]:
+    """Try mode-based fallbacks (CLI, API, DISCORD_DEFAULT)."""
+    if not app_config:
+        return None
+
+    mode = getattr(app_config, "agent_mode", "")
+    mode_lower = mode.lower() if mode else ""
+
+    if mode_lower == "cli":
+        logger.debug("Using CLI mode fallback channel_id")
+        return "CLI"
+    elif mode_lower == "api":
+        logger.debug("Using API mode fallback channel_id")
+        return "API"
+    elif mode == "discord":
+        logger.debug("Using Discord mode fallback channel_id")
+        return "DISCORD_DEFAULT"
+
+    return None
+
+
 async def resolve_channel_id_and_context(
     task: Optional[Task],
     thought: Any,
@@ -45,68 +97,40 @@ async def resolve_channel_id_and_context(
     Returns:
         Tuple of (channel_id, channel_context) where either may be None
     """
-    # First try memory-based resolution (most reliable)
+    # 1. Try memory-based resolution (most reliable)
     channel_id, channel_context = await _resolve_channel_context(task, thought, memory_service)
-
-    # If we got both from memory, we're done
-    if channel_id and channel_context:
-        logger.debug(f"Resolved channel_id '{channel_id}' from memory with context")
-        return channel_id, channel_context
-
-    # If we have channel_id but no context, continue with it
     if channel_id:
-        logger.debug(f"Resolved channel_id '{channel_id}' from memory without context")
+        logger.debug(f"Resolved channel_id '{channel_id}' from memory")
         return channel_id, channel_context
 
-    # Try task's direct channel_id field
-    if task and hasattr(task, "channel_id") and task.channel_id:
-        channel_id = str(task.channel_id)
+    # 2. Try task's direct channel_id field
+    channel_id = _try_task_channel_id(task)
+    if channel_id:
         logger.debug(f"Resolved channel_id '{channel_id}' from task.channel_id")
         return channel_id, None
 
-    # Try app config home channel
-    if app_config and hasattr(app_config, "home_channel"):
-        home_channel = getattr(app_config, "home_channel", None)
-        if home_channel:
-            channel_id = str(home_channel)
-            logger.debug(f"Resolved channel_id '{channel_id}' from app_config.home_channel")
-            return channel_id, None
+    # 3. Try app config home channel
+    channel_id = _try_app_config_home_channel(app_config)
+    if channel_id:
+        logger.debug(f"Resolved channel_id '{channel_id}' from app_config.home_channel")
+        return channel_id, None
 
-    # Try environment variable
-    env_channel_id = get_env_var("DISCORD_CHANNEL_ID")
-    if env_channel_id:
-        channel_id = env_channel_id
+    # 4. Try environment variable
+    channel_id = get_env_var("DISCORD_CHANNEL_ID")
+    if channel_id:
         logger.debug(f"Resolved channel_id '{channel_id}' from DISCORD_CHANNEL_ID env var")
         return channel_id, None
 
-    # Try mode-specific config attributes
-    if app_config:
-        config_attrs = ["discord_channel_id", "cli_channel_id", "api_channel_id"]
-        for attr in config_attrs:
-            if hasattr(app_config, attr):
-                config_channel_id = getattr(app_config, attr, None)
-                if config_channel_id:
-                    channel_id = str(config_channel_id)
-                    logger.debug(f"Resolved channel_id '{channel_id}' from app_config.{attr}")
-                    return channel_id, None
+    # 5. Try mode-specific config attributes
+    channel_id = _try_mode_specific_config(app_config)
+    if channel_id:
+        return channel_id, None
 
-    # Mode-based fallbacks
-    if app_config:
-        mode = getattr(app_config, "agent_mode", "")
-        mode_lower = mode.lower() if mode else ""
-        if mode_lower == "cli":
-            channel_id = "CLI"
-            logger.debug("Using CLI mode fallback channel_id")
-            return channel_id, None
-        elif mode_lower == "api":
-            channel_id = "API"
-            logger.debug("Using API mode fallback channel_id")
-            return channel_id, None
-        elif mode == "discord":
-            channel_id = "DISCORD_DEFAULT"
-            logger.debug("Using Discord mode fallback channel_id")
-            return channel_id, None
+    # 6. Mode-based fallbacks
+    channel_id = _try_mode_based_fallback(app_config)
+    if channel_id:
+        return channel_id, None
 
-    # Emergency fallback
+    # 7. Emergency fallback
     logger.warning("CRITICAL: Channel ID could not be resolved from any source")
     return "UNKNOWN", None

@@ -55,7 +55,11 @@ class CliPlatform(Service):
             template = getattr(runtime, "template", None)
             if template and hasattr(template, "cli_config") and template.cli_config:
                 try:
-                    config_dict = template.cli_config.dict() if hasattr(template.cli_config, "dict") else {}
+                    config_dict = (
+                        template.cli_config.model_dump()
+                        if hasattr(template.cli_config, "model_dump")
+                        else {}
+                    )
                     for key, value in config_dict.items():
                         if hasattr(self.config, key):
                             setattr(self.config, key, value)

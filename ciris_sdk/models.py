@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from .model_types import (
     AdapterConfig,
@@ -47,9 +47,11 @@ class GraphNode(BaseModel):
     updated_by: Optional[str] = Field(None, description="Who last updated")
     updated_at: Optional[datetime] = Field(None, description="When last updated")
 
-    class Config:
-        # Ensure datetime serialization works
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    model_config = ConfigDict()
+
+    @field_serializer('updated_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class MemoryOpResult(BaseModel):

@@ -7,7 +7,7 @@ Provides types needed for API authentication and user management.
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.services.authority_core import WARole
 
@@ -55,6 +55,4 @@ class PaginatedResponse(BaseModel):
     page_size: int = Field(..., description="Number of items per page")
     pages: int = Field(..., description="Total number of pages")
 
-    class Config:
-        # Allow generic types
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

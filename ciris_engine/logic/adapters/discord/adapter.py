@@ -77,7 +77,11 @@ class DiscordPlatform(Service):
             template = getattr(runtime, "template", None)
             if template and hasattr(template, "discord_config") and template.discord_config:
                 try:
-                    config_dict = template.discord_config.dict() if hasattr(template.discord_config, "dict") else {}
+                    config_dict = (
+                        template.discord_config.model_dump()
+                        if hasattr(template.discord_config, "model_dump")
+                        else {}
+                    )
                     for key, value in config_dict.items():
                         if hasattr(self.config, key):
                             setattr(self.config, key, value)

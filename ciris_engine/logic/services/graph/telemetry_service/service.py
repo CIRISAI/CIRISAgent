@@ -1494,7 +1494,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 behavioral_data = BehavioralData(
                     data_type="task",
                     content=(
-                        snapshot.current_task_details.dict() if hasattr(snapshot.current_task_details, "dict") else {}
+                        snapshot.current_task_details.model_dump() if hasattr(snapshot.current_task_details, "model_dump") else {}
                     ),
                     metadata={"thought_id": thought_id},
                 )
@@ -1505,8 +1505,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 behavioral_data = BehavioralData(
                     data_type="thought",
                     content=(
-                        snapshot.current_thought_summary.dict()
-                        if hasattr(snapshot.current_thought_summary, "dict")
+                        snapshot.current_thought_summary.model_dump()
+                        if hasattr(snapshot.current_thought_summary, "model_dump")
                         else {}
                     ),
                     metadata={"thought_id": thought_id},
@@ -1648,8 +1648,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             updated_by="telemetry_service",
             updated_at=self._now(),
             attributes={
-                "user_profiles": [p.dict() for p in user_profiles],
-                "channel_context": channel_context.dict() if channel_context else None,
+                "user_profiles": [p.model_dump() for p in user_profiles],
+                "channel_context": channel_context.model_dump() if channel_context else None,
                 "memory_type": MemoryType.SOCIAL.value,
                 "tags": {"thought_id": thought_id, "user_count": str(len(user_profiles))},
             },

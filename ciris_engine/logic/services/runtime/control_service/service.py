@@ -742,7 +742,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             schema = await tool_service.get_tool_schema(tool_name)
             if schema:
                 # ToolInfo expects 'parameters', not 'schema'
-                tool_info["parameters"] = schema.dict() if hasattr(schema, "dict") else schema
+                tool_info["parameters"] = schema.model_dump() if hasattr(schema, "model_dump") else schema
 
         return tool_info
 

@@ -135,7 +135,7 @@ class JobsResource:
         """
         request = JobCreateRequest(job_type=job_type, parameters=parameters, priority=priority)
 
-        result = await self._transport.request("POST", "/v1/jobs", json=request.dict())
+        result = await self._transport.request("POST", "/v1/jobs", json=request.model_dump())
 
         return JobCreateResponse(**result)
 

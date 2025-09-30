@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..telemetry_models import (
     MetricData,
@@ -43,8 +43,7 @@ class TelemetryOverview(BaseModel):
     messages_processed_24h: int = Field(default=0, description="Messages in last 24h")
     healthy_services: int = Field(default=0, description="Number of healthy services")
 
-    class Config:
-        extra = "allow"  # Allow additional fields
+    model_config = ConfigDict(extra="allow")
 
 
 class TelemetryMetrics(BaseModel):
@@ -52,8 +51,7 @@ class TelemetryMetrics(BaseModel):
 
     metrics: List[MetricData] = Field(..., description="List of metrics")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TelemetryMetricDetail(BaseModel):
@@ -63,8 +61,7 @@ class TelemetryMetricDetail(BaseModel):
     current: float = Field(..., description="Current value")
     unit: Optional[str] = Field(None, description="Unit of measurement")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TelemetryResources(BaseModel):
@@ -74,8 +71,7 @@ class TelemetryResources(BaseModel):
     limits: ResourceLimits = Field(..., description="Resource limits")
     health: Union[str, ResourceHealth] = Field(..., description="Health status")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TelemetryResourcesHistory(BaseModel):
@@ -85,8 +81,7 @@ class TelemetryResourcesHistory(BaseModel):
     cpu: List[ResourceHistoryPoint] = Field(..., description="CPU history")
     memory: List[ResourceHistoryPoint] = Field(..., description="Memory history")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     @classmethod
     def from_api_response(cls, data: dict) -> "TelemetryResourcesHistory":

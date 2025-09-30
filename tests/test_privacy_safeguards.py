@@ -2,7 +2,7 @@
 Tests for privacy safeguards and retention policies.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -47,8 +47,8 @@ class TestDataRetention:
         # Create a period summary (which tracks consolidation data)
         summary = TSDBPeriodSummary(
             period_label="2025080712",
-            period_start=(datetime.utcnow() - timedelta(hours=6)).isoformat(),
-            period_end=datetime.utcnow().isoformat(),
+            period_start=(datetime.now(timezone.utc) - timedelta(hours=6)).isoformat(),
+            period_end=datetime.now(timezone.utc).isoformat(),
             source_node_count=100,
             action_counts={"metrics_expired": 5, "metrics_created": 10},
         )
@@ -85,12 +85,12 @@ class TestPDMARedaction:
         from ciris_engine.logic.adapters.api.routes.agent import ConversationMessage
 
         message = ConversationMessage(
-            id="msg_123", author="user", content="What is the weather?", timestamp=datetime.utcnow(), is_agent=False
+            id="msg_123", author="user", content="What is the weather?", timestamp=datetime.now(timezone.utc), is_agent=False
         )
 
         # Should only have public fields
         public_fields = {"id", "author", "content", "timestamp", "is_agent"}
-        assert set(message.model_fields.keys()) == public_fields
+        assert set(ConversationMessage.model_fields.keys()) == public_fields
 
     @patch("ciris_engine.logic.adapters.api.routes.agent.logger")
     def test_pdma_logs_are_internal_only(self, mock_logger):
@@ -118,8 +118,8 @@ class TestTransparencyFeed:
         from ciris_engine.logic.adapters.api.routes.transparency import TransparencyStats
 
         stats = TransparencyStats(
-            period_start=datetime.utcnow() - timedelta(hours=24),
-            period_end=datetime.utcnow(),
+            period_start=datetime.now(timezone.utc) - timedelta(hours=24),
+            period_end=datetime.now(timezone.utc),
             total_interactions=150,
             actions_taken=[],
             deferrals_to_human=20,
@@ -151,7 +151,7 @@ class TestTransparencyFeed:
 
         policy = TransparencyPolicy(
             version="1.0",
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
             retention_days=14,
             commitments=[
                 "We do not train on your content",

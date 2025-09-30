@@ -6,7 +6,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.api.auth import AuthContext, PermissionRequestResponse, PermissionRequestUser, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
@@ -176,21 +176,23 @@ class CreateUserRequest(BaseModel):
 class MintWARequest(BaseModel):
     """Request to mint user as Wise Authority."""
 
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"wa_role": "AUTHORITY", "signature": "base64_encoded_signature"}}
+    )
+
     wa_role: WARole = Field(description="Role to grant: AUTHORITY or OBSERVER")
     signature: Optional[str] = Field(None, description="Ed25519 signature from ROOT private key")
     private_key_path: Optional[str] = Field(None, description="Path to ROOT private key for auto-signing")
-
-    class Config:
-        schema_extra = {"example": {"wa_role": "AUTHORITY", "signature": "base64_encoded_signature"}}
 
 
 class UpdatePermissionsRequest(BaseModel):
     """Request to update user's custom permissions."""
 
-    permissions: List[str] = Field(description="List of permission strings to grant")
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"permissions": ["send_messages", "custom_permission_1"]}}
+    )
 
-    class Config:
-        schema_extra = {"example": {"permissions": ["send_messages", "custom_permission_1"]}}
+    permissions: List[str] = Field(description="List of permission strings to grant")
 
 
 class WAKeyCheckResponse(BaseModel):

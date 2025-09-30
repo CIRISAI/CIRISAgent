@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 # Node Attribute Models
@@ -20,9 +20,11 @@ class BaseAttributes(BaseModel):
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
     tags: List[str] = Field(default_factory=list, description="Associated tags")
 
-    class Config:
-        extra = "allow"
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class MemoryAttributes(BaseAttributes):
@@ -61,8 +63,7 @@ class ProcessorResult(BaseModel):
     affected_items: int = Field(default=0, description="Number of items affected")
     details: Dict[str, str] = Field(default_factory=dict, description="Additional details")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # Config Models
@@ -74,8 +75,7 @@ class ConfigParam(BaseModel):
     type: str = Field(..., description="Value type")
     required: bool = Field(default=False, description="Whether required")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class AdapterConfig(BaseModel):
@@ -86,8 +86,7 @@ class AdapterConfig(BaseModel):
     feature_flags: Dict[str, bool] = Field(default_factory=dict, description="Feature toggles")
     limits: Dict[str, int] = Field(default_factory=dict, description="Resource limits")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 # Lineage Models
@@ -101,8 +100,9 @@ class LineageInfo(BaseModel):
     environment: str = Field(default="production", description="Deployment environment")
     features: List[str] = Field(default_factory=list, description="Enabled features")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer('build_date')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Processor State Models
@@ -115,8 +115,9 @@ class CognitiveStateInfo(BaseModel):
     previous_state: Optional[str] = Field(None, description="Previous state")
     transition_reason: Optional[str] = Field(None, description="Reason for transition")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer('entered_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class ProcessorStateInfo(BaseModel):
@@ -127,8 +128,7 @@ class ProcessorStateInfo(BaseModel):
     queue_sizes: Dict[str, int] = Field(default_factory=dict, description="Queue sizes by priority")
     active_handlers: List[str] = Field(default_factory=list, description="Active handler names")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 # Configuration Snapshot Models
@@ -141,8 +141,7 @@ class SystemConfiguration(BaseModel):
     limits: Dict[str, Union[int, float]] = Field(default_factory=dict, description="System limits")
     integrations: List[str] = Field(default_factory=list, description="Active integrations")
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 # Service Metadata Models
@@ -157,8 +156,9 @@ class ServiceMetadata(BaseModel):
     success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Success rate")
     average_response_ms: Optional[float] = Field(None, description="Average response time")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer('last_restart')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # Context Models
@@ -169,9 +169,11 @@ class BaseContext(BaseModel):
     request_id: Optional[str] = Field(None, description="Request identifier")
     trace_id: Optional[str] = Field(None, description="Trace identifier")
 
-    class Config:
-        extra = "allow"
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer('timestamp')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class DeferralContext(BaseContext):
@@ -210,8 +212,7 @@ class VerificationDetails(BaseModel):
     hash_value: Optional[str] = Field(None, description="Hash value")
     certificate: Optional[str] = Field(None, description="Certificate used")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class VerificationResult(BaseModel):
@@ -230,9 +231,13 @@ class VerificationResult(BaseModel):
     details: Optional[VerificationDetails] = Field(None, description="Verification details")
     errors: List[str] = Field(default_factory=list, description="Verification errors")
 
-    class Config:
-        extra = "allow"
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    model_config = ConfigDict(extra="allow")
+
+    @field_serializer('verified_at')
+    def serialize_datetime(self, dt: Union[str, datetime, None], _info):
+        if isinstance(dt, datetime):
+            return dt.isoformat()
+        return dt
 
 
 # Thought Models
@@ -248,5 +253,6 @@ class ThoughtContent(BaseModel):
     result: Optional[str] = Field(None, description="Processing result")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer('created_at', 'completed_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None

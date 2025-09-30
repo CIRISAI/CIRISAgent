@@ -6,7 +6,7 @@ Provides typed models for processor contexts instead of Dict[str, Any].
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.runtime.models import Thought
 
@@ -18,8 +18,7 @@ class ProcessorContext(BaseModel):
     prefetched_thought: Optional[Thought] = Field(None, description="Pre-fetched thought object")
     batch_context: Optional[Any] = Field(None, description="Batch processing context")
 
-    class Config:
-        extra = "allow"  # Allow additional fields for extensibility
+    model_config = ConfigDict(extra="allow")
 
 
 class BatchProcessingContext(BaseModel):
@@ -30,8 +29,7 @@ class BatchProcessingContext(BaseModel):
     current_index: int = Field(0, description="Current item index in batch")
     total_processed: int = Field(0, description="Total items processed so far")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 __all__ = ["ProcessorContext", "BatchProcessingContext"]

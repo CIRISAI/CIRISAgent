@@ -99,7 +99,7 @@ class TestCLIAdapterLifecycle:
         # Mock template with CLI config
         mock_template = Mock()
         mock_cli_config = Mock()
-        mock_cli_config.dict.return_value = {
+        mock_cli_config.model_dump.return_value = {
             "interactive": True,
             "prompt_prefix": "TEMPLATE> ",
             "max_history_entries": 200,

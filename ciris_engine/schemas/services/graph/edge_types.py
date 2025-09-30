@@ -6,7 +6,7 @@ Provides typed models for edge creation and management.
 
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EdgeAttributes(BaseModel):
@@ -16,8 +16,7 @@ class EdgeAttributes(BaseModel):
     confidence: float = Field(1.0, ge=0.0, le=1.0, description="Confidence score")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        extra = "allow"  # Allow additional fields for flexibility
+    model_config = ConfigDict(extra="allow")
 
 
 class ParticipantData(BaseModel):
@@ -30,8 +29,7 @@ class ParticipantData(BaseModel):
     last_seen: Optional[str] = Field(None, description="Last interaction timestamp")
     role: Optional[str] = Field(None, description="User role if known")
 
-    class Config:
-        extra = "allow"  # Allow additional fields for different platforms
+    model_config = ConfigDict(extra="allow")
 
 
 class EdgeSpecification(BaseModel):

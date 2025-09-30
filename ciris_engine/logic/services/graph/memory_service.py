@@ -259,8 +259,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         attributes_dict: dict
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
-        elif hasattr(attributes, "dict"):
-            attributes_dict = attributes.dict()
         else:  # isinstance(attributes, dict)
             attributes_dict = attributes
 
@@ -302,8 +300,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         attributes_dict: dict
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
-        elif hasattr(attributes, "dict"):
-            attributes_dict = attributes.dict()
         else:  # isinstance(attributes, dict)
             attributes_dict = attributes
 

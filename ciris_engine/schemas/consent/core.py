@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConsentStream(str, Enum):
@@ -48,8 +48,7 @@ class ConsentStatus(BaseModel):
     impact_score: float = Field(0.0, ge=0.0, description="Contribution to collective learning")
     attribution_count: int = Field(0, ge=0, description="Number of patterns attributed")
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class ConsentRequest(BaseModel):

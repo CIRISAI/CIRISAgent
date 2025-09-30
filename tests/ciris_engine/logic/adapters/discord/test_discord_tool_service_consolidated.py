@@ -6,7 +6,7 @@ for better efficiency while maintaining thorough coverage.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import discord
@@ -282,7 +282,7 @@ class TestSpecificTools:
         user.discriminator = "1234"
         user.avatar = None  # No avatar for simplicity
         user.bot = False
-        user.created_at = datetime.utcnow()
+        user.created_at = datetime.now(timezone.utc)
 
         # Mock fetch_user as async
         client.fetch_user = AsyncMock(return_value=user)

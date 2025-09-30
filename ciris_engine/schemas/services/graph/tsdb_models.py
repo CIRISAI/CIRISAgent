@@ -8,7 +8,7 @@ Follows 'No Dicts' principle.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SummaryAttributes(BaseModel):
@@ -41,8 +41,7 @@ class SummaryAttributes(BaseModel):
     messages_by_channel: Optional[Dict[str, Union[int, Dict[str, Any]]]] = Field(default=None)
     participants: Optional[Dict[str, Dict[str, Any]]] = Field(default=None)
 
-    class Config:
-        extra = "allow"  # Allow additional fields during migration
+    model_config = ConfigDict(extra="allow")
 
 
 class CompressionResult(BaseModel):
@@ -77,8 +76,7 @@ class EdgeAttributes(BaseModel):
         default_factory=dict, description="Edge metadata - typed values only"
     )
 
-    class Config:
-        extra = "forbid"  # Strict validation
+    model_config = ConfigDict(extra="forbid")
 
 
 class NodeReference(BaseModel):

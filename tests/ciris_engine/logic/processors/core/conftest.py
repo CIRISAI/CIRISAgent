@@ -157,10 +157,17 @@ def sample_processing_queue_item():
 
 @pytest.fixture
 def sample_final_result():
-    """Create a sample final result with selected action."""
+    """Create a sample final result with selected action.
+
+    Mocks a ConscienceApplicationResult which has:
+    - final_action: ActionSelectionDMAResult
+      - selected_action: HandlerActionType (enum with .value)
+    """
     result = Mock()
-    result.selected_action = Mock()
-    result.selected_action.value = "SPEAK"
+    # Set up the nested structure: final_action.selected_action.value
+    result.final_action = Mock()
+    result.final_action.selected_action = Mock()
+    result.final_action.selected_action.value = "SPEAK"
     return result
 
 

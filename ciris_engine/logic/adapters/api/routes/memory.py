@@ -110,7 +110,30 @@ async def query_memory(
                 scope=body.scope,
             )
 
-        # General search
+        # Determine user filtering before queries (for OBSERVER users)
+        from ciris_engine.schemas.api.auth import UserRole
+
+        user_role = auth.current_user.get("role", UserRole.OBSERVER)
+        if isinstance(user_role, str):
+            try:
+                user_role = UserRole(user_role)
+            except ValueError:
+                user_role = UserRole.OBSERVER
+
+        user_filter_ids = None
+        if should_apply_user_filtering(user_role):
+            auth_service = getattr(request.app.state, "authentication_service", None)
+            if not auth_service:
+                raise HTTPException(status_code=503, detail="Authentication service not available")
+
+            user_id = auth.current_user.get("user_id")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="User ID not found in token")
+
+            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+            user_filter_ids = list(allowed_user_ids)
+
+        # General search (with SQL Layer 1 filtering if OBSERVER)
         else:
             nodes = await search_nodes(
                 memory_service=memory_service,
@@ -122,29 +145,12 @@ async def query_memory(
                 tags=body.tags,
                 limit=body.limit,
                 offset=body.offset,
+                user_filter_ids=user_filter_ids,  # SECURITY LAYER 1: SQL-level filtering
             )
 
-        # SECURITY LAYER 2: Filter results by user attribution for OBSERVER users
-        from ciris_engine.schemas.api.auth import UserRole
-
-        user_role = auth.current_user.get("role", UserRole.OBSERVER)
-        if isinstance(user_role, str):
-            try:
-                user_role = UserRole(user_role)
-            except ValueError:
-                user_role = UserRole.OBSERVER
-
-        if should_apply_user_filtering(user_role):
-            auth_service = getattr(request.app.state, "authentication_service", None)
-            if not auth_service:
-                raise HTTPException(status_code=503, detail="Authentication service not available")
-
-            user_id = auth.current_user.get("user_id")
-            if not user_id:
-                raise HTTPException(status_code=401, detail="User ID not found in token")
-
-            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
-            nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
+        # SECURITY LAYER 2: Double-check with result filtering for defense in depth
+        if user_filter_ids:
+            nodes = filter_nodes_by_user_attribution(nodes, set(user_filter_ids))
 
         return SuccessResponse(
             data=nodes,
@@ -230,16 +236,7 @@ async def get_timeline(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
-        # Query timeline nodes
-        nodes = await query_timeline_nodes(
-            memory_service=memory_service,
-            hours=hours,
-            scope=scope,
-            node_type=type,
-            limit=1000,
-        )
-
-        # SECURITY LAYER 2: Filter results by user attribution for OBSERVER users
+        # Determine user filtering before queries (for OBSERVER users)
         from ciris_engine.schemas.api.auth import UserRole
 
         user_role = auth.current_user.get("role", UserRole.OBSERVER)
@@ -249,6 +246,7 @@ async def get_timeline(
             except ValueError:
                 user_role = UserRole.OBSERVER
 
+        user_filter_ids = None
         if should_apply_user_filtering(user_role):
             auth_service = getattr(request.app.state, "authentication_service", None)
             if not auth_service:
@@ -259,7 +257,21 @@ async def get_timeline(
                 raise HTTPException(status_code=401, detail="User ID not found in token")
 
             allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
-            nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
+            user_filter_ids = list(allowed_user_ids)
+
+        # Query timeline nodes (with SQL Layer 1 filtering if OBSERVER)
+        nodes = await query_timeline_nodes(
+            memory_service=memory_service,
+            hours=hours,
+            scope=scope,
+            node_type=type,
+            limit=1000,
+            user_filter_ids=user_filter_ids,  # SECURITY LAYER 1: SQL-level filtering
+        )
+
+        # SECURITY LAYER 2: Double-check with result filtering for defense in depth
+        if user_filter_ids:
+            nodes = filter_nodes_by_user_attribution(nodes, set(user_filter_ids))
 
         # Calculate time buckets
         now = datetime.now(timezone.utc)

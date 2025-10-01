@@ -20,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Added `tasks_by_user` (task count per user)
     - Added `user_id` field to individual task summaries
   - **Double-Protection Filtering**: Two-layer defense for OBSERVER users
-    - Layer 1: SQL-level filtering helpers (reserved for future optimization)
-    - Layer 2: Post-query result filtering (active - filters by `created_by`, `user_list`, `task_summaries[].user_id`, `conversations_by_channel[].author_id`)
+    - Layer 1: SQL-level filtering (ACTIVE - filters at database query level using JSON extraction and LIKE patterns)
+    - Layer 2: Post-query result filtering (ACTIVE - filters by `created_by`, `user_list`, `task_summaries[].user_id`, `conversations_by_channel[].author_id`)
   - **Protected Endpoints**:
     - `POST /memory/query` - OBSERVER users see only their memories
     - `GET /memory/timeline` - Filtered timeline view

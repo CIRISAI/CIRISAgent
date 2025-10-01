@@ -286,10 +286,7 @@ def get_active_task_for_channel(channel_id: str, db_path: Optional[str] = None) 
 
 
 def set_task_updated_info_flag(
-    task_id: str,
-    updated_content: str,
-    time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None
+    task_id: str, updated_content: str, time_service: TimeServiceProtocol, db_path: Optional[str] = None
 ) -> bool:
     """Set the updated_info_available flag on a task with new observation content.
 

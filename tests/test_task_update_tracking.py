@@ -41,6 +41,7 @@ class TestTaskUpdateTracking:
 
         # Cleanup
         import os
+
         try:
             os.unlink(db_path)
         except OSError:
@@ -119,6 +120,7 @@ class TestTaskUpdateTracking:
 
         # Second task created later
         import time
+
         time.sleep(0.01)  # Ensure different timestamps
         mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
 
@@ -148,10 +150,7 @@ class TestTaskUpdateTracking:
         add_task(sample_task, db_path=temp_db)
 
         success = set_task_updated_info_flag(
-            sample_task.task_id,
-            "New message: @user says hello",
-            mock_time_service,
-            db_path=temp_db
+            sample_task.task_id, "New message: @user says hello", mock_time_service, db_path=temp_db
         )
 
         assert success is True
@@ -178,7 +177,7 @@ class TestTaskUpdateTracking:
             final_action=FinalAction(
                 action_type=HandlerActionType.PONDER.value,
                 action_params={"questions": ["Why?"]},
-                reasoning="Need more thought"
+                reasoning="Need more thought",
             ),
             context=ThoughtContext(
                 task_id=sample_task.task_id,
@@ -191,10 +190,7 @@ class TestTaskUpdateTracking:
 
         # Should still succeed because PONDER is allowed
         success = set_task_updated_info_flag(
-            sample_task.task_id,
-            "New message arrived",
-            mock_time_service,
-            db_path=temp_db
+            sample_task.task_id, "New message arrived", mock_time_service, db_path=temp_db
         )
 
         assert success is True
@@ -215,7 +211,7 @@ class TestTaskUpdateTracking:
             final_action=FinalAction(
                 action_type=HandlerActionType.SPEAK.value,
                 action_params={"content": "Hello there"},
-                reasoning="Ready to respond"
+                reasoning="Ready to respond",
             ),
             context=ThoughtContext(
                 task_id=sample_task.task_id,
@@ -228,10 +224,7 @@ class TestTaskUpdateTracking:
 
         # Should fail because task already committed to SPEAK action
         success = set_task_updated_info_flag(
-            sample_task.task_id,
-            "New message arrived",
-            mock_time_service,
-            db_path=temp_db
+            sample_task.task_id, "New message arrived", mock_time_service, db_path=temp_db
         )
 
         assert success is False
@@ -255,9 +248,7 @@ class TestTaskUpdateTracking:
             updated_at=mock_time_service.now_iso(),
             thought_depth=0,
             final_action=FinalAction(
-                action_type=HandlerActionType.TASK_COMPLETE.value,
-                action_params={},
-                reasoning="Task done"
+                action_type=HandlerActionType.TASK_COMPLETE.value, action_params={}, reasoning="Task done"
             ),
             context=ThoughtContext(
                 task_id=sample_task.task_id,
@@ -270,22 +261,14 @@ class TestTaskUpdateTracking:
 
         # Should fail because task already committed to TASK_COMPLETE
         success = set_task_updated_info_flag(
-            sample_task.task_id,
-            "New message arrived",
-            mock_time_service,
-            db_path=temp_db
+            sample_task.task_id, "New message arrived", mock_time_service, db_path=temp_db
         )
 
         assert success is False
 
     def test_set_task_updated_info_flag_nonexistent_task(self, temp_db, mock_time_service):
         """Test setting flag on nonexistent task."""
-        success = set_task_updated_info_flag(
-            "nonexistent-task-id",
-            "New message",
-            mock_time_service,
-            db_path=temp_db
-        )
+        success = set_task_updated_info_flag("nonexistent-task-id", "New message", mock_time_service, db_path=temp_db)
 
         assert success is False
 

@@ -73,10 +73,14 @@ class EpistemicData(BaseModel):
 
     # Optional replacement action for conscience checks that override the selected action
     # Used by ThoughtDepthGuardrail and UpdatedStatusConscience
-    replacement_action: Optional[Dict[str, Any]] = Field(default=None, description="Replacement action when conscience overrides")
+    replacement_action: Optional[Dict[str, Any]] = Field(
+        default=None, description="Replacement action when conscience overrides"
+    )
 
     # Optional observation content for UpdatedStatusConscience
-    CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(default=None, description="New observation that arrived during processing")
+    CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(
+        default=None, description="New observation that arrived during processing"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

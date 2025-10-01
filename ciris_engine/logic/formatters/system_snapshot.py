@@ -17,6 +17,16 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
 
     lines = ["=== System Snapshot ==="]
 
+    # Time of System Snapshot
+    if hasattr(system_snapshot, "current_time_utc") and system_snapshot.current_time_utc:
+        lines.append("Time of System Snapshot:")
+        lines.append(f"  UTC: {system_snapshot.current_time_utc}")
+        if hasattr(system_snapshot, "current_time_chicago") and system_snapshot.current_time_chicago:
+            lines.append(f"  Chicago: {system_snapshot.current_time_chicago}")
+        if hasattr(system_snapshot, "current_time_tokyo") and system_snapshot.current_time_tokyo:
+            lines.append(f"  Tokyo: {system_snapshot.current_time_tokyo}")
+        lines.append("")  # Empty line for separation
+
     # CRITICAL: Check for resource alerts FIRST
     if hasattr(system_snapshot, "resource_alerts") and system_snapshot.resource_alerts:
         lines.append("🚨🚨🚨 CRITICAL RESOURCE ALERTS 🚨🚨🚨")

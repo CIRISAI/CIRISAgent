@@ -507,17 +507,16 @@ class BaseObserver[MessageT: BaseModel](ABC):
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
             # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel
-            from ciris_engine.logic.persistence.models.tasks import get_active_task_for_channel, set_task_updated_info_flag
+            from ciris_engine.logic.persistence.models.tasks import (
+                get_active_task_for_channel,
+                set_task_updated_info_flag,
+            )
 
             existing_task = get_active_task_for_channel(channel_id)
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
                 update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
-                success = set_task_updated_info_flag(
-                    existing_task.task_id,
-                    update_content,
-                    self.time_service
-                )
+                success = set_task_updated_info_flag(existing_task.task_id, update_content, self.time_service)
                 if success:
                     logger.info(
                         f"[OBSERVER] TASK UPDATE: Flagged existing task {existing_task.task_id} "

@@ -39,6 +39,7 @@ class TestUpdatedStatusConscience:
 
         # Cleanup
         import os
+
         try:
             os.unlink(db_path)
         except OSError:
@@ -60,8 +61,8 @@ class TestUpdatedStatusConscience:
     @pytest.fixture
     def patch_db_path(self, temp_db, monkeypatch):
         """Patch database functions to use temp_db."""
-        from ciris_engine.logic.persistence.models import tasks as tasks_module
         from ciris_engine.logic.persistence import db as db_module
+        from ciris_engine.logic.persistence.models import tasks as tasks_module
 
         original_get_task = tasks_module.get_task_by_id
         original_get_db_connection = db_module.get_db_connection
@@ -137,14 +138,13 @@ class TestUpdatedStatusConscience:
         assert result.status == ConscienceStatus.PASSED
 
     @pytest.mark.asyncio
-    async def test_fails_when_update_flag_set(self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service):
+    async def test_fails_when_update_flag_set(
+        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+    ):
         """Test that check fails when update flag is set."""
         # Set the update flag
         set_task_updated_info_flag(
-            sample_task.task_id,
-            "@newuser said: Actually, I changed my mind",
-            mock_time_service,
-            db_path=patch_db_path
+            sample_task.task_id, "@newuser said: Actually, I changed my mind", mock_time_service, db_path=patch_db_path
         )
 
         context = {"thought": sample_thought}
@@ -157,15 +157,12 @@ class TestUpdatedStatusConscience:
         assert result.epistemic_data.replacement_action is not None
 
     @pytest.mark.asyncio
-    async def test_clears_flag_after_detection(self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service):
+    async def test_clears_flag_after_detection(
+        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+    ):
         """Test that update flag is cleared after detection."""
         # Set the update flag
-        set_task_updated_info_flag(
-            sample_task.task_id,
-            "New content",
-            mock_time_service,
-            db_path=patch_db_path
-        )
+        set_task_updated_info_flag(sample_task.task_id, "New content", mock_time_service, db_path=patch_db_path)
 
         context = {"thought": sample_thought}
 
@@ -182,16 +179,13 @@ class TestUpdatedStatusConscience:
         assert result2.passed is True
 
     @pytest.mark.asyncio
-    async def test_replacement_action_is_ponder(self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service):
+    async def test_replacement_action_is_ponder(
+        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+    ):
         """Test that replacement action is PONDER with update content."""
         # Set the update flag with specific content
         update_content = "@alice: I need help with something else"
-        set_task_updated_info_flag(
-            sample_task.task_id,
-            update_content,
-            mock_time_service,
-            db_path=patch_db_path
-        )
+        set_task_updated_info_flag(sample_task.task_id, update_content, mock_time_service, db_path=patch_db_path)
 
         context = {"thought": sample_thought}
         result = await conscience.check(speak_action, context)
@@ -248,15 +242,12 @@ class TestUpdatedStatusConscience:
         assert result.status == ConscienceStatus.PASSED
 
     @pytest.mark.asyncio
-    async def test_update_message_formatting(self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service):
+    async def test_update_message_formatting(
+        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+    ):
         """Test that update message is properly formatted."""
         update_content = "@alice (ID: 12345): Actually never mind"
-        set_task_updated_info_flag(
-            sample_task.task_id,
-            update_content,
-            mock_time_service,
-            db_path=patch_db_path
-        )
+        set_task_updated_info_flag(sample_task.task_id, update_content, mock_time_service, db_path=patch_db_path)
 
         context = {"thought": sample_thought}
         result = await conscience.check(speak_action, context)

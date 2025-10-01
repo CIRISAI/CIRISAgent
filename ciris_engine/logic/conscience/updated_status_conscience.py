@@ -97,7 +97,9 @@ class UpdatedStatusConscience(ConscienceInterface):
         updated_content = getattr(task, "updated_info_content", "New observation received")
 
         # Get the original action description and channel info
-        original_action_desc = action.selected_action if isinstance(action.selected_action, str) else action.selected_action.value
+        original_action_desc = (
+            action.selected_action if isinstance(action.selected_action, str) else action.selected_action.value
+        )
         channel_id = getattr(task, "channel_id", "this channel")
 
         # Clear the flag so this only triggers once
@@ -105,20 +107,17 @@ class UpdatedStatusConscience(ConscienceInterface):
 
         try:
             with get_db_connection() as conn:
-                conn.execute(
-                    "UPDATE tasks SET updated_info_available = 0 WHERE task_id = ?",
-                    (task_id,)
-                )
+                conn.execute("UPDATE tasks SET updated_info_available = 0 WHERE task_id = ?", (task_id,))
                 conn.commit()
                 logger.info(f"Cleared updated_info_available flag for task {task_id}")
         except Exception as e:
             logger.error(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
 
         # Store the observation in the thought's payload for access during next processing round
-        if hasattr(thought, 'payload') and isinstance(thought.payload, dict):
-            thought.payload['CIRIS_OBSERVATION_UPDATED_STATUS'] = updated_content
+        if hasattr(thought, "payload") and isinstance(thought.payload, dict):
+            thought.payload["CIRIS_OBSERVATION_UPDATED_STATUS"] = updated_content
             logger.info(f"Added CIRIS_OBSERVATION_UPDATED_STATUS to thought {thought.thought_id} payload")
-        elif hasattr(thought, 'payload'):
+        elif hasattr(thought, "payload"):
             logger.warning(f"Thought {thought.thought_id} has payload but it's not a dict: {type(thought.payload)}")
         else:
             logger.warning(f"Thought {thought.thought_id} has no payload attribute")
@@ -127,7 +126,7 @@ class UpdatedStatusConscience(ConscienceInterface):
         questions = [
             f"I was going to {original_action_desc} in channel {channel_id}, but a new message arrived before I could.",
             f"The new observation: {updated_content}",
-            "Should I revise my action based on this new information?"
+            "Should I revise my action based on this new information?",
         ]
 
         # Create the PONDER action that will replace the original

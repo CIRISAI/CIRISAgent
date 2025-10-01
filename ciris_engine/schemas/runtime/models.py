@@ -76,8 +76,12 @@ class Task(BaseModel):
     signature: Optional[str] = Field(None, description="Cryptographic signature of task")
     signed_at: Optional[str] = Field(None, description="ISO8601 timestamp when signed")
     # Updated info tracking
-    updated_info_available: bool = Field(default=False, description="Flag indicating new observation arrived for this task")
-    updated_info_content: Optional[str] = Field(None, description="New observation content that arrived after task creation")
+    updated_info_available: bool = Field(
+        default=False, description="Flag indicating new observation arrived for this task"
+    )
+    updated_info_content: Optional[str] = Field(
+        None, description="New observation content that arrived after task creation"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

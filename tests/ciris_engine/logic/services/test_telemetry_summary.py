@@ -362,3 +362,63 @@ class TestSystemSnapshotIntegration:
         assert "⚠️ Error Rate: 2.5%" in formatted
         assert "Service Usage:" in formatted
         assert "- openai: 100 calls" in formatted
+
+    def test_system_snapshot_formatting_with_time_fields(self) -> None:
+        """Test formatting of system snapshot with time fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot with time fields
+        snapshot = SystemSnapshot(
+            channel_id="test",
+            current_time_utc="2025-10-01T14:30:00+00:00",
+            current_time_london="2025-10-01T15:30:00+01:00",
+            current_time_chicago="2025-10-01T09:30:00-05:00",
+            current_time_tokyo="2025-10-01T23:30:00+09:00",
+        )
+
+        # Format the snapshot
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify output contains time information
+        assert "Time of System Snapshot:" in formatted
+        assert "UTC: 2025-10-01T14:30:00+00:00" in formatted
+        assert "Chicago: 2025-10-01T09:30:00-05:00" in formatted
+        assert "Tokyo: 2025-10-01T23:30:00+09:00" in formatted
+        # London should NOT be displayed
+        assert "London" not in formatted
+
+    def test_system_snapshot_formatting_without_time_fields(self) -> None:
+        """Test formatting of system snapshot without time fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot without time fields
+        snapshot = SystemSnapshot(channel_id="test")
+
+        # Format the snapshot
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify output does not contain time section
+        assert "Time of System Snapshot:" not in formatted
+        assert "UTC:" not in formatted
+
+    def test_system_snapshot_formatting_with_partial_time_fields(self) -> None:
+        """Test formatting of system snapshot with only some time fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot with only UTC time
+        snapshot = SystemSnapshot(
+            channel_id="test",
+            current_time_utc="2025-10-01T14:30:00+00:00",
+        )
+
+        # Format the snapshot
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify output contains time section with UTC only
+        assert "Time of System Snapshot:" in formatted
+        assert "UTC: 2025-10-01T14:30:00+00:00" in formatted
+        assert "Chicago:" not in formatted
+        assert "Tokyo:" not in formatted

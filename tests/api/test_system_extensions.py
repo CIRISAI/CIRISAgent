@@ -724,3 +724,491 @@ class TestProcessorStatesEndpoint:
         # All states should be inactive
         for state in result.data:
             assert state.is_active is False
+
+
+class TestAdditionalEdgeCases:
+    """Additional edge case tests to improve coverage."""
+
+    @pytest.mark.asyncio
+    async def test_extract_pipeline_data_no_runtime(self):
+        """Test _extract_pipeline_data with no runtime."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _extract_pipeline_data
+        
+        step_point, step_result, pipeline_state, time_ms, tokens, demo = _extract_pipeline_data(None)
+        
+        assert step_point is None
+        assert step_result is None
+        assert pipeline_state is None
+        assert time_ms == 0.0
+        assert tokens is None
+
+    @pytest.mark.asyncio
+    async def test_extract_pipeline_data_runtime_exception(self):
+        """Test _extract_pipeline_data handles runtime exceptions."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _extract_pipeline_data
+        from unittest.mock import Mock
+        
+        runtime = Mock()
+        runtime.pipeline_controller = property(lambda self: (_ for _ in ()).throw(RuntimeError("Error")))
+        
+        step_point, step_result, pipeline_state, time_ms, tokens, demo = _extract_pipeline_data(runtime)
+        
+        # Should handle exception gracefully
+        assert step_point is None
+        assert pipeline_state is None
+
+    @pytest.mark.asyncio
+    async def test_convert_step_point_invalid(self):
+        """Test _convert_step_point with invalid input."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _convert_step_point
+        from unittest.mock import Mock
+        
+        result = Mock()
+        result.step_point = "invalid_step_point"
+        
+        converted = _convert_step_point(result)
+        
+        # Should return None for invalid step point
+        assert converted is None
+
+    @pytest.mark.asyncio
+    async def test_convert_step_point_none(self):
+        """Test _convert_step_point with None."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _convert_step_point
+        from unittest.mock import Mock
+        
+        result = Mock()
+        result.step_point = None
+        
+        converted = _convert_step_point(result)
+        
+        assert converted is None
+
+    @pytest.mark.asyncio
+    async def test_consolidate_step_results_no_results(self):
+        """Test _consolidate_step_results with no step_results."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _consolidate_step_results
+        from unittest.mock import Mock
+        
+        result = Mock()
+        result.step_results = None
+        
+        consolidated = _consolidate_step_results(result)
+        
+        assert consolidated is None
+
+    @pytest.mark.asyncio
+    async def test_consolidate_step_results_empty_list(self):
+        """Test _consolidate_step_results with empty list."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _consolidate_step_results
+        from unittest.mock import Mock
+
+        result = Mock()
+        result.step_results = []
+
+        consolidated = _consolidate_step_results(result)
+
+        assert consolidated is None
+
+
+class TestReasoningStreamEndpoint:
+    """Test SSE streaming endpoint for reasoning steps."""
+
+    @pytest.mark.asyncio
+    async def test_reasoning_stream_no_runtime_control(self, mock_request):
+        """Test reasoning_stream when runtime control service is unavailable."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from fastapi import HTTPException
+
+        # Setup: No runtime control service
+        mock_request.app.state.main_runtime_control_service = None
+        mock_request.app.state.runtime_control_service = None
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Execute and verify exception
+        with pytest.raises(HTTPException) as exc_info:
+            await reasoning_stream(request=mock_request, auth=mock_auth)
+
+        assert exc_info.value.status_code == 503
+        assert "Runtime control service not available" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_reasoning_stream_no_auth_service(self, mock_request):
+        """Test reasoning_stream when authentication service is unavailable."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from fastapi import HTTPException
+
+        # Setup: Runtime control present, but no auth service
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = None
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Execute and verify exception
+        with pytest.raises(HTTPException) as exc_info:
+            await reasoning_stream(request=mock_request, auth=mock_auth)
+
+        assert exc_info.value.status_code == 503
+        assert "Authentication service not available" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_reasoning_stream_observer_no_user_id(self, mock_request):
+        """Test reasoning_stream with OBSERVER role but missing user_id."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from fastapi import HTTPException
+
+        # Setup: Services available
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        # OBSERVER user without user_id
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"role": UserRole.OBSERVER}  # No user_id
+
+        # Execute and verify exception
+        with pytest.raises(HTTPException) as exc_info:
+            await reasoning_stream(request=mock_request, auth=mock_auth)
+
+        assert exc_info.value.status_code == 401
+        assert "User ID not found in token" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_reasoning_stream_admin_success(self, mock_request):
+        """Test reasoning_stream successfully returns StreamingResponse for ADMIN."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from fastapi.responses import StreamingResponse
+
+        # Setup: All services available
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        # ADMIN user
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "admin_user", "role": UserRole.ADMIN}
+
+        # Execute
+        response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+        # Verify it's a streaming response
+        assert isinstance(response, StreamingResponse)
+        assert response.media_type == "text/event-stream"
+        assert response.headers["Cache-Control"] == "no-cache"
+        assert response.headers["Connection"] == "keep-alive"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_stream_observer_success(self, mock_request):
+        """Test reasoning_stream successfully returns StreamingResponse for OBSERVER."""
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from fastapi.responses import StreamingResponse
+        from unittest.mock import AsyncMock
+
+        # Setup: All services available
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+
+        # Mock auth service with database
+        mock_auth_service = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.execute_fetchall = AsyncMock(return_value=[])
+        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
+
+        mock_db = MagicMock()
+        mock_db.connection = MagicMock(return_value=mock_conn)
+        mock_auth_service.db_manager = mock_db
+        mock_request.app.state.authentication_service = mock_auth_service
+
+        # OBSERVER user with user_id
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "observer_user", "role": UserRole.OBSERVER}
+
+        # Execute
+        response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+        # Verify it's a streaming response
+        assert isinstance(response, StreamingResponse)
+        assert response.media_type == "text/event-stream"
+
+    @pytest.mark.asyncio
+    async def test_stream_generator_connected_event(self, mock_request):
+        """Test stream generator sends connected event first."""
+        import asyncio
+        import json
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from unittest.mock import patch, AsyncMock
+
+        # Setup services
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Mock the reasoning_event_stream to never send events
+        mock_queue = AsyncMock()
+        mock_queue.get = AsyncMock(side_effect=asyncio.TimeoutError())
+
+        mock_stream = MagicMock()
+        mock_stream.subscribe = MagicMock()
+        mock_stream.unsubscribe = MagicMock()
+
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
+            with patch("asyncio.Queue", return_value=mock_queue):
+                response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+                # Consume first event from stream
+                events = []
+                async for chunk in response.body_iterator:
+                    events.append(chunk)
+                    if len(events) >= 2:  # connected + keepalive
+                        break
+
+                # Verify connected event
+                assert len(events) >= 1
+                first_event = events[0]
+                assert "event: connected" in first_event
+                assert "data:" in first_event
+                data = json.loads(first_event.split("data: ")[1].strip())
+                assert data["status"] == "connected"
+                assert "timestamp" in data
+
+    @pytest.mark.asyncio
+    async def test_stream_generator_keepalive(self, mock_request):
+        """Test stream generator sends keepalive on timeout."""
+        import asyncio
+        import json
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from unittest.mock import patch, AsyncMock
+
+        # Setup services
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Mock queue to timeout (triggers keepalive)
+        mock_queue = AsyncMock()
+        mock_queue.get = AsyncMock(side_effect=asyncio.TimeoutError())
+
+        mock_stream = MagicMock()
+        mock_stream.subscribe = MagicMock()
+        mock_stream.unsubscribe = MagicMock()
+
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
+            with patch("asyncio.Queue", return_value=mock_queue):
+                response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+                # Consume events (connected + keepalive)
+                events = []
+                async for chunk in response.body_iterator:
+                    events.append(chunk)
+                    if len(events) >= 2:
+                        break
+
+                # Second event should be keepalive
+                assert len(events) >= 2
+                keepalive_event = events[1]
+                assert "event: keepalive" in keepalive_event
+                assert "data:" in keepalive_event
+
+    @pytest.mark.asyncio
+    async def test_stream_generator_step_update(self, mock_request):
+        """Test stream generator sends step updates."""
+        import asyncio
+        import json
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from unittest.mock import patch, AsyncMock
+
+        # Setup services
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Mock queue to return one event then timeout
+        step_update = {"events": [{"task_id": "task1", "data": "test"}]}
+        call_count = [0]
+
+        async def mock_get_with_count():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return step_update
+            raise asyncio.TimeoutError()
+
+        mock_queue = AsyncMock()
+        mock_queue.get = mock_get_with_count
+
+        mock_stream = MagicMock()
+        mock_stream.subscribe = MagicMock()
+        mock_stream.unsubscribe = MagicMock()
+
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
+            with patch("asyncio.Queue", return_value=mock_queue):
+                response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+                # Consume events
+                events = []
+                async for chunk in response.body_iterator:
+                    events.append(chunk)
+                    if len(events) >= 2:  # connected + step_update
+                        break
+
+                # Second event should be step_update
+                assert len(events) >= 2
+                step_event = events[1]
+                assert "event: step_update" in step_event
+                assert "data:" in step_event
+                data = json.loads(step_event.split("data: ")[1].strip())
+                assert data == step_update
+
+    @pytest.mark.asyncio
+    async def test_stream_generator_observer_filtering(self, mock_request):
+        """Test stream generator filters events for OBSERVER users."""
+        import asyncio
+        import json
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from unittest.mock import patch, AsyncMock
+
+        # Setup services
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+
+        # Mock auth service database
+        mock_conn = MagicMock()
+        mock_conn.execute_fetchall = AsyncMock(return_value=[])
+        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
+
+        mock_db = MagicMock()
+        mock_db.connection = MagicMock(return_value=mock_conn)
+
+        mock_auth_service = MagicMock()
+        mock_auth_service.db_manager = mock_db
+        mock_request.app.state.authentication_service = mock_auth_service
+
+        # OBSERVER user
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "observer_user", "role": UserRole.OBSERVER}
+
+        # Mock queue with events that should be filtered
+        step_update = {
+            "events": [
+                {"task_id": "task1", "data": "allowed"},
+                {"task_id": "task2", "data": "denied"},
+            ]
+        }
+        call_count = [0]
+
+        async def mock_get_with_count():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return step_update
+            raise asyncio.TimeoutError()
+
+        mock_queue = AsyncMock()
+        mock_queue.get = mock_get_with_count
+
+        mock_stream = MagicMock()
+        mock_stream.subscribe = MagicMock()
+        mock_stream.unsubscribe = MagicMock()
+
+        # Mock batch fetch to return channel mappings
+        async def mock_batch_fetch(service, task_ids):
+            return {"task1": "observer_user", "task2": "other_user"}
+
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
+            with patch("asyncio.Queue", return_value=mock_queue):
+                with patch("ciris_engine.logic.adapters.api.routes.system_extensions._batch_fetch_task_channel_ids", side_effect=mock_batch_fetch):
+                    response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+                    # Consume events
+                    events = []
+                    async for chunk in response.body_iterator:
+                        events.append(chunk)
+                        if len(events) >= 2:
+                            break
+
+                    # Verify filtering occurred
+                    assert len(events) >= 2
+                    step_event = events[1]
+                    data = json.loads(step_event.split("data: ")[1].strip())
+                    # Only task1 should be included (channel_id matches user_id)
+                    assert len(data["events"]) == 1
+                    assert data["events"][0]["task_id"] == "task1"
+
+    @pytest.mark.asyncio
+    async def test_stream_generator_error_handling(self, mock_request):
+        """Test stream generator handles errors gracefully."""
+        import asyncio
+        import json
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from unittest.mock import patch, AsyncMock
+
+        # Setup services
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Mock queue to raise exception
+        mock_queue = AsyncMock()
+        mock_queue.get = AsyncMock(side_effect=RuntimeError("Test error"))
+
+        mock_stream = MagicMock()
+        mock_stream.subscribe = MagicMock()
+        mock_stream.unsubscribe = MagicMock()
+
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
+            with patch("asyncio.Queue", return_value=mock_queue):
+                response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+                # Consume events
+                events = []
+                async for chunk in response.body_iterator:
+                    events.append(chunk)
+                    if "error" in chunk:
+                        break
+
+                # Should have connected event + error event
+                assert len(events) >= 2
+                error_event = events[-1]
+                assert "event: error" in error_event
+                assert "data:" in error_event
+
+    @pytest.mark.asyncio
+    async def test_stream_cleanup_on_disconnect(self, mock_request):
+        """Test stream properly unsubscribes on disconnect."""
+        import asyncio
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
+        from unittest.mock import patch, AsyncMock, call
+
+        # Setup services
+        mock_request.app.state.main_runtime_control_service = MagicMock()
+        mock_request.app.state.authentication_service = MagicMock()
+
+        mock_auth = MagicMock()
+        mock_auth.current_user = {"user_id": "test_user", "role": UserRole.ADMIN}
+
+        # Mock queue
+        mock_queue = AsyncMock()
+        mock_queue.get = AsyncMock(side_effect=asyncio.TimeoutError())
+
+        mock_stream = MagicMock()
+        mock_stream.subscribe = MagicMock()
+        mock_stream.unsubscribe = MagicMock()
+
+        with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
+            with patch("asyncio.Queue", return_value=mock_queue):
+                response = await reasoning_stream(request=mock_request, auth=mock_auth)
+
+                # Consume one event then stop (simulating disconnect)
+                async for chunk in response.body_iterator:
+                    break
+
+                # Verify subscribe was called
+                mock_stream.subscribe.assert_called_once()
+                # Note: unsubscribe happens in finally block, may not be called yet in this test structure

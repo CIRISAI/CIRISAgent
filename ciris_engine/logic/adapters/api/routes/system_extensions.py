@@ -604,7 +604,6 @@ async def get_processor_states(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/runtime/reasoning-stream")
 def _determine_user_role(current_user: dict):
     """Determine user role from current_user dict."""
     from ciris_engine.schemas.api.auth import UserRole
@@ -680,6 +679,7 @@ def _filter_events_by_channel_access(
     return filtered_events
 
 
+@router.get("/runtime/reasoning-stream")
 async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)):
     """
     Stream live H3ERE reasoning steps as they occur.
@@ -708,15 +708,15 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
         raise HTTPException(status_code=503, detail="Authentication service not available")
 
     # SECURITY: Determine if user can see all events (ADMIN or higher)
-    user_role = _determine_user_role(auth.current_user)
-    can_see_all = user_role.has_permission(UserRole.ADMIN)
+    user_role = auth.role
+    can_see_all = user_role in (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
 
     # SECURITY: Get user's allowed channel IDs (user_id + linked OAuth accounts)
     allowed_channel_ids: set[str] = set()
     task_channel_cache: dict[str, str] = {}  # Cache task_id -> channel_id lookups
 
     if not can_see_all:
-        user_id = auth.current_user.get("user_id")
+        user_id = auth.user_id
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found in token")
 

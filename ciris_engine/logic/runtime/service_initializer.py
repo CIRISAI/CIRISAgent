@@ -265,7 +265,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.memory_service = LocalGraphMemoryService(
             db_path=db_path, time_service=self.time_service, secrets_service=self.secrets_service
         )
-        self.memory_service.start()
+        await self.memory_service.start()
         self._services_started_count += 1
 
         logger.info("Memory service initialized")

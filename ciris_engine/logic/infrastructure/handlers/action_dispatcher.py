@@ -88,11 +88,15 @@ class ActionDispatcher:
         and creating follow-up thoughts.
         """
 
-        # Get the action type (already typed as HandlerActionType in schema)
+        # Get the action type and extract final action
         # Handle both ConscienceApplicationResult (has final_action) and ActionSelectionDMAResult (has selected_action)
         if hasattr(action_selection_result, "final_action"):
-            action_type = action_selection_result.final_action.selected_action
+            # Extract final_action from ConscienceApplicationResult
+            final_action_result = action_selection_result.final_action
+            action_type = final_action_result.selected_action
         else:
+            # Already an ActionSelectionDMAResult
+            final_action_result = action_selection_result
             action_type = action_selection_result.selected_action
 
         if self.action_filter:
@@ -185,7 +189,8 @@ class ActionDispatcher:
                 )
 
             # The handler's `handle` method will take care of everything.
-            follow_up_thought_id = await handler_instance.handle(action_selection_result, thought, dispatch_context)
+            # Pass the final_action_result (ActionSelectionDMAResult) to the handler
+            follow_up_thought_id = await handler_instance.handle(final_action_result, thought, dispatch_context)
 
             # Create centralized audit entry for this action completion
             audit_result = None

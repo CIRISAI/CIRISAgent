@@ -334,20 +334,24 @@ class ShutdownProcessor(BaseProcessor):
                     task = persistence.get_task_by_id(thought.source_task_id)
                     from ciris_engine.logic.utils.context_utils import build_dispatch_context
 
+                    # Get action from final_action (result is ConscienceApplicationResult)
+                    action_result = result.final_action if hasattr(result, "final_action") else result
+                    action_type = action_result.selected_action if action_result else None
+
                     dispatch_context = build_dispatch_context(
                         thought=thought,
                         time_service=self.time_service,
                         task=task,
                         app_config=self.config,  # Use config accessor
                         round_number=0,
-                        action_type=result.selected_action if result else None,
+                        action_type=action_type,
                     )
 
                     await self.action_dispatcher.dispatch(
-                        action_selection_result=result, thought=thought, dispatch_context=dispatch_context
+                        action_selection_result=action_result, thought=thought, dispatch_context=dispatch_context
                     )
 
-                    logger.info(f"Dispatched {result.selected_action} action for shutdown thought")
+                    logger.info(f"Dispatched {action_type} action for shutdown thought")
                 else:
                     logger.warning(f"No result from processing shutdown thought {thought.thought_id}")
 

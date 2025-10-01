@@ -141,7 +141,11 @@ class StateManager:
         import datetime
 
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] [STATE] Transition: {old_state.value} -> {target_state.value}")  # Print to console
+        try:
+            print(f"[{timestamp}] [STATE] Transition: {old_state.value} -> {target_state.value}")  # Print to console
+        except (BrokenPipeError, OSError):
+            # Stdout closed during shutdown - this is expected in some contexts (e.g., QA runner)
+            pass
 
         # Initialize metadata for new state if needed
         if target_state not in self.state_metadata:

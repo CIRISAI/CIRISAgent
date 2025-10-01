@@ -37,6 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `DELETE /v1/users/{user_id}/oauth-links/{provider}/{external_id}` - Users can unlink from their own account, SYSTEM_ADMIN can unlink from any
   - Removed `users.write` permission requirement when operating on own account
   - Enables self-service OAuth account management for all authenticated users
+- **🐛 Memory Service Startup**: Fixed missing `await` on `memory_service.start()` causing circuit breaker failures
+  - `service_initializer.py:268` - Added missing `await` keyword
+  - Resolves RuntimeWarning: "coroutine 'LocalGraphMemoryService.start' was never awaited"
+  - Prevents memory service circuit breaker opening during TSDB consolidation at startup
+- **🐛 ConscienceApplicationResult Handling**: Fixed handlers receiving wrong result type
+  - `action_dispatcher.py:93-100,193` - Extract `final_action` from `ConscienceApplicationResult` before passing to handlers
+  - `shutdown_processor.py:338-339,347` - Extract action type from `final_action`
+  - Handlers expect `ActionSelectionDMAResult` but were receiving `ConscienceApplicationResult`
+  - Architecture: ASDMA produces `ActionSelectionDMAResult`, conscience wraps it in `ConscienceApplicationResult` with `original_action` and `final_action` fields
+  - Resolves AttributeError: 'ConscienceApplicationResult' object has no attribute 'action_parameters'
+- **🐛 Graceful Shutdown BrokenPipeError**: Fixed crash during shutdown when stdout is closed
+  - `state_manager.py:144` - Wrapped `print()` in try-except to catch BrokenPipeError/OSError
+  - Prevents processing loop crashes during graceful shutdown in non-interactive contexts (QA runner, systemd)
 - **🎯 ACTION_RESULT Event Streaming**: Fixed critical bugs preventing ACTION_RESULT events from streaming
   - **Attribute Access Bugs**: Fixed 3 bugs where code accessed `result.selected_action` instead of `result.final_action.selected_action`
     - `thought_processor/main.py:357` - Fixed telemetry recording

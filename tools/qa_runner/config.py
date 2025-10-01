@@ -96,7 +96,7 @@ class QAConfig:
 
     # Server management
     auto_start_server: bool = True
-    server_startup_timeout: float = 30.0  # Normal startup with wakeup takes ~10-15 seconds
+    server_startup_timeout: float = 60.0  # Startup with TSDB consolidation can take 30-45 seconds
     mock_llm: bool = True
     adapter: str = "api"
 

@@ -19,6 +19,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from .config import QAConfig, QAModule, QATestCase
+from .modules.filter_test_helper import FilterTestHelper
 from .server import APIServerManager
 
 
@@ -33,6 +34,7 @@ class QARunner:
         self.server_manager = APIServerManager(self.config)
         self.results: Dict[str, Dict] = {}
         self._startup_incidents_position = 0
+        self._filter_helper: Optional[FilterTestHelper] = None
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
@@ -62,6 +64,16 @@ class QARunner:
                 self.server_manager.stop()
             return False
 
+        # Initialize filter test helper if running filter tests
+        if QAModule.FILTERS in modules:
+            self._filter_helper = FilterTestHelper(self.config.base_url, self.token)
+            try:
+                self._filter_helper.start_monitoring()
+                self.console.print("[green]✅ SSE monitoring started for filter tests[/green]")
+            except Exception as e:
+                self.console.print(f"[yellow]⚠️  Failed to start SSE monitoring: {e}[/yellow]")
+                self._filter_helper = None
+
         # Collect all test cases
         all_tests = []
         for module in modules:
@@ -84,6 +96,11 @@ class QARunner:
 
         # Generate reports
         self._generate_reports()
+
+        # Stop filter helper if running
+        if self._filter_helper:
+            self._filter_helper.stop_monitoring()
+            self.console.print("[cyan]⏹️  SSE monitoring stopped[/cyan]")
 
         # Stop server if we started it
         if self.config.auto_start_server:
@@ -361,6 +378,28 @@ class QARunner:
 
                 if not passed:
                     all_passed = False
+
+                # FILTER TESTS: Wait for task completion between tests
+                # Each filter test creates a task that must complete before the next test
+                if test.module == QAModule.FILTERS:
+                    if self._filter_helper:
+                        if self.config.verbose:
+                            self.console.print(f"[dim]⏳ Waiting for TASK_COMPLETE event via SSE...[/dim]")
+
+                        # Wait for task completion via SSE (30s timeout per test)
+                        completed = self._filter_helper.wait_for_task_complete(task_id=None, timeout=30.0)
+
+                        if not completed:
+                            self.console.print(f"[yellow]⚠️  Task did not complete within 30s for {test.name}[/yellow]")
+                            # Give extra buffer time
+                            time.sleep(2.0)
+                        elif self.config.verbose:
+                            self.console.print(f"[green]✅ Task completed for {test.name}[/green]")
+                    else:
+                        # Fallback to simple delay if SSE monitoring not available
+                        if self.config.verbose:
+                            self.console.print(f"[dim]⏳ Waiting for task completion (fallback delay)...[/dim]")
+                        time.sleep(2.0)
 
                 progress.advance(task)
 

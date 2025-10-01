@@ -230,8 +230,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     def _create_protected_content(self, clean_content: str, message_number: int, total_messages: int) -> str:
         """Create anti-spoofing protected content with markers."""
+        timestamp = self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
         return (
-            f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START\n"
+            f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START [Timestamp: {timestamp}]\n"
             f"{clean_content}\n"
             f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
         )
@@ -578,14 +579,17 @@ class BaseObserver[MessageT: BaseModel](ABC):
             await self._add_custom_context_sections(task_lines, msg, history_context)
 
             task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
-            task_lines.append("CIRIS_OBSERVATION_START")
+            observation_timestamp = (
+                self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
+            )
+            task_lines.append(f"CIRIS_OBSERVATION_START [Timestamp: {observation_timestamp}]")
 
             # Build user lookup and format history lines
             user_lookup = self._build_user_lookup_from_history(msg, history_context)
             history_lines = self._format_history_lines(history_context, user_lookup)
             task_lines.extend(history_lines)
 
-            task_lines.append("CIRIS_OBSERVATION_END")
+            task_lines.append(f"CIRIS_OBSERVATION_END [Timestamp: {observation_timestamp}]")
 
             task_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="

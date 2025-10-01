@@ -236,7 +236,7 @@ class TestThoughtProcessor:
 
         assert result is not None
         # The conscience system may change the action, so check that we got a valid result
-        assert result.selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]
+        assert result.final_action.selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]
 
     @pytest.mark.asyncio
     async def test_process_thought_with_ponder(

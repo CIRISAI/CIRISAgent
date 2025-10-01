@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.0] - 2025-09-30
 
+### Added
+- **⏰ System Time Display**: Fixed system snapshot formatter to display "Time of System Snapshot" with UTC, Chicago, and Tokyo times
+- **📋 Task Update Tracking**: New 6th conscience check (UpdatedStatusConscience) detects new observations arriving during task processing
+  - Automatically forces PONDER when new messages arrive in active task's channel
+  - Stores observations in thought payload under `CIRIS_OBSERVATION_UPDATED_STATUS`
+  - Only updates tasks that haven't committed to non-PONDER actions
+  - Database migration 003 adds `updated_info_available` and `updated_info_content` to tasks table
+
 ### Fixed
 - **🎯 ACTION_RESULT Event Streaming**: Fixed critical bugs preventing ACTION_RESULT events from streaming
   - **Attribute Access Bugs**: Fixed 3 bugs where code accessed `result.selected_action` instead of `result.final_action.selected_action`

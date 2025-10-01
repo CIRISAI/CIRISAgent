@@ -48,9 +48,9 @@ def temp_db():
 async def memory_service(temp_db, secrets_service, time_service):
     """Create a memory service for testing."""
     service = LocalGraphMemoryService(db_path=temp_db, secrets_service=secrets_service, time_service=time_service)
-    service.start()
+    await service.start()
     yield service
-    service.stop()
+    await service.stop()
 
 
 @pytest.mark.asyncio

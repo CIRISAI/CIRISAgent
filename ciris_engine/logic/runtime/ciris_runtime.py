@@ -1105,7 +1105,7 @@ class CIRISRuntime:
             logger.debug("Runtime.run() exiting finally block")
 
     async def shutdown(self) -> None:
-        """Gracefully shutdown all services with consciousness preservation."""
+        """Gracefully shutdown all services with continuity awareness."""
         from .ciris_runtime_helpers import (
             cleanup_runtime_resources,
             execute_final_maintenance_tasks,
@@ -1155,7 +1155,7 @@ class CIRISRuntime:
         validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
 
-    async def _preserve_shutdown_consciousness(self) -> None:
+    async def _preserve_shutdown_continuity(self) -> None:
         """Preserve agent state for future reactivation."""
         try:
             from ciris_engine.schemas.runtime.extended import ShutdownContext
@@ -1188,14 +1188,14 @@ class CIRISRuntime:
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
                 attributes=GraphNodeAttributes(
-                    created_by="runtime_shutdown", tags=["shutdown", "consciousness_preservation"]
+                    created_by="runtime_shutdown", tags=["shutdown", "continuity_awareness"]
                 ),
             )
 
             # Store in memory service
             if self.memory_service:
                 await self.memory_service.memorize(shutdown_node)
-                logger.info(f"Preserved shutdown consciousness: {shutdown_node.id}")
+                logger.info(f"Preserved shutdown continuity: {shutdown_node.id}")
 
                 # Update identity with shutdown memory reference
                 if self.agent_identity and hasattr(self.agent_identity, "core_profile"):
@@ -1213,7 +1213,7 @@ class CIRISRuntime:
                         logger.debug("Agent identity updates stored in memory graph")
 
         except Exception as e:
-            logger.error(f"Failed to preserve shutdown consciousness: {e}")
+            logger.error(f"Failed to preserve shutdown continuity: {e}")
 
     def _parse_bootstrap_config(
         self,

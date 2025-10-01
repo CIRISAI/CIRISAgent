@@ -328,19 +328,19 @@ class TestSystemStatePreservation:
     async def test_preserve_with_identity(self, mock_runtime_with_identity):
         """Test successful state preservation with identity."""
         await preserve_critical_system_state(mock_runtime_with_identity)
-        mock_runtime_with_identity._preserve_shutdown_consciousness.assert_called_once()
+        mock_runtime_with_identity._preserve_shutdown_continuity.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_preserve_no_identity(self, mock_runtime):
         """Test when no agent identity exists."""
         mock_runtime.agent_identity = None
-        # Should complete without calling consciousness preservation
+        # Should complete without calling continuity awareness
         await preserve_critical_system_state(mock_runtime)
 
     @pytest.mark.asyncio
     async def test_preserve_with_error(self, mock_runtime_with_identity):
         """Test error handling in state preservation."""
-        mock_runtime_with_identity._preserve_shutdown_consciousness.side_effect = Exception("Preservation failed")
+        mock_runtime_with_identity._preserve_shutdown_continuity.side_effect = Exception("Preservation failed")
 
         # Should not raise exception
         await preserve_critical_system_state(mock_runtime_with_identity)

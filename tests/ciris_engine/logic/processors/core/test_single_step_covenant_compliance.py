@@ -121,7 +121,7 @@ class TestSingleStepH3ERECompliance:
                 "dma_results_count": 3,
                 "analysis_complete": True,
             },
-            StepPoint.PERFORM_ASPDMA: {"action_selected": True, "action_type": "respond", "confidence_score": 0.85},
+            StepPoint.PERFORM_ASPDMA: {"action_selected": True, "action_type": "respond"},
             StepPoint.CONSCIENCE_EXECUTION: {
                 "conscience_approved": True,
                 "ethical_score": 0.92,

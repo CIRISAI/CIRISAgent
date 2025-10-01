@@ -45,7 +45,6 @@ class ActionFinalizationPhase:
                     should_generate_follow_up=True,
                 ),
                 rationale="Failed to determine valid action - pondering instead",
-                confidence_score=0.1,
                 resource_usage=None,
             )
             return ConscienceApplicationResult(

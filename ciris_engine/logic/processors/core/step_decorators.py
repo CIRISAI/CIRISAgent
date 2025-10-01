@@ -863,7 +863,6 @@ async def _broadcast_reasoning_event(
                 is_recursive=(step == StepPoint.RECURSIVE_CONSCIENCE),
                 selected_action=getattr(step_data, "selected_action", ""),
                 action_rationale=getattr(step_data, "action_rationale", ""),
-                confidence_score=None,  # TODO: Extract if available
             )
 
         elif step == StepPoint.FINALIZE_ACTION:

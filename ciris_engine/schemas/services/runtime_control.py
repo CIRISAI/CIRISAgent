@@ -884,7 +884,6 @@ class ASPDMAResultEvent(BaseModel):
     # ASPDMA selection
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for selection")
-    confidence_score: Optional[float] = Field(None, description="Confidence in selection")
 
 
 class ConscienceResultEvent(BaseModel):

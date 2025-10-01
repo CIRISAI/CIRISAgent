@@ -346,7 +346,6 @@ class PatternEffectiveness(BaseModel):
     average_improvement: float = Field(0.0, description="Average improvement %")
     last_applied: Optional[datetime] = Field(None, description="When last applied")
     recommendation: str = Field("monitor", description="monitor, apply, ignore")
-    confidence_score: float = Field(0.0, description="Confidence in effectiveness metrics")
 
 
 class AnalysisStatus(BaseModel):

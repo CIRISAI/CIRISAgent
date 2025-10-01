@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **DSAR Ready**: User attribution preserved across all consolidated nodes for GDPR compliance
 
 ### Fixed
+- **🔐 OAuth Account Linking Permissions**: Users can now link/unlink their own OAuth accounts without admin privileges
+  - `POST /v1/users/{user_id}/oauth-links` - Users can link to their own account, SYSTEM_ADMIN can link to any
+  - `DELETE /v1/users/{user_id}/oauth-links/{provider}/{external_id}` - Users can unlink from their own account, SYSTEM_ADMIN can unlink from any
+  - Removed `users.write` permission requirement when operating on own account
+  - Enables self-service OAuth account management for all authenticated users
 - **🎯 ACTION_RESULT Event Streaming**: Fixed critical bugs preventing ACTION_RESULT events from streaming
   - **Attribute Access Bugs**: Fixed 3 bugs where code accessed `result.selected_action` instead of `result.final_action.selected_action`
     - `thought_processor/main.py:357` - Fixed telemetry recording

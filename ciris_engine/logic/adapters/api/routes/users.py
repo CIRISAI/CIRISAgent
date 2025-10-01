@@ -520,9 +520,16 @@ async def link_oauth_account(
     request: LinkOAuthAccountRequest,
     auth: AuthContext = Depends(get_auth_context),
     auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_WRITE])),
 ) -> UserDetail:
-    """Link an OAuth identity to an existing user."""
+    """
+    Link an OAuth identity to an existing user.
+
+    Users can link accounts to themselves without special permissions.
+    Only SYSTEM_ADMIN can link accounts to other users.
+    """
+    # Check permissions: users can link to their own account, SYSTEM_ADMIN can link to any
+    if user_id != auth.user_id:
+        await check_permissions([PERMISSION_USERS_WRITE])(auth, auth_service)
 
     user = await auth_service.link_user_oauth(
         wa_id=user_id,
@@ -536,7 +543,33 @@ async def link_oauth_account(
     if not user:
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
-    return await get_user(user_id, auth, auth_service, None)
+    # Build UserDetail response directly (no permission check needed for self)
+    permissions = auth_service.get_permissions_for_role(user.api_role)
+    api_keys = auth_service.list_user_api_keys(user_id)
+
+    return UserDetail(
+        user_id=user_id,
+        username=user.name,
+        auth_type=user.auth_type,
+        api_role=user.api_role,
+        wa_role=user.wa_role,
+        wa_id=user.wa_id if user.wa_role else None,
+        oauth_provider=user.oauth_provider,
+        oauth_email=user.oauth_email,
+        oauth_name=user.oauth_name,
+        oauth_picture=user.oauth_picture,
+        permission_requested_at=user.permission_requested_at,
+        oauth_external_id=user.oauth_external_id,
+        created_at=user.created_at,
+        last_login=user.last_login,
+        is_active=user.is_active,
+        permissions=permissions,
+        custom_permissions=user.custom_permissions,
+        wa_parent_id=user.wa_parent_id,
+        wa_auto_minted=user.wa_auto_minted,
+        api_keys_count=len(api_keys),
+        linked_oauth_accounts=_build_linked_accounts(user),
+    )
 
 
 @router.delete("/{user_id}/oauth-links/{provider}/{external_id}", response_model=UserDetail)
@@ -546,15 +579,48 @@ async def unlink_oauth_account(
     external_id: str,
     auth: AuthContext = Depends(get_auth_context),
     auth_service: APIAuthService = Depends(get_auth_service),
-    _: None = Depends(check_permissions([PERMISSION_USERS_WRITE])),
 ) -> UserDetail:
-    """Remove a linked OAuth identity from a user."""
+    """
+    Remove a linked OAuth identity from a user.
+
+    Users can unlink accounts from themselves without special permissions.
+    Only SYSTEM_ADMIN can unlink accounts from other users.
+    """
+    # Check permissions: users can unlink from their own account, SYSTEM_ADMIN can unlink from any
+    if user_id != auth.user_id:
+        await check_permissions([PERMISSION_USERS_WRITE])(auth, auth_service)
 
     user = await auth_service.unlink_user_oauth(user_id, provider, external_id)
     if not user:
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
-    return await get_user(user_id, auth, auth_service, None)
+    # Build UserDetail response directly (no permission check needed for self)
+    permissions = auth_service.get_permissions_for_role(user.api_role)
+    api_keys = auth_service.list_user_api_keys(user_id)
+
+    return UserDetail(
+        user_id=user_id,
+        username=user.name,
+        auth_type=user.auth_type,
+        api_role=user.api_role,
+        wa_role=user.wa_role,
+        wa_id=user.wa_id if user.wa_role else None,
+        oauth_provider=user.oauth_provider,
+        oauth_email=user.oauth_email,
+        oauth_name=user.oauth_name,
+        oauth_picture=user.oauth_picture,
+        permission_requested_at=user.permission_requested_at,
+        oauth_external_id=user.oauth_external_id,
+        created_at=user.created_at,
+        last_login=user.last_login,
+        is_active=user.is_active,
+        permissions=permissions,
+        custom_permissions=user.custom_permissions,
+        wa_parent_id=user.wa_parent_id,
+        wa_auto_minted=user.wa_auto_minted,
+        api_keys_count=len(api_keys),
+        linked_oauth_accounts=_build_linked_accounts(user),
+    )
 
 
 @router.post("/{user_id}/mint-wa", response_model=UserDetail)

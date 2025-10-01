@@ -35,6 +35,16 @@ class StepPoint(str, Enum):
     ROUND_COMPLETE = "round_complete"  # 10) Processing round completed
 
 
+class ReasoningEvent(str, Enum):
+    """Simplified reasoning stream events - 5 clear result events."""
+
+    SNAPSHOT_AND_CONTEXT = "snapshot_and_context"  # 1) System snapshot + gathered context
+    DMA_RESULTS = "dma_results"  # 2) All 3 DMA results (csdma, dsdma, aspdma)
+    ASPDMA_RESULT = "aspdma_result"  # 3) Selected action + rationale
+    CONSCIENCE_RESULT = "conscience_result"  # 4) Conscience evaluation + final action
+    ACTION_RESULT = "action_result"  # 5) Action execution outcome + audit trail
+
+
 class StepDuration(str, Enum):
     """How long to wait before building the round queue."""
 
@@ -825,3 +835,94 @@ class AllStepsExecutionResult(BaseModel):
     thoughts_advanced: int = Field(0, description="Number of thoughts advanced")
     message: Optional[str] = Field(None, description="Result message")
     error: Optional[str] = Field(None, description="Error message if failed")
+
+
+# ============================================================================
+# Simplified Reasoning Stream Event Results (5 clear events, no UI metadata)
+# ============================================================================
+
+
+class SnapshotAndContextResult(BaseModel):
+    """Event 1: System snapshot and gathered context for this thought/task."""
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.SNAPSHOT_AND_CONTEXT)
+    thought_id: str = Field(..., description="Thought being processed")
+    task_id: Optional[str] = Field(None, description="Parent task if any")
+    timestamp: str = Field(..., description="Event timestamp")
+
+    # System snapshot
+    system_snapshot: Dict[str, Any] = Field(..., description="Current system state")
+
+    # Gathered context
+    context: str = Field(..., description="Context gathered for DMA processing")
+    context_size: int = Field(..., description="Size of context in characters")
+
+
+class DMAResultsEvent(BaseModel):
+    """Event 2: Results from all 3 DMA perspectives."""
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.DMA_RESULTS)
+    thought_id: str = Field(..., description="Thought being processed")
+    task_id: Optional[str] = Field(None, description="Parent task if any")
+    timestamp: str = Field(..., description="Event timestamp")
+
+    # All 3 DMA results
+    csdma: Optional[str] = Field(None, description="Cognitive State DMA result")
+    dsdma: Optional[str] = Field(None, description="Decision Space DMA result")
+    aspdma_options: Optional[str] = Field(None, description="ASPDMA available options")
+
+
+class ASPDMAResultEvent(BaseModel):
+    """Event 3: Selected action and rationale from ASPDMA."""
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.ASPDMA_RESULT)
+    thought_id: str = Field(..., description="Thought being processed")
+    task_id: Optional[str] = Field(None, description="Parent task if any")
+    timestamp: str = Field(..., description="Event timestamp")
+
+    # ASPDMA selection
+    selected_action: str = Field(..., description="Action selected by ASPDMA")
+    action_rationale: str = Field(..., description="Rationale for selection")
+    confidence_score: Optional[float] = Field(None, description="Confidence in selection")
+
+
+class ConscienceResultEvent(BaseModel):
+    """Event 4: Conscience evaluation and final action selected."""
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.CONSCIENCE_RESULT)
+    thought_id: str = Field(..., description="Thought being processed")
+    task_id: Optional[str] = Field(None, description="Parent task if any")
+    timestamp: str = Field(..., description="Event timestamp")
+
+    # Conscience evaluation
+    conscience_passed: bool = Field(..., description="Whether conscience checks passed")
+    conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
+    epistemic_data: Dict[str, Any] = Field(
+        default_factory=dict, description="Rich conscience evaluation data from all checks"
+    )
+
+    # Final action
+    final_action: str = Field(..., description="Final action after conscience evaluation")
+    action_was_overridden: bool = Field(..., description="Whether conscience changed the action")
+
+
+class ActionResultEvent(BaseModel):
+    """Event 5: Action execution outcome with audit trail."""
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.ACTION_RESULT)
+    thought_id: str = Field(..., description="Thought being processed")
+    task_id: Optional[str] = Field(None, description="Parent task if any")
+    timestamp: str = Field(..., description="Event timestamp")
+
+    # Action execution
+    action_executed: str = Field(..., description="Action that was executed")
+    execution_success: bool = Field(..., description="Whether execution succeeded")
+    execution_time_ms: float = Field(..., description="Execution time in milliseconds")
+    follow_up_thought_id: Optional[str] = Field(None, description="Follow-up thought created if any")
+    error: Optional[str] = Field(None, description="Error message if execution failed")
+
+    # Audit trail (tamper-evident)
+    audit_entry_id: Optional[str] = Field(None, description="ID of audit entry for this action")
+    audit_sequence_number: Optional[int] = Field(None, description="Sequence number in audit hash chain")
+    audit_entry_hash: Optional[str] = Field(None, description="Hash of audit entry (tamper-evident)")
+    audit_signature: Optional[str] = Field(None, description="Cryptographic signature of audit entry")

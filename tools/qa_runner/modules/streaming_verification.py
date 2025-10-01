@@ -172,10 +172,19 @@ class StreamingVerificationModule:
                                                 if isinstance(step_result, dict)
                                                 else None
                                             )
+                                            dma_results = (
+                                                step_result.get("dma_results")
+                                                if isinstance(step_result, dict)
+                                                else None
+                                            )
                                             step_result_details["has_selected_action"] = bool(selected_action)
                                             step_result_details["has_action_rationale"] = bool(action_rationale)
+                                            step_result_details["has_dma_results"] = bool(dma_results)
+                                            step_result_details["dma_results"] = dma_results  # Include actual data for verification
                                             if not selected_action:
                                                 step_result_issues.append("perform_aspdma missing selected_action")
+                                            if not dma_results:
+                                                step_result_issues.append("perform_aspdma missing dma_results (should have csdma/dsdma)")
 
                                         elif step == "conscience_execution":
                                             conscience_passed = (
@@ -607,6 +616,25 @@ class StreamingVerificationModule:
                 message = f"✅ All {len(result['received_steps'])} required steps received"
                 if task_tracking["all_have_task_id"]:
                     message += f"\n✅ Task ID propagation working ({task_tracking['task_ids_seen']} unique IDs)"
+
+                # Check PERFORM_ASPDMA dma_results specifically
+                aspdma_issues = step_validation.get("perform_aspdma_issues", [])
+                aspdma_with_dma_results = sum(
+                    1 for detail in result.get("all_step_details", [])
+                    if detail.get("step") == "perform_aspdma"
+                    and detail.get("step_result_details", {}).get("has_dma_results")
+                )
+                aspdma_total = sum(
+                    1 for detail in result.get("all_step_details", [])
+                    if detail.get("step") == "perform_aspdma"
+                )
+
+                if aspdma_total > 0:
+                    if aspdma_with_dma_results == aspdma_total:
+                        message += f"\n✅ PERFORM_ASPDMA dma_results present ({aspdma_with_dma_results}/{aspdma_total})"
+                    else:
+                        message += f"\n⚠️  PERFORM_ASPDMA dma_results missing in {aspdma_total - aspdma_with_dma_results}/{aspdma_total} steps"
+
                 if total_issues == 0:
                     message += f"\n✅ All step results have valid data"
                 else:
@@ -622,6 +650,11 @@ class StreamingVerificationModule:
                         "duration": f"{result['duration']:.2f}s",
                         "task_id_tracking": task_tracking,
                         "typed_step_results_tracking": typed_results_tracking,
+                        "perform_aspdma_dma_results": {
+                            "total_aspdma_steps": aspdma_total,
+                            "with_dma_results": aspdma_with_dma_results,
+                            "missing_dma_results": aspdma_total - aspdma_with_dma_results,
+                        },
                     },
                 }
             else:

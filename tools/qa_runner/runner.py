@@ -588,6 +588,18 @@ class QARunner:
 
                         custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
                         if custom_result["success"]:
+                            # Print validation details
+                            if self.config.verbose:
+                                self.console.print(f"[cyan]{custom_result.get('message', 'Custom test passed')}[/cyan]")
+                                if "details" in custom_result:
+                                    import json
+                                    details = custom_result["details"]
+                                    # Print dma_results validation specifically
+                                    if "perform_aspdma_dma_results" in details:
+                                        dma_info = details["perform_aspdma_dma_results"]
+                                        self.console.print(f"[cyan]   PERFORM_ASPDMA DMA Results: {dma_info['with_dma_results']}/{dma_info['total_aspdma_steps']} steps have dma_results[/cyan]")
+                                        if dma_info["missing_dma_results"] > 0:
+                                            self.console.print(f"[yellow]   ⚠️  {dma_info['missing_dma_results']} PERFORM_ASPDMA steps missing dma_results![/yellow]")
                             result = {
                                 "success": True,
                                 "status_code": 200,
@@ -596,6 +608,8 @@ class QARunner:
                                 "custom_result": custom_result,
                             }
                         else:
+                            if self.config.verbose:
+                                self.console.print(f"[yellow]{custom_result.get('message', 'Custom test failed')}[/yellow]")
                             return False, {
                                 "success": False,
                                 "error": custom_result.get("message", "Custom test failed"),

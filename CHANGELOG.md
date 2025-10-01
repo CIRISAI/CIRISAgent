@@ -5,7 +5,7 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2025-09-30
+## [1.2.0] - 2025-10-01
 
 ### Added
 - **⏰ System Time Display**: Fixed system snapshot formatter to display "Time of System Snapshot" with UTC, Chicago, and Tokyo times
@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stores observations in thought payload under `CIRIS_OBSERVATION_UPDATED_STATUS`
   - Only updates tasks that haven't committed to non-PONDER actions
   - Database migration 003 adds `updated_info_available` and `updated_info_content` to tasks table
+- **🔐 Memory Access Control (OBSERVER Filtering)**: Complete role-based filtering for memory query/search endpoints
+  - **TaskSummaryNode Enhancement**: Now preserves user attribution data for DSAR/consent/filtering
+    - Added `user_list` (all unique user IDs involved in tasks)
+    - Added `tasks_by_user` (task count per user)
+    - Added `user_id` field to individual task summaries
+  - **Double-Protection Filtering**: Two-layer defense for OBSERVER users
+    - Layer 1: SQL-level filtering helpers (reserved for future optimization)
+    - Layer 2: Post-query result filtering (active - filters by `created_by`, `user_list`, `task_summaries[].user_id`, `conversations_by_channel[].author_id`)
+  - **Protected Endpoints**:
+    - `POST /memory/query` - OBSERVER users see only their memories
+    - `GET /memory/timeline` - Filtered timeline view
+    - `GET /memory/{node_id}` - Returns 403 Forbidden if unauthorized (not 404)
+    - `GET /memory/recall/{node_id}` - Same protection as above
+  - **OAuth Integration**: Automatically includes memories from linked Discord/Google accounts
+  - **ADMIN Bypass**: ADMIN/AUTHORITY/SYSTEM_ADMIN see all memories without filtering
+  - **DSAR Ready**: User attribution preserved across all consolidated nodes for GDPR compliance
 
 ### Fixed
 - **🎯 ACTION_RESULT Event Streaming**: Fixed critical bugs preventing ACTION_RESULT events from streaming

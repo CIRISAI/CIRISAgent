@@ -20,6 +20,7 @@ from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
 
 from ..dependencies.auth import AuthContext, require_admin, require_observer
+from .memory_filters import filter_nodes_by_user_attribution, get_user_allowed_ids, should_apply_user_filtering
 
 # Import extracted modules
 from .memory_models import MemoryStats, QueryRequest, StoreRequest, TimelineResponse
@@ -83,6 +84,8 @@ async def query_memory(
     Query memories with flexible filters (RECALL).
 
     Supports querying by ID, type, text, time range, and relationships.
+
+    SECURITY: OBSERVER users only see nodes they created or participated in.
     """
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
@@ -121,6 +124,28 @@ async def query_memory(
                 offset=body.offset,
             )
 
+        # SECURITY LAYER 2: Filter results by user attribution for OBSERVER users
+        from ciris_engine.schemas.api.auth import UserRole
+
+        user_role = auth.current_user.get("role", UserRole.OBSERVER)
+        if isinstance(user_role, str):
+            try:
+                user_role = UserRole(user_role)
+            except ValueError:
+                user_role = UserRole.OBSERVER
+
+        if should_apply_user_filtering(user_role):
+            auth_service = getattr(request.app.state, "authentication_service", None)
+            if not auth_service:
+                raise HTTPException(status_code=503, detail="Authentication service not available")
+
+            user_id = auth.current_user.get("user_id")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="User ID not found in token")
+
+            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+            nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
+
         return SuccessResponse(
             data=nodes,
             meta=ResponseMetadata(
@@ -130,6 +155,8 @@ async def query_memory(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to query memory: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -195,6 +222,8 @@ async def get_timeline(
     Get a timeline view of recent memories.
 
     Returns memories organized chronologically with time buckets.
+
+    SECURITY: OBSERVER users only see nodes they created or participated in.
     """
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
@@ -209,6 +238,28 @@ async def get_timeline(
             node_type=type,
             limit=1000,
         )
+
+        # SECURITY LAYER 2: Filter results by user attribution for OBSERVER users
+        from ciris_engine.schemas.api.auth import UserRole
+
+        user_role = auth.current_user.get("role", UserRole.OBSERVER)
+        if isinstance(user_role, str):
+            try:
+                user_role = UserRole(user_role)
+            except ValueError:
+                user_role = UserRole.OBSERVER
+
+        if should_apply_user_filtering(user_role):
+            auth_service = getattr(request.app.state, "authentication_service", None)
+            if not auth_service:
+                raise HTTPException(status_code=503, detail="Authentication service not available")
+
+            user_id = auth.current_user.get("user_id")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="User ID not found in token")
+
+            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+            nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
 
         # Calculate time buckets
         now = datetime.now(timezone.utc)
@@ -527,6 +578,8 @@ async def recall_by_id(
     Recall a specific node by ID (legacy endpoint).
 
     Use GET /memory/{node_id} for new implementations.
+
+    SECURITY: OBSERVER users can only access nodes they created or participated in.
     """
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
@@ -546,7 +599,38 @@ async def recall_by_id(
         nodes = await memory_service.recall(query)
         if not nodes:
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
-        node = nodes[0]
+
+        # SECURITY LAYER 2: Filter by user attribution for OBSERVER users
+        from ciris_engine.schemas.api.auth import UserRole
+
+        user_role = auth.current_user.get("role", UserRole.OBSERVER)
+        if isinstance(user_role, str):
+            try:
+                user_role = UserRole(user_role)
+            except ValueError:
+                user_role = UserRole.OBSERVER
+
+        if should_apply_user_filtering(user_role):
+            auth_service = getattr(request.app.state, "authentication_service", None)
+            if not auth_service:
+                raise HTTPException(status_code=503, detail="Authentication service not available")
+
+            user_id = auth.current_user.get("user_id")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="User ID not found in token")
+
+            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+            filtered_nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
+
+            # If filtering removed the node, return 403 Forbidden
+            if not filtered_nodes:
+                raise HTTPException(
+                    status_code=403, detail=f"Access denied: You do not have permission to view this memory node"
+                )
+
+            node = filtered_nodes[0]
+        else:
+            node = nodes[0]
 
         return SuccessResponse(
             data=node,

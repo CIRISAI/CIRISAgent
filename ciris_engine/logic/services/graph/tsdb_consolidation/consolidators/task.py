@@ -52,6 +52,8 @@ class TaskConsolidator:
         # Aggregate task data
         tasks_by_status: Dict[str, int] = defaultdict(int)
         tasks_by_channel: Dict[str, int] = defaultdict(int)
+        tasks_by_user: Dict[str, int] = defaultdict(int)
+        unique_users = set()
         handler_usage: Dict[str, int] = defaultdict(int)
         task_durations = []
         task_summaries = {}
@@ -63,6 +65,12 @@ class TaskConsolidator:
             task_id = task.task_id
             status = task.status
             channel = task.channel_id or "unknown"
+            user_id = task.user_id
+
+            # Track unique users and count tasks per user
+            if user_id:
+                unique_users.add(user_id)
+                tasks_by_user[user_id] += 1
 
             # Count by status and channel
             tasks_by_status[status] += 1
@@ -104,6 +112,7 @@ class TaskConsolidator:
                 "description": task.result_summary or "",
                 "status": status,
                 "channel": channel,
+                "user_id": user_id,  # OBSERVER filtering: preserve user attribution
                 "duration_ms": duration_ms,
                 "thought_count": len(thoughts),
                 "handlers_selected": handlers_selected,
@@ -138,6 +147,9 @@ class TaskConsolidator:
             "total_tasks": total_tasks,
             "tasks_by_status": dict(tasks_by_status),
             "tasks_by_channel": dict(tasks_by_channel),
+            "tasks_by_user": dict(tasks_by_user),  # OBSERVER filtering: task count per user
+            "user_list": list(unique_users),  # OBSERVER filtering: all users involved
+            "unique_users": len(unique_users),
             "completion_rate": completion_rate,
             "total_thoughts": total_thoughts,
             "avg_thoughts_per_task": avg_thoughts,

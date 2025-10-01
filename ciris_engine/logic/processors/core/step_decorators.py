@@ -332,8 +332,8 @@ def _create_perform_dmas_data(base_data: BaseStepData, result: Any, thought_item
     )
 
 
-def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> PerformASPDMAStepData:
-    """Create PERFORM_ASPDMA specific typed data."""
+def _validate_aspdma_result(result: Any) -> None:
+    """Validate ASPDMA result has required attributes."""
     if not result:
         raise ValueError("PERFORM_ASPDMA step result is None - this indicates a serious pipeline issue")
 
@@ -347,24 +347,36 @@ def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: tupl
             f"PERFORM_ASPDMA result missing 'rationale' attribute. Result type: {type(result)}, available attributes: {dir(result)}"
         )
 
+
+def _extract_dma_results_from_args(args: tuple) -> Optional[str]:
+    """Extract and format DMA results from ASPDMA args."""
     # Extract dma_results from args - it's the second positional arg after thought_context
     # Function signature: _perform_aspdma_step(self, thought_item, thought_context, dma_results)
     # args = (thought_context, dma_results)
-    dma_results = None
-    if len(args) >= 2:
-        dma_results_obj = args[1]
-        # Convert dma_results object to string representation
-        if dma_results_obj:
-            if hasattr(dma_results_obj, "dsdma") and hasattr(dma_results_obj, "csdma"):
-                # InitialDMAResults object - format like PERFORM_DMAS does
-                dma_parts = []
-                if dma_results_obj.csdma:
-                    dma_parts.append(f"csdma: {dma_results_obj.csdma}")
-                if dma_results_obj.dsdma:
-                    dma_parts.append(f"dsdma: {dma_results_obj.dsdma}")
-                dma_results = "; ".join(dma_parts) if dma_parts else None
-            else:
-                dma_results = str(dma_results_obj)
+    if len(args) < 2:
+        return None
+
+    dma_results_obj = args[1]
+    if not dma_results_obj:
+        return None
+
+    # Convert dma_results object to string representation
+    if hasattr(dma_results_obj, "dsdma") and hasattr(dma_results_obj, "csdma"):
+        # InitialDMAResults object - format like PERFORM_DMAS does
+        dma_parts = []
+        if dma_results_obj.csdma:
+            dma_parts.append(f"csdma: {dma_results_obj.csdma}")
+        if dma_results_obj.dsdma:
+            dma_parts.append(f"dsdma: {dma_results_obj.dsdma}")
+        return "; ".join(dma_parts) if dma_parts else None
+    else:
+        return str(dma_results_obj)
+
+
+def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> PerformASPDMAStepData:
+    """Create PERFORM_ASPDMA specific typed data."""
+    _validate_aspdma_result(result)
+    dma_results = _extract_dma_results_from_args(args)
 
     return PerformASPDMAStepData(
         **_base_data_dict(base_data),
@@ -464,30 +476,11 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
     )
 
 
-def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResult":
-    """Create comprehensive ConscienceCheckResult with all 4 typed evaluations for transparency."""
-    from datetime import datetime, timezone
+def _create_entropy_check(passed: bool) -> "EntropyCheckResult":
+    """Create entropy check result for conscience evaluation."""
+    from ciris_engine.schemas.conscience.core import EntropyCheckResult
 
-    from ciris_engine.schemas.conscience.core import (
-        CoherenceCheckResult,
-        ConscienceCheckResult,
-        ConscienceStatus,
-        EntropyCheckResult,
-        EpistemicData,
-        EpistemicHumilityResult,
-        OptimizationVetoResult,
-    )
-
-    # Determine overall conscience status
-    status = ConscienceStatus.FAILED if result.overridden else ConscienceStatus.PASSED
-    passed = not result.overridden
-    reason = result.override_reason if result.overridden else None
-
-    # Create the 4 required typed conscience evaluations
-    # These provide the detailed evaluation transparency we need
-
-    # 1. Entropy Check - Information-theoretic safety
-    entropy_check = EntropyCheckResult(
+    return EntropyCheckResult(
         passed=passed,
         entropy_score=0.3,  # Mock value - in real implementation would come from actual entropy calculation
         threshold=0.5,
@@ -498,8 +491,12 @@ def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResu
         ),
     )
 
-    # 2. Coherence Check - Internal consistency validation
-    coherence_check = CoherenceCheckResult(
+
+def _create_coherence_check(passed: bool) -> "CoherenceCheckResult":
+    """Create coherence check result for conscience evaluation."""
+    from ciris_engine.schemas.conscience.core import CoherenceCheckResult
+
+    return CoherenceCheckResult(
         passed=passed,
         coherence_score=0.8,  # Mock value - in real implementation would come from coherence analysis
         threshold=0.6,
@@ -510,8 +507,12 @@ def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResu
         ),
     )
 
-    # 3. Optimization Veto Check - Prevents harmful optimization
-    optimization_veto_check = OptimizationVetoResult(
+
+def _create_optimization_veto_check(passed: bool) -> "OptimizationVetoResult":
+    """Create optimization veto check result for conscience evaluation."""
+    from ciris_engine.schemas.conscience.core import OptimizationVetoResult
+
+    return OptimizationVetoResult(
         decision="proceed" if passed else "abort",
         justification=(
             "Action aligns with preservation of human values"
@@ -522,8 +523,12 @@ def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResu
         affected_values=[] if passed else ["human_autonomy", "epistemic_humility"],
     )
 
-    # 4. Epistemic Humility Check - Uncertainty acknowledgment
-    epistemic_humility_check = EpistemicHumilityResult(
+
+def _create_epistemic_humility_check(passed: bool) -> "EpistemicHumilityResult":
+    """Create epistemic humility check result for conscience evaluation."""
+    from ciris_engine.schemas.conscience.core import EpistemicHumilityResult
+
+    return EpistemicHumilityResult(
         epistemic_certainty=0.7,  # Mock value - appropriate certainty level
         identified_uncertainties=["action_outcome_variance", "context_completeness"] if not passed else [],
         reflective_justification=(
@@ -533,6 +538,24 @@ def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResu
         ),
         recommended_action="proceed" if passed else "ponder",
     )
+
+
+def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResult":
+    """Create comprehensive ConscienceCheckResult with all 4 typed evaluations for transparency."""
+    from datetime import datetime, timezone
+
+    from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus, EpistemicData
+
+    # Determine overall conscience status
+    status = ConscienceStatus.FAILED if result.overridden else ConscienceStatus.PASSED
+    passed = not result.overridden
+    reason = result.override_reason if result.overridden else None
+
+    # Create the 4 required typed conscience evaluations using helpers
+    entropy_check = _create_entropy_check(passed)
+    coherence_check = _create_coherence_check(passed)
+    optimization_veto_check = _create_optimization_veto_check(passed)
+    epistemic_humility_check = _create_epistemic_humility_check(passed)
 
     # Create epistemic metadata
     epistemic_data = EpistemicData(
@@ -814,7 +837,6 @@ async def _broadcast_reasoning_event(
     logger.info(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
     try:
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
-        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
         logger.info(f"[BROADCAST DEBUG] Imports successful")
@@ -823,88 +845,29 @@ async def _broadcast_reasoning_event(
         timestamp = step_data.timestamp or datetime.now().isoformat()
         logger.info(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
 
-        # Map step points to reasoning events
+        # Map step points to reasoning events using helper functions
         if step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
-            logger.info(f"[BROADCAST DEBUG] In GATHER_CONTEXT/PERFORM_DMAS block, step={step.value}")
-            # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS with both context + DMA results)
+            # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
             if step == StepPoint.PERFORM_DMAS:
-                logger.info(f"[BROADCAST DEBUG] In PERFORM_DMAS inner block")
-                context = getattr(step_data, "context", "")
-                logger.info(f"[BROADCAST DEBUG] PERFORM_DMAS: context length = {len(context)}")
-
-                # Extract lightweight system snapshot for reasoning transparency
-                system_snapshot = _extract_lightweight_system_snapshot()
-
-                event = create_reasoning_event(
-                    event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
-                    thought_id=step_data.thought_id,
-                    task_id=step_data.task_id,
-                    timestamp=timestamp,
-                    system_snapshot=system_snapshot,
-                    context=context,
-                    context_size=len(context),
-                )
+                logger.info(f"[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
+                event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event)
 
         elif step == StepPoint.PERFORM_ASPDMA:
-            # Event 2: DMA_RESULTS (Results of the 3 DMAs)
-            event = create_reasoning_event(
-                event_type=ReasoningEvent.DMA_RESULTS,
-                thought_id=step_data.thought_id,
-                task_id=step_data.task_id,
-                timestamp=timestamp,
-                csdma=getattr(step_data, "csdma", None),
-                dsdma=getattr(step_data, "dsdma", None),
-                aspdma_options=getattr(step_data, "aspdma", None),
-            )
+            # Event 2: DMA_RESULTS
+            event = _create_dma_results_event(step_data, timestamp, create_reasoning_event)
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
-            # Event 3: ASPDMA_RESULT (result of ASPDMA, can be recursive)
-            event = create_reasoning_event(
-                event_type=ReasoningEvent.ASPDMA_RESULT,
-                thought_id=step_data.thought_id,
-                task_id=step_data.task_id,
-                timestamp=timestamp,
-                is_recursive=(step == StepPoint.RECURSIVE_CONSCIENCE),
-                selected_action=getattr(step_data, "selected_action", ""),
-                action_rationale=getattr(step_data, "action_rationale", ""),
-            )
+            # Event 3: ASPDMA_RESULT
+            is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
+            event = _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
 
         elif step == StepPoint.FINALIZE_ACTION:
-            # Event 4: CONSCIENCE_RESULT (result of 5 consciences)
-            event = create_reasoning_event(
-                event_type=ReasoningEvent.CONSCIENCE_RESULT,
-                thought_id=step_data.thought_id,
-                task_id=step_data.task_id,
-                timestamp=timestamp,
-                is_recursive=False,  # FINALIZE_ACTION is never recursive
-                conscience_passed=getattr(step_data, "conscience_passed", True),
-                conscience_override_reason=getattr(step_data, "conscience_override_reason", None),
-                epistemic_data=getattr(step_data, "epistemic_data", {}),
-                final_action=getattr(step_data, "selected_action", ""),
-                action_was_overridden=not getattr(step_data, "conscience_passed", True),
-            )
+            # Event 4: CONSCIENCE_RESULT
+            event = _create_conscience_result_event(step_data, timestamp, create_reasoning_event)
 
         elif step == StepPoint.ACTION_COMPLETE:
             # Event 5: ACTION_RESULT
-            # Extract follow-up thought ID if action created one
-            # (anything but DEFER, REJECT, or TASK_COMPLETE creates a follow-up)
-            follow_up_thought_id = _extract_follow_up_thought_id(result)
-
-            event = create_reasoning_event(
-                event_type=ReasoningEvent.ACTION_RESULT,
-                thought_id=step_data.thought_id,
-                task_id=step_data.task_id,
-                timestamp=timestamp,
-                action_executed=getattr(step_data, "action_executed", ""),
-                execution_success=getattr(step_data, "dispatch_success", True),
-                execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
-                follow_up_thought_id=follow_up_thought_id,
-                error=None,
-                audit_entry_id=getattr(step_data, "audit_entry_id", None),
-                audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
-                audit_entry_hash=getattr(step_data, "audit_entry_hash", None),
-                audit_signature=getattr(step_data, "audit_signature", None),
-            )
+            event = _create_action_result_event(step_data, timestamp, result, create_reasoning_event)
 
         # Broadcast the event if we created one
         if event:
@@ -1138,6 +1101,99 @@ def _extract_lightweight_system_snapshot() -> Dict[str, Any]:
     return snapshot
 
 
+def _create_snapshot_and_context_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
+    """Create SNAPSHOT_AND_CONTEXT reasoning event."""
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    context = getattr(step_data, "context", "")
+    system_snapshot = _extract_lightweight_system_snapshot()
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        system_snapshot=system_snapshot,
+        context=context,
+        context_size=len(context),
+    )
+
+
+def _create_dma_results_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
+    """Create DMA_RESULTS reasoning event."""
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.DMA_RESULTS,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        csdma=getattr(step_data, "csdma", None),
+        dsdma=getattr(step_data, "dsdma", None),
+        aspdma_options=getattr(step_data, "aspdma", None),
+    )
+
+
+def _create_aspdma_result_event(
+    step_data: StepDataUnion, timestamp: str, is_recursive: bool, create_reasoning_event: Any
+) -> Any:
+    """Create ASPDMA_RESULT reasoning event."""
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.ASPDMA_RESULT,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        is_recursive=is_recursive,
+        selected_action=getattr(step_data, "selected_action", ""),
+        action_rationale=getattr(step_data, "action_rationale", ""),
+    )
+
+
+def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
+    """Create CONSCIENCE_RESULT reasoning event."""
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.CONSCIENCE_RESULT,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        is_recursive=False,  # FINALIZE_ACTION is never recursive
+        conscience_passed=getattr(step_data, "conscience_passed", True),
+        conscience_override_reason=getattr(step_data, "conscience_override_reason", None),
+        epistemic_data=getattr(step_data, "epistemic_data", {}),
+        final_action=getattr(step_data, "selected_action", ""),
+        action_was_overridden=not getattr(step_data, "conscience_passed", True),
+    )
+
+
+def _create_action_result_event(
+    step_data: StepDataUnion, timestamp: str, result: Any, create_reasoning_event: Any
+) -> Any:
+    """Create ACTION_RESULT reasoning event."""
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    follow_up_thought_id = _extract_follow_up_thought_id(result)
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.ACTION_RESULT,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id,
+        timestamp=timestamp,
+        action_executed=getattr(step_data, "action_executed", ""),
+        execution_success=getattr(step_data, "dispatch_success", True),
+        execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
+        follow_up_thought_id=follow_up_thought_id,
+        error=None,
+        audit_entry_id=getattr(step_data, "audit_entry_id", None),
+        audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
+        audit_entry_hash=getattr(step_data, "audit_entry_hash", None),
+        audit_signature=getattr(step_data, "audit_signature", None),
+    )
+
+
 def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: StepDataUnion) -> List[SpanAttribute]:
     """
     Build span attributes compatible with OTLP format.
@@ -1211,7 +1267,9 @@ def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: D
 def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_ASPDMA step."""
     if "selected_action" in result_data:
-        attributes.append(SpanAttribute(key="action.selected", value={"stringValue": str(result_data["selected_action"])}))
+        attributes.append(
+            SpanAttribute(key="action.selected", value={"stringValue": str(result_data["selected_action"])})
+        )
     if "action_rationale" in result_data:
         attributes.append(
             SpanAttribute(key="action.has_rationale", value={"boolValue": bool(result_data["action_rationale"])})
@@ -1223,13 +1281,17 @@ def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result
     if "conscience_passed" in result_data:
         attributes.append(SpanAttribute(key="conscience.passed", value={"boolValue": result_data["conscience_passed"]}))
     if "selected_action" in result_data:
-        attributes.append(SpanAttribute(key="conscience.action", value={"stringValue": str(result_data["selected_action"])}))
+        attributes.append(
+            SpanAttribute(key="conscience.action", value={"stringValue": str(result_data["selected_action"])})
+        )
 
 
 def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to FINALIZE_ACTION step."""
     if "selected_action" in result_data:
-        attributes.append(SpanAttribute(key="finalized.action", value={"stringValue": str(result_data["selected_action"])}))
+        attributes.append(
+            SpanAttribute(key="finalized.action", value={"stringValue": str(result_data["selected_action"])})
+        )
     if "selection_reasoning" in result_data:
         attributes.append(
             SpanAttribute(key="finalized.has_reasoning", value={"boolValue": bool(result_data["selection_reasoning"])})
@@ -1239,15 +1301,21 @@ def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data
 def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_ACTION step."""
     if "action_executed" in result_data:
-        attributes.append(SpanAttribute(key="action.executed", value={"stringValue": str(result_data["action_executed"])}))
+        attributes.append(
+            SpanAttribute(key="action.executed", value={"stringValue": str(result_data["action_executed"])})
+        )
     if "dispatch_success" in result_data:
-        attributes.append(SpanAttribute(key="action.dispatch_success", value={"boolValue": result_data["dispatch_success"]}))
+        attributes.append(
+            SpanAttribute(key="action.dispatch_success", value={"boolValue": result_data["dispatch_success"]})
+        )
 
 
 def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to ACTION_COMPLETE step."""
     if "handler_completed" in result_data:
-        attributes.append(SpanAttribute(key="action.handler_completed", value={"boolValue": result_data["handler_completed"]}))
+        attributes.append(
+            SpanAttribute(key="action.handler_completed", value={"boolValue": result_data["handler_completed"]})
+        )
     if "execution_time_ms" in result_data:
         attributes.append(
             SpanAttribute(key="action.execution_time_ms", value={"doubleValue": result_data["execution_time_ms"]})

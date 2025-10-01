@@ -843,7 +843,7 @@ class AllStepsExecutionResult(BaseModel):
 
 
 class SnapshotAndContextResult(BaseModel):
-    """Event 1: System snapshot and gathered context for this thought/task."""
+    """Event 1: System snapshot and gathered context (GATHER_CONTEXT step)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.SNAPSHOT_AND_CONTEXT)
     thought_id: str = Field(..., description="Thought being processed")
@@ -859,7 +859,7 @@ class SnapshotAndContextResult(BaseModel):
 
 
 class DMAResultsEvent(BaseModel):
-    """Event 2: Results from all 3 DMA perspectives."""
+    """Event 2: Results from all 3 DMA perspectives (PERFORM_DMAS step)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.DMA_RESULTS)
     thought_id: str = Field(..., description="Thought being processed")
@@ -869,16 +869,17 @@ class DMAResultsEvent(BaseModel):
     # All 3 DMA results
     csdma: Optional[str] = Field(None, description="Cognitive State DMA result")
     dsdma: Optional[str] = Field(None, description="Decision Space DMA result")
-    aspdma_options: Optional[str] = Field(None, description="ASPDMA available options")
+    aspdma_options: Optional[str] = Field(None, description="ASPDMA available action options")
 
 
 class ASPDMAResultEvent(BaseModel):
-    """Event 3: Selected action and rationale from ASPDMA."""
+    """Event 3: Selected action and rationale (PERFORM_ASPDMA + RECURSIVE_ASPDMA steps)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.ASPDMA_RESULT)
     thought_id: str = Field(..., description="Thought being processed")
     task_id: Optional[str] = Field(None, description="Parent task if any")
     timestamp: str = Field(..., description="Event timestamp")
+    is_recursive: bool = Field(False, description="Whether this is a recursive ASPDMA after conscience override")
 
     # ASPDMA selection
     selected_action: str = Field(..., description="Action selected by ASPDMA")
@@ -887,12 +888,13 @@ class ASPDMAResultEvent(BaseModel):
 
 
 class ConscienceResultEvent(BaseModel):
-    """Event 4: Conscience evaluation and final action selected."""
+    """Event 4: Conscience evaluation and final action (CONSCIENCE_EXECUTION + RECURSIVE_CONSCIENCE + FINALIZE_ACTION steps)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.CONSCIENCE_RESULT)
     thought_id: str = Field(..., description="Thought being processed")
     task_id: Optional[str] = Field(None, description="Parent task if any")
     timestamp: str = Field(..., description="Event timestamp")
+    is_recursive: bool = Field(False, description="Whether this is a recursive conscience check after override")
 
     # Conscience evaluation
     conscience_passed: bool = Field(..., description="Whether conscience checks passed")
@@ -907,7 +909,7 @@ class ConscienceResultEvent(BaseModel):
 
 
 class ActionResultEvent(BaseModel):
-    """Event 5: Action execution outcome with audit trail."""
+    """Event 5: Action execution outcome with audit trail (ACTION_COMPLETE step)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.ACTION_RESULT)
     thought_id: str = Field(..., description="Thought being processed")

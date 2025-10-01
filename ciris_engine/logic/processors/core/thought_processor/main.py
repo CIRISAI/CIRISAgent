@@ -165,6 +165,7 @@ class ThoughtProcessor(
             )
             # Wrap in ConscienceApplicationResult before returning
             from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
             return ConscienceApplicationResult(
                 original_action=dma_results,
                 final_action=dma_results,
@@ -178,6 +179,7 @@ class ThoughtProcessor(
             deferral_result = self._create_deferral_result(dma_results, thought)
             # Wrap in ConscienceApplicationResult before returning
             from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
             return ConscienceApplicationResult(
                 original_action=deferral_result,
                 final_action=deferral_result,

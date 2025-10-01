@@ -159,7 +159,10 @@ class TestThoughtDepthPropagation:
         mock_dependencies = Mock(spec=ActionHandlerDependencies)
         mock_bus_manager = Mock()
         mock_audit_service = Mock()
-        mock_audit_service.log_event = AsyncMock(return_value=None)
+        # Mock audit result with entry_id attribute
+        mock_audit_result = Mock()
+        mock_audit_result.entry_id = "test_audit_entry_123"
+        mock_audit_service.log_event = AsyncMock(return_value=mock_audit_result)
         mock_bus_manager.audit_service = mock_audit_service
         mock_dependencies.bus_manager = mock_bus_manager
         mock_action_dispatcher = Mock()
@@ -256,7 +259,10 @@ class TestThoughtDepthPropagation:
         mock_dependencies = Mock(spec=ActionHandlerDependencies)
         mock_bus_manager = Mock()
         mock_audit_service = Mock()
-        mock_audit_service.log_event = AsyncMock(return_value=None)
+        # Mock audit result with entry_id attribute
+        mock_audit_result = Mock()
+        mock_audit_result.entry_id = "test_audit_entry_456"
+        mock_audit_service.log_event = AsyncMock(return_value=mock_audit_result)
         mock_bus_manager.audit_service = mock_audit_service
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)

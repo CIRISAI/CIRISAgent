@@ -1171,9 +1171,9 @@ class TestRefactoredHelperFunctions:
         _add_perform_dmas_attributes(attributes, result_data)
 
         expected_attrs = [
-            {"key": "dma.results_available", "value": {"boolValue": True}},
-            {"key": "dma.results_size", "value": {"intValue": len("ethical_pdma: result1; csdma: result2")}},
-            {"key": "dma.context_provided", "value": {"boolValue": True}},
+            SpanAttribute(key="dma.results_available", value={"boolValue": True}),
+            SpanAttribute(key="dma.results_size", value={"intValue": len("ethical_pdma: result1; csdma: result2")}),
+            SpanAttribute(key="dma.context_provided", value={"boolValue": True}),
         ]
         assert attributes == expected_attrs
 
@@ -1185,7 +1185,7 @@ class TestRefactoredHelperFunctions:
         _add_perform_dmas_attributes(attributes, result_data)
 
         # Should only add context attribute
-        expected_attrs = [{"key": "dma.context_provided", "value": {"boolValue": True}}]
+        expected_attrs = [SpanAttribute(key="dma.context_provided", value={"boolValue": True})]
         assert attributes == expected_attrs
 
     def test_add_perform_aspdma_attributes_success(self):
@@ -1195,7 +1195,7 @@ class TestRefactoredHelperFunctions:
 
         _add_perform_aspdma_attributes(attributes, result_data)
 
-        expected_attrs = [{"key": "action.selected", "value": {"stringValue": "speak_with_confidence"}}]
+        expected_attrs = [SpanAttribute(key="action.selected", value={"stringValue": "speak_with_confidence"})]
         assert attributes == expected_attrs
 
     def test_add_conscience_execution_attributes_success(self):
@@ -1206,8 +1206,8 @@ class TestRefactoredHelperFunctions:
         _add_conscience_execution_attributes(attributes, result_data)
 
         expected_attrs = [
-            {"key": "conscience.passed", "value": {"boolValue": False}},
-            {"key": "conscience.action", "value": {"stringValue": "reject"}},
+            SpanAttribute(key="conscience.passed", value={"boolValue": False}),
+            SpanAttribute(key="conscience.action", value={"stringValue": "reject"}),
         ]
         assert attributes == expected_attrs
 
@@ -1219,8 +1219,8 @@ class TestRefactoredHelperFunctions:
         _add_finalize_action_attributes(attributes, result_data)
 
         expected_attrs = [
-            {"key": "finalized.action", "value": {"stringValue": "speak"}},
-            {"key": "finalized.has_reasoning", "value": {"boolValue": True}},
+            SpanAttribute(key="finalized.action", value={"stringValue": "speak"}),
+            SpanAttribute(key="finalized.has_reasoning", value={"boolValue": True}),
         ]
         assert attributes == expected_attrs
 
@@ -1232,8 +1232,8 @@ class TestRefactoredHelperFunctions:
         _add_perform_action_attributes(attributes, result_data)
 
         expected_attrs = [
-            {"key": "action.executed", "value": {"stringValue": "respond_helpfully"}},
-            {"key": "action.dispatch_success", "value": {"boolValue": True}},
+            SpanAttribute(key="action.executed", value={"stringValue": "respond_helpfully"}),
+            SpanAttribute(key="action.dispatch_success", value={"boolValue": True}),
         ]
         assert attributes == expected_attrs
 
@@ -1245,8 +1245,8 @@ class TestRefactoredHelperFunctions:
         _add_action_complete_attributes(attributes, result_data)
 
         expected_attrs = [
-            {"key": "action.handler_completed", "value": {"boolValue": True}},
-            {"key": "action.execution_time_ms", "value": {"doubleValue": 150.5}},
+            SpanAttribute(key="action.handler_completed", value={"boolValue": True}),
+            SpanAttribute(key="action.execution_time_ms", value={"doubleValue": 150.5}),
         ]
         assert attributes == expected_attrs
 
@@ -1273,9 +1273,9 @@ class TestRefactoredHelperFunctions:
 
         # Should have called _add_perform_dmas_attributes
         expected_attrs = [
-            {"key": "dma.results_available", "value": {"boolValue": True}},
-            {"key": "dma.results_size", "value": {"intValue": len("ethical_pdma: safe; csdma: clear")}},
-            {"key": "dma.context_provided", "value": {"boolValue": True}},
+            SpanAttribute(key="dma.results_available", value={"boolValue": True}),
+            SpanAttribute(key="dma.results_size", value={"intValue": len("ethical_pdma: safe; csdma: clear")}),
+            SpanAttribute(key="dma.context_provided", value={"boolValue": True}),
         ]
         assert attributes == expected_attrs
 
@@ -1288,8 +1288,8 @@ class TestRefactoredHelperFunctions:
 
         # Should have called _add_conscience_execution_attributes
         expected_attrs = [
-            {"key": "conscience.passed", "value": {"boolValue": True}},
-            {"key": "conscience.action", "value": {"stringValue": "speak"}},
+            SpanAttribute(key="conscience.passed", value={"boolValue": True}),
+            SpanAttribute(key="conscience.action", value={"stringValue": "speak"}),
         ]
         assert attributes == expected_attrs
 
@@ -1301,7 +1301,7 @@ class TestRefactoredHelperFunctions:
         _add_typed_step_attributes(attributes, StepPoint.FINALIZE_ACTION, result_data)
 
         # Should have called _add_finalize_action_attributes
-        expected_attrs = [{"key": "finalized.action", "value": {"stringValue": "listen"}}]
+        expected_attrs = [SpanAttribute(key="finalized.action", value={"stringValue": "listen"})]
         assert attributes == expected_attrs
 
     def test_add_typed_step_attributes_perform_action(self):
@@ -1313,8 +1313,8 @@ class TestRefactoredHelperFunctions:
 
         # Should have called _add_perform_action_attributes
         expected_attrs = [
-            {"key": "action.executed", "value": {"stringValue": "provide_information"}},
-            {"key": "action.dispatch_success", "value": {"boolValue": False}},
+            SpanAttribute(key="action.executed", value={"stringValue": "provide_information"}),
+            SpanAttribute(key="action.dispatch_success", value={"boolValue": False}),
         ]
         assert attributes == expected_attrs
 
@@ -1326,7 +1326,7 @@ class TestRefactoredHelperFunctions:
         _add_typed_step_attributes(attributes, StepPoint.ACTION_COMPLETE, result_data)
 
         # Should have called _add_action_complete_attributes
-        expected_attrs = [{"key": "action.handler_completed", "value": {"boolValue": True}}]
+        expected_attrs = [SpanAttribute(key="action.handler_completed", value={"boolValue": True})]
         assert attributes == expected_attrs
 
     def test_add_typed_step_attributes_perform_aspdma(self):
@@ -1337,7 +1337,7 @@ class TestRefactoredHelperFunctions:
         _add_typed_step_attributes(attributes, StepPoint.PERFORM_ASPDMA, result_data)
 
         # Should have called _add_perform_aspdma_attributes
-        expected_attrs = [{"key": "action.selected", "value": {"stringValue": "analyze_deeply"}}]
+        expected_attrs = [SpanAttribute(key="action.selected", value={"stringValue": "analyze_deeply"})]
         assert attributes == expected_attrs
 
     def test_add_typed_step_attributes_unsupported_step(self):

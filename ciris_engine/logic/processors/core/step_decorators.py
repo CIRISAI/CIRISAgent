@@ -831,12 +831,16 @@ async def _broadcast_reasoning_event(
                 logger.info(f"[BROADCAST DEBUG] In PERFORM_DMAS inner block")
                 context = getattr(step_data, "context", "")
                 logger.info(f"[BROADCAST DEBUG] PERFORM_DMAS: context length = {len(context)}")
+
+                # Extract lightweight system snapshot for reasoning transparency
+                system_snapshot = _extract_lightweight_system_snapshot()
+
                 event = create_reasoning_event(
                     event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
                     thought_id=step_data.thought_id,
                     task_id=step_data.task_id,
                     timestamp=timestamp,
-                    system_snapshot={},  # TODO: Extract system snapshot
+                    system_snapshot=system_snapshot,
                     context=context,
                     context_size=len(context),
                 )
@@ -882,6 +886,10 @@ async def _broadcast_reasoning_event(
 
         elif step == StepPoint.ACTION_COMPLETE:
             # Event 5: ACTION_RESULT
+            # Extract follow-up thought ID if action created one
+            # (anything but DEFER, REJECT, or TASK_COMPLETE creates a follow-up)
+            follow_up_thought_id = _extract_follow_up_thought_id(result)
+
             event = create_reasoning_event(
                 event_type=ReasoningEvent.ACTION_RESULT,
                 thought_id=step_data.thought_id,
@@ -890,7 +898,7 @@ async def _broadcast_reasoning_event(
                 action_executed=getattr(step_data, "action_executed", ""),
                 execution_success=getattr(step_data, "dispatch_success", True),
                 execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
-                follow_up_thought_id=None,  # TODO: Extract if available
+                follow_up_thought_id=follow_up_thought_id,
                 error=None,
                 audit_entry_id=getattr(step_data, "audit_entry_id", None),
                 audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
@@ -1060,6 +1068,76 @@ def _build_trace_context_dict(
     )
 
 
+def _extract_follow_up_thought_id(result: Any) -> Optional[str]:
+    """
+    Extract follow-up thought ID from ACTION_COMPLETE result.
+
+    According to the requirement: Anything but DEFER, REJECT, or TASK_COMPLETE
+    should have a follow-up thought created.
+
+    Args:
+        result: The ACTION_COMPLETE step result (dict or object)
+
+    Returns:
+        Follow-up thought ID if available, None otherwise
+    """
+    # Terminal actions that don't create follow-ups
+    TERMINAL_ACTIONS = {"DEFER", "REJECT", "TASK_COMPLETE"}
+
+    # Try to extract from dict format (primary path)
+    if isinstance(result, dict):
+        # Check action type FIRST to determine if follow-up should exist
+        action_type = result.get("action_type", "").upper()
+
+        if action_type in TERMINAL_ACTIONS:
+            # These actions should NOT have follow-ups, even if ID is present
+            return None
+
+        # For non-terminal actions, extract the follow_up_thought_id
+        return result.get("follow_up_thought_id")
+
+    # Try to extract from object format
+    if hasattr(result, "follow_up_thought_id"):
+        return str(result.follow_up_thought_id) if result.follow_up_thought_id else None
+
+    # Check for alternative attribute names
+    if hasattr(result, "follow_up_id"):
+        return str(result.follow_up_id) if result.follow_up_id else None
+
+    return None
+
+
+def _extract_lightweight_system_snapshot() -> Dict[str, Any]:
+    """
+    Extract lightweight system snapshot for reasoning event context.
+
+    This provides basic system state without heavy data collection:
+    - Current timestamp
+    - Process health indicators (if available)
+    - Basic resource metrics (if available)
+    """
+    from datetime import datetime, timezone
+
+    snapshot: Dict[str, Any] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "snapshot_type": "lightweight_reasoning_context",
+    }
+
+    # Try to get basic resource info if available (non-blocking)
+    try:
+        import psutil
+
+        process = psutil.Process()
+        snapshot["cpu_percent"] = float(process.cpu_percent(interval=0.01))
+        snapshot["memory_mb"] = float(process.memory_info().rss / (1024 * 1024))
+        snapshot["threads"] = int(process.num_threads())
+    except Exception:
+        # Resource monitoring not available - continue without it
+        pass
+
+    return snapshot
+
+
 def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: StepDataUnion) -> List[SpanAttribute]:
     """
     Build span attributes compatible with OTLP format.
@@ -1122,57 +1200,57 @@ def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: D
     if "dma_results" in result_data and result_data["dma_results"]:
         attributes.extend(
             [
-                {"key": "dma.results_available", "value": {"boolValue": True}},
-                {"key": "dma.results_size", "value": {"intValue": len(str(result_data["dma_results"]))}},
+                SpanAttribute(key="dma.results_available", value={"boolValue": True}),
+                SpanAttribute(key="dma.results_size", value={"intValue": len(str(result_data["dma_results"]))}),
             ]
         )
     if "context" in result_data:
-        attributes.append({"key": "dma.context_provided", "value": {"boolValue": bool(result_data["context"])}})
+        attributes.append(SpanAttribute(key="dma.context_provided", value={"boolValue": bool(result_data["context"])}))
 
 
 def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_ASPDMA step."""
     if "selected_action" in result_data:
-        attributes.append({"key": "action.selected", "value": {"stringValue": str(result_data["selected_action"])}})
+        attributes.append(SpanAttribute(key="action.selected", value={"stringValue": str(result_data["selected_action"])}))
     if "action_rationale" in result_data:
         attributes.append(
-            {"key": "action.has_rationale", "value": {"boolValue": bool(result_data["action_rationale"])}}
+            SpanAttribute(key="action.has_rationale", value={"boolValue": bool(result_data["action_rationale"])})
         )
 
 
 def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to CONSCIENCE_EXECUTION step."""
     if "conscience_passed" in result_data:
-        attributes.append({"key": "conscience.passed", "value": {"boolValue": result_data["conscience_passed"]}})
+        attributes.append(SpanAttribute(key="conscience.passed", value={"boolValue": result_data["conscience_passed"]}))
     if "selected_action" in result_data:
-        attributes.append({"key": "conscience.action", "value": {"stringValue": str(result_data["selected_action"])}})
+        attributes.append(SpanAttribute(key="conscience.action", value={"stringValue": str(result_data["selected_action"])}))
 
 
 def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to FINALIZE_ACTION step."""
     if "selected_action" in result_data:
-        attributes.append({"key": "finalized.action", "value": {"stringValue": str(result_data["selected_action"])}})
+        attributes.append(SpanAttribute(key="finalized.action", value={"stringValue": str(result_data["selected_action"])}))
     if "selection_reasoning" in result_data:
         attributes.append(
-            {"key": "finalized.has_reasoning", "value": {"boolValue": bool(result_data["selection_reasoning"])}}
+            SpanAttribute(key="finalized.has_reasoning", value={"boolValue": bool(result_data["selection_reasoning"])})
         )
 
 
 def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to PERFORM_ACTION step."""
     if "action_executed" in result_data:
-        attributes.append({"key": "action.executed", "value": {"stringValue": str(result_data["action_executed"])}})
+        attributes.append(SpanAttribute(key="action.executed", value={"stringValue": str(result_data["action_executed"])}))
     if "dispatch_success" in result_data:
-        attributes.append({"key": "action.dispatch_success", "value": {"boolValue": result_data["dispatch_success"]}})
+        attributes.append(SpanAttribute(key="action.dispatch_success", value={"boolValue": result_data["dispatch_success"]}))
 
 
 def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
     """Add attributes specific to ACTION_COMPLETE step."""
     if "handler_completed" in result_data:
-        attributes.append({"key": "action.handler_completed", "value": {"boolValue": result_data["handler_completed"]}})
+        attributes.append(SpanAttribute(key="action.handler_completed", value={"boolValue": result_data["handler_completed"]}))
     if "execution_time_ms" in result_data:
         attributes.append(
-            {"key": "action.execution_time_ms", "value": {"doubleValue": result_data["execution_time_ms"]}}
+            SpanAttribute(key="action.execution_time_ms", value={"doubleValue": result_data["execution_time_ms"]})
         )
 
 

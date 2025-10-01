@@ -1,16 +1,18 @@
 """Comprehensive tests for system_extensions.py helper functions."""
 
+from unittest.mock import AsyncMock, MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock
+
 from ciris_engine.logic.adapters.api.routes.system_extensions import (
+    _batch_fetch_task_channel_ids,
+    _determine_user_role,
+    _filter_events_by_channel_access,
+    _get_latest_step_data,
     _get_pipeline_controller,
     _get_pipeline_state,
-    _get_latest_step_data,
     _get_processing_metrics,
-    _determine_user_role,
     _get_user_allowed_channel_ids,
-    _batch_fetch_task_channel_ids,
-    _filter_events_by_channel_access,
 )
 
 
@@ -21,9 +23,9 @@ class TestPipelineHelpers:
         """Test successful pipeline controller extraction."""
         mock_controller = Mock()
         runtime = Mock(pipeline_controller=mock_controller)
-        
+
         result = _get_pipeline_controller(runtime)
-        
+
         assert result == mock_controller
 
     def test_get_pipeline_controller_no_runtime(self):
@@ -42,9 +44,9 @@ class TestPipelineHelpers:
         mock_state = {"is_paused": True, "current_round": 5}
         controller = Mock()
         controller.get_current_state = Mock(return_value=mock_state)
-        
+
         result = _get_pipeline_state(controller)
-        
+
         assert result == mock_state
         controller.get_current_state.assert_called_once()
 
@@ -57,9 +59,9 @@ class TestPipelineHelpers:
         """Test pipeline state handles exceptions."""
         controller = Mock()
         controller.get_current_state = Mock(side_effect=Exception("Error"))
-        
+
         result = _get_pipeline_state(controller)
-        
+
         assert result is None
 
     def test_get_latest_step_data_success(self):
@@ -67,12 +69,12 @@ class TestPipelineHelpers:
         mock_step_result = Mock()
         mock_step_result.step_point = "PERFORM_DMAS"
         mock_step_result.model_dump = Mock(return_value={"step": "data"})
-        
+
         controller = Mock()
         controller.get_latest_step_result = Mock(return_value=mock_step_result)
-        
+
         step_point, step_result = _get_latest_step_data(controller)
-        
+
         assert step_point == "PERFORM_DMAS"
         assert step_result == {"step": "data"}
 
@@ -97,9 +99,9 @@ class TestPipelineHelpers:
         """Test step data extraction when no result available."""
         controller = Mock()
         controller.get_latest_step_result = Mock(return_value=None)
-        
+
         step_point, step_result = _get_latest_step_data(controller)
-        
+
         assert step_point is None
         assert step_result is None
 
@@ -107,9 +109,9 @@ class TestPipelineHelpers:
         """Test step data handles exceptions."""
         controller = Mock()
         controller.get_latest_step_result = Mock(side_effect=Exception("Error"))
-        
+
         step_point, step_result = _get_latest_step_data(controller)
-        
+
         assert step_point is None
         assert step_result is None
 
@@ -118,9 +120,9 @@ class TestPipelineHelpers:
         metrics = {"total_processing_time_ms": 1250.0, "tokens_used": 150}
         controller = Mock()
         controller.get_processing_metrics = Mock(return_value=metrics)
-        
+
         time_ms, tokens = _get_processing_metrics(controller)
-        
+
         assert time_ms == 1250.0
         assert tokens == 150
 
@@ -129,9 +131,9 @@ class TestPipelineHelpers:
         metrics = {"total_processing_time_ms": 500.0}
         controller = Mock()
         controller.get_processing_metrics = Mock(return_value=metrics)
-        
+
         time_ms, tokens = _get_processing_metrics(controller)
-        
+
         assert time_ms == 500.0
         assert tokens is None
 
@@ -139,9 +141,9 @@ class TestPipelineHelpers:
         """Test metrics extraction when no metrics available."""
         controller = Mock()
         controller.get_processing_metrics = Mock(return_value=None)
-        
+
         time_ms, tokens = _get_processing_metrics(controller)
-        
+
         assert time_ms == 0.0
         assert tokens is None
 
@@ -149,9 +151,9 @@ class TestPipelineHelpers:
         """Test metrics handles exceptions."""
         controller = Mock()
         controller.get_processing_metrics = Mock(side_effect=Exception("Error"))
-        
+
         time_ms, tokens = _get_processing_metrics(controller)
-        
+
         assert time_ms == 0.0
         assert tokens is None
 
@@ -162,10 +164,10 @@ class TestUserRoleHelpers:
     def test_determine_user_role_enum(self):
         """Test role determination with UserRole enum."""
         from ciris_engine.schemas.api.auth import UserRole
-        
+
         current_user = {"role": UserRole.ADMIN}
         result = _determine_user_role(current_user)
-        
+
         assert result == UserRole.ADMIN
 
     def test_determine_user_role_string(self):
@@ -174,22 +176,25 @@ class TestUserRoleHelpers:
         result = _determine_user_role(current_user)
 
         from ciris_engine.schemas.api.auth import UserRole
+
         assert result == UserRole.ADMIN
 
     def test_determine_user_role_invalid_string(self):
         """Test role determination with invalid string defaults to OBSERVER."""
         current_user = {"role": "invalid_role"}
         result = _determine_user_role(current_user)
-        
+
         from ciris_engine.schemas.api.auth import UserRole
+
         assert result == UserRole.OBSERVER
 
     def test_determine_user_role_missing(self):
         """Test role determination with missing role defaults to OBSERVER."""
         current_user = {}
         result = _determine_user_role(current_user)
-        
+
         from ciris_engine.schemas.api.auth import UserRole
+
         assert result == UserRole.OBSERVER
 
     @pytest.mark.asyncio
@@ -201,9 +206,9 @@ class TestUserRoleHelpers:
         mock_conn.execute_fetchall = AsyncMock(return_value=[])
         mock_db.connection = AsyncMock(return_value=mock_conn)
         auth_service.db_manager = mock_db
-        
+
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
-        
+
         assert result == {"user123"}
 
     @pytest.mark.asyncio
@@ -213,10 +218,12 @@ class TestUserRoleHelpers:
 
         auth_service = Mock()
         mock_conn = MagicMock()
-        mock_conn.execute_fetchall = AsyncMock(return_value=[
-            ("discord", "discord123"),
-            ("google", "google456"),
-        ])
+        mock_conn.execute_fetchall = AsyncMock(
+            return_value=[
+                ("discord", "discord123"),
+                ("google", "google456"),
+            ]
+        )
         mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
         mock_conn.__aexit__ = AsyncMock(return_value=None)
 
@@ -236,9 +243,9 @@ class TestUserRoleHelpers:
         mock_db = AsyncMock()
         mock_db.connection = AsyncMock(side_effect=Exception("DB Error"))
         auth_service.db_manager = mock_db
-        
+
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
-        
+
         # Should still return user_id even on error
         assert result == {"user123"}
 
@@ -249,11 +256,13 @@ class TestUserRoleHelpers:
 
         auth_service = Mock()
         mock_conn = MagicMock()
-        mock_conn.execute_fetchall = AsyncMock(return_value=[
-            ("task1", "channel1"),
-            ("task2", "channel2"),
-            ("task3", "channel1"),
-        ])
+        mock_conn.execute_fetchall = AsyncMock(
+            return_value=[
+                ("task1", "channel1"),
+                ("task2", "channel2"),
+                ("task3", "channel1"),
+            ]
+        )
         mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
         mock_conn.__aexit__ = AsyncMock(return_value=None)
 
@@ -269,9 +278,9 @@ class TestUserRoleHelpers:
     async def test_batch_fetch_task_channel_ids_empty(self):
         """Test batch fetching with empty task list."""
         auth_service = Mock()
-        
+
         result = await _batch_fetch_task_channel_ids(auth_service, [])
-        
+
         assert result == {}
 
     @pytest.mark.asyncio
@@ -281,9 +290,9 @@ class TestUserRoleHelpers:
         mock_db = AsyncMock()
         mock_db.connection = AsyncMock(side_effect=Exception("DB Error"))
         auth_service.db_manager = mock_db
-        
+
         result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
-        
+
         assert result == {}
 
     def test_filter_events_by_channel_access_allowed(self):
@@ -295,9 +304,9 @@ class TestUserRoleHelpers:
         ]
         allowed_channels = {"channel1", "channel2"}
         task_cache = {"task1": "channel1", "task2": "channel2", "task3": "channel3"}
-        
+
         result = _filter_events_by_channel_access(events, allowed_channels, task_cache)
-        
+
         assert len(result) == 2
         assert result[0]["task_id"] == "task1"
         assert result[1]["task_id"] == "task2"
@@ -310,9 +319,9 @@ class TestUserRoleHelpers:
         ]
         allowed_channels = {"channel1"}
         task_cache = {"task1": "channel1"}
-        
+
         result = _filter_events_by_channel_access(events, allowed_channels, task_cache)
-        
+
         assert len(result) == 1
         assert result[0]["task_id"] == "task1"
 
@@ -324,9 +333,9 @@ class TestUserRoleHelpers:
         ]
         allowed_channels = {"channel1"}
         task_cache = {"task1": "channel1"}  # task_unknown not in cache
-        
+
         result = _filter_events_by_channel_access(events, allowed_channels, task_cache)
-        
+
         assert len(result) == 1
         assert result[0]["task_id"] == "task1"
 
@@ -338,9 +347,9 @@ class TestUserRoleHelpers:
         ]
         allowed_channels = {"channel_other"}
         task_cache = {"task1": "channel1", "task2": "channel2"}
-        
+
         result = _filter_events_by_channel_access(events, allowed_channels, task_cache)
-        
+
         assert len(result) == 0
 
 
@@ -352,9 +361,9 @@ class TestEdgeCasesAndCoverage:
         metrics = {}  # Empty metrics dict
         controller = Mock()
         controller.get_processing_metrics = Mock(return_value=metrics)
-        
+
         time_ms, tokens = _get_processing_metrics(controller)
-        
+
         assert time_ms == 0.0
         assert tokens is None
 
@@ -388,6 +397,6 @@ class TestEdgeCasesAndCoverage:
 
         # Should handle None gracefully
         result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
-        
+
         # Function should handle this gracefully
         assert isinstance(result, dict)

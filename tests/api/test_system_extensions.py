@@ -733,9 +733,9 @@ class TestAdditionalEdgeCases:
     async def test_extract_pipeline_data_no_runtime(self):
         """Test _extract_pipeline_data with no runtime."""
         from ciris_engine.logic.adapters.api.routes.system_extensions import _extract_pipeline_data
-        
+
         step_point, step_result, pipeline_state, time_ms, tokens, demo = _extract_pipeline_data(None)
-        
+
         assert step_point is None
         assert step_result is None
         assert pipeline_state is None
@@ -745,14 +745,15 @@ class TestAdditionalEdgeCases:
     @pytest.mark.asyncio
     async def test_extract_pipeline_data_runtime_exception(self):
         """Test _extract_pipeline_data handles runtime exceptions."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import _extract_pipeline_data
         from unittest.mock import Mock
-        
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _extract_pipeline_data
+
         runtime = Mock()
         runtime.pipeline_controller = property(lambda self: (_ for _ in ()).throw(RuntimeError("Error")))
-        
+
         step_point, step_result, pipeline_state, time_ms, tokens, demo = _extract_pipeline_data(runtime)
-        
+
         # Should handle exception gracefully
         assert step_point is None
         assert pipeline_state is None
@@ -760,48 +761,52 @@ class TestAdditionalEdgeCases:
     @pytest.mark.asyncio
     async def test_convert_step_point_invalid(self):
         """Test _convert_step_point with invalid input."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import _convert_step_point
         from unittest.mock import Mock
-        
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _convert_step_point
+
         result = Mock()
         result.step_point = "invalid_step_point"
-        
+
         converted = _convert_step_point(result)
-        
+
         # Should return None for invalid step point
         assert converted is None
 
     @pytest.mark.asyncio
     async def test_convert_step_point_none(self):
         """Test _convert_step_point with None."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import _convert_step_point
         from unittest.mock import Mock
-        
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _convert_step_point
+
         result = Mock()
         result.step_point = None
-        
+
         converted = _convert_step_point(result)
-        
+
         assert converted is None
 
     @pytest.mark.asyncio
     async def test_consolidate_step_results_no_results(self):
         """Test _consolidate_step_results with no step_results."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import _consolidate_step_results
         from unittest.mock import Mock
-        
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _consolidate_step_results
+
         result = Mock()
         result.step_results = None
-        
+
         consolidated = _consolidate_step_results(result)
-        
+
         assert consolidated is None
 
     @pytest.mark.asyncio
     async def test_consolidate_step_results_empty_list(self):
         """Test _consolidate_step_results with empty list."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import _consolidate_step_results
         from unittest.mock import Mock
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import _consolidate_step_results
 
         result = Mock()
         result.step_results = []
@@ -817,8 +822,9 @@ class TestReasoningStreamEndpoint:
     @pytest.mark.asyncio
     async def test_reasoning_stream_no_runtime_control(self, mock_request):
         """Test reasoning_stream when runtime control service is unavailable."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
         from fastapi import HTTPException
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
 
         # Setup: No runtime control service
         mock_request.app.state.main_runtime_control_service = None
@@ -837,8 +843,9 @@ class TestReasoningStreamEndpoint:
     @pytest.mark.asyncio
     async def test_reasoning_stream_no_auth_service(self, mock_request):
         """Test reasoning_stream when authentication service is unavailable."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
         from fastapi import HTTPException
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
 
         # Setup: Runtime control present, but no auth service
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -857,8 +864,9 @@ class TestReasoningStreamEndpoint:
     @pytest.mark.asyncio
     async def test_reasoning_stream_observer_no_user_id(self, mock_request):
         """Test reasoning_stream with OBSERVER role but missing user_id."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
         from fastapi import HTTPException
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
 
         # Setup: Services available
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -878,8 +886,9 @@ class TestReasoningStreamEndpoint:
     @pytest.mark.asyncio
     async def test_reasoning_stream_admin_success(self, mock_request):
         """Test reasoning_stream successfully returns StreamingResponse for ADMIN."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
         from fastapi.responses import StreamingResponse
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
 
         # Setup: All services available
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -901,9 +910,11 @@ class TestReasoningStreamEndpoint:
     @pytest.mark.asyncio
     async def test_reasoning_stream_observer_success(self, mock_request):
         """Test reasoning_stream successfully returns StreamingResponse for OBSERVER."""
-        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from fastapi.responses import StreamingResponse
         from unittest.mock import AsyncMock
+
+        from fastapi.responses import StreamingResponse
+
+        from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
 
         # Setup: All services available
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -936,8 +947,9 @@ class TestReasoningStreamEndpoint:
         """Test stream generator sends connected event first."""
         import asyncio
         import json
+        from unittest.mock import AsyncMock, patch
+
         from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from unittest.mock import patch, AsyncMock
 
         # Setup services
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -979,8 +991,9 @@ class TestReasoningStreamEndpoint:
         """Test stream generator sends keepalive on timeout."""
         import asyncio
         import json
+        from unittest.mock import AsyncMock, patch
+
         from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from unittest.mock import patch, AsyncMock
 
         # Setup services
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -1019,8 +1032,9 @@ class TestReasoningStreamEndpoint:
         """Test stream generator sends step updates."""
         import asyncio
         import json
+        from unittest.mock import AsyncMock, patch
+
         from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from unittest.mock import patch, AsyncMock
 
         # Setup services
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -1070,8 +1084,9 @@ class TestReasoningStreamEndpoint:
         """Test stream generator filters events for OBSERVER users."""
         import asyncio
         import json
+        from unittest.mock import AsyncMock, patch
+
         from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from unittest.mock import patch, AsyncMock
 
         # Setup services
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -1121,7 +1136,10 @@ class TestReasoningStreamEndpoint:
 
         with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):
             with patch("asyncio.Queue", return_value=mock_queue):
-                with patch("ciris_engine.logic.adapters.api.routes.system_extensions._batch_fetch_task_channel_ids", side_effect=mock_batch_fetch):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.system_extensions._batch_fetch_task_channel_ids",
+                    side_effect=mock_batch_fetch,
+                ):
                     response = await reasoning_stream(request=mock_request, auth=mock_auth)
 
                     # Consume events
@@ -1144,8 +1162,9 @@ class TestReasoningStreamEndpoint:
         """Test stream generator handles errors gracefully."""
         import asyncio
         import json
+        from unittest.mock import AsyncMock, patch
+
         from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from unittest.mock import patch, AsyncMock
 
         # Setup services
         mock_request.app.state.main_runtime_control_service = MagicMock()
@@ -1183,8 +1202,9 @@ class TestReasoningStreamEndpoint:
     async def test_stream_cleanup_on_disconnect(self, mock_request):
         """Test stream properly unsubscribes on disconnect."""
         import asyncio
+        from unittest.mock import AsyncMock, call, patch
+
         from ciris_engine.logic.adapters.api.routes.system_extensions import reasoning_stream
-        from unittest.mock import patch, AsyncMock, call
 
         # Setup services
         mock_request.app.state.main_runtime_control_service = MagicMock()

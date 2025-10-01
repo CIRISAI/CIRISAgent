@@ -184,9 +184,7 @@ def _get_latest_step_data(pipeline_controller) -> tuple[Optional[Any], Optional[
 
         step_point = latest_step_result.step_point
         step_result = (
-            latest_step_result.model_dump()
-            if hasattr(latest_step_result, "model_dump")
-            else dict(latest_step_result)
+            latest_step_result.model_dump() if hasattr(latest_step_result, "model_dump") else dict(latest_step_result)
         )
         return step_point, step_result
     except Exception as e:
@@ -664,7 +662,9 @@ async def _batch_fetch_task_channel_ids(auth_service, task_ids: list[str]) -> di
     return task_channel_map
 
 
-def _filter_events_by_channel_access(events: list, allowed_channel_ids: set[str], task_channel_cache: dict[str, str]) -> list:
+def _filter_events_by_channel_access(
+    events: list, allowed_channel_ids: set[str], task_channel_cache: dict[str, str]
+) -> list:
     """Filter events to only those the user can access based on channel_id whitelist."""
     filtered_events = []
     for event in events:
@@ -762,7 +762,9 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                                 task_channel_cache.update(new_mappings)
 
                             # Filter events based on channel_id whitelist
-                            filtered_events = _filter_events_by_channel_access(events, allowed_channel_ids, task_channel_cache)
+                            filtered_events = _filter_events_by_channel_access(
+                                events, allowed_channel_ids, task_channel_cache
+                            )
 
                             # Replace events with filtered list
                             if filtered_events:

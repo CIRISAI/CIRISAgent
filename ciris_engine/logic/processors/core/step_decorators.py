@@ -218,7 +218,7 @@ def _get_step_data_creators() -> dict[StepPoint, callable]:
             base_data, result, thought_item
         ),
         StepPoint.PERFORM_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_perform_aspdma_data(
-            base_data, result
+            base_data, result, args
         ),
         StepPoint.CONSCIENCE_EXECUTION: lambda base_data, result, args, kwargs, thought_item: _create_conscience_execution_data(
             base_data, result
@@ -332,7 +332,7 @@ def _create_perform_dmas_data(base_data: BaseStepData, result: Any, thought_item
     )
 
 
-def _create_perform_aspdma_data(base_data: BaseStepData, result: Any) -> PerformASPDMAStepData:
+def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> PerformASPDMAStepData:
     """Create PERFORM_ASPDMA specific typed data."""
     if not result:
         raise ValueError("PERFORM_ASPDMA step result is None - this indicates a serious pipeline issue")
@@ -347,10 +347,30 @@ def _create_perform_aspdma_data(base_data: BaseStepData, result: Any) -> Perform
             f"PERFORM_ASPDMA result missing 'rationale' attribute. Result type: {type(result)}, available attributes: {dir(result)}"
         )
 
+    # Extract dma_results from args - it's the second positional arg after thought_context
+    # Function signature: _perform_aspdma_step(self, thought_item, thought_context, dma_results)
+    # args = (thought_context, dma_results)
+    dma_results = None
+    if len(args) >= 2:
+        dma_results_obj = args[1]
+        # Convert dma_results object to string representation
+        if dma_results_obj:
+            if hasattr(dma_results_obj, "dsdma") and hasattr(dma_results_obj, "csdma"):
+                # InitialDMAResults object - format like PERFORM_DMAS does
+                dma_parts = []
+                if dma_results_obj.csdma:
+                    dma_parts.append(f"csdma: {dma_results_obj.csdma}")
+                if dma_results_obj.dsdma:
+                    dma_parts.append(f"dsdma: {dma_results_obj.dsdma}")
+                dma_results = "; ".join(dma_parts) if dma_parts else None
+            else:
+                dma_results = str(dma_results_obj)
+
     return PerformASPDMAStepData(
         **_base_data_dict(base_data),
         selected_action=str(result.selected_action),
         action_rationale=str(result.rationale),
+        dma_results=dma_results,
     )
 
 

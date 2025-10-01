@@ -2,7 +2,6 @@
 Unit tests for telemetry API endpoint metric name alignment.
 """
 
-import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,10 +12,11 @@ from fastapi.testclient import TestClient
 from ciris_engine.logic.adapters.api.routes import telemetry
 
 
-class TestTelemetryAPIMetrics(unittest.TestCase):
+class TestTelemetryAPIMetrics:
     """Test that telemetry API endpoints query for correct metric names."""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         """Set up test fixtures."""
         # Create mock telemetry service
         self.mock_telemetry_service = AsyncMock()
@@ -48,9 +48,9 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
         self.mock_telemetry_service.query_metrics = mock_query_metrics
 
         # Mock auth context
-        from ciris_engine.schemas.auth.contexts import AuthContext
+        from ciris_engine.schemas.api.auth import AuthContext
 
-        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", agent_id="test_agent")
+        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc))
 
         # Call the endpoint
         with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
@@ -75,7 +75,7 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
         ]
 
         for metric in expected_metrics:
-            self.assertIn(metric, queried_metrics, f"Expected {metric} to be queried by /metrics endpoint")
+            assert metric in queried_metrics, f"Expected {metric} to be queried by /metrics endpoint"
 
     @pytest.mark.asyncio
     async def test_overview_endpoint_metric_names(self):
@@ -101,9 +101,9 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
         self.mock_request.app.state.incident_service.get_incident_count = AsyncMock(return_value=0)
 
         # Mock auth
-        from ciris_engine.schemas.auth.contexts import AuthContext
+        from ciris_engine.schemas.api.auth import AuthContext
 
-        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", agent_id="test_agent")
+        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc))
 
         # Call overview endpoint
         with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
@@ -120,7 +120,7 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
         ]
 
         for metric in expected_overview_metrics:
-            self.assertIn(metric, queried_metrics, f"Expected {metric} to be queried by overview endpoint")
+            assert metric in queried_metrics, f"Expected {metric} to be queried by overview endpoint"
 
     @pytest.mark.asyncio
     async def test_individual_metric_endpoint(self):
@@ -138,9 +138,9 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
         self.mock_telemetry_service.query_metrics = mock_query_metrics
 
         # Mock auth
-        from ciris_engine.schemas.auth.contexts import AuthContext
+        from ciris_engine.schemas.api.auth import AuthContext
 
-        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", agent_id="test_agent")
+        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc))
 
         # Call individual metric endpoint
         with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
@@ -149,16 +149,16 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
             )
 
         # Verify response contains the metric data
-        self.assertIsNotNone(response)
-        self.assertEqual(response.data.name, "llm.tokens.total")
-        self.assertEqual(response.data.current_value, 100.0)
+        assert response is not None
+        assert response.data.name == "llm.tokens.total"
+        assert response.data.current_value == 100.0
 
         # Verify query_metrics was called with correct name
         self.mock_telemetry_service.query_metrics.assert_called()
         call_args = self.mock_telemetry_service.query_metrics.call_args_list
         # Should be called multiple times for different time ranges
         for call in call_args:
-            self.assertEqual(call.kwargs.get("metric_name", call.args[0]), "llm.tokens.total")
+            assert call.kwargs.get("metric_name", call.args[0]) == "llm.tokens.total"
 
     @pytest.mark.asyncio
     async def test_metrics_endpoint_handles_missing_service(self):
@@ -167,20 +167,16 @@ class TestTelemetryAPIMetrics(unittest.TestCase):
         self.mock_request.app.state.telemetry_service = None
 
         # Mock auth
-        from ciris_engine.schemas.auth.contexts import AuthContext
+        from ciris_engine.schemas.api.auth import AuthContext
 
-        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", agent_id="test_agent")
+        mock_auth = AuthContext(user_id="test_user", role="OBSERVER", permissions=set(), authenticated_at=datetime.now(timezone.utc))
 
         # Should raise HTTPException with 503
         from fastapi import HTTPException
 
-        with self.assertRaises(HTTPException) as context:
+        with pytest.raises(HTTPException) as exc_info:
             with patch("ciris_engine.logic.adapters.api.routes.telemetry.require_observer", return_value=mock_auth):
                 await telemetry.get_detailed_metrics(self.mock_request, auth=mock_auth)
 
-        self.assertEqual(context.exception.status_code, 503)
-        self.assertIn("Telemetry service", context.exception.detail)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert exc_info.value.status_code == 503
+        assert "Telemetry service" in exc_info.value.detail

@@ -108,8 +108,8 @@ def streaming_step(step: StepPoint):
                 # Add step-specific data and create typed step data
                 step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)
 
-                # Stream the step result
-                await _broadcast_step_result(step, step_data)
+                # Broadcast simplified reasoning event for key steps only
+                await _broadcast_reasoning_event(step, step_data, result)
 
                 return result
 
@@ -128,7 +128,7 @@ def streaming_step(step: StepPoint):
                 }
                 error_step_data = BaseStepData(**base_error_data)
 
-                await _broadcast_step_result(step, error_step_data)
+                # Don't broadcast errors as reasoning events - handled at higher level
                 raise
 
         return cast(F, wrapper)
@@ -792,38 +792,110 @@ def _build_step_result_data(
 
 
 async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> None:
-    """Broadcast step result to global step result stream."""
+    """Broadcast step result to global step result stream (DEPRECATED - use reasoning events)."""
+    # OLD BROADCASTING - TO BE REMOVED
+    # Keep for now to avoid breaking changes, but reasoning events are the future
+    pass
+
+
+async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False) -> None:
+    """
+    Broadcast simplified reasoning event for one of the 5 key steps.
+
+    Step Point Mapping:
+    - GATHER_CONTEXT → SNAPSHOT_AND_CONTEXT
+    - PERFORM_DMAS → DMA_RESULTS
+    - PERFORM_ASPDMA / RECURSIVE_ASPDMA → ASPDMA_RESULT (with is_recursive flag)
+    - CONSCIENCE_EXECUTION / RECURSIVE_CONSCIENCE → CONSCIENCE_RESULT (with is_recursive flag)
+    - FINALIZE_ACTION → Included in CONSCIENCE_RESULT
+    - ACTION_COMPLETE → ACTION_RESULT
+    """
     try:
-        # Import here to avoid circular dependency
-        from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
-        # Create appropriate step result schema
-        step_result = _create_step_result_schema(step, step_data)
+        event = None
+        timestamp = step_data.timestamp or datetime.now().isoformat()
 
-        if step_result:
-            # Extract and normalize timing data
-            start_time, end_time = _extract_timing_data(step_data)
-
-            # Build trace context using our helper function
-            trace_context = _build_trace_context_dict(
-                step_data.thought_id, step_data.task_id, step, start_time, end_time
+        # Map step points to reasoning events
+        if step == StepPoint.GATHER_CONTEXT:
+            # Event 1: SNAPSHOT_AND_CONTEXT
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
+                thought_id=step_data.thought_id,
+                task_id=step_data.task_id,
+                timestamp=timestamp,
+                system_snapshot={},  # TODO: Extract from step_data
+                context=getattr(step_data, 'context', ''),
+                context_size=len(getattr(step_data, 'context', '')),
             )
 
-            # Build span attributes using our helper function
-            span_attributes = _build_span_attributes_dict(step, step_result, step_data)
-
-            # Build complete step result data
-            step_result_data = _build_step_result_data(step, step_data, trace_context, span_attributes)
-
-            logger.debug(
-                f"Broadcasting step result for {step.value}: task_id={step_result_data.task_id}, thought_id={step_result_data.thought_id}"
+        elif step == StepPoint.PERFORM_DMAS:
+            # Event 2: DMA_RESULTS
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.DMA_RESULTS,
+                thought_id=step_data.thought_id,
+                task_id=step_data.task_id,
+                timestamp=timestamp,
+                csdma=getattr(step_data, 'csdma', None),
+                dsdma=getattr(step_data, 'dsdma', None),
+                aspdma_options=getattr(step_data, 'aspdma', None),
             )
-            await step_result_stream.broadcast_step_result(step_result_data)
-        else:
-            logger.warning(f"No step result created for {step.value}, step_data type: {type(step_data)}")
+
+        elif step in (StepPoint.PERFORM_ASPDMA, StepPoint.RECURSIVE_ASPDMA):
+            # Event 3: ASPDMA_RESULT (can be recursive)
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.ASPDMA_RESULT,
+                thought_id=step_data.thought_id,
+                task_id=step_data.task_id,
+                timestamp=timestamp,
+                is_recursive=(step == StepPoint.RECURSIVE_ASPDMA),
+                selected_action=getattr(step_data, 'selected_action', ''),
+                action_rationale=getattr(step_data, 'action_rationale', ''),
+                confidence_score=None,  # TODO: Extract if available
+            )
+
+        elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE, StepPoint.FINALIZE_ACTION):
+            # Event 4: CONSCIENCE_RESULT (can be recursive, finalize is included here)
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.CONSCIENCE_RESULT,
+                thought_id=step_data.thought_id,
+                task_id=step_data.task_id,
+                timestamp=timestamp,
+                is_recursive=(step == StepPoint.RECURSIVE_CONSCIENCE),
+                conscience_passed=getattr(step_data, 'conscience_passed', True),
+                conscience_override_reason=getattr(step_data, 'conscience_override_reason', None),
+                epistemic_data=getattr(step_data, 'epistemic_data', {}),
+                final_action=getattr(step_data, 'selected_action', ''),
+                action_was_overridden=not getattr(step_data, 'conscience_passed', True),
+            )
+
+        elif step == StepPoint.ACTION_COMPLETE:
+            # Event 5: ACTION_RESULT
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.ACTION_RESULT,
+                thought_id=step_data.thought_id,
+                task_id=step_data.task_id,
+                timestamp=timestamp,
+                action_executed=getattr(step_data, 'action_executed', ''),
+                execution_success=getattr(step_data, 'dispatch_success', True),
+                execution_time_ms=getattr(step_data, 'execution_time_ms', 0.0),
+                follow_up_thought_id=None,  # TODO: Extract if available
+                error=None,
+                audit_entry_id=getattr(step_data, 'audit_entry_id', None),
+                audit_sequence_number=getattr(step_data, 'audit_sequence_number', None),
+                audit_entry_hash=getattr(step_data, 'audit_entry_hash', None),
+                audit_signature=getattr(step_data, 'audit_signature', None),
+            )
+
+        # Broadcast the event if we created one
+        if event:
+            await reasoning_event_stream.broadcast_reasoning_event(event)
+            logger.debug(f"Broadcasted {event.event_type} reasoning event for thought {step_data.thought_id}")
 
     except Exception as e:
-        logger.warning(f"Error broadcasting step result for {step.value}: {e}")
+        logger.warning(f"Error broadcasting reasoning event for {step.value}: {e}")
 
 
 # Public API functions for single-step control

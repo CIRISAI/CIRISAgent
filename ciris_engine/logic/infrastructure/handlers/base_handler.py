@@ -176,8 +176,14 @@ class BaseActionHandler(ABC):
 
     async def _audit_log(
         self, action_type: HandlerActionType, dispatch_context: DispatchContext, outcome: str = "success"
-    ) -> None:
-        """Log an audit event through the audit service."""
+    ) -> "AuditEntryResult":
+        """Log an audit event through the audit service.
+
+        Returns:
+            AuditEntryResult with entry_id and hash chain data (if hash chain enabled)
+        """
+        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+
         # Debug logging
         self.logger.info(f"[AUDIT DEBUG] _audit_log called for {action_type.value} with outcome={outcome}")
         self.logger.info(f"[AUDIT DEBUG] bus_manager has audit_service: {hasattr(self.bus_manager, 'audit_service')}")
@@ -195,9 +201,9 @@ class BaseActionHandler(ABC):
         audit_event_type = AuditEventType(f"handler_action_{action_type.value}")
         self.logger.info(f"[AUDIT DEBUG] Creating audit event type: {audit_event_type}")
 
-        # Use the audit service directly (it's not a bussed service)
+        # Use the audit service directly (it's not a bussed service) and capture result
         self.logger.info(f"[AUDIT DEBUG] Calling audit_service.log_event with handler={self.__class__.__name__}")
-        await self.bus_manager.audit_service.log_event(
+        audit_result = await self.bus_manager.audit_service.log_event(
             event_type=str(audit_event_type),
             event_data={
                 "handler_name": self.__class__.__name__,
@@ -208,7 +214,8 @@ class BaseActionHandler(ABC):
                 "wa_authorized": dispatch_context.wa_authorized,
             },
         )
-        self.logger.info("[AUDIT DEBUG] Successfully logged audit event")
+        self.logger.info(f"[AUDIT DEBUG] Successfully logged audit event with entry_id={audit_result.entry_id}")
+        return audit_result
 
     async def _handle_error(
         self, action_type: HandlerActionType, dispatch_context: DispatchContext, thought_id: str, error: Exception

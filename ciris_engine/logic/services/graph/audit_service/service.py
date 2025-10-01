@@ -274,13 +274,17 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to log action {action_type}: {e}")
 
-    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> None:
+    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> "AuditEntryResult":
         """Log a general event.
 
         Args:
             event_type: Type of event being logged
             event_data: Event data as EventPayload object
+
+        Returns:
+            AuditEntryResult with entry_id and hash chain data (if enabled)
         """
+        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
         # Convert EventPayload to AuditEventData
         audit_data = AuditEventData(
             entity_id=str(getattr(event_data, "user_id", "unknown")),
@@ -340,9 +344,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
             # Add to hash chain if enabled
             logger.debug(f"enable_hash_chain={self.enable_hash_chain}")
+            hash_chain_data = None
             if self.enable_hash_chain:
                 logger.debug("Adding entry to hash chain")
-                await self._add_to_hash_chain(entry)
+                hash_chain_data = await self._add_to_hash_chain(entry)
             else:
                 logger.debug("Hash chain disabled, not writing to audit_log table")
 
@@ -360,8 +365,20 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             action_type = HandlerActionType.OBSERVE  # Default for general audit events
             await self._create_trace_correlation(entry, action_type)
 
+            # Return full audit entry result with hash chain data
+            return AuditEntryResult(
+                entry_id=entry.entry_id,
+                sequence_number=hash_chain_data.get("sequence_number") if hash_chain_data else None,
+                entry_hash=hash_chain_data.get("entry_hash") if hash_chain_data else None,
+                previous_hash=hash_chain_data.get("previous_hash") if hash_chain_data else None,
+                signature=hash_chain_data.get("signature") if hash_chain_data else None,
+                signing_key_id=hash_chain_data.get("signing_key_id") if hash_chain_data else None,
+            )
+
         except Exception as e:
             logger.error(f"Failed to log event {event_type}: {e}")
+            # Return entry with just entry_id on error
+            return AuditEntryResult(entry_id=entry.entry_id if 'entry' in locals() else "error")
 
     async def log_conscience_event(
         self, thought_id: str, decision: str, reasoning: str, metadata: Optional[dict] = None
@@ -1005,14 +1022,20 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         await asyncio.to_thread(_create_tables)
         self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
 
-    async def _add_to_hash_chain(self, entry: AuditRequest) -> None:
-        """Add an entry to the hash chain."""
+    async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[Dict[str, Any]]:
+        """Add an entry to the hash chain.
+
+        Returns:
+            Dict with hash chain data (sequence_number, entry_hash, previous_hash, signature, signing_key_id)
+            or None if hash chain is disabled
+        """
         if not self.enable_hash_chain:
-            return
+            return None
 
         async with self._hash_chain_lock:
+            hash_chain_data: Optional[Dict[str, Any]] = None
 
-            def _write_to_chain() -> None:
+            def _write_to_chain() -> Dict[str, Any]:
                 entry_dict = {
                     "event_id": entry.entry_id,
                     "event_timestamp": entry.timestamp.isoformat(),
@@ -1056,12 +1079,23 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
                 self._db_connection.commit()
 
+                # Return hash chain data
+                return {
+                    "sequence_number": prepared["sequence_number"],
+                    "entry_hash": prepared["entry_hash"],
+                    "previous_hash": prepared["previous_hash"],
+                    "signature": signature,
+                    "signing_key_id": self.signature_manager.key_id or "unknown",
+                }
+
             try:
                 logger.debug(f"About to write to hash chain for entry {entry.entry_id}")
-                await asyncio.to_thread(_write_to_chain)
+                hash_chain_data = await asyncio.to_thread(_write_to_chain)
                 logger.debug(f"Successfully wrote to hash chain for entry {entry.entry_id}")
+                return hash_chain_data
             except Exception as e:
                 logger.error(f"Failed to add to hash chain: {e}", exc_info=True)
+                return None
 
     def _cache_entry(self, entry: AuditRequest) -> None:
         """Add entry to cache."""

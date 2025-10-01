@@ -621,7 +621,7 @@ class StepResultPerformAction(BaseModel):
 
 
 class StepResultActionComplete(BaseModel):
-    """Result from ACTION_COMPLETE step - action execution completed."""
+    """Result from ACTION_COMPLETE step - action execution completed with audit trail."""
 
     step_point: StepPoint = Field(StepPoint.ACTION_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
@@ -635,6 +635,10 @@ class StepResultActionComplete(BaseModel):
     execution_time_ms: float = Field(..., description="Execution time from SUT")
     handler_completed: bool = Field(..., description="Handler completed from SUT")
     follow_up_processing_pending: bool = Field(..., description="Follow-up processing pending from SUT")
+    audit_entry_id: Optional[str] = Field(None, description="ID of audit entry for this action")
+    audit_sequence_number: Optional[int] = Field(None, description="Sequence number in audit hash chain")
+    audit_entry_hash: Optional[str] = Field(None, description="Hash of audit entry (tamper-evident)")
+    audit_signature: Optional[str] = Field(None, description="Cryptographic signature of audit entry")
 
 
 class StepResultRoundComplete(BaseModel):
@@ -755,13 +759,17 @@ class PerformActionStepData(BaseStepData):
 
 
 class ActionCompleteStepData(BaseStepData):
-    """Step data for ACTION_COMPLETE step."""
+    """Step data for ACTION_COMPLETE step with audit trail information."""
 
     action_executed: str = Field(..., description="Action that was executed")
     dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
     handler_completed: bool = Field(..., description="Whether action handler completed")
     follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
     execution_time_ms: float = Field(0.0, description="Action execution time")
+    audit_entry_id: Optional[str] = Field(None, description="ID of audit entry created for this action")
+    audit_sequence_number: Optional[int] = Field(None, description="Sequence number in audit hash chain")
+    audit_entry_hash: Optional[str] = Field(None, description="Hash of audit entry (tamper-evident)")
+    audit_signature: Optional[str] = Field(None, description="Cryptographic signature of audit entry")
 
 
 class RoundCompleteStepData(BaseStepData):

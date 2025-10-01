@@ -5,7 +5,7 @@ Task and Thought are the fundamental units of agent processing.
 NO Dict[str, Any] - everything is typed.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -52,7 +52,7 @@ class FinalAction(BaseModel):
     """Typed final action from thought processing."""
 
     action_type: str = Field(..., description="Action type chosen")
-    action_params: dict = Field(..., description="Action parameters (will be typed per action)")
+    action_params: Dict[str, Any] = Field(..., description="Action parameters (will be typed per action)")
     reasoning: str = Field(..., description="Why this action was chosen")
 
     model_config = ConfigDict(extra="forbid")

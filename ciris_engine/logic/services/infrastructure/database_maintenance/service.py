@@ -131,6 +131,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # --- Clean up stale wakeup tasks from interrupted startups ---
         await self._cleanup_stale_wakeup_tasks()
 
+        # --- Clean up old active tasks from previous runs ---
+        await self._cleanup_old_active_tasks()
+
         # --- 1. Remove orphaned active tasks and thoughts ---
         orphaned_tasks_deleted_count = 0
         orphaned_thoughts_deleted_count = 0
@@ -316,6 +319,65 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         except Exception as e:
             logger.error(f"Failed to clean up runtime config: {e}", exc_info=True)
+
+    async def _cleanup_old_active_tasks(self) -> None:
+        """Mark old active tasks from previous runs as completed."""
+        try:
+            from ciris_engine.logic.persistence import update_task_status
+
+            logger.info("Checking for old active tasks from previous runs")
+
+            # Get current time
+            current_time = self.time_service.now()
+
+            # Get all active tasks
+            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
+            old_task_ids = []
+
+            for task in active_tasks:
+                if not hasattr(task, "task_id"):
+                    continue
+
+                # Skip wakeup and shutdown tasks (handled by _cleanup_stale_wakeup_tasks)
+                if (
+                    task.task_id.startswith("WAKEUP_")
+                    or task.task_id.startswith("VERIFY_IDENTITY_")
+                    or task.task_id.startswith("VALIDATE_INTEGRITY_")
+                    or task.task_id.startswith("EVALUATE_RESILIENCE_")
+                    or task.task_id.startswith("ACCEPT_INCOMPLETENESS_")
+                    or task.task_id.startswith("EXPRESS_GRATITUDE_")
+                    or task.task_id.startswith("shutdown_")
+                ):
+                    continue
+
+                # Check task age
+                if isinstance(task.created_at, str):
+                    from datetime import datetime
+
+                    task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
+                else:
+                    task_created = task.created_at
+
+                task_age = current_time - task_created
+                # Mark tasks older than 5 minutes as completed
+                is_old = task_age.total_seconds() > 300  # 5 minutes
+
+                if is_old:
+                    logger.info(
+                        f"Found old active task from previous run: {task.task_id} (age: {task_age.total_seconds():.0f}s) - marking as completed"
+                    )
+                    old_task_ids.append(task.task_id)
+
+            # Mark old tasks as completed
+            if old_task_ids:
+                for task_id in old_task_ids:
+                    update_task_status(task_id, TaskStatus.COMPLETED, self.time_service)
+                logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
+            else:
+                logger.info("No old active tasks found")
+
+        except Exception as e:
+            logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)
 
     async def _cleanup_stale_wakeup_tasks(self) -> None:
         """Clean up stale wakeup and shutdown thoughts from previous runs while preserving completed tasks for history."""

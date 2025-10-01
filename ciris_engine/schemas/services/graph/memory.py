@@ -5,7 +5,7 @@ Replaces Dict[str, Any] in memory service operations.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +23,7 @@ class NodeAttributes(BaseModel):
 
     # Dynamic attributes - we use a constrained dict here since node attributes are truly dynamic
     # but we ensure they're JSON-serializable types
-    data: Dict[str, Union[str, int, float, bool, list, dict, None]] = Field(
+    data: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]] = Field(
         default_factory=dict, description="Node data attributes"
     )
 

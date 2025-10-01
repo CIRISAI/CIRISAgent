@@ -5,12 +5,11 @@ These replace all Dict[str, Any] usage in verifier.py.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from ciris_engine.schemas.audit.hash_chain import HashChainAuditEntry
+from ciris_engine.schemas.audit.hash_chain import HashChainAuditEntry
 
 
 class ChainVerificationResult(BaseModel):
@@ -56,7 +55,7 @@ class EntryVerificationResult(BaseModel):
     signature_valid: Optional[bool] = Field(None, description="Whether signature is valid if present")
     previous_hash_valid: bool = Field(..., description="Whether link to previous entry is valid")
     errors: List[str] = Field(default_factory=list, description="List of validation errors")
-    entry_data: Optional["HashChainAuditEntry"] = Field(None, description="Entry data if requested")
+    entry_data: Optional[HashChainAuditEntry] = Field(None, description="Entry data if requested")
 
 
 class RangeVerificationResult(BaseModel):

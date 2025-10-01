@@ -114,8 +114,8 @@ class ConfigSecurity:
 
     @classmethod
     def filter_config(
-        cls, config: Dict[str, Union[str, int, float, bool, list, dict]], role: UserRole
-    ) -> Dict[str, Union[str, int, float, bool, list, dict]]:
+        cls, config: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]], role: UserRole
+    ) -> Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]:
         """
         Filter entire configuration dictionary based on role.
 
@@ -182,13 +182,15 @@ class ConfigValueResponse(BaseModel):
 class ConfigListResponse(BaseModel):
     """Response for configuration list."""
 
-    configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(..., description="Configuration values")
+    configs: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
+        ..., description="Configuration values"
+    )
     metadata: Dict[str, Union[str, int, float, bool]] = Field(..., description="Response metadata")
 
 
 def filter_config_for_role(
-    config: Dict[str, Union[str, int, float, bool, list, dict]], role: UserRole
-) -> Dict[str, Union[str, int, float, bool, list, dict]]:
+    config: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]], role: UserRole
+) -> Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]:
     """
     Filter configuration values based on user role.
 
@@ -232,7 +234,9 @@ class ConfigHistoryEntry(BaseModel):
 class ConfigValidationRequest(BaseModel):
     """Request to validate configuration changes."""
 
-    changes: Dict[str, Union[str, int, float, bool, list, dict]] = Field(..., description="Proposed changes")
+    changes: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
+        ..., description="Proposed changes"
+    )
 
 
 class ConfigValidationResponse(BaseModel):

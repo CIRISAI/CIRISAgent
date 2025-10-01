@@ -89,7 +89,11 @@ class ActionDispatcher:
         """
 
         # Get the action type (already typed as HandlerActionType in schema)
-        action_type = action_selection_result.selected_action
+        # Handle both ConscienceApplicationResult (has final_action) and ActionSelectionDMAResult (has selected_action)
+        if hasattr(action_selection_result, "final_action"):
+            action_type = action_selection_result.final_action.selected_action
+        else:
+            action_type = action_selection_result.selected_action
 
         if self.action_filter:
             try:
@@ -194,7 +198,7 @@ class ActionDispatcher:
                         event_data={
                             "handler_name": handler_instance.__class__.__name__,
                             "thought_id": thought.thought_id,
-                            "task_id": dispatch_context.task_id if hasattr(dispatch_context, 'task_id') else None,
+                            "task_id": dispatch_context.task_id if hasattr(dispatch_context, "task_id") else None,
                             "action": action_type.value,
                             "outcome": "success",
                             "follow_up_thought_id": follow_up_thought_id,
@@ -246,7 +250,7 @@ class ActionDispatcher:
                         event_data={
                             "handler_name": handler_instance.__class__.__name__,
                             "thought_id": thought.thought_id,
-                            "task_id": dispatch_context.task_id if hasattr(dispatch_context, 'task_id') else None,
+                            "task_id": dispatch_context.task_id if hasattr(dispatch_context, "task_id") else None,
                             "action": action_type.value,
                             "outcome": f"error:{type(e).__name__}",
                             "error": str(e),

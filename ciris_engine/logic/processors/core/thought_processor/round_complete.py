@@ -41,7 +41,7 @@ class RoundCompletePhase:
                     tags={
                         "thought_id": thought_item.thought_id,
                         "round_number": str(getattr(self, "current_round_number", 0)),
-                        "final_action": final_result.selected_action.value if final_result else "none",
+                        "final_action": final_result.final_action.selected_action.value if final_result else "none",
                     },
                 )
             except Exception as e:

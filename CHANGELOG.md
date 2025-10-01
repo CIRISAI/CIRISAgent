@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2025-09-30
 
 ### Fixed
+- **🎯 ACTION_RESULT Event Streaming**: Fixed critical bugs preventing ACTION_RESULT events from streaming
+  - **Attribute Access Bugs**: Fixed 3 bugs where code accessed `result.selected_action` instead of `result.final_action.selected_action`
+    - `thought_processor/main.py:357` - Fixed telemetry recording
+    - `thought_processor/round_complete.py:44` - Fixed metric recording
+    - `action_dispatcher.py:92` - **Root cause**: Fixed action type extraction from ConscienceApplicationResult
+  - All 5 reasoning events (SNAPSHOT_AND_CONTEXT, DMA_RESULTS, ASPDMA_RESULT, CONSCIENCE_RESULT, ACTION_RESULT) now streaming correctly via SSE
 - **🤝 Discord Inter-Agent Awareness**: Complete fix for agents seeing other agents' messages
   - **Conversation History**: Changed Discord fetch_messages() to prioritize Discord API over correlation database
     - Now includes messages from all users and bots in history lookups
@@ -15,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Real-time Observations**: Removed bot message filter from on_message handler
     - Agents now create passive observations for messages from other agents
     - Enables full multi-agent awareness in monitored Discord channels
+
+### Added
+- **🔐 Role-Based Event Filtering**: Secure event filtering for SSE reasoning stream endpoint
+  - **OBSERVER Role**: Users see only events for tasks they created (matched by user_id or linked OAuth accounts)
+  - **ADMIN+ Roles**: ADMIN/AUTHORITY/SYSTEM_ADMIN users see all events without filtering
+  - **Security**: Whitelist-based filtering with parameterized SQL queries to prevent SQL injection
+  - **Performance**: Batch database lookups and per-connection caching minimize database queries
+  - **OAuth Integration**: Automatically includes events from user's linked Discord/Google accounts
 
 ## [1.1.9] - 2025-09-30
 

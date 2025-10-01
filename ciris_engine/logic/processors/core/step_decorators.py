@@ -798,7 +798,9 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
     pass
 
 
-async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False) -> None:
+async def _broadcast_reasoning_event(
+    step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False
+) -> None:
     """
     Broadcast simplified reasoning event for one of the 5 key steps.
 
@@ -809,26 +811,34 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
     4. FINALIZE_ACTION → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
     5. ACTION_COMPLETE → ACTION_RESULT (execution + audit)
     """
+    logger.info(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
     try:
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
         from ciris_engine.schemas.services.runtime_control import ReasoningEvent
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
+        logger.info(f"[BROADCAST DEBUG] Imports successful")
+
         event = None
         timestamp = step_data.timestamp or datetime.now().isoformat()
+        logger.info(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
 
         # Map step points to reasoning events
         if step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
+            logger.info(f"[BROADCAST DEBUG] In GATHER_CONTEXT/PERFORM_DMAS block, step={step.value}")
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS with both context + DMA results)
             if step == StepPoint.PERFORM_DMAS:
+                logger.info(f"[BROADCAST DEBUG] In PERFORM_DMAS inner block")
+                context = getattr(step_data, "context", "")
+                logger.info(f"[BROADCAST DEBUG] PERFORM_DMAS: context length = {len(context)}")
                 event = create_reasoning_event(
                     event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
                     thought_id=step_data.thought_id,
                     task_id=step_data.task_id,
                     timestamp=timestamp,
                     system_snapshot={},  # TODO: Extract system snapshot
-                    context=getattr(step_data, 'context', ''),  # Context from prior GATHER_CONTEXT
-                    context_size=len(getattr(step_data, 'context', '')),
+                    context=context,
+                    context_size=len(context),
                 )
 
         elif step == StepPoint.PERFORM_ASPDMA:
@@ -838,9 +848,9 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
                 thought_id=step_data.thought_id,
                 task_id=step_data.task_id,
                 timestamp=timestamp,
-                csdma=getattr(step_data, 'csdma', None),
-                dsdma=getattr(step_data, 'dsdma', None),
-                aspdma_options=getattr(step_data, 'aspdma', None),
+                csdma=getattr(step_data, "csdma", None),
+                dsdma=getattr(step_data, "dsdma", None),
+                aspdma_options=getattr(step_data, "aspdma", None),
             )
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
@@ -851,8 +861,8 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
                 task_id=step_data.task_id,
                 timestamp=timestamp,
                 is_recursive=(step == StepPoint.RECURSIVE_CONSCIENCE),
-                selected_action=getattr(step_data, 'selected_action', ''),
-                action_rationale=getattr(step_data, 'action_rationale', ''),
+                selected_action=getattr(step_data, "selected_action", ""),
+                action_rationale=getattr(step_data, "action_rationale", ""),
                 confidence_score=None,  # TODO: Extract if available
             )
 
@@ -864,11 +874,11 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
                 task_id=step_data.task_id,
                 timestamp=timestamp,
                 is_recursive=False,  # FINALIZE_ACTION is never recursive
-                conscience_passed=getattr(step_data, 'conscience_passed', True),
-                conscience_override_reason=getattr(step_data, 'conscience_override_reason', None),
-                epistemic_data=getattr(step_data, 'epistemic_data', {}),
-                final_action=getattr(step_data, 'selected_action', ''),
-                action_was_overridden=not getattr(step_data, 'conscience_passed', True),
+                conscience_passed=getattr(step_data, "conscience_passed", True),
+                conscience_override_reason=getattr(step_data, "conscience_override_reason", None),
+                epistemic_data=getattr(step_data, "epistemic_data", {}),
+                final_action=getattr(step_data, "selected_action", ""),
+                action_was_overridden=not getattr(step_data, "conscience_passed", True),
             )
 
         elif step == StepPoint.ACTION_COMPLETE:
@@ -878,21 +888,26 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
                 thought_id=step_data.thought_id,
                 task_id=step_data.task_id,
                 timestamp=timestamp,
-                action_executed=getattr(step_data, 'action_executed', ''),
-                execution_success=getattr(step_data, 'dispatch_success', True),
-                execution_time_ms=getattr(step_data, 'execution_time_ms', 0.0),
+                action_executed=getattr(step_data, "action_executed", ""),
+                execution_success=getattr(step_data, "dispatch_success", True),
+                execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
                 follow_up_thought_id=None,  # TODO: Extract if available
                 error=None,
-                audit_entry_id=getattr(step_data, 'audit_entry_id', None),
-                audit_sequence_number=getattr(step_data, 'audit_sequence_number', None),
-                audit_entry_hash=getattr(step_data, 'audit_entry_hash', None),
-                audit_signature=getattr(step_data, 'audit_signature', None),
+                audit_entry_id=getattr(step_data, "audit_entry_id", None),
+                audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
+                audit_entry_hash=getattr(step_data, "audit_entry_hash", None),
+                audit_signature=getattr(step_data, "audit_signature", None),
             )
 
         # Broadcast the event if we created one
         if event:
+            logger.info(f"[BROADCAST DEBUG] About to broadcast {event.event_type}")
             await reasoning_event_stream.broadcast_reasoning_event(event)
-            logger.debug(f"Broadcasted {event.event_type} reasoning event for thought {step_data.thought_id}")
+            logger.info(
+                f"[BROADCAST DEBUG] Broadcasted {event.event_type} reasoning event for thought {step_data.thought_id}"
+            )
+        else:
+            logger.info(f"[BROADCAST DEBUG] No event created for step {step.value}")
 
     except Exception as e:
         logger.warning(f"Error broadcasting reasoning event for {step.value}: {e}")

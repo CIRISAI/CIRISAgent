@@ -354,13 +354,13 @@ class ThoughtProcessor(
         )
 
         if final_result:
-            action_metric = f"action_selected_{final_result.selected_action.value}"
+            action_metric = f"action_selected_{final_result.final_action.selected_action.value}"
             await self.telemetry_service.record_metric(
                 action_metric,
                 value=1.0,
                 tags={
                     "thought_id": thought.thought_id,
-                    "action": final_result.selected_action.value,
+                    "action": final_result.final_action.selected_action.value,
                     "path_type": "hot",
                     "source_module": "thought_processor",
                 },
@@ -375,7 +375,7 @@ class ThoughtProcessor(
             correlation_id=correlation.correlation_id,
             response_data={
                 "success": "true",
-                "result_summary": f"Successfully processed thought with action: {final_result.selected_action if final_result else 'none'}",
+                "result_summary": f"Successfully processed thought with action: {final_result.final_action.selected_action if final_result else 'none'}",
                 "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                 "response_timestamp": end_time.isoformat(),
             },

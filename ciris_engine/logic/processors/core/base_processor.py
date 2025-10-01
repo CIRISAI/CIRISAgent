@@ -134,6 +134,7 @@ class BaseProcessor(ABC):
         Common action dispatch logic.
         Returns True if dispatch succeeded.
         """
+        logger.info(f"[DISPATCH DEBUG] dispatch_action called for thought {thought.thought_id}")
         try:
             # Convert dict to DispatchContext
             from ciris_engine.schemas.runtime.contexts import DispatchContext
@@ -166,7 +167,7 @@ class BaseProcessor(ABC):
                 else None
             )
 
-            await self.action_dispatcher.dispatch(
+            dispatch_result = await self.action_dispatcher.dispatch(
                 action_selection_result=result, thought=thought, dispatch_context=dispatch_ctx
             )
 
@@ -180,22 +181,56 @@ class BaseProcessor(ABC):
             )
 
             # STEP POINT: ACTION_COMPLETE (after action dispatch)
-            if hasattr(self, "_stream_step_point"):
-                from ciris_engine.schemas.services.runtime_control import StepPoint
+            # Broadcast reasoning event directly
+            try:
+                from ciris_engine.logic.processors.core.step_decorators import _broadcast_reasoning_event
+                from ciris_engine.schemas.services.runtime_control import ActionCompleteStepData, StepPoint
 
-                await self._stream_step_point(
-                    StepPoint.ACTION_COMPLETE,
-                    thought.thought_id,
-                    {
-                        "timestamp": dispatch_end.isoformat() if dispatch_end else None,
-                        "thought_id": thought.thought_id,
-                        "action_executed": str(getattr(result, "selected_action", "UNKNOWN")),
-                        "dispatch_success": True,
-                        "execution_time_ms": dispatch_time_ms,
-                        "handler_completed": True,
-                        "follow_up_processing_pending": True,
-                    },
+                # Create ACTION_COMPLETE step data with audit trail
+                # Extract action name - handle both ConscienceApplicationResult and ActionSelectionDMAResult
+                action_name = "UNKNOWN"
+                if isinstance(dispatch_result, dict):
+                    action_name = str(dispatch_result.get("action_type", "UNKNOWN"))
+                else:
+                    # Check if result has final_action (ConscienceApplicationResult)
+                    try:
+                        final_action = result.final_action  # ConscienceApplicationResult
+                        action_name = str(final_action.selected_action)
+                    except AttributeError:
+                        # Must be ActionSelectionDMAResult directly
+                        try:
+                            action_name = str(result.selected_action)
+                        except AttributeError:
+                            action_name = "UNKNOWN"
+
+                step_data = ActionCompleteStepData(
+                    timestamp=dispatch_end.isoformat() if dispatch_end else None,
+                    thought_id=thought.thought_id,
+                    task_id=getattr(thought, "source_task_id", None),
+                    processing_time_ms=dispatch_time_ms,
+                    success=True,
+                    action_executed=action_name,
+                    dispatch_success=(
+                        dispatch_result.get("success", True) if isinstance(dispatch_result, dict) else True
+                    ),
+                    handler_completed=True,
+                    follow_up_processing_pending=True,
+                    execution_time_ms=dispatch_time_ms,
+                    audit_entry_id=dispatch_result.get("audit_entry_id") if isinstance(dispatch_result, dict) else None,
+                    audit_sequence_number=(
+                        dispatch_result.get("audit_sequence_number") if isinstance(dispatch_result, dict) else None
+                    ),
+                    audit_entry_hash=(
+                        dispatch_result.get("audit_entry_hash") if isinstance(dispatch_result, dict) else None
+                    ),
+                    audit_signature=(
+                        dispatch_result.get("audit_signature") if isinstance(dispatch_result, dict) else None
+                    ),
                 )
+
+                await _broadcast_reasoning_event(StepPoint.ACTION_COMPLETE, step_data, dispatch_result)
+            except Exception as broadcast_error:
+                logger.warning(f"Error broadcasting ACTION_COMPLETE event: {broadcast_error}")
 
             return True
         except Exception as e:

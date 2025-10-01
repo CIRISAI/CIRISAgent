@@ -285,6 +285,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             AuditEntryResult with entry_id and hash chain data (if enabled)
         """
         from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+
         # Convert EventPayload to AuditEventData
         audit_data = AuditEventData(
             entity_id=str(getattr(event_data, "user_id", "unknown")),
@@ -378,7 +379,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to log event {event_type}: {e}")
             # Return entry with just entry_id on error
-            return AuditEntryResult(entry_id=entry.entry_id if 'entry' in locals() else "error")
+            return AuditEntryResult(entry_id=entry.entry_id if "entry" in locals() else "error")
 
     async def log_conscience_event(
         self, thought_id: str, decision: str, reasoning: str, metadata: Optional[dict] = None

@@ -594,6 +594,8 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
     from fastapi.responses import StreamingResponse
 
+    from ciris_engine.schemas.api.auth import UserRole
+
     # Get runtime control service
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
@@ -601,15 +603,65 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
+    # Get authentication service for OAuth lookup
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        raise HTTPException(status_code=503, detail="Authentication service not available")
+
+    # SECURITY: Determine if user can see all events (ADMIN or higher)
+    user_role = current_user.get("role", UserRole.OBSERVER)
+    if isinstance(user_role, str):
+        try:
+            user_role = UserRole(user_role)
+        except ValueError:
+            # Invalid role, default to most restrictive
+            user_role = UserRole.OBSERVER
+    can_see_all = user_role.has_permission(UserRole.ADMIN)
+
+    # SECURITY: Get user's allowed channel IDs (user_id + linked OAuth accounts)
+    # This is a whitelist - only tasks matching these channel_ids are visible
+    allowed_channel_ids: set[str] = set()
+    task_channel_cache: dict[str, str] = {}  # Cache task_id -> channel_id lookups
+
+    if not can_see_all:
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in token")
+
+        # Add user's own ID (this is the primary filter)
+        allowed_channel_ids.add(user_id)
+
+        # Get linked OAuth accounts - these are additional identities for the same user
+        try:
+            # SECURITY: Only select OAuth links for THIS user, prevent privilege escalation
+            db = auth_service.db_manager
+            query = """
+                SELECT oauth_provider, oauth_external_id
+                FROM wa_cert
+                WHERE user_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL
+            """
+            async with db.connection() as conn:
+                rows = await conn.execute_fetchall(query, (user_id,))
+                for row in rows:
+                    oauth_provider, oauth_external_id = row
+                    # Add multiple formats to handle different channel_id patterns
+                    # Format: provider:external_id (e.g., "discord:123456")
+                    allowed_channel_ids.add(f"{oauth_provider}:{oauth_external_id}")
+                    # Format: just external_id (for backward compatibility)
+                    allowed_channel_ids.add(oauth_external_id)
+        except Exception as e:
+            logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
+            # Continue with just user_id - don't fail the request
+
     async def stream_reasoning_steps():
         """Generate Server-Sent Events for live reasoning steps."""
         try:
-            # Subscribe to the global step result stream
-            from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+            # Subscribe to the global reasoning event stream
+            from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
             # Create a queue for this client
             stream_queue = asyncio.Queue(maxsize=100)
-            step_result_stream.subscribe(stream_queue)
+            reasoning_event_stream.subscribe(stream_queue)
 
             try:
                 # Send initial connection event
@@ -620,6 +672,59 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                     try:
                         # Wait for step results with timeout to send keepalive
                         step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
+
+                        # SECURITY: Filter events for OBSERVER users
+                        # ADMIN+ users bypass filtering and see all events
+                        if not can_see_all:
+                            events = step_update.get("events", [])
+                            if not events:
+                                continue
+
+                            filtered_events = []
+
+                            # Batch lookup task IDs not in cache
+                            uncached_task_ids = [
+                                event.get("task_id")
+                                for event in events
+                                if event.get("task_id") and event.get("task_id") not in task_channel_cache
+                            ]
+
+                            # SECURITY: Batch fetch channel_ids for efficiency
+                            if uncached_task_ids:
+                                try:
+                                    db = auth_service.db_manager
+                                    placeholders = ",".join("?" * len(uncached_task_ids))
+                                    query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
+                                    async with db.connection() as conn:
+                                        rows = await conn.execute_fetchall(query, uncached_task_ids)
+                                        for row in rows:
+                                            tid, cid = row
+                                            # SECURITY: Cache the mapping (this cache is per-connection)
+                                            task_channel_cache[tid] = cid
+                                except Exception as e:
+                                    logger.error(f"Error batch fetching task channel_ids: {e}", exc_info=True)
+                                    # Continue with cached data only
+
+                            # Filter events based on channel_id whitelist
+                            for event in events:
+                                task_id = event.get("task_id")
+                                if not task_id:
+                                    # No task_id means system event - OBSERVER can't see these
+                                    continue
+
+                                # SECURITY: Check cached channel_id against whitelist
+                                channel_id = task_channel_cache.get(task_id)
+                                if channel_id and channel_id in allowed_channel_ids:
+                                    # User owns this task (direct or via OAuth link)
+                                    filtered_events.append(event)
+                                # else: task not found or not owned by user - skip silently
+
+                            # Replace events with filtered list
+                            if filtered_events:
+                                step_update = {"events": filtered_events}
+                            else:
+                                # No events for this user, skip this update silently
+                                continue
 
                         # Stream the step update
                         yield f"event: step_update\ndata: {json.dumps(step_update, default=str)}\n\n"
@@ -635,7 +740,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
             finally:
                 # Clean up subscription
-                step_result_stream.unsubscribe(stream_queue)
+                reasoning_event_stream.unsubscribe(stream_queue)
 
         except Exception as e:
             logger.error(f"Error in reasoning stream: {e}")

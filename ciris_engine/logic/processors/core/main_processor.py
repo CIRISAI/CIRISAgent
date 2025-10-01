@@ -632,7 +632,7 @@ class AgentProcessor:
                         app_config=self.app_config,
                         round_number=self.current_round_number,
                         conscience_result=conscience_result,
-                        action_type=result.selected_action if result else None,
+                        action_type=result.final_action.selected_action if result else None,
                     )
                     # Services should be accessed via service registry, not passed in context
                     # to avoid serialization issues during audit logging

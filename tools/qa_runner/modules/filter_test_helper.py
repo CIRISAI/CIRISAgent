@@ -15,9 +15,10 @@ import requests
 class FilterTestHelper:
     """Helper to monitor task completion via SSE for filter tests."""
 
-    def __init__(self, base_url: str, token: str):
+    def __init__(self, base_url: str, token: str, verbose: bool = False):
         self.base_url = base_url
         self.token = token
+        self.verbose = verbose
         self.completed_tasks: Set[str] = set()
         self.stream_thread: Optional[threading.Thread] = None
         self.should_stop = threading.Event()
@@ -120,10 +121,19 @@ class FilterTestHelper:
                             if event_type == "action_result":
                                 action_executed = event.get("action_executed", "")
                                 execution_success = event.get("execution_success", False)
+                                task_id = event.get("task_id", "unknown")
+                                thought_id = event.get("thought_id", "unknown")
+
+                                if self.verbose:
+                                    print(
+                                        f"[SSE] ACTION_RESULT: task={task_id[:8]}, thought={thought_id[:8]}, "
+                                        f"action={action_executed}, success={execution_success}"
+                                    )
 
                                 # Check if this is a TASK_COMPLETE action that succeeded
                                 if "TASK_COMPLETE" in action_executed and execution_success:
-                                    task_id = event.get("task_id")
+                                    if self.verbose:
+                                        print(f"[SSE] ✅ TASK_COMPLETE detected for task {task_id}")
                                     if task_id:
                                         self.completed_tasks.add(task_id)
 

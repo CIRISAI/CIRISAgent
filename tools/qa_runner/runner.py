@@ -66,7 +66,7 @@ class QARunner:
 
         # Initialize filter test helper if running filter tests
         if QAModule.FILTERS in modules:
-            self._filter_helper = FilterTestHelper(self.config.base_url, self.token)
+            self._filter_helper = FilterTestHelper(self.config.base_url, self.token, verbose=self.config.verbose)
             try:
                 self._filter_helper.start_monitoring()
                 self.console.print("[green]✅ SSE monitoring started for filter tests[/green]")

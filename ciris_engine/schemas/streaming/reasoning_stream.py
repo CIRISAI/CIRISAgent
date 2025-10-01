@@ -1,7 +1,7 @@
 """
 Simplified reasoning stream for H3ERE pipeline.
 
-5 clear result events, no UI metadata (SVG locations, etc).
+6 clear result events, no UI metadata (SVG locations, etc).
 Pure data events for monitoring pipeline execution.
 """
 
@@ -17,10 +17,12 @@ from ciris_engine.schemas.services.runtime_control import (
     DMAResultsEvent,
     ReasoningEvent,
     SnapshotAndContextResult,
+    ThoughtStartEvent,
 )
 
-# Union of all 5 reasoning event types
+# Union of all 6 reasoning event types
 ReasoningEventUnion = Union[
+    ThoughtStartEvent,
     SnapshotAndContextResult,
     DMAResultsEvent,
     ASPDMAResultEvent,
@@ -63,7 +65,9 @@ def create_reasoning_event(
         "timestamp": timestamp,
     }
 
-    if event_type == ReasoningEvent.SNAPSHOT_AND_CONTEXT:
+    if event_type == ReasoningEvent.THOUGHT_START:
+        return ThoughtStartEvent(**base_data, **event_data)
+    elif event_type == ReasoningEvent.SNAPSHOT_AND_CONTEXT:
         return SnapshotAndContextResult(**base_data, **event_data)
     elif event_type == ReasoningEvent.DMA_RESULTS:
         return DMAResultsEvent(**base_data, **event_data)
@@ -81,6 +85,7 @@ __all__ = [
     "ReasoningEvent",
     "ReasoningEventUnion",
     "ReasoningStreamUpdate",
+    "ThoughtStartEvent",
     "SnapshotAndContextResult",
     "DMAResultsEvent",
     "ASPDMAResultEvent",

@@ -1,8 +1,9 @@
 """
 Reasoning Event Streaming Verification Module.
 
-Validates that the 5 simplified reasoning events are properly streaming
-via Server-Sent Events (SSE) to the reasoning-stream endpoint.
+Validates that the 6 simplified reasoning events are properly streaming
+via Server-Sent Events (SSE) to the reasoning-stream endpoint, and that
+ONLY those 6 events are emitted (no extras from the 11 step points).
 """
 
 import json
@@ -17,10 +18,11 @@ from ..config import QAConfig, QAModule, QATestCase
 
 
 class StreamingVerificationModule:
-    """Verify all 5 reasoning events are streaming correctly."""
+    """Verify all 6 reasoning events are streaming correctly."""
 
-    # All 5 reasoning events expected (with 60s timeout for wakeup to complete)
+    # All 6 reasoning events expected (with 60s timeout for wakeup to complete)
     EXPECTED_EVENTS = {
+        "thought_start",
         "snapshot_and_context",
         "dma_results",
         "aspdma_result",
@@ -46,6 +48,7 @@ class StreamingVerificationModule:
         events_with_recursive_flag = 0
         recursive_aspdma_count = 0
         recursive_conscience_count = 0
+        unexpected_events: Set[str] = set()  # Track events outside the expected 6
 
         # Shared state for thread communication
         stream_connected = threading.Event()
@@ -54,7 +57,7 @@ class StreamingVerificationModule:
         def monitor_stream():
             """Monitor SSE stream in a separate thread."""
             nonlocal events_with_audit_data, events_with_recursive_flag
-            nonlocal recursive_aspdma_count, recursive_conscience_count
+            nonlocal recursive_aspdma_count, recursive_conscience_count, unexpected_events
 
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
@@ -95,6 +98,10 @@ class StreamingVerificationModule:
                                 # Track this event type
                                 received_events.add(event_type)
 
+                                # Check if this is an unexpected event (not one of the 6)
+                                if event_type not in StreamingVerificationModule.EXPECTED_EVENTS:
+                                    unexpected_events.add(event_type)
+
                                 # Validate event structure
                                 event_detail = {
                                     "event_type": event_type,
@@ -105,11 +112,31 @@ class StreamingVerificationModule:
                                 }
 
                                 # Event-specific validation
-                                if event_type == "snapshot_and_context":
+                                if event_type == "thought_start":
+                                    if "thought_type" not in event:
+                                        event_detail["issues"].append("Missing thought_type")
+                                    elif not event["thought_type"]:
+                                        event_detail["issues"].append("Empty thought_type")
+                                    if "thought_content" not in event:
+                                        event_detail["issues"].append("Missing thought_content")
+                                    elif not event["thought_content"]:
+                                        event_detail["issues"].append("Empty thought_content")
+                                    if "task_description" not in event:
+                                        event_detail["issues"].append("Missing task_description")
+                                    elif not event["task_description"]:
+                                        event_detail["issues"].append("Empty task_description")
+                                    if "round_number" not in event:
+                                        event_detail["issues"].append("Missing round_number")
+
+                                elif event_type == "snapshot_and_context":
                                     if "system_snapshot" not in event:
                                         event_detail["issues"].append("Missing system_snapshot")
+                                    elif not event["system_snapshot"]:
+                                        event_detail["issues"].append("Empty system_snapshot")
                                     if "context" not in event:
                                         event_detail["issues"].append("Missing context")
+                                    elif not event["context"]:
+                                        event_detail["issues"].append("Empty context")
                                     if "context_size" not in event:
                                         event_detail["issues"].append("Missing context_size")
 
@@ -125,8 +152,12 @@ class StreamingVerificationModule:
                                 elif event_type == "aspdma_result":
                                     if "selected_action" not in event:
                                         event_detail["issues"].append("Missing selected_action")
+                                    elif not event["selected_action"]:
+                                        event_detail["issues"].append("Empty selected_action")
                                     if "action_rationale" not in event:
                                         event_detail["issues"].append("Missing action_rationale")
+                                    elif not event["action_rationale"]:
+                                        event_detail["issues"].append("Empty action_rationale")
                                     if "is_recursive" in event:
                                         events_with_recursive_flag += 1
                                         if event["is_recursive"]:
@@ -137,6 +168,8 @@ class StreamingVerificationModule:
                                         event_detail["issues"].append("Missing conscience_passed")
                                     if "final_action" not in event:
                                         event_detail["issues"].append("Missing final_action")
+                                    elif not event["final_action"]:
+                                        event_detail["issues"].append("Empty final_action")
                                     if "epistemic_data" not in event:
                                         event_detail["issues"].append("Missing epistemic_data")
                                     if "is_recursive" in event:
@@ -147,6 +180,8 @@ class StreamingVerificationModule:
                                 elif event_type == "action_result":
                                     if "action_executed" not in event:
                                         event_detail["issues"].append("Missing action_executed")
+                                    elif not event["action_executed"]:
+                                        event_detail["issues"].append("Empty action_executed")
                                     if "execution_success" not in event:
                                         event_detail["issues"].append("Missing execution_success")
 
@@ -214,9 +249,10 @@ class StreamingVerificationModule:
 
         # Build result
         result = {
-            "success": len(missing_events) == 0,  # Require all 5 events
+            "success": len(missing_events) == 0 and len(unexpected_events) == 0,  # Require all 6 events, no extras
             "received_events": sorted(list(received_events)),
             "missing_events": sorted(list(missing_events)),
+            "unexpected_events": sorted(list(unexpected_events)),
             "duration": duration,
             "total_events": len(event_details),
             "events_with_audit_data": events_with_audit_data,
@@ -229,7 +265,7 @@ class StreamingVerificationModule:
 
         # Build status message
         if result["success"]:
-            message = f"✅ All 5 reasoning events received"
+            message = f"✅ All 6 reasoning events received (no unexpected events)"
             if events_with_audit_data > 0:
                 message += f"\n✅ Audit trail data present in {events_with_audit_data} ACTION_RESULT events"
             if recursive_aspdma_count > 0 or recursive_conscience_count > 0:
@@ -238,7 +274,12 @@ class StreamingVerificationModule:
                 )
             result["message"] = message
         else:
-            result["message"] = f"❌ Missing events: {', '.join(missing_events)}"
+            error_parts = []
+            if missing_events:
+                error_parts.append(f"Missing events: {', '.join(missing_events)}")
+            if unexpected_events:
+                error_parts.append(f"Unexpected events: {', '.join(unexpected_events)}")
+            result["message"] = "❌ " + "; ".join(error_parts)
 
         return result
 

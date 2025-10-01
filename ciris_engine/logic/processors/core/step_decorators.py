@@ -825,9 +825,10 @@ async def _broadcast_reasoning_event(
     step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False
 ) -> None:
     """
-    Broadcast simplified reasoning event for one of the 5 key steps.
+    Broadcast simplified reasoning event for one of the 6 key steps.
 
     CORRECT Step Point Mapping:
+    0. START_ROUND → THOUGHT_START (thought + task metadata)
     1. GATHER_CONTEXT + PERFORM_DMAS → SNAPSHOT_AND_CONTEXT (snapshot + context)
     2. PERFORM_ASPDMA → DMA_RESULTS (Results of the 3 DMAs)
     3. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → ASPDMA_RESULT (result of ASPDMA, with is_recursive flag)
@@ -846,7 +847,11 @@ async def _broadcast_reasoning_event(
         logger.info(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
 
         # Map step points to reasoning events using helper functions
-        if step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
+        if step == StepPoint.START_ROUND:
+            # Event 0: THOUGHT_START
+            event = _create_thought_start_event(step_data, timestamp, create_reasoning_event)
+
+        elif step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
             if step == StepPoint.PERFORM_DMAS:
                 logger.info(f"[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
@@ -1099,6 +1104,35 @@ def _extract_lightweight_system_snapshot() -> Dict[str, Any]:
         pass
 
     return snapshot
+
+
+def _create_thought_start_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
+    """Create THOUGHT_START reasoning event with thought and task metadata."""
+    from ciris_engine.logic.persistence import get_task_by_id, get_thought_by_id
+    from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    # Get full thought and task data from persistence
+    thought = get_thought_by_id(step_data.thought_id)
+    task = get_task_by_id(step_data.task_id) if step_data.task_id else None
+
+    return create_reasoning_event(
+        event_type=ReasoningEvent.THOUGHT_START,
+        thought_id=step_data.thought_id,
+        task_id=step_data.task_id or "",
+        timestamp=timestamp,
+        # Thought metadata
+        thought_type=thought.thought_type.value if thought else "unknown",
+        thought_content=thought.content if thought else "",
+        thought_status=thought.status.value if thought else "unknown",
+        round_number=thought.round_number if thought else 0,
+        thought_depth=thought.thought_depth if thought else 0,
+        parent_thought_id=thought.parent_thought_id if thought else None,
+        # Task metadata
+        task_description=task.description if task else "",
+        task_priority=task.priority if task else 0,
+        channel_id=task.channel_id if task else "",
+        updated_info_available=task.updated_info_available if task else False,
+    )
 
 
 def _create_snapshot_and_context_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:

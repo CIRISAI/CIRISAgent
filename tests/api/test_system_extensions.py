@@ -872,8 +872,10 @@ class TestReasoningStreamEndpoint:
         mock_request.app.state.main_runtime_control_service = MagicMock()
         mock_request.app.state.authentication_service = MagicMock()
 
-        # OBSERVER user without user_id - use AuthContext
-        mock_auth = AuthContext(user_id=None, role=UserRole.OBSERVER, permissions=[])
+        # OBSERVER user without user_id - use AuthContext with empty user_id
+        mock_auth = AuthContext(
+            user_id="", role=UserRole.OBSERVER, permissions=[], authenticated_at=datetime.now(timezone.utc)
+        )
 
         # Execute and verify exception
         with pytest.raises(HTTPException) as exc_info:
@@ -1039,7 +1041,9 @@ class TestReasoningStreamEndpoint:
         mock_request.app.state.main_runtime_control_service = MagicMock()
         mock_request.app.state.authentication_service = MagicMock()
 
-        mock_auth = AuthContext(user_id="test_user", role=UserRole.ADMIN, permissions=[])
+        mock_auth = AuthContext(
+            user_id="test_user", role=UserRole.ADMIN, permissions=[], authenticated_at=datetime.now(timezone.utc)
+        )
 
         # Mock queue to return one event then timeout
         step_update = {"events": [{"task_id": "task1", "data": "test"}]}
@@ -1103,7 +1107,9 @@ class TestReasoningStreamEndpoint:
         mock_request.app.state.authentication_service = mock_auth_service
 
         # OBSERVER user - use AuthContext
-        mock_auth = AuthContext(user_id="observer_user", role=UserRole.OBSERVER, permissions=[])
+        mock_auth = AuthContext(
+            user_id="observer_user", role=UserRole.OBSERVER, permissions=[], authenticated_at=datetime.now(timezone.utc)
+        )
 
         # Mock queue with events that should be filtered
         step_update = {

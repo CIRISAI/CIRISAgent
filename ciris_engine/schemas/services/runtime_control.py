@@ -36,8 +36,9 @@ class StepPoint(str, Enum):
 
 
 class ReasoningEvent(str, Enum):
-    """Simplified reasoning stream events - 5 clear result events."""
+    """Simplified reasoning stream events - 6 clear result events."""
 
+    THOUGHT_START = "thought_start"  # 0) Thought begins processing - metadata and content
     SNAPSHOT_AND_CONTEXT = "snapshot_and_context"  # 1) System snapshot + gathered context
     DMA_RESULTS = "dma_results"  # 2) All 3 DMA results (csdma, dsdma, aspdma)
     ASPDMA_RESULT = "aspdma_result"  # 3) Selected action + rationale
@@ -838,8 +839,31 @@ class AllStepsExecutionResult(BaseModel):
 
 
 # ============================================================================
-# Simplified Reasoning Stream Event Results (5 clear events, no UI metadata)
+# Simplified Reasoning Stream Event Results (6 clear events, no UI metadata)
 # ============================================================================
+
+
+class ThoughtStartEvent(BaseModel):
+    """Event 0: Thought begins processing - thought and task metadata (START_ROUND step)."""
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.THOUGHT_START)
+    thought_id: str = Field(..., description="Thought being processed")
+    task_id: str = Field(..., description="Source task identifier")
+    timestamp: str = Field(..., description="Event timestamp")
+
+    # Thought metadata
+    thought_type: str = Field(..., description="Type of thought (standard, pondering, etc)")
+    thought_content: str = Field(..., description="Thought content/reasoning")
+    thought_status: str = Field(..., description="Current thought status")
+    round_number: int = Field(..., description="Processing round")
+    thought_depth: int = Field(0, description="Pondering depth if applicable")
+    parent_thought_id: Optional[str] = Field(None, description="Parent thought if pondering")
+
+    # Task metadata (context for the thought)
+    task_description: str = Field(..., description="What needs to be done")
+    task_priority: int = Field(..., description="Priority 0-10")
+    channel_id: str = Field(..., description="Channel where task originated")
+    updated_info_available: bool = Field(False, description="Whether task has updated information")
 
 
 class SnapshotAndContextResult(BaseModel):

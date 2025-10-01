@@ -163,12 +163,27 @@ class ThoughtProcessor(
             logger.info(
                 f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
             )
-            return dma_results
+            # Wrap in ConscienceApplicationResult before returning
+            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+            return ConscienceApplicationResult(
+                original_action=dma_results,
+                final_action=dma_results,
+                overridden=False,
+                override_reason=None,
+            )
 
         # Check for critical failures
         if self._has_critical_failure(dma_results):
             await self._handle_critical_failure(correlation, start_time)
-            return self._create_deferral_result(dma_results, thought)
+            deferral_result = self._create_deferral_result(dma_results, thought)
+            # Wrap in ConscienceApplicationResult before returning
+            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+            return ConscienceApplicationResult(
+                original_action=deferral_result,
+                final_action=deferral_result,
+                overridden=False,
+                override_reason=None,
+            )
 
         # Phase 3: Action selection
         action_result = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)

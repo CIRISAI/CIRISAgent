@@ -171,11 +171,11 @@ class BaseProcessor(ABC):
                 action_selection_result=result, thought=thought, dispatch_context=dispatch_ctx
             )
 
-            dispatch_end = (
-                getattr(self, "_time_service", None).now()
-                if hasattr(self, "_time_service") and self._time_service
-                else None
-            )
+            # Get time service - check both _time_service and time_service
+            time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
+            if not time_svc:
+                raise RuntimeError("CRITICAL: No time service available in processor - system integrity compromised")
+            dispatch_end = time_svc.now()
             dispatch_time_ms = (
                 (dispatch_end - dispatch_start).total_seconds() * 1000 if dispatch_start and dispatch_end else 0.0
             )
@@ -204,7 +204,7 @@ class BaseProcessor(ABC):
                             action_name = "UNKNOWN"
 
                 step_data = ActionCompleteStepData(
-                    timestamp=dispatch_end.isoformat() if dispatch_end else None,
+                    timestamp=dispatch_end.isoformat(),
                     thought_id=thought.thought_id,
                     task_id=getattr(thought, "source_task_id", None),
                     processing_time_ms=dispatch_time_ms,

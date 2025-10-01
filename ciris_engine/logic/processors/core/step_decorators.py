@@ -802,13 +802,12 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
     """
     Broadcast simplified reasoning event for one of the 5 key steps.
 
-    Step Point Mapping:
-    - GATHER_CONTEXT → SNAPSHOT_AND_CONTEXT
-    - PERFORM_DMAS → DMA_RESULTS
-    - PERFORM_ASPDMA / RECURSIVE_ASPDMA → ASPDMA_RESULT (with is_recursive flag)
-    - CONSCIENCE_EXECUTION / RECURSIVE_CONSCIENCE → CONSCIENCE_RESULT (with is_recursive flag)
-    - FINALIZE_ACTION → Included in CONSCIENCE_RESULT
-    - ACTION_COMPLETE → ACTION_RESULT
+    CORRECT Step Point Mapping:
+    1. GATHER_CONTEXT + PERFORM_DMAS → SNAPSHOT_AND_CONTEXT (snapshot + context)
+    2. PERFORM_ASPDMA → DMA_RESULTS (Results of the 3 DMAs)
+    3. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → ASPDMA_RESULT (result of ASPDMA, with is_recursive flag)
+    4. FINALIZE_ACTION → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
+    5. ACTION_COMPLETE → ACTION_RESULT (execution + audit)
     """
     try:
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
@@ -819,20 +818,21 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
         timestamp = step_data.timestamp or datetime.now().isoformat()
 
         # Map step points to reasoning events
-        if step == StepPoint.GATHER_CONTEXT:
-            # Event 1: SNAPSHOT_AND_CONTEXT
-            event = create_reasoning_event(
-                event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
-                thought_id=step_data.thought_id,
-                task_id=step_data.task_id,
-                timestamp=timestamp,
-                system_snapshot={},  # TODO: Extract from step_data
-                context=getattr(step_data, 'context', ''),
-                context_size=len(getattr(step_data, 'context', '')),
-            )
+        if step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
+            # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS with both context + DMA results)
+            if step == StepPoint.PERFORM_DMAS:
+                event = create_reasoning_event(
+                    event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
+                    thought_id=step_data.thought_id,
+                    task_id=step_data.task_id,
+                    timestamp=timestamp,
+                    system_snapshot={},  # TODO: Extract system snapshot
+                    context=getattr(step_data, 'context', ''),  # Context from prior GATHER_CONTEXT
+                    context_size=len(getattr(step_data, 'context', '')),
+                )
 
-        elif step == StepPoint.PERFORM_DMAS:
-            # Event 2: DMA_RESULTS
+        elif step == StepPoint.PERFORM_ASPDMA:
+            # Event 2: DMA_RESULTS (Results of the 3 DMAs)
             event = create_reasoning_event(
                 event_type=ReasoningEvent.DMA_RESULTS,
                 thought_id=step_data.thought_id,
@@ -843,27 +843,27 @@ async def _broadcast_reasoning_event(step: StepPoint, step_data: StepDataUnion, 
                 aspdma_options=getattr(step_data, 'aspdma', None),
             )
 
-        elif step in (StepPoint.PERFORM_ASPDMA, StepPoint.RECURSIVE_ASPDMA):
-            # Event 3: ASPDMA_RESULT (can be recursive)
+        elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
+            # Event 3: ASPDMA_RESULT (result of ASPDMA, can be recursive)
             event = create_reasoning_event(
                 event_type=ReasoningEvent.ASPDMA_RESULT,
                 thought_id=step_data.thought_id,
                 task_id=step_data.task_id,
                 timestamp=timestamp,
-                is_recursive=(step == StepPoint.RECURSIVE_ASPDMA),
+                is_recursive=(step == StepPoint.RECURSIVE_CONSCIENCE),
                 selected_action=getattr(step_data, 'selected_action', ''),
                 action_rationale=getattr(step_data, 'action_rationale', ''),
                 confidence_score=None,  # TODO: Extract if available
             )
 
-        elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE, StepPoint.FINALIZE_ACTION):
-            # Event 4: CONSCIENCE_RESULT (can be recursive, finalize is included here)
+        elif step == StepPoint.FINALIZE_ACTION:
+            # Event 4: CONSCIENCE_RESULT (result of 5 consciences)
             event = create_reasoning_event(
                 event_type=ReasoningEvent.CONSCIENCE_RESULT,
                 thought_id=step_data.thought_id,
                 task_id=step_data.task_id,
                 timestamp=timestamp,
-                is_recursive=(step == StepPoint.RECURSIVE_CONSCIENCE),
+                is_recursive=False,  # FINALIZE_ACTION is never recursive
                 conscience_passed=getattr(step_data, 'conscience_passed', True),
                 conscience_override_reason=getattr(step_data, 'conscience_override_reason', None),
                 epistemic_data=getattr(step_data, 'epistemic_data', {}),

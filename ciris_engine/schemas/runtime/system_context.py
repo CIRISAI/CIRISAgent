@@ -68,7 +68,7 @@ class SystemSnapshot(BaseModel):
     )
 
     # Agent identity (loaded once from graph memory)
-    agent_identity: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    agent_identity: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
         default_factory=dict, description="Raw agent identity data from graph node - typed values only"
     )
     identity_purpose: Optional[str] = Field(None, description="Agent's purpose statement extracted from identity")

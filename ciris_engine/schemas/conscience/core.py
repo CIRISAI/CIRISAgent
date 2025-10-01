@@ -6,7 +6,7 @@ Provides schemas for conscience validation results and epistemic safety checks.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -70,6 +70,13 @@ class EpistemicData(BaseModel):
     coherence_level: float = Field(ge=0.0, le=1.0, description="Current coherence level")
     uncertainty_acknowledged: bool = Field(description="Whether uncertainty was acknowledged")
     reasoning_transparency: float = Field(ge=0.0, le=1.0, description="Transparency of reasoning")
+
+    # Optional replacement action for conscience checks that override the selected action
+    # Used by ThoughtDepthGuardrail and UpdatedStatusConscience
+    replacement_action: Optional[Dict[str, Any]] = Field(default=None, description="Replacement action when conscience overrides")
+
+    # Optional observation content for UpdatedStatusConscience
+    CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(default=None, description="New observation that arrived during processing")
 
     model_config = ConfigDict(extra="forbid")
 

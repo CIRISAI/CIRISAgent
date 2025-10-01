@@ -3,7 +3,7 @@ Audit API response schemas - fully typed replacements for Dict[str, Any].
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ class AuditContext(BaseModel):
     user_agent: Optional[str] = Field(None, description="User agent if applicable")
     result: Optional[str] = Field(None, description="Operation result")
     error: Optional[str] = Field(None, description="Error message if failed")
-    metadata: Optional[dict] = Field(None, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 class EntryVerification(BaseModel):

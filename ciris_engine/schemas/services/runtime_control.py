@@ -595,8 +595,9 @@ class StepResultFinalizeAction(BaseModel):
     thought_id: str = Field(..., description="Thought ID from SUT")
     task_id: Optional[str] = Field(None, description="Task ID from SUT")
     selected_action: str = Field(..., description="Selected action from SUT")
-    selection_reasoning: str = Field(..., description="Selection reasoning from SUT")
-    conscience_passed: bool = Field(..., description="Conscience passed from SUT")
+    conscience_passed: bool = Field(..., description="Whether conscience checks passed")
+    conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
+    epistemic_data: Dict[str, Any] = Field(default_factory=dict, description="Rich conscience evaluation data")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
     error: Optional[str] = Field(None)
@@ -738,8 +739,9 @@ class FinalizeActionStepData(BaseStepData):
     """Step data for FINALIZE_ACTION step."""
 
     selected_action: str = Field(..., description="Final selected action")
-    selection_reasoning: str = Field(..., description="Reasoning for final action selection")
-    conscience_passed: bool = Field(True, description="Conscience passed if we reach this step")
+    conscience_passed: bool = Field(..., description="Whether conscience checks passed")
+    conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
+    epistemic_data: Dict[str, Any] = Field(default_factory=dict, description="Rich conscience evaluation data from all checks")
 
 
 class PerformActionStepData(BaseStepData):

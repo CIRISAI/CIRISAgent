@@ -694,8 +694,6 @@ class ThoughtProcessor(
 
     def _handle_special_cases(self, conscience_result):
         """Handle special processing cases (PONDER, DEFER overrides)."""
-        # This method handles edge cases and will be kept in main.py
-        # Implementation would go here based on current logic
-        if conscience_result and hasattr(conscience_result, "final_action"):
-            return conscience_result.final_action
-        return None
+        # Return the full ConscienceApplicationResult to preserve all conscience data
+        # The full result includes epistemic_data, override_reason, etc.
+        return conscience_result

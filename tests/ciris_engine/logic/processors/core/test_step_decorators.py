@@ -745,8 +745,8 @@ class TestStepDataExtraction:
                     await recursive_aspdma_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio
-    async def test_step_specific_data_fail_fast_finalize_action_missing_rationale(self):
-        """Test FINALIZE_ACTION fails fast when result missing rationale."""
+    async def test_step_specific_data_fail_fast_finalize_action_missing_final_action(self):
+        """Test FINALIZE_ACTION fails fast when result missing final_action (ConscienceApplicationResult expected)."""
 
         with patch(
             "ciris_engine.logic.processors.core.step_decorators._broadcast_step_result"
@@ -754,8 +754,8 @@ class TestStepDataExtraction:
 
             @streaming_step(StepPoint.FINALIZE_ACTION)
             async def finalize_action_step(self, thought_item):
-                # Mock result with selected_action but missing rationale
-                result = Mock(spec=["selected_action"])  # Only has selected_action
+                # Mock result without final_action (should be ConscienceApplicationResult)
+                result = Mock(spec=["selected_action"])  # Missing final_action
                 result.selected_action = "test_action"
                 return result
 
@@ -767,8 +767,8 @@ class TestStepDataExtraction:
             mock_thought.thought_id = "test-123"
             mock_thought.source_task_id = "task-456"
 
-            # Should fail fast with AttributeError
-            with pytest.raises(AttributeError, match="FINALIZE_ACTION result missing 'rationale' attribute"):
+            # Should fail fast with AttributeError for missing final_action
+            with pytest.raises(AttributeError, match="FINALIZE_ACTION result missing 'final_action' attribute"):
                 await finalize_action_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio

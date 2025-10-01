@@ -595,25 +595,34 @@ def _create_recursive_conscience_data(base_data: BaseStepData, result: Any) -> R
 
 
 def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> FinalizeActionStepData:
-    """Create FINALIZE_ACTION specific typed data."""
+    """Create FINALIZE_ACTION specific typed data with rich conscience information."""
     if not result:
         raise ValueError("FINALIZE_ACTION result is None - this indicates a serious pipeline issue")
 
-    if not hasattr(result, "selected_action"):
+    # Result should be ConscienceApplicationResult
+    if not hasattr(result, "final_action"):
         raise AttributeError(
-            f"FINALIZE_ACTION result missing 'selected_action' attribute. Result type: {type(result)}, attributes: {dir(result)}"
+            f"FINALIZE_ACTION result missing 'final_action' attribute. Expected ConscienceApplicationResult, got {type(result)}, attributes: {dir(result)}"
         )
 
-    if not hasattr(result, "rationale"):
+    # Extract the final action
+    final_action = result.final_action
+    if not hasattr(final_action, "selected_action"):
         raise AttributeError(
-            f"FINALIZE_ACTION result missing 'rationale' attribute. Result type: {type(result)}, attributes: {dir(result)}"
+            f"FINALIZE_ACTION final_action missing 'selected_action' attribute. Type: {type(final_action)}, attributes: {dir(final_action)}"
         )
+
+    # Extract conscience data
+    conscience_passed = not result.overridden
+    override_reason = result.override_reason if result.overridden else None
+    epistemic_data = result.epistemic_data if hasattr(result, "epistemic_data") else {}
 
     return FinalizeActionStepData(
         **_base_data_dict(base_data),
-        selected_action=str(result.selected_action),
-        selection_reasoning=str(result.rationale),
-        conscience_passed=True,  # If we reach here, conscience passed
+        selected_action=str(final_action.selected_action),
+        conscience_passed=conscience_passed,
+        conscience_override_reason=override_reason,
+        epistemic_data=epistemic_data,
     )
 
 

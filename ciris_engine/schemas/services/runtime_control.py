@@ -741,7 +741,9 @@ class FinalizeActionStepData(BaseStepData):
     selected_action: str = Field(..., description="Final selected action")
     conscience_passed: bool = Field(..., description="Whether conscience checks passed")
     conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
-    epistemic_data: Dict[str, Any] = Field(default_factory=dict, description="Rich conscience evaluation data from all checks")
+    epistemic_data: Dict[str, Any] = Field(
+        default_factory=dict, description="Rich conscience evaluation data from all checks"
+    )
 
 
 class PerformActionStepData(BaseStepData):

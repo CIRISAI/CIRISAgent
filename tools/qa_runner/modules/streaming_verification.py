@@ -304,6 +304,58 @@ class StreamingVerificationModule:
                                                     "conscience_execution missing conscience_result data"
                                                 )
 
+                                        elif step == "finalize_action":
+                                            # Validate finalize_action contains rich conscience data
+                                            selected_action = (
+                                                step_result.get("selected_action")
+                                                if isinstance(step_result, dict)
+                                                else None
+                                            )
+                                            conscience_passed = (
+                                                step_result.get("conscience_passed")
+                                                if isinstance(step_result, dict)
+                                                else None
+                                            )
+                                            conscience_override_reason = (
+                                                step_result.get("conscience_override_reason")
+                                                if isinstance(step_result, dict)
+                                                else None
+                                            )
+                                            epistemic_data = (
+                                                step_result.get("epistemic_data")
+                                                if isinstance(step_result, dict)
+                                                else None
+                                            )
+
+                                            step_result_details["has_selected_action"] = bool(selected_action)
+                                            step_result_details["has_conscience_passed"] = conscience_passed is not None
+                                            step_result_details["conscience_passed"] = conscience_passed
+                                            step_result_details["has_conscience_override_reason"] = (
+                                                conscience_override_reason is not None
+                                            )
+                                            step_result_details["has_epistemic_data"] = epistemic_data is not None
+                                            step_result_details["epistemic_data_type"] = (
+                                                type(epistemic_data).__name__ if epistemic_data else None
+                                            )
+
+                                            # Only expect override_reason if conscience didn't pass
+                                            if conscience_passed is False and not conscience_override_reason:
+                                                step_result_issues.append(
+                                                    "finalize_action conscience failed but missing override_reason"
+                                                )
+
+                                            # epistemic_data should be a dict (may be empty)
+                                            if epistemic_data is not None and not isinstance(epistemic_data, dict):
+                                                step_result_issues.append(
+                                                    "finalize_action epistemic_data is not a dict"
+                                                )
+
+                                            # Basic field validation
+                                            if not selected_action:
+                                                step_result_issues.append("finalize_action missing selected_action")
+                                            if conscience_passed is None:
+                                                step_result_issues.append("finalize_action missing conscience_passed")
+
                                         thoughts_with_typed_results += 1
                                     else:
                                         step_result_details["has_step_result"] = False
@@ -476,6 +528,16 @@ class StreamingVerificationModule:
                     detail
                     for detail in step_details
                     if detail.get("step") == "perform_aspdma" and detail.get("step_result_issues")
+                ],
+                "conscience_execution_issues": [
+                    detail
+                    for detail in step_details
+                    if detail.get("step") == "conscience_execution" and detail.get("step_result_issues")
+                ],
+                "finalize_action_issues": [
+                    detail
+                    for detail in step_details
+                    if detail.get("step") == "finalize_action" and detail.get("step_result_issues")
                 ],
                 "total_issues": sum(len(detail.get("step_result_issues", [])) for detail in step_details),
             },

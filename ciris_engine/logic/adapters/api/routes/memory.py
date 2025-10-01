@@ -92,6 +92,23 @@ async def query_memory(
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
+        # Determine user filtering (for OBSERVER users)
+        from ciris_engine.schemas.api.auth import UserRole
+
+        user_role = auth.role
+        user_filter_ids = None
+        if should_apply_user_filtering(user_role):
+            auth_service = getattr(request.app.state, "authentication_service", None)
+            if not auth_service:
+                raise HTTPException(status_code=503, detail="Authentication service not available")
+
+            user_id = auth.user_id
+            if not user_id:
+                raise HTTPException(status_code=401, detail="User ID not found in token")
+
+            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+            user_filter_ids = list(allowed_user_ids)
+
         # If querying by specific ID
         if body.node_id:
             # Use recall method with a query for the specific node
@@ -109,29 +126,6 @@ async def query_memory(
                 depth=body.depth,
                 scope=body.scope,
             )
-
-        # Determine user filtering before queries (for OBSERVER users)
-        from ciris_engine.schemas.api.auth import UserRole
-
-        user_role = auth.current_user.get("role", UserRole.OBSERVER)
-        if isinstance(user_role, str):
-            try:
-                user_role = UserRole(user_role)
-            except ValueError:
-                user_role = UserRole.OBSERVER
-
-        user_filter_ids = None
-        if should_apply_user_filtering(user_role):
-            auth_service = getattr(request.app.state, "authentication_service", None)
-            if not auth_service:
-                raise HTTPException(status_code=503, detail="Authentication service not available")
-
-            user_id = auth.current_user.get("user_id")
-            if not user_id:
-                raise HTTPException(status_code=401, detail="User ID not found in token")
-
-            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
-            user_filter_ids = list(allowed_user_ids)
 
         # General search (with SQL Layer 1 filtering if OBSERVER)
         else:
@@ -239,12 +233,7 @@ async def get_timeline(
         # Determine user filtering before queries (for OBSERVER users)
         from ciris_engine.schemas.api.auth import UserRole
 
-        user_role = auth.current_user.get("role", UserRole.OBSERVER)
-        if isinstance(user_role, str):
-            try:
-                user_role = UserRole(user_role)
-            except ValueError:
-                user_role = UserRole.OBSERVER
+        user_role = auth.role
 
         user_filter_ids = None
         if should_apply_user_filtering(user_role):
@@ -252,7 +241,7 @@ async def get_timeline(
             if not auth_service:
                 raise HTTPException(status_code=503, detail="Authentication service not available")
 
-            user_id = auth.current_user.get("user_id")
+            user_id = auth.user_id
             if not user_id:
                 raise HTTPException(status_code=401, detail="User ID not found in token")
 
@@ -615,19 +604,14 @@ async def recall_by_id(
         # SECURITY LAYER 2: Filter by user attribution for OBSERVER users
         from ciris_engine.schemas.api.auth import UserRole
 
-        user_role = auth.current_user.get("role", UserRole.OBSERVER)
-        if isinstance(user_role, str):
-            try:
-                user_role = UserRole(user_role)
-            except ValueError:
-                user_role = UserRole.OBSERVER
+        user_role = auth.role
 
         if should_apply_user_filtering(user_role):
             auth_service = getattr(request.app.state, "authentication_service", None)
             if not auth_service:
                 raise HTTPException(status_code=503, detail="Authentication service not available")
 
-            user_id = auth.current_user.get("user_id")
+            user_id = auth.user_id
             if not user_id:
                 raise HTTPException(status_code=401, detail="User ID not found in token")
 

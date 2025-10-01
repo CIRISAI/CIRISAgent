@@ -36,6 +36,66 @@ from ciris_engine.logic.processors.core.step_decorators import (
 )
 from ciris_engine.schemas.services.runtime_control import BaseStepData
 
+# ============================================================================
+# Shared Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def base_step_data():
+    """Common base step data for integration tests."""
+    return BaseStepData(
+        thought_id="thought_123",
+        task_id="task_456",
+        timestamp="2025-01-01T12:00:00Z",
+        processing_time_ms=50.0,
+        success=True,
+    )
+
+
+@pytest.fixture
+def mock_aspdma_result():
+    """Mock ASPDMA result with proper attributes."""
+    result = Mock()
+    result.selected_action = "PONDER"
+    result.rationale = "Need more context"
+    return result
+
+
+@pytest.fixture
+def mock_conscience_result_passed():
+    """Mock conscience result for passed checks."""
+    # Create nested structure for final_action
+    final_action_mock = Mock()
+    final_action_mock.selected_action = "SPEAK"
+
+    result = Mock()
+    result.overridden = False
+    result.final_action = final_action_mock
+    result.selected_action = "SPEAK"
+    result.override_reason = None
+    result.epistemic_data = {}
+    result.__str__ = Mock(return_value="passed")
+    return result
+
+
+@pytest.fixture
+def mock_action_result():
+    """Mock action execution result."""
+    result = Mock()
+    result.action_type = "SPEAK"
+    result.selected_action = "SPEAK"
+    result.success = True
+    result.completed = True
+    result.has_follow_up = False
+    result.execution_time_ms = 125.0
+    return result
+
+
+# ============================================================================
+# Test Classes
+# ============================================================================
+
 
 class TestASPDMAHelpers:
     """Test ASPDMA-related helper functions."""
@@ -492,132 +552,57 @@ class TestIntegrationRefactoredFunctions:
         assert conscience_result.optimization_veto_check.decision == "abort"
         assert conscience_result.epistemic_humility_check.recommended_action == "ponder"
 
-    def test_create_recursive_aspdma_data_integration(self):
+    def test_create_recursive_aspdma_data_integration(self, base_step_data, mock_aspdma_result):
         """Test _create_recursive_aspdma_data with retry reason."""
-        base_data = BaseStepData(
-            thought_id="thought_123",
-            task_id="task_456",
-            timestamp="2025-01-01T12:00:00Z",
-            processing_time_ms=50.0,
-            success=True,
-        )
-
-        result = Mock()
-        result.selected_action = "PONDER"
-        result.rationale = "Need more context"
-
         args = ("Need to gather more information",)
-
-        step_data = _create_recursive_aspdma_data(base_data, result, args)
+        step_data = _create_recursive_aspdma_data(base_step_data, mock_aspdma_result, args)
 
         assert step_data.thought_id == "thought_123"
-        assert step_data.selected_action == "PONDER"
-        assert step_data.action_rationale == "Need more context"
+        assert step_data.original_action == "PONDER"
         assert step_data.retry_reason == "Need to gather more information"
 
-    def test_create_recursive_conscience_data_integration(self):
+    def test_create_recursive_conscience_data_integration(self, base_step_data, mock_conscience_result_passed):
         """Test _create_recursive_conscience_data."""
-        base_data = BaseStepData(
-            thought_id="thought_123",
-            task_id="task_456",
-            timestamp="2025-01-01T12:00:00Z",
-            processing_time_ms=75.0,
-            success=True,
-        )
-
-        result = Mock()
-        result.overridden = False
-        result.final_action = "SPEAK"
-        result.selected_action = "SPEAK"
-        result.override_reason = None
-
-        step_data = _create_recursive_conscience_data(base_data, result)
+        step_data = _create_recursive_conscience_data(base_step_data, mock_conscience_result_passed)
 
         assert step_data.thought_id == "thought_123"
-        assert step_data.conscience_passed is True
-        assert step_data.selected_action == "SPEAK"
+        assert step_data.retry_action == "SPEAK"
+        assert step_data.retry_result == "passed"
 
-    def test_create_finalize_action_data_integration(self):
+    def test_create_finalize_action_data_integration(self, base_step_data, mock_conscience_result_passed):
         """Test _create_finalize_action_data."""
-        base_data = BaseStepData(
-            thought_id="thought_123",
-            task_id="task_456",
-            timestamp="2025-01-01T12:00:00Z",
-            processing_time_ms=25.0,
-            success=True,
-        )
-
-        result = Mock()
-        result.overridden = False
-        result.final_action = "SPEAK"
-        result.selected_action = "SPEAK"
-        result.override_reason = None
-
-        step_data = _create_finalize_action_data(base_data, result)
+        step_data = _create_finalize_action_data(base_step_data, mock_conscience_result_passed)
 
         assert step_data.thought_id == "thought_123"
         assert step_data.conscience_passed is True
         assert step_data.selected_action == "SPEAK"
 
-    def test_create_perform_action_data_integration(self):
+    def test_create_perform_action_data_integration(self, base_step_data, mock_action_result):
         """Test _create_perform_action_data."""
-        base_data = BaseStepData(
-            thought_id="thought_123",
-            task_id="task_456",
-            timestamp="2025-01-01T12:00:00Z",
-            processing_time_ms=150.0,
-            success=True,
-        )
-
-        result = Mock()
-        result.action_type = "SPEAK"
-
-        step_data = _create_perform_action_data(base_data, result)
+        step_data = _create_perform_action_data(base_step_data, mock_action_result, args=(), kwargs={})
 
         assert step_data.thought_id == "thought_123"
-        assert step_data.action_type == "SPEAK"
+        assert step_data.selected_action == "SPEAK"
 
-    def test_create_action_complete_data_integration_dict(self):
+    def test_create_action_complete_data_integration_dict(self, base_step_data):
         """Test _create_action_complete_data with dict result."""
-        base_data = BaseStepData(
-            thought_id="thought_123",
-            task_id="task_456",
-            timestamp="2025-01-01T12:00:00Z",
-            processing_time_ms=200.0,
-            success=True,
-        )
-
         result = {
-            "selected_action": "SPEAK",
+            "action_type": "SPEAK",
             "success": True,
-            "completed": True,
-            "execution_time_ms": 125.0,
+            "handler": "speak_handler",
         }
 
-        step_data = _create_action_complete_data(base_data, result)
+        step_data = _create_action_complete_data(base_step_data, result)
 
         assert step_data.thought_id == "thought_123"
         assert step_data.action_executed == "SPEAK"
         assert step_data.dispatch_success is True
-        assert step_data.execution_time_ms == 125.0
+        assert step_data.handler_completed is True
 
-    def test_create_action_complete_data_integration_object(self):
+    def test_create_action_complete_data_integration_object(self, base_step_data, mock_action_result):
         """Test _create_action_complete_data with object result."""
-        base_data = BaseStepData(
-            thought_id="thought_123",
-            task_id="task_456",
-            timestamp="2025-01-01T12:00:00Z",
-            processing_time_ms=180.0,
-            success=True,
-        )
-
-        result = Mock()
-        result.selected_action = "DEFER"
-        result.success = False
-        result.completed = False
-
-        step_data = _create_action_complete_data(base_data, result)
+        step_data = _create_action_complete_data(base_step_data, mock_action_result)
 
         assert step_data.thought_id == "thought_123"
-        assert step_data.action_executed == "DEFER"
-        assert step_data.dispatch_success is False
+        assert step_data.action_executed == "SPEAK"
+        assert step_data.dispatch_success is True

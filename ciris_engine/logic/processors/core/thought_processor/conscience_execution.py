@@ -99,15 +99,10 @@ class ConscienceExecutionPhase:
                 overridden = True
                 override_reason = result.reason
 
-                # Check if the conscience provides a replacement action
-                if (
-                    result.epistemic_data
-                    and hasattr(result.epistemic_data, "get")
-                    and "replacement_action" in result.epistemic_data
-                ):
+                # Check if the conscience provides a replacement action (top-level field)
+                if result.replacement_action:
                     # Use the conscience's suggested replacement action
-                    replacement_data = result.epistemic_data["replacement_action"]
-                    final_action = ActionSelectionDMAResult.model_validate(replacement_data)
+                    final_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
                 else:
                     # Default behavior: create a PONDER action
                     attempted_action_desc = self._describe_action(action_result)

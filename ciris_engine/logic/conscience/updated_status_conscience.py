@@ -137,22 +137,22 @@ class UpdatedStatusConscience(ConscienceInterface):
             raw_llm_response=None,
         )
 
-        # Create dict with required EpistemicData fields + replacement action
-        # Following the pattern from ThoughtDepthGuardrail
+        # Create EpistemicData with pure epistemic metrics
         epistemic_data_dict = {
             "entropy_level": 0.7,  # Higher uncertainty due to new information
             "coherence_level": 0.6,  # Moderate coherence - action is being overridden
             "uncertainty_acknowledged": True,  # Explicitly acknowledging new uncertainty
             "reasoning_transparency": 0.9,  # Very transparent about why we're overriding
-            "replacement_action": ponder_action.model_dump(),  # The PONDER action for conscience execution
-            "CIRIS_OBSERVATION_UPDATED_STATUS": updated_content,  # Store observation in epistemic data too
         }
 
         # Return FAILED status with the update reason
+        # replacement_action and CIRIS_OBSERVATION_UPDATED_STATUS are now top-level fields
         return ConscienceCheckResult(
             status=ConscienceStatus.FAILED,
             passed=False,
             reason=f"New observation arrived during processing: {updated_content[:100]}...",
-            epistemic_data=epistemic_data_dict,  # Pass as dict so conscience execution can access replacement_action
+            epistemic_data=epistemic_data_dict,
+            replacement_action=ponder_action.model_dump(),  # Top-level field in ConscienceCheckResult
+            CIRIS_OBSERVATION_UPDATED_STATUS=updated_content,  # Top-level field in ConscienceCheckResult
             check_timestamp=ts_datetime,
         )

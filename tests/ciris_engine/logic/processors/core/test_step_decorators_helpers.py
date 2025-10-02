@@ -339,19 +339,25 @@ class TestBroadcastEventHelpers:
         step_data = Mock()
         step_data.thought_id = "thought_123"
         step_data.task_id = "task_456"
-        step_data.csdma = "common_sense_result"
-        step_data.dsdma = "domain_specific_result"
-        step_data.aspdma = "action_selection_result"
+
+        # Mock InitialDMAResults with the 3 DMA results
+        dma_results = Mock()
+        dma_results.csdma = Mock()
+        dma_results.csdma.model_dump = Mock(return_value="common_sense_result")
+        dma_results.dsdma = Mock()
+        dma_results.dsdma.model_dump = Mock(return_value="domain_specific_result")
+        dma_results.ethical_pdma = Mock()
+        dma_results.ethical_pdma.model_dump = Mock(return_value="ethical_pdma_result")
 
         mock_create = Mock(return_value="dma_event")
 
-        result = _create_dma_results_event(step_data, "2025-01-01T12:00:00Z", mock_create)
+        result = _create_dma_results_event(step_data, "2025-01-01T12:00:00Z", dma_results, mock_create)
 
         assert result == "dma_event"
         call_kwargs = mock_create.call_args[1]
         assert call_kwargs["csdma"] == "common_sense_result"
         assert call_kwargs["dsdma"] == "domain_specific_result"
-        assert call_kwargs["aspdma_options"] == "action_selection_result"
+        assert call_kwargs["pdma"] == "ethical_pdma_result"
 
     def test_create_aspdma_result_event_non_recursive(self):
         """Test creating ASPDMA_RESULT event (non-recursive)."""
@@ -445,13 +451,14 @@ class TestBroadcastEventHelpers:
         step_data.action_executed = "SPEAK"
         step_data.dispatch_success = True
         step_data.execution_time_ms = 125.5
+        step_data.follow_up_thought_id = "thought_next"  # Now on step_data
         step_data.audit_entry_id = "audit_789"
         step_data.audit_sequence_number = 42
         step_data.audit_entry_hash = "hash_abc"
         step_data.audit_signature = "sig_xyz"
 
-        # Result with follow-up (non-terminal action)
-        result = {"action_type": "SPEAK", "follow_up_thought_id": "thought_next"}
+        # Result dict (no longer used for follow_up_thought_id)
+        result = {"action_type": "SPEAK"}
 
         mock_create = Mock(return_value="action_event")
 
@@ -474,13 +481,14 @@ class TestBroadcastEventHelpers:
         step_data.action_executed = "TASK_COMPLETE"
         step_data.dispatch_success = True
         step_data.execution_time_ms = 50.0
+        step_data.follow_up_thought_id = None  # Terminal action = no follow-up
         step_data.audit_entry_id = None
         step_data.audit_sequence_number = None
         step_data.audit_entry_hash = None
         step_data.audit_signature = None
 
-        # Terminal action should not have follow-up
-        result = {"action_type": "TASK_COMPLETE", "follow_up_thought_id": "should_be_ignored"}
+        # Terminal action - result dict
+        result = {"action_type": "TASK_COMPLETE"}
 
         mock_create = Mock(return_value="terminal_event")
 

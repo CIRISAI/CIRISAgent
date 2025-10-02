@@ -527,6 +527,7 @@ class TestConversationSummaryNode:
                         "author_name": "Bob",
                         "content": "What's the weather?",
                         "action_type": "observe",
+                        "correlation_id": "msg_123",
                     }
                 ]
             },

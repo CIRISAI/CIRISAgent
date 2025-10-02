@@ -197,16 +197,28 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
 
     def export_identity_context(self) -> str:
-        lines: List[str] = []
+        """
+        Export agent identity context as formatted text.
+
+        Uses format_agent_identity() to convert raw graph node data into
+        human-readable text with shutdown history.
+        """
+        from ciris_engine.logic.formatters.identity import format_agent_identity
+
         with get_db_connection(db_path=self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
             )
-            for row in cursor.fetchall():
-                attrs = json.loads(row["attributes_json"]) if row["attributes_json"] else {}
-                lines.append(f"{row['node_id']}: {attrs}")
-        return "\n".join(lines)
+            rows = cursor.fetchall()
+
+            # If we have identity nodes, format the first one
+            # (typically there's only one identity node per agent)
+            if rows:
+                attrs = json.loads(rows[0]["attributes_json"]) if rows[0]["attributes_json"] else {}
+                return format_agent_identity(attrs)
+
+            return ""
 
     async def _process_secrets_for_memorize(self, node: GraphNode) -> GraphNode:
         """Process secrets in node attributes during memorization."""

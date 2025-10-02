@@ -390,6 +390,9 @@ class CIRISRuntime:
         self.identity_manager = IdentityManager(config, self.time_service)
         self.agent_identity = await self.identity_manager.initialize_identity()
 
+        # Create startup node for continuity tracking
+        await self._create_startup_node()
+
     def _register_initialization_steps(self, init_manager: Any) -> None:
         """Register all initialization steps with the initialization manager."""
 
@@ -1154,6 +1157,27 @@ class CIRISRuntime:
         await cleanup_runtime_resources(self)
         validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
+
+    async def _create_startup_node(self) -> None:
+        """Create startup node for continuity tracking."""
+        try:
+            from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+
+            # Create memory node for startup
+            startup_node = GraphNode(
+                id=f"startup_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
+                type=NodeType.AGENT,
+                scope=GraphScope.IDENTITY,
+                attributes=GraphNodeAttributes(created_by="runtime_startup", tags=["startup", "continuity_awareness"]),
+            )
+
+            # Store in memory service
+            if self.memory_service:
+                await self.memory_service.memorize(startup_node)
+                logger.info(f"Created startup continuity node: {startup_node.id}")
+
+        except Exception as e:
+            logger.error(f"Failed to create startup node: {e}")
 
     async def _preserve_shutdown_continuity(self) -> None:
         """Preserve agent state for future reactivation."""

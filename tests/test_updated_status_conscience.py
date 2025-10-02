@@ -154,7 +154,7 @@ class TestUpdatedStatusConscience:
         assert result.status == ConscienceStatus.FAILED
         assert "New observation arrived" in result.reason
         assert result.epistemic_data is not None
-        assert result.epistemic_data.replacement_action is not None
+        assert result.replacement_action is not None  # Now top-level field
 
     @pytest.mark.asyncio
     async def test_clears_flag_after_detection(
@@ -193,9 +193,9 @@ class TestUpdatedStatusConscience:
         assert result.passed is False
         assert result.epistemic_data is not None
 
-        # Verify replacement action
-        replacement_data = result.epistemic_data.replacement_action
-        replacement_action = ActionSelectionDMAResult.model_validate(replacement_data)
+        # Verify replacement action (now top-level field on ConscienceCheckResult)
+        assert result.replacement_action is not None
+        replacement_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
 
         assert replacement_action.selected_action == HandlerActionType.PONDER
         assert isinstance(replacement_action.action_parameters, PonderParams)
@@ -252,9 +252,9 @@ class TestUpdatedStatusConscience:
         context = {"thought": sample_thought}
         result = await conscience.check(speak_action, context)
 
-        # Verify the formatted update message
-        replacement_data = result.epistemic_data.replacement_action
-        replacement_action = ActionSelectionDMAResult.model_validate(replacement_data)
+        # Verify the formatted update message (replacement_action is now top-level)
+        assert result.replacement_action is not None
+        replacement_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
         questions = replacement_action.action_parameters.questions
 
         # Should have the update content and contextual question

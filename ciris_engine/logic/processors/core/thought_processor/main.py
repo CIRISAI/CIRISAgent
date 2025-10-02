@@ -624,13 +624,9 @@ class ThoughtProcessor(
     def _create_replacement_action(self, conscience_result, original_action, conscience_name):
         """Create replacement action based on conscience result."""
         if not conscience_result.passed:
-            if (
-                conscience_result.epistemic_data
-                and hasattr(conscience_result.epistemic_data, "get")
-                and "replacement_action" in conscience_result.epistemic_data
-            ):
-                replacement_data = conscience_result.epistemic_data["replacement_action"]
-                return ActionSelectionDMAResult.model_validate(replacement_data)
+            # Check for replacement_action on ConscienceCheckResult (top-level field)
+            if conscience_result.replacement_action:
+                return ActionSelectionDMAResult.model_validate(conscience_result.replacement_action)
             else:
                 return self._create_ponder_replacement(original_action, conscience_result, conscience_name)
         return original_action

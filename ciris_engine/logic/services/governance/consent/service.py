@@ -8,7 +8,7 @@ This is the 22nd core CIRIS service.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
@@ -104,7 +104,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._average_consent_age_hours = 0.0
 
         # Pending partnership requests
-        self._pending_partnerships: Dict[str, Dict] = {}
+        self._pending_partnerships: Dict[str, Dict[str, Any]] = {}
+
+    def _now(self) -> datetime:
+        """Get current time from time service."""
+        if self._time_service is None:
+            return datetime.now(timezone.utc)
+        return self._time_service.now()
 
     async def get_consent(self, user_id: str) -> ConsentStatus:
         """
@@ -118,7 +124,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             cached = self._consent_cache[user_id]
             # Verify TEMPORARY hasn't expired
             if cached.stream == ConsentStream.TEMPORARY and cached.expires_at:
-                if self._time_service.now() > cached.expires_at:
+                if self._now() > cached.expires_at:
                     # Expired - remove from cache and fail
                     del self._consent_cache[user_id]
                     raise ConsentNotFoundError(f"Consent for {user_id} has expired")
@@ -131,22 +137,25 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 raise ConsentNotFoundError(f"No consent found for user {user_id}")
 
             # Reconstruct ConsentStatus from node
+            # Convert attributes to dict for easier access
+            attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+
             status = ConsentStatus(
                 user_id=user_id,
-                stream=ConsentStream(node.attributes["stream"]),
-                categories=[ConsentCategory(c) for c in node.attributes["categories"]],
-                granted_at=datetime.fromisoformat(node.attributes["granted_at"]),
+                stream=ConsentStream(attrs["stream"]),
+                categories=[ConsentCategory(c) for c in attrs["categories"]],
+                granted_at=datetime.fromisoformat(attrs["granted_at"]),
                 expires_at=(
-                    datetime.fromisoformat(node.attributes["expires_at"]) if node.attributes.get("expires_at") else None
+                    datetime.fromisoformat(attrs["expires_at"]) if attrs.get("expires_at") else None
                 ),
-                last_modified=datetime.fromisoformat(node.attributes["last_modified"]),
-                impact_score=node.attributes.get("impact_score", 0.0),
-                attribution_count=node.attributes.get("attribution_count", 0),
+                last_modified=datetime.fromisoformat(attrs["last_modified"]),
+                impact_score=attrs.get("impact_score", 0.0),
+                attribution_count=attrs.get("attribution_count", 0),
             )
 
             # Check expiry
             if status.stream == ConsentStream.TEMPORARY and status.expires_at:
-                if self._time_service.now() > status.expires_at:
+                if self._now() > status.expires_at:
                     raise ConsentNotFoundError(f"Consent for {user_id} has expired")
 
             # Update cache
@@ -221,6 +230,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Create partnership task for agent approval
         from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
+        if self._time_service is None:
+            raise ValueError("TimeService required for partnership requests")
         handler = PartnershipRequestHandler(time_service=self._time_service)
         task = handler.create_partnership_task(
             user_id=request.user_id,
@@ -230,7 +241,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         )
 
         # Create pending status
-        now = self._time_service.now()
+        now = self._now()
         pending_status = ConsentStatus(
             user_id=request.user_id,
             stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
@@ -279,7 +290,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self, request: ConsentRequest, previous_status: Optional[ConsentStatus]
     ) -> ConsentStatus:
         """Create new consent status from request."""
-        now = self._time_service.now()
+        now = self._now()
         expires_at = None
         if request.stream == ConsentStream.TEMPORARY:
             expires_at = now + timedelta(days=14)
@@ -303,7 +314,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         initiated_by: str,
     ) -> None:
         """Persist consent status and audit trail to graph."""
-        now = self._time_service.now()
+        now = self._now()
 
         # Store in graph
         node = GraphNode(
@@ -322,6 +333,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             updated_by="consent_manager",
             updated_at=now,
         )
+        if self._time_service is None:
+            raise ValueError("TimeService required for persisting consent")
         add_graph_node(node, self._time_service, self._db_path)
 
         # Create audit entry
@@ -366,7 +379,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         except ConsentNotFoundError:
             pass
 
-        now = self._time_service.now()
+        now = self._now()
         expires_at = None
         if stream == ConsentStream.TEMPORARY:
             expires_at = now + timedelta(days=14)
@@ -400,6 +413,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             updated_at=now,
         )
 
+        if self._time_service is None:
+            raise ValueError("TimeService required for updating consent")
         add_graph_node(node, self._time_service, self._db_path)
 
         # Create audit entry
@@ -449,7 +464,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             logger.info(f"Triggered filter profile anonymization for {user_id}")
 
         # Create decay status
-        now = self._time_service.now()
+        now = self._now()
         decay = ConsentDecayStatus(
             user_id=user_id,
             decay_started=now,
@@ -468,6 +483,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             updated_by="consent_manager",
             updated_at=now,
         )
+        if self._time_service is None:
+            raise ValueError("TimeService required for revoking consent")
         add_graph_node(decay_node, self._time_service, self._db_path)
 
         # Update consent to expired
@@ -491,7 +508,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 "stream": revoked_status.stream,
                 "categories": [],
                 "granted_at": revoked_status.granted_at.isoformat(),
-                "expires_at": revoked_status.expires_at.isoformat(),
+                "expires_at": revoked_status.expires_at.isoformat() if revoked_status.expires_at else "",
                 "last_modified": revoked_status.last_modified.isoformat(),
                 "impact_score": revoked_status.impact_score,
                 "attribution_count": revoked_status.attribution_count,
@@ -549,7 +566,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         """
         status = await self.get_consent(user_id)  # Let it raise - fail fast!
         if status.stream == ConsentStream.TEMPORARY and status.expires_at:
-            return self._time_service.now() > status.expires_at
+            return self._now() > status.expires_at
         return False
 
     async def get_impact_report(self, user_id: str) -> ConsentImpactReport:
@@ -572,12 +589,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Count interactions where this user participated
         total_interactions = 0
         for summary in conversation_summaries:
-            if summary.attributes and "participants" in summary.attributes:
-                participants = summary.attributes["participants"]
-                # Check if user_id is in any participant data
-                for participant_data in participants.values():
-                    if isinstance(participant_data, dict) and participant_data.get("user_id") == user_id:
-                        total_interactions += participant_data.get("message_count", 0)
+            if summary.attributes:
+                attrs = summary.attributes if isinstance(summary.attributes, dict) else summary.attributes.model_dump()
+                if "participants" in attrs:
+                    participants = attrs["participants"]
+                    # Check if user_id is in any participant data
+                    if isinstance(participants, dict):
+                        for participant_data in participants.values():
+                            if isinstance(participant_data, dict) and participant_data.get("user_id") == user_id:
+                                total_interactions += participant_data.get("message_count", 0)
 
         # Get real contribution data from task summaries
         task_summaries = await self._memory_bus.search(
@@ -586,19 +606,21 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         patterns_contributed = 0
         for task_summary in task_summaries:
-            if task_summary.attributes and task_summary.attributes.get("author_id") == user_id:
-                patterns_contributed += 1
+            if task_summary.attributes:
+                attrs = task_summary.attributes if isinstance(task_summary.attributes, dict) else task_summary.attributes.model_dump()
+                if attrs.get("author_id") == user_id:
+                    patterns_contributed += 1
 
         # Calculate users helped from actual conversation engagement
-        users_helped = len(
-            set(
-                participant_id
-                for summary in conversation_summaries
-                if summary.attributes and "participants" in summary.attributes
-                for participant_id, participant_data in summary.attributes["participants"].items()
-                if participant_id != user_id and isinstance(participant_data, dict)
-            )
-        )
+        users_helped_set = set()
+        for summary in conversation_summaries:
+            if summary.attributes:
+                attrs = summary.attributes if isinstance(summary.attributes, dict) else summary.attributes.model_dump()
+                if "participants" in attrs and isinstance(attrs["participants"], dict):
+                    for participant_id, participant_data in attrs["participants"].items():
+                        if participant_id != user_id and isinstance(participant_data, dict):
+                            users_helped_set.add(participant_id)
+        users_helped = len(users_helped_set)
 
         logger.info(
             f"Real impact metrics for {user_id}: {total_interactions} interactions, {patterns_contributed} contributions, {users_helped} users helped"
@@ -629,7 +651,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 audit_nodes = await self._memory_bus.search(
                     query="",
                     filters=MemorySearchFilter(
-                        node_type=NodeType.AUDIT.value,
+                        node_type=NodeType.AUDIT_ENTRY.value,
                         scope=GraphScope.IDENTITY.value,
                         attribute_values={"user_id": user_id, "service": "consent"},
                     ),
@@ -638,12 +660,17 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 # Convert nodes to audit entries (limit by parameter)
                 for node in audit_nodes[:limit]:
                     if node.attributes:
+                        attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
                         entry = ConsentAuditEntry(
+                            entry_id=attrs.get("entry_id", "unknown"),
                             user_id=user_id,
-                            action=node.attributes.get("action", "unknown"),
                             timestamp=node.updated_at,
-                            details=node.attributes.get("details", {}),
-                            consent_stream=ConsentStream(node.attributes.get("stream", "temporary")),
+                            previous_stream=ConsentStream(attrs.get("previous_stream", "temporary")),
+                            new_stream=ConsentStream(attrs.get("new_stream", "temporary")),
+                            previous_categories=[ConsentCategory(c) for c in attrs.get("previous_categories", [])],
+                            new_categories=[ConsentCategory(c) for c in attrs.get("new_categories", [])],
+                            initiated_by=attrs.get("initiated_by", "unknown"),
+                            reason=attrs.get("reason"),
                         )
                         audit_entries.append(entry)
 
@@ -673,13 +700,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Check task outcome
         from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
+        if self._time_service is None:
+            raise ValueError("TimeService required for partnership status check")
         handler = PartnershipRequestHandler(time_service=self._time_service)
         outcome, reason = handler.check_task_outcome(task_id)
 
         if outcome == "accepted":
             # Finalize the partnership
             request = pending["request"]
-            now = self._time_service.now()
+            now = self._now()
 
             # Create PARTNERED status
             partnered_status = ConsentStatus(
@@ -751,20 +780,22 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                     query="",
                     filters=MemorySearchFilter(
                         node_type=NodeType.CONCEPT.value,
-                        scope=GraphScope.BEHAVIORAL.value,
+                        scope=GraphScope.COMMUNITY.value,
                         attribute_values={"contributor_id": user_id},
                     ),
                 )
 
                 # Extract meaningful examples (limit to 3-5)
                 for node in contribution_nodes[:5]:
-                    if node.attributes and "description" in node.attributes:
-                        examples.append(node.attributes["description"])
-                    elif node.attributes and "content" in node.attributes:
-                        examples.append(node.attributes["content"])
-                    else:
-                        # Fallback to node ID if no meaningful description
-                        examples.append(f"Contribution: {node.id}")
+                    if node.attributes:
+                        attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+                        if "description" in attrs:
+                            examples.append(attrs["description"])
+                        elif "content" in attrs:
+                            examples.append(attrs["content"])
+                        else:
+                            # Fallback to node ID if no meaningful description
+                            examples.append(f"Contribution: {node.id}")
 
                 logger.debug(f"Found {len(examples)} example contributions for {user_id}")
             except Exception as e:
@@ -786,7 +817,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         HARD DELETE after 14 days.
         """
         self._expired_cleanups += 1
-        current_time = self._time_service.now()
+        current_time = self._now()
 
         # Get expired user IDs from graph or cache
         expired_user_ids = await self._find_expired_user_ids(current_time)
@@ -806,6 +837,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def _find_expired_from_graph(self, current_time: datetime) -> List[str]:
         """Find expired consents from memory graph nodes."""
         expired = []
+
+        if self._memory_bus is None:
+            return []
 
         try:
             consent_nodes = await self._memory_bus.search(
@@ -831,14 +865,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         return expired
 
-    def _extract_expired_user_from_node(self, node, current_time: datetime) -> Optional[str]:
+    def _extract_expired_user_from_node(self, node: Any, current_time: datetime) -> Optional[str]:
         """Extract user ID if the consent node represents an expired temporary consent."""
         if not node.attributes:
             return None
 
-        stream = node.attributes.get("stream")
-        expires_at_str = node.attributes.get("expires_at")
-        user_id = node.attributes.get("user_id")
+        attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+        stream = attrs.get("stream")
+        expires_at_str = attrs.get("expires_at")
+        user_id = attrs.get("user_id")
 
         # Check if this is a temporary consent with expiry data
         if not (stream == ConsentStream.TEMPORARY.value and expires_at_str and user_id):
@@ -848,7 +883,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         try:
             expires_at = datetime.fromisoformat(expires_at_str)
             if current_time > expires_at:
-                return user_id
+                return str(user_id)
         except Exception as e:
             logger.warning(f"Failed to parse expiry date for {user_id}: {e}")
 
@@ -999,7 +1034,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     # ToolService Protocol Implementation
 
-    async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         self._track_request()  # Track the tool execution
         self._tool_executions += 1
@@ -1120,17 +1155,21 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get info for all available tools."""
-        return [
-            await self.get_tool_info("upgrade_relationship"),
-            await self.get_tool_info("degrade_relationship"),
-        ]
+        tools = []
+        tool1 = await self.get_tool_info("upgrade_relationship")
+        if tool1:
+            tools.append(tool1)
+        tool2 = await self.get_tool_info("degrade_relationship")
+        if tool2:
+            tools.append(tool2)
+        return tools
 
     async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         """Get result of an async tool execution by correlation ID."""
         # ConsentService tools are synchronous, so results are immediate
         return None
 
-    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
         """Validate parameters for a tool."""
         if tool_name == "upgrade_relationship":
             return "user_id" in parameters
@@ -1138,7 +1177,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return "user_id" in parameters
         return False
 
-    async def _upgrade_relationship_tool(self, parameters: dict) -> dict:
+    async def _upgrade_relationship_tool(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Tool implementation for upgrading relationship to PARTNERED."""
         try:
             user_id = parameters.get("user_id")
@@ -1194,7 +1233,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             logger.error(f"Failed to upgrade relationship: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _degrade_relationship_tool(self, parameters: dict) -> dict:
+    async def _degrade_relationship_tool(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Tool implementation for downgrading relationship."""
         try:
             user_id = parameters.get("user_id")

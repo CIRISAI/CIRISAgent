@@ -9,7 +9,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -32,13 +32,13 @@ logger = logging.getLogger(__name__)
 class RateLimitedLogger:
     """Logger that suppresses repetitive warnings."""
 
-    def __init__(self, logger, max_warnings_per_type=5, reset_interval_seconds=3600):
+    def __init__(self, logger: Any, max_warnings_per_type: int = 5, reset_interval_seconds: int = 3600) -> None:
         self.logger = logger
         self.max_warnings = max_warnings_per_type
         self.reset_interval = reset_interval_seconds
-        self.warning_counts = defaultdict(int)
+        self.warning_counts: Dict[str, int] = defaultdict(int)
         self.last_reset = datetime.now(timezone.utc)
-        self.suppressed_counts = defaultdict(int)
+        self.suppressed_counts: Dict[str, int] = defaultdict(int)
 
     def should_log(self, error_key: str) -> bool:
         """Check if we should log this error or suppress it."""
@@ -64,7 +64,7 @@ class RateLimitedLogger:
             self.suppressed_counts[error_key] += 1
             return False
 
-    def warning(self, message: str, error_key: Optional[str] = None):
+    def warning(self, message: str, error_key: Optional[str] = None) -> None:
         """Log a warning with rate limiting."""
         if error_key is None:
             error_key = message[:100]  # Use first 100 chars as key
@@ -92,14 +92,14 @@ class RawCorrelationData(BaseModel):
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
     timestamp: datetime
-    request_data: Optional[Dict[str, str | int | float | bool | list | dict | None]] = Field(default_factory=dict)
-    response_data: Optional[Dict[str, str | int | float | bool | list | dict | None]] = Field(default_factory=dict)
+    request_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(default_factory=dict)
+    response_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(default_factory=dict)
     tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=dict)
-    context: Optional[Dict[str, str | int | float | bool | list]] = Field(default=None)
+    context: Optional[Dict[str, str | int | float | bool | List[Any]]] = Field(default=None)
 
     @field_validator("request_data", "response_data", "tags", mode="before")
     @classmethod
-    def convert_none_to_empty_dict(cls, v):
+    def convert_none_to_empty_dict(cls, v: Any) -> Any:
         """Convert None values to empty dict for proper type safety."""
         if v is None:
             return {}
@@ -136,26 +136,26 @@ class RawThoughtData(BaseModel):
 
 
 # Helper functions for safe data extraction and type conversion
-def safe_dict_get(data: dict | str | int | float | list | None, key: str, default=None):
+def safe_dict_get(data: Dict[str, Any] | str | int | float | List[Any] | None, key: str, default: Any = None) -> Any:
     """Safely extract value from data that might not be a dict."""
     if isinstance(data, dict):
         return data.get(key, default)
     return default
 
 
-def ensure_dict(data: dict | str | int | float | list | None) -> dict:
+def ensure_dict(data: Dict[str, Any] | str | int | float | List[Any] | None) -> Dict[str, Any]:
     """Ensure data is a dict, return empty dict if not."""
     return data if isinstance(data, dict) else {}
 
 
-def safe_str_dict(data: dict | str | int | float | list | None) -> Dict[str, str]:
+def safe_str_dict(data: Dict[str, Any] | str | int | float | List[Any] | None) -> Dict[str, str]:
     """Convert data to string dictionary safely."""
     if isinstance(data, dict):
         return {k: str(v) for k, v in data.items()}
     return {}
 
 
-def build_request_data_from_raw(raw_request: dict | str | int | float | list | None) -> Optional[RequestData]:
+def build_request_data_from_raw(raw_request: Dict[str, Any] | str | int | float | List[Any] | None) -> Optional[RequestData]:
     """Extract and build RequestData from raw request data with type safety."""
     if raw_request is None or not isinstance(raw_request, dict):
         return None
@@ -173,7 +173,7 @@ def build_request_data_from_raw(raw_request: dict | str | int | float | list | N
     )
 
 
-def build_response_data_from_raw(raw_response: dict | str | int | float | list | None) -> Optional[ResponseData]:
+def build_response_data_from_raw(raw_response: Dict[str, Any] | str | int | float | List[Any] | None) -> Optional[ResponseData]:
     """Extract and build ResponseData from raw response data with type safety."""
     if raw_response is None or not isinstance(raw_response, dict):
         return None
@@ -190,7 +190,7 @@ def build_response_data_from_raw(raw_response: dict | str | int | float | list |
 
 
 def build_interaction_context_from_raw(
-    context_data: dict | str | int | float | list | None,
+    context_data: Dict[str, Any] | str | int | float | List[Any] | None,
 ) -> Optional[InteractionContext]:
     """Extract and build InteractionContext from raw context data with type safety."""
     if context_data is None or not isinstance(context_data, dict):
@@ -211,7 +211,7 @@ class TSDBDataConverter:
     """Converts raw dictionary data to typed schemas."""
 
     @staticmethod
-    def convert_service_interaction(raw_data: dict | RawCorrelationData) -> Optional[ServiceInteractionData]:
+    def convert_service_interaction(raw_data: Dict[str, Any] | RawCorrelationData) -> Optional[ServiceInteractionData]:
         """Convert raw correlation data to ServiceInteractionData."""
         try:
             # Convert dict to typed model if needed
@@ -246,7 +246,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_metric_correlation(raw_data: dict | RawCorrelationData) -> Optional[MetricCorrelationData]:
+    def convert_metric_correlation(raw_data: Dict[str, Any] | RawCorrelationData) -> Optional[MetricCorrelationData]:
         """Convert raw correlation data to MetricCorrelationData."""
         try:
             # Convert dict to typed model if needed
@@ -258,36 +258,45 @@ class TSDBDataConverter:
 
             # Build typed request/response data
             request_data = None
-            if raw_request:
+            if raw_request and isinstance(raw_request, dict):
                 request_data = RequestData(
                     channel_id=raw_request.get("channel_id"),
-                    parameters=raw_request.get("parameters", {}),
-                    headers=raw_request.get("headers", {}),
-                    metadata=raw_request.get("metadata", {}),
+                    parameters=ensure_dict(raw_request.get("parameters", {})),
+                    headers=ensure_dict(raw_request.get("headers", {})),
+                    metadata=ensure_dict(raw_request.get("metadata", {})),
                 )
 
             response_data = None
-            if raw_response:
+            if raw_response and isinstance(raw_response, dict):
                 response_data = ResponseData(
                     execution_time_ms=raw_response.get("execution_time_ms"),
                     success=raw_response.get("success"),
                     error=raw_response.get("error"),
                     error_type=raw_response.get("error_type"),
-                    resource_usage=raw_response.get("resource_usage", {}),
-                    metadata=raw_response.get("metadata", {}),
+                    resource_usage=ensure_dict(raw_response.get("resource_usage", {})),
+                    metadata=ensure_dict(raw_response.get("metadata", {})),
                 )
+
+            metric_value = 0.0
+            if isinstance(raw_request, dict):
+                raw_val = raw_request.get("value", 0)
+                if isinstance(raw_val, (int, float, str)):
+                    try:
+                        metric_value = float(raw_val)
+                    except (ValueError, TypeError):
+                        metric_value = 0.0
 
             return MetricCorrelationData(
                 correlation_id=raw_data.correlation_id,
-                metric_name=raw_request.get("metric_name", "unknown"),
-                value=float(raw_request.get("value", 0)),
+                metric_name=raw_request.get("metric_name", "unknown") if isinstance(raw_request, dict) else "unknown",
+                value=metric_value,
                 timestamp=raw_data.timestamp,
                 request_data=request_data,
                 response_data=response_data,
-                tags=raw_data.tags,
+                tags=raw_data.tags if raw_data.tags else {},
                 source="correlation",
-                unit=raw_request.get("unit"),
-                aggregation_type=raw_request.get("aggregation_type"),
+                unit=raw_request.get("unit") if isinstance(raw_request, dict) else None,
+                aggregation_type=raw_request.get("aggregation_type") if isinstance(raw_request, dict) else None,
             )
         except Exception as e:
             error_msg = f"Failed to convert metric correlation data: {str(e)[:200]}"
@@ -295,7 +304,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_trace_span(raw_data: dict | RawCorrelationData) -> Optional[TraceSpanData]:
+    def convert_trace_span(raw_data: Dict[str, Any] | RawCorrelationData) -> Optional[TraceSpanData]:
         """Convert raw correlation data to TraceSpanData."""
         try:
             # Convert dict to typed model if needed
@@ -308,10 +317,19 @@ class TSDBDataConverter:
 
             # Build typed span tags
             tags = None
-            if raw_tags:
+            if raw_tags and isinstance(raw_tags, dict):
+                task_id_raw: Any = raw_tags.get("task_id")
+                if not task_id_raw and isinstance(raw_request, dict):
+                    task_id_raw = raw_request.get("task_id")
+                task_id = str(task_id_raw) if (task_id_raw is not None and not isinstance(task_id_raw, (dict, list))) else None
+
+                thought_id_raw: Any = raw_tags.get("thought_id")
+                if not thought_id_raw and isinstance(raw_request, dict):
+                    thought_id_raw = raw_request.get("thought_id")
+                thought_id = str(thought_id_raw) if (thought_id_raw is not None and not isinstance(thought_id_raw, (dict, list))) else None
                 tags = SpanTags(
-                    task_id=raw_tags.get("task_id") or raw_request.get("task_id"),
-                    thought_id=raw_tags.get("thought_id") or raw_request.get("thought_id"),
+                    task_id=task_id,
+                    thought_id=thought_id,
                     component_type=raw_tags.get("component_type") or raw_data.service_type,
                     handler_name=raw_tags.get("handler_name"),
                     user_id=raw_tags.get("user_id"),
@@ -341,19 +359,19 @@ class TSDBDataConverter:
                 span_id=raw_data.span_id or "",
                 parent_span_id=raw_data.parent_span_id,
                 timestamp=raw_data.timestamp,
-                duration_ms=raw_response.get("duration_ms", 0.0),
+                duration_ms=raw_response.get("duration_ms", 0.0) if isinstance(raw_response, dict) else 0.0,
                 operation_name=raw_data.action_type,
                 service_name=raw_data.service_type,
-                status="ok" if raw_response.get("success", True) else "error",
+                status="ok" if (isinstance(raw_response, dict) and raw_response.get("success", True)) else "error",
                 tags=tags,
                 task_id=tags.task_id if tags else None,
                 thought_id=tags.thought_id if tags else None,
                 component_type=tags.component_type if tags else None,
-                error=not raw_response.get("success", True),
-                error_message=raw_response.get("error"),
-                error_type=raw_response.get("error_type"),
-                latency_ms=raw_response.get("execution_time_ms"),
-                resource_usage=raw_response.get("resource_usage", {}),
+                error=not (isinstance(raw_response, dict) and raw_response.get("success", True)),
+                error_message=raw_response.get("error") if isinstance(raw_response, dict) else None,
+                error_type=raw_response.get("error_type") if isinstance(raw_response, dict) else None,
+                latency_ms=raw_response.get("execution_time_ms") if isinstance(raw_response, dict) else None,
+                resource_usage=ensure_dict(raw_response.get("resource_usage", {})) if isinstance(raw_response, dict) else {},
             )
         except Exception as e:
             error_msg = f"Failed to convert trace span data: {str(e)[:200]}"
@@ -361,7 +379,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_task(raw_task: dict | RawTaskData) -> Optional[TaskCorrelationData]:
+    def convert_task(raw_task: Dict[str, Any] | RawTaskData) -> Optional[TaskCorrelationData]:
         """Convert raw task data to TaskCorrelationData."""
         try:
             # Convert dict to typed model if needed
@@ -438,7 +456,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def _convert_thought(raw_thought: dict | RawThoughtData) -> Optional[ThoughtSummary]:
+    def _convert_thought(raw_thought: Dict[str, Any] | RawThoughtData) -> Optional[ThoughtSummary]:
         """Convert raw thought data to ThoughtSummary."""
         try:
             # Convert dict to typed model if needed

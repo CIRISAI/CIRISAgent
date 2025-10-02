@@ -33,6 +33,8 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 
 # Constants
 MEMORY_SERVICE_NOT_AVAILABLE = "Memory service not available"
+AUTH_SERVICE_NOT_AVAILABLE = "Authentication service not available"
+USER_ID_NOT_FOUND = "User ID not found in token"
 
 
 # ============================================================================
@@ -46,6 +48,200 @@ def get_memory_service(request: Request):
     if not memory_service:
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
     return memory_service
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+
+async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) -> Optional[List[str]]:
+    """
+    Get user filter IDs for OBSERVER role users.
+
+    Returns None for ADMIN users (no filtering).
+    Returns list of allowed user IDs for OBSERVER users.
+
+    Raises HTTPException if authentication service not available or user_id missing.
+    """
+    from ciris_engine.schemas.api.auth import UserRole
+
+    user_role = auth.role
+
+    if not should_apply_user_filtering(user_role):
+        return None
+
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        raise HTTPException(status_code=503, detail=AUTH_SERVICE_NOT_AVAILABLE)
+
+    user_id = auth.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail=USER_ID_NOT_FOUND)
+
+    allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+    return list(allowed_user_ids)
+
+
+def calculate_time_buckets(nodes: List[GraphNode], hours: int) -> Dict[str, int]:
+    """
+    Calculate time buckets for nodes based on hours range.
+
+    Buckets by hour if <= 48 hours, otherwise by day.
+    Returns dict mapping bucket key to node count.
+    """
+    buckets = {}
+    bucket_size = "hour" if hours <= 48 else "day"
+
+    for node in nodes:
+        if node.updated_at:
+            if bucket_size == "hour":
+                bucket_key = node.updated_at.strftime("%Y-%m-%d %H:00")
+            else:
+                bucket_key = node.updated_at.strftime("%Y-%m-%d")
+
+            buckets[bucket_key] = buckets.get(bucket_key, 0) + 1
+
+    return buckets
+
+
+def query_edges_for_visualization(nodes: List[GraphNode], max_edges: int = 500) -> List[GraphEdge]:
+    """
+    Query edges for graph visualization.
+
+    Args:
+        nodes: List of nodes to get edges for
+        max_edges: Maximum number of edges to return
+
+    Returns:
+        List of edges between the provided nodes
+    """
+    edges = []
+    if not nodes:
+        return edges
+
+    # Get all node IDs for filtering
+    node_ids = set(node.id for node in nodes)
+
+    try:
+        # Import the edge query function
+        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+        from ciris_engine.schemas.services.graph_core import GraphScope
+
+        # Get edges for each node (limit to prevent too many)
+        seen_edges = set()  # Track (source, target) pairs to avoid duplicates
+
+        for node in nodes[:500]:  # Query edges for up to 500 nodes
+            # Convert scope to GraphScope enum if it's a string
+            if isinstance(node.scope, str):
+                scope_enum = GraphScope(node.scope)
+            else:
+                scope_enum = node.scope
+
+            node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
+
+            for edge_data in node_edges:
+                # Only include edges where both nodes are in our visualization
+                if edge_data.target in node_ids:
+                    edge_key = (edge_data.source, edge_data.target)
+                    reverse_key = (edge_data.target, edge_data.source)
+
+                    # Avoid duplicate edges
+                    if edge_key not in seen_edges and reverse_key not in seen_edges:
+                        edges.append(edge_data)
+                        seen_edges.add(edge_key)
+
+                        # Limit total edges for performance
+                        if len(edges) >= max_edges:
+                            break
+
+            if len(edges) >= max_edges:
+                break
+
+        logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
+
+    except Exception as e:
+        logger.warning(f"Failed to query edges for visualization: {e}")
+        # Continue with empty edges if query fails
+
+    return edges
+
+
+def generate_html_wrapper(svg: str, hours: int, layout: str, node_count: int, width: int) -> str:
+    """
+    Generate HTML wrapper for SVG visualization.
+
+    Args:
+        svg: The SVG content
+        hours: Time range in hours
+        layout: Layout type
+        node_count: Number of nodes
+        width: SVG width
+
+    Returns:
+        HTML string with embedded SVG
+    """
+    # Safely escape user-controlled values to prevent XSS
+    safe_hours = html.escape(str(hours))
+    safe_layout = html.escape(str(layout))
+    safe_node_count = html.escape(str(node_count))
+    safe_width = int(width) + 40  # Already validated as int by Query
+
+    # Wrap in HTML with escaped values
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Memory Graph Visualization</title>
+        <style>
+            body {{
+                font-family: monospace;
+                margin: 0;
+                padding: 20px;
+                background: #f3f4f6;
+            }}
+            .container {{
+                max-width: {safe_width}px;
+                margin: 0 auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }}
+            h1 {{
+                margin-top: 0;
+                color: #1f2937;
+            }}
+            .stats {{
+                margin-bottom: 20px;
+                padding: 10px;
+                background: #f9fafb;
+                border-radius: 4px;
+            }}
+            .svg-container {{
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                overflow: auto;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Memory Graph Visualization</h1>
+            <div class="stats">
+                <strong>Time Range:</strong> Last {safe_hours} hours<br>
+                <strong>Nodes:</strong> {safe_node_count}<br>
+                <strong>Layout:</strong> {safe_layout}
+            </div>
+            <div class="svg-container">
+                {svg}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html_content
 
 
 # ============================================================================
@@ -102,21 +298,7 @@ async def query_memory(
 
     try:
         # Determine user filtering (for OBSERVER users)
-        from ciris_engine.schemas.api.auth import UserRole
-
-        user_role = auth.role
-        user_filter_ids = None
-        if should_apply_user_filtering(user_role):
-            auth_service = getattr(request.app.state, "authentication_service", None)
-            if not auth_service:
-                raise HTTPException(status_code=503, detail="Authentication service not available")
-
-            user_id = auth.user_id
-            if not user_id:
-                raise HTTPException(status_code=401, detail="User ID not found in token")
-
-            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
-            user_filter_ids = list(allowed_user_ids)
+        user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
 
         # If querying by specific ID
         if body.node_id:
@@ -235,22 +417,7 @@ async def get_timeline(
     """
     try:
         # Determine user filtering before queries (for OBSERVER users)
-        from ciris_engine.schemas.api.auth import UserRole
-
-        user_role = auth.role
-
-        user_filter_ids = None
-        if should_apply_user_filtering(user_role):
-            auth_service = getattr(request.app.state, "authentication_service", None)
-            if not auth_service:
-                raise HTTPException(status_code=503, detail="Authentication service not available")
-
-            user_id = auth.user_id
-            if not user_id:
-                raise HTTPException(status_code=401, detail="User ID not found in token")
-
-            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
-            user_filter_ids = list(allowed_user_ids)
+        user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
 
         # Query timeline nodes (with SQL Layer 1 filtering if OBSERVER)
         nodes = await query_timeline_nodes(
@@ -269,19 +436,7 @@ async def get_timeline(
         # Calculate time buckets
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours)
-
-        # Bucket by hour if < 48 hours, otherwise by day
-        buckets = {}
-        bucket_size = "hour" if hours <= 48 else "day"
-
-        for node in nodes:
-            if node.updated_at:
-                if bucket_size == "hour":
-                    bucket_key = node.updated_at.strftime("%Y-%m-%d %H:00")
-                else:
-                    bucket_key = node.updated_at.strftime("%Y-%m-%d")
-
-                buckets[bucket_key] = buckets.get(bucket_key, 0) + 1
+        buckets = calculate_time_buckets(nodes, hours)
 
         response = TimelineResponse(
             memories=nodes,
@@ -394,55 +549,7 @@ async def visualize_graph(
         )
 
         # Query edges between the nodes we have
-        edges = []
-        if nodes:
-            # Get all node IDs for filtering
-            node_ids = set(node.id for node in nodes)
-
-            # Query edges directly from persistence for these nodes
-            try:
-                # Import the edge query function
-                from ciris_engine.logic.persistence.models.graph import get_edges_for_node
-
-                # Get edges for each node (limit to prevent too many)
-                seen_edges = set()  # Track (source, target) pairs to avoid duplicates
-
-                for node in nodes[:500]:  # Query edges for up to 500 nodes
-                    # Get all edges for this node
-                    # get_edges_for_node expects a GraphScope enum, not a string
-                    from ciris_engine.schemas.services.graph_core import GraphScope
-
-                    # Convert scope to GraphScope enum if it's a string
-                    if isinstance(node.scope, str):
-                        scope_enum = GraphScope(node.scope)
-                    else:
-                        scope_enum = node.scope
-
-                    node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
-
-                    for edge_data in node_edges:
-                        # Only include edges where both nodes are in our visualization
-                        if edge_data.target in node_ids:
-                            edge_key = (edge_data.source, edge_data.target)
-                            reverse_key = (edge_data.target, edge_data.source)
-
-                            # Avoid duplicate edges
-                            if edge_key not in seen_edges and reverse_key not in seen_edges:
-                                edges.append(edge_data)
-                                seen_edges.add(edge_key)
-
-                                # Limit total edges for performance
-                                if len(edges) >= 500:
-                                    break
-
-                    if len(edges) >= 500:
-                        break
-
-                logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
-
-            except Exception as e:
-                logger.warning(f"Failed to query edges for visualization: {e}")
-                # Continue with empty edges if query fails
+        edges = query_edges_for_visualization(nodes, max_edges=500)
 
         # Generate SVG
         svg = generate_svg(
@@ -453,65 +560,8 @@ async def visualize_graph(
             height=height,
         )
 
-        # Safely escape user-controlled values to prevent XSS
-        safe_hours = html.escape(str(hours))
-        safe_layout = html.escape(str(layout))
-        safe_node_count = html.escape(str(len(nodes)))
-        safe_width = int(width) + 40  # Already validated as int by Query
-
-        # Wrap in HTML with escaped values
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Memory Graph Visualization</title>
-            <style>
-                body {{
-                    font-family: monospace;
-                    margin: 0;
-                    padding: 20px;
-                    background: #f3f4f6;
-                }}
-                .container {{
-                    max-width: {safe_width}px;
-                    margin: 0 auto;
-                    background: white;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                }}
-                h1 {{
-                    margin-top: 0;
-                    color: #1f2937;
-                }}
-                .stats {{
-                    margin-bottom: 20px;
-                    padding: 10px;
-                    background: #f9fafb;
-                    border-radius: 4px;
-                }}
-                .svg-container {{
-                    border: 1px solid #e5e7eb;
-                    border-radius: 4px;
-                    overflow: auto;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Memory Graph Visualization</h1>
-                <div class="stats">
-                    <strong>Time Range:</strong> Last {safe_hours} hours<br>
-                    <strong>Nodes:</strong> {safe_node_count}<br>
-                    <strong>Layout:</strong> {safe_layout}
-                </div>
-                <div class="svg-container">
-                    {svg}
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        # Generate HTML wrapper with XSS protection
+        html_content = generate_html_wrapper(svg=svg, hours=hours, layout=layout, node_count=len(nodes), width=width)
 
         return HTMLResponse(content=html_content)
 
@@ -594,26 +644,16 @@ async def recall_by_id(
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
 
         # SECURITY LAYER 2: Filter by user attribution for OBSERVER users
-        from ciris_engine.schemas.api.auth import UserRole
+        user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
 
-        user_role = auth.role
-
-        if should_apply_user_filtering(user_role):
-            auth_service = getattr(request.app.state, "authentication_service", None)
-            if not auth_service:
-                raise HTTPException(status_code=503, detail="Authentication service not available")
-
-            user_id = auth.user_id
-            if not user_id:
-                raise HTTPException(status_code=401, detail="User ID not found in token")
-
-            allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+        if user_filter_ids:
+            allowed_user_ids = set(user_filter_ids)
             filtered_nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
 
             # If filtering removed the node, return 403 Forbidden
             if not filtered_nodes:
                 raise HTTPException(
-                    status_code=403, detail=f"Access denied: You do not have permission to view this memory node"
+                    status_code=403, detail="Access denied: You do not have permission to view this memory node"
                 )
 
             node = filtered_nodes[0]

@@ -30,7 +30,12 @@ class ServiceCorrelationQueryResult(BaseModel):
 
     def to_dict_by_type(
         self,
-    ) -> Dict[str, Union[List[ServiceInteractionData], List[MetricCorrelationData], List[TraceSpanData], List[TaskCorrelationData]]]:
+    ) -> Dict[
+        str,
+        Union[
+            List[ServiceInteractionData], List[MetricCorrelationData], List[TraceSpanData], List[TaskCorrelationData]
+        ],
+    ]:
         """Convert to dictionary keyed by correlation type."""
         return {
             "service_interactions": self.service_interactions,

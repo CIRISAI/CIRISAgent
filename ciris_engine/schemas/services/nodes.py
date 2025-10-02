@@ -136,7 +136,9 @@ class ConfigValue(BaseModel):
     float_value: Optional[float] = None
     bool_value: Optional[bool] = None
     list_value: Optional[List[Union[str, int, float, bool]]] = None
-    dict_value: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]]] = None  # Allow None values in dict
+    dict_value: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]]] = (
+        None  # Allow None values in dict
+    )
 
     @property
     def value(

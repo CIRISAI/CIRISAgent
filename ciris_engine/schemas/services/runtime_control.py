@@ -16,11 +16,9 @@ from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.types import EpistemicData
+from ciris_engine.schemas.types import ConfigDict, ConfigValue, EpistemicData
 
 # Type aliases for configuration values
-ConfigValue = Union[str, int, float, bool, List[Any], Dict[str, Any]]
-ConfigDict = Dict[str, ConfigValue]
 ConfigItem = Tuple[str, ConfigValue]
 
 

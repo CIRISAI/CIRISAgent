@@ -105,6 +105,70 @@ def calculate_time_buckets(nodes: List[GraphNode], hours: int) -> Dict[str, int]
     return buckets
 
 
+def _convert_to_graph_scope(scope: Any) -> "GraphScope":
+    """Convert scope value to GraphScope enum."""
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    if isinstance(scope, str):
+        return GraphScope(scope)
+    return scope
+
+
+def _is_edge_valid(edge: "GraphEdge", node_ids: set, seen_edges: set) -> bool:
+    """
+    Check if an edge is valid for visualization.
+
+    Args:
+        edge: Edge to validate
+        node_ids: Set of node IDs in visualization
+        seen_edges: Set of already seen edge pairs
+
+    Returns:
+        True if edge should be included
+    """
+    # Only include edges where both nodes are in visualization
+    if edge.target not in node_ids:
+        return False
+
+    # Check for duplicates (bidirectional)
+    edge_key = (edge.source, edge.target)
+    reverse_key = (edge.target, edge.source)
+
+    return edge_key not in seen_edges and reverse_key not in seen_edges
+
+
+def _collect_edges_for_node(
+    node: "GraphNode", node_ids: set, seen_edges: set, max_edges: int, current_edges: List["GraphEdge"]
+) -> bool:
+    """
+    Collect edges for a single node.
+
+    Args:
+        node: Node to query edges for
+        node_ids: Set of all node IDs in visualization
+        seen_edges: Set of seen edge pairs (modified in place)
+        max_edges: Maximum edges allowed
+        current_edges: List of current edges (modified in place)
+
+    Returns:
+        True if max_edges reached, False otherwise
+    """
+    from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+    scope_enum = _convert_to_graph_scope(node.scope)
+    node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
+
+    for edge_data in node_edges:
+        if _is_edge_valid(edge_data, node_ids, seen_edges):
+            current_edges.append(edge_data)
+            seen_edges.add((edge_data.source, edge_data.target))
+
+            if len(current_edges) >= max_edges:
+                return True
+
+    return False
+
+
 def query_edges_for_visualization(nodes: List[GraphNode], max_edges: int = 500) -> List[GraphEdge]:
     """
     Query edges for graph visualization.
@@ -116,53 +180,22 @@ def query_edges_for_visualization(nodes: List[GraphNode], max_edges: int = 500) 
     Returns:
         List of edges between the provided nodes
     """
-    edges = []
     if not nodes:
-        return edges
+        return []
 
-    # Get all node IDs for filtering
+    edges = []
     node_ids = set(node.id for node in nodes)
+    seen_edges = set()
 
     try:
-        # Import the edge query function
-        from ciris_engine.logic.persistence.models.graph import get_edges_for_node
-        from ciris_engine.schemas.services.graph_core import GraphScope
-
-        # Get edges for each node (limit to prevent too many)
-        seen_edges = set()  # Track (source, target) pairs to avoid duplicates
-
         for node in nodes[:500]:  # Query edges for up to 500 nodes
-            # Convert scope to GraphScope enum if it's a string
-            if isinstance(node.scope, str):
-                scope_enum = GraphScope(node.scope)
-            else:
-                scope_enum = node.scope
-
-            node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
-
-            for edge_data in node_edges:
-                # Only include edges where both nodes are in our visualization
-                if edge_data.target in node_ids:
-                    edge_key = (edge_data.source, edge_data.target)
-                    reverse_key = (edge_data.target, edge_data.source)
-
-                    # Avoid duplicate edges
-                    if edge_key not in seen_edges and reverse_key not in seen_edges:
-                        edges.append(edge_data)
-                        seen_edges.add(edge_key)
-
-                        # Limit total edges for performance
-                        if len(edges) >= max_edges:
-                            break
-
-            if len(edges) >= max_edges:
-                break
+            if _collect_edges_for_node(node, node_ids, seen_edges, max_edges, edges):
+                break  # Max edges reached
 
         logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
 
     except Exception as e:
         logger.warning(f"Failed to query edges for visualization: {e}")
-        # Continue with empty edges if query fails
 
     return edges
 

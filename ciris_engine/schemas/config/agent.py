@@ -4,7 +4,7 @@ Agent configuration schemas.
 Minimal schemas for agent identity and templates.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -78,7 +78,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("stewardship", mode="before")
     @classmethod
-    def convert_stewardship(cls, v) -> Optional["Stewardship"]:
+    def convert_stewardship(cls, v: Any) -> Optional["Stewardship"]:
         """Convert dict to Stewardship if needed."""
         if v is None:
             return None
@@ -88,7 +88,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("dsdma_kwargs", mode="before")
     @classmethod
-    def convert_dsdma_kwargs(cls, v) -> Optional["DSDMAConfiguration"]:
+    def convert_dsdma_kwargs(cls, v: Any) -> Optional["DSDMAConfiguration"]:
         """Convert dict to DSDMAConfiguration if needed."""
         if v is None:
             return None
@@ -98,7 +98,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("csdma_overrides", mode="before")
     @classmethod
-    def convert_csdma_overrides(cls, v) -> Optional["CSDMAOverrides"]:
+    def convert_csdma_overrides(cls, v: Any) -> Optional["CSDMAOverrides"]:
         """Convert dict to CSDMAOverrides if needed."""
         if v is None:
             return None
@@ -108,7 +108,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("action_selection_pdma_overrides", mode="before")
     @classmethod
-    def convert_action_selection_overrides(cls, v) -> Optional["ActionSelectionOverrides"]:
+    def convert_action_selection_overrides(cls, v: Any) -> Optional["ActionSelectionOverrides"]:
         """Convert dict to ActionSelectionOverrides if needed."""
         if v is None:
             return None
@@ -118,7 +118,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("discord_config", mode="before")
     @classmethod
-    def convert_discord_config(cls, v) -> Optional["DiscordAdapterOverrides"]:
+    def convert_discord_config(cls, v: Any) -> Optional["DiscordAdapterOverrides"]:
         """Convert dict to DiscordAdapterOverrides if needed."""
         if v is None:
             return None
@@ -128,7 +128,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("api_config", mode="before")
     @classmethod
-    def convert_api_config(cls, v) -> Optional["APIAdapterOverrides"]:
+    def convert_api_config(cls, v: Any) -> Optional["APIAdapterOverrides"]:
         """Convert dict to APIAdapterOverrides if needed."""
         if v is None:
             return None
@@ -138,7 +138,7 @@ class AgentTemplate(BaseModel):
 
     @field_validator("cli_config", mode="before")
     @classmethod
-    def convert_cli_config(cls, v) -> Optional["CLIAdapterOverrides"]:
+    def convert_cli_config(cls, v: Any) -> Optional["CLIAdapterOverrides"]:
         """Convert dict to CLIAdapterOverrides if needed."""
         if v is None:
             return None

@@ -6,7 +6,7 @@ Replaces Dict[str, Any] in self-observation operations.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -153,8 +153,8 @@ class ConfigurationChange(BaseModel):
     change_id: str = Field(..., description="Unique change identifier")
     scope: str = Field(..., description="Scope: LOCAL, ENVIRONMENT, IDENTITY, COMMUNITY")
     target_path: str = Field(..., description="Configuration path to change")
-    old_value: Optional[Union[str, int, float, bool, List, Dict]] = Field(None)
-    new_value: Union[str, int, float, bool, List, Dict] = Field(...)
+    old_value: Optional[Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(None)
+    new_value: Union[str, int, float, bool, List[Any], Dict[str, Any]] = Field(...)
     estimated_variance_impact: float = Field(..., description="Estimated variance %")
     reliability_score: float = Field(..., description="Reliability score for this change")
     reason: str = Field(..., description="Why this change is proposed")
@@ -190,7 +190,7 @@ class ObservabilitySignal(BaseModel):
     timestamp: datetime = Field(..., description="When signal occurred")
     severity: str = Field("info", description="info, warning, error, critical")
     source: str = Field(..., description="Source service or component")
-    details: Dict[str, Union[str, int, float, bool, List]] = Field(default_factory=dict)
+    details: Dict[str, Union[str, int, float, bool, List[Any]]] = Field(default_factory=dict)
 
 
 class ObservationOpportunity(BaseModel):

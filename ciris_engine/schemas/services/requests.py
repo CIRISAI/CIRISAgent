@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import ConfigDict as ConfigDictType
+from ciris_engine.schemas.types import ConfigDict as ConfigDictType, NodeAttributes
 
 from .metadata import ServiceMetadata
 
@@ -63,7 +63,7 @@ class RecallRequest(ServiceRequest):
 class RecallResponse(ServiceResponse):
     """Response from memory service recall method."""
 
-    nodes: List[Dict[str, Any]] = Field(..., description="Retrieved nodes")  # Would be typed as List[GraphNode]
+    nodes: List[NodeAttributes] = Field(..., description="Retrieved nodes as attribute dictionaries")
     count: int = Field(..., ge=0, description="Number of nodes retrieved")
 
 

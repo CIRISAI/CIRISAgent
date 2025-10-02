@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional, Union
 
 from pydantic import Field
 
+from ciris_engine.schemas.types import NodeAttributes
+
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
 
@@ -66,7 +68,7 @@ class AuditSummaryNode(TypedGraphNode):
     scope: GraphScope = Field(default=GraphScope.LOCAL)
     id: str = Field(..., description="Node ID")
     version: int = Field(default=1)
-    attributes: Union[Dict[str, Any], Any] = Field(default_factory=dict, description="Node attributes")
+    attributes: NodeAttributes = Field(default_factory=dict, description="Node attributes")
 
     @staticmethod
     def compute_audit_hash(event_ids: list[str], algorithm: str = "sha256") -> str:

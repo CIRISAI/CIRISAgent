@@ -84,7 +84,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return Stewardship(**v)
-        return v  # type: ignore[return-value]  # Already a Stewardship instance
+        return v  # type: ignore[no-any-return]  # Already a Stewardship instance
 
     @field_validator("dsdma_kwargs", mode="before")
     @classmethod
@@ -94,7 +94,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return DSDMAConfiguration(**v)
-        return v  # type: ignore[return-value]  # Already a DSDMAConfiguration instance
+        return v  # type: ignore[no-any-return]  # Already a DSDMAConfiguration instance
 
     @field_validator("csdma_overrides", mode="before")
     @classmethod
@@ -104,7 +104,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return CSDMAOverrides(**v)
-        return v  # type: ignore[return-value]  # Already a CSDMAOverrides instance
+        return v  # type: ignore[no-any-return]  # Already a CSDMAOverrides instance
 
     @field_validator("action_selection_pdma_overrides", mode="before")
     @classmethod
@@ -114,7 +114,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return ActionSelectionOverrides(**v)
-        return v  # type: ignore[return-value]  # Already an ActionSelectionOverrides instance
+        return v  # type: ignore[no-any-return]  # Already an ActionSelectionOverrides instance
 
     @field_validator("discord_config", mode="before")
     @classmethod
@@ -124,7 +124,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return DiscordAdapterOverrides(**v)
-        return v  # type: ignore[return-value]  # Already a DiscordAdapterOverrides instance
+        return v  # type: ignore[no-any-return]  # Already a DiscordAdapterOverrides instance
 
     @field_validator("api_config", mode="before")
     @classmethod
@@ -134,7 +134,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return APIAdapterOverrides(**v)
-        return v  # type: ignore[return-value]  # Already an APIAdapterOverrides instance
+        return v  # type: ignore[no-any-return]  # Already an APIAdapterOverrides instance
 
     @field_validator("cli_config", mode="before")
     @classmethod
@@ -144,7 +144,7 @@ class AgentTemplate(BaseModel):
             return None
         if isinstance(v, dict):
             return CLIAdapterOverrides(**v)
-        return v  # type: ignore[return-value]  # Already a CLIAdapterOverrides instance
+        return v  # type: ignore[no-any-return]  # Already a CLIAdapterOverrides instance
 
 
 class DSDMAConfiguration(BaseModel):

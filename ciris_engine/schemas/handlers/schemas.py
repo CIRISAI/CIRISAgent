@@ -4,7 +4,7 @@ Handler schemas for contract-driven architecture.
 Replaces Dict[str, Any] in handler contexts and results.
 """
 
-from typing import Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -77,7 +77,7 @@ class HandlerResult(BaseModel):
 
     success: bool = Field(..., description="Whether the handler succeeded")
     message: Optional[str] = Field(None, description="Result message")
-    data: Optional[Dict[str, Union[str, int, float, bool, list]]] = Field(None, description="Additional result data")
+    data: Optional[Dict[str, Union[str, int, float, bool, List[Any]]]] = Field(None, description="Additional result data")
     error: Optional[str] = Field(None, description="Error message if failed")
 
     model_config = ConfigDict(extra="forbid")
@@ -87,7 +87,7 @@ class HandlerDecapsulatedParams(BaseModel):
     """Schema for decapsulated handler parameters."""
 
     action_type: str = Field(..., description="Type of action being handled")
-    action_params: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    action_params: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
         ..., description="Decapsulated action parameters"
     )
     context: DecapsulationContext = Field(..., description="Decapsulation context")

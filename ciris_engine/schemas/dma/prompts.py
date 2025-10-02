@@ -91,7 +91,7 @@ class PromptCollection(BaseModel):
 
         # Try direct attribute
         if hasattr(self, key):
-            return getattr(self, key)
+            return getattr(self, key)  # type: ignore[no-any-return]  # Dynamic attribute lookup
 
         # Try custom prompts
         if key in self.custom_prompts:

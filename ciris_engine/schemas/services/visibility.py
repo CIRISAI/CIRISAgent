@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 # CorrelationNode was removed in the cleanup
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.runtime.models import Task, Thought
+from ciris_engine.schemas.types import ConfigDict
 
 
 class VisibilitySnapshot(BaseModel):
@@ -38,7 +39,7 @@ class ThoughtStep(BaseModel):
     """Single step in the reasoning trace."""
 
     thought: Thought = Field(..., description="The full thought object")
-    conscience_results: Optional[dict] = Field(None, description="Conscience evaluation results (non-terminal actions)")
+    conscience_results: Optional[ConfigDict] = Field(None, description="Conscience evaluation results (non-terminal actions)")
     handler_result: Optional[HandlerResult] = Field(None, description="Result from action handler")
     followup_thoughts: List[str] = Field(default_factory=list, description="IDs of followup thoughts generated")
 
@@ -68,7 +69,7 @@ class DecisionRecord(BaseModel):
 
     # Decision details
     action_type: str = Field(..., description="Type of action decided")
-    parameters: dict = Field(default_factory=dict, description="Parameters for the action")
+    parameters: ConfigDict = Field(default_factory=dict, description="Parameters for the action")
     rationale: str = Field(..., description="Reasoning for the decision")
     alternatives_considered: List[str] = Field(default_factory=list, description="Other options considered")
 

@@ -24,6 +24,10 @@ EventData = Dict[str, EventValue]
 OAuthValue = Union[str, int, bool, List[str], None]
 OAuthData = Dict[str, OAuthValue]
 
+# Epistemic data - conscience and faculty evaluation results
+# Structured data from epistemic faculties (ethical, common sense, domain-specific)
+EpistemicData = Dict[str, Union[str, int, float, bool, List[str], None]]
+
 # Export all type aliases
 __all__ = [
     "ConfigValue",
@@ -35,4 +39,5 @@ __all__ = [
     "EventData",
     "OAuthValue",
     "OAuthData",
+    "EpistemicData",
 ]

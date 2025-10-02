@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.conscience.results import ConscienceResult
+from ciris_engine.schemas.types import EpistemicData
 from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
@@ -610,7 +611,7 @@ class StepResultFinalizeAction(BaseModel):
     selected_action: str = Field(..., description="Selected action from SUT")
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
-    epistemic_data: Dict[str, Any] = Field(default_factory=dict, description="Rich conscience evaluation data")
+    epistemic_data: EpistemicData = Field(default_factory=dict, description="Rich conscience evaluation data")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
     error: Optional[str] = Field(None)
@@ -758,7 +759,7 @@ class FinalizeActionStepData(BaseStepData):
     selected_action: str = Field(..., description="Final selected action")
     conscience_passed: bool = Field(..., description="Whether conscience checks passed")
     conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
-    epistemic_data: Dict[str, Any] = Field(
+    epistemic_data: EpistemicData = Field(
         default_factory=dict, description="Rich conscience evaluation data from all checks"
     )
 
@@ -924,7 +925,7 @@ class ConscienceResultEvent(BaseModel):
     # Conscience evaluation
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
-    epistemic_data: Dict[str, Any] = Field(
+    epistemic_data: EpistemicData = Field(
         default_factory=dict, description="Rich conscience evaluation data from all checks"
     )
 

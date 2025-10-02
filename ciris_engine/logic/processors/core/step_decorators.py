@@ -697,7 +697,13 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
             dispatch_success=result["success"],
             handler_completed=result["handler"] != "Unknown",
             follow_up_processing_pending=bool(result.get("follow_up_thought_id")),
+            follow_up_thought_id=result.get("follow_up_thought_id"),
             execution_time_ms=0.0,  # Dict format doesn't include execution time
+            # Extract audit trail data from dispatch_result
+            audit_entry_id=result.get("audit_entry_id"),
+            audit_sequence_number=result.get("audit_sequence_number"),
+            audit_entry_hash=result.get("audit_entry_hash"),
+            audit_signature=result.get("audit_signature"),
         )
     else:
         # Object-based results (should be rare, fail fast if wrong structure)
@@ -1218,10 +1224,11 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
 def _create_action_result_event(
     step_data: StepDataUnion, timestamp: str, result: Any, create_reasoning_event: Any
 ) -> Any:
-    """Create ACTION_RESULT reasoning event."""
+    """Create ACTION_RESULT reasoning event with audit trail and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
-    follow_up_thought_id = _extract_follow_up_thought_id(result)
+    # Extract follow_up_thought_id from step_data (already populated from dispatch_result)
+    follow_up_thought_id = getattr(step_data, "follow_up_thought_id", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.ACTION_RESULT,

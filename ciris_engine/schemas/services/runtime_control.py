@@ -783,6 +783,7 @@ class ActionCompleteStepData(BaseStepData):
     dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
     handler_completed: bool = Field(..., description="Whether action handler completed")
     follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
+    follow_up_thought_id: Optional[str] = Field(None, description="ID of follow-up thought if created")
     execution_time_ms: float = Field(0.0, description="Action execution time")
     audit_entry_id: Optional[str] = Field(None, description="ID of audit entry created for this action")
     audit_sequence_number: Optional[int] = Field(None, description="Sequence number in audit hash chain")

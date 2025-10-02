@@ -4,7 +4,7 @@ Tool message bus - handles all tool service operations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
 
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -48,7 +48,7 @@ class ToolBus(BaseBus[ToolService]):
         self._cached_tools_count = 0  # Updated by collect_telemetry when available
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict, handler_name: str = "default"
+        self, tool_name: str, parameters: Dict[str, Any], handler_name: str = "default"
     ) -> ToolExecutionResult:
         """Execute a tool and return the result"""
         logger.debug(f"execute_tool called with tool_name={tool_name}, parameters={parameters}")
@@ -189,7 +189,7 @@ class ToolBus(BaseBus[ToolService]):
             logger.error(f"Error getting tool result: {e}", exc_info=True)
             return None
 
-    async def validate_parameters(self, tool_name: str, parameters: dict, handler_name: str = "default") -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any], handler_name: str = "default") -> bool:
         """Validate parameters for a tool"""
         service = await self.get_service(handler_name=handler_name, required_capabilities=["validate_parameters"])
 
@@ -267,7 +267,7 @@ class ToolBus(BaseBus[ToolService]):
         """Process a tool message - currently all tool operations are synchronous"""
         logger.warning(f"Tool operations should be synchronous, got queued message: {type(message)}")
 
-    def _get_all_tool_services(self) -> list:
+    def _get_all_tool_services(self) -> List[Any]:
         """Get all tool services from the registry."""
         all_tool_services = []
         try:
@@ -295,7 +295,7 @@ class ToolBus(BaseBus[ToolService]):
             "error": "No tool services available",
         }
 
-    def _create_tool_telemetry_tasks(self, services) -> list:
+    def _create_tool_telemetry_tasks(self, services: List[Any]) -> List[Any]:
         """Create telemetry collection tasks for all services."""
         import asyncio
 
@@ -305,7 +305,7 @@ class ToolBus(BaseBus[ToolService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_tool_telemetry(self, telemetry: dict, aggregated: dict):
+    def _aggregate_tool_telemetry(self, telemetry: Dict[str, Any], aggregated: Dict[str, Any]) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
             aggregated["providers"].append(telemetry.get("service_name", "unknown"))
@@ -331,7 +331,7 @@ class ToolBus(BaseBus[ToolService]):
             "tool_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> dict[str, float]:
+    def get_metrics(self) -> Dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()
@@ -357,7 +357,7 @@ class ToolBus(BaseBus[ToolService]):
 
         return metrics
 
-    async def collect_telemetry(self) -> dict[str, Any]:
+    async def collect_telemetry(self) -> Dict[str, Any]:
         """
         Collect telemetry from all tool providers in parallel.
 
@@ -390,7 +390,8 @@ class ToolBus(BaseBus[ToolService]):
         }
 
         if not tasks:
-            aggregated["total_tools"] = len(aggregated["unique_tools"])
+            unique_tools_set = cast(Set[str], aggregated["unique_tools"])
+            aggregated["total_tools"] = len(unique_tools_set)
             del aggregated["unique_tools"]
             return aggregated
 
@@ -410,10 +411,12 @@ class ToolBus(BaseBus[ToolService]):
                 logger.warning(f"Failed to collect telemetry from tool provider: {e}")
 
         # Count unique tools
-        aggregated["total_tools"] = len(aggregated["unique_tools"])
+        unique_tools_set = cast(Set[str], aggregated["unique_tools"])
+        aggregated["total_tools"] = len(unique_tools_set)
 
         # Cache the tools count for get_metrics()
-        self._cached_tools_count = aggregated["total_tools"]
+        total_tools = cast(int, aggregated["total_tools"])
+        self._cached_tools_count = total_tools
 
         del aggregated["unique_tools"]  # Remove set from final result
 

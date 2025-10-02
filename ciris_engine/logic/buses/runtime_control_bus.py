@@ -57,7 +57,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None
         # Track ongoing operations to prevent conflicts
-        self._active_operations: Dict[str, asyncio.Task] = {}
+        self._active_operations: Dict[str, asyncio.Task[Any]] = {}
         self._operation_lock = asyncio.Lock()
         self._shutting_down = False
 
@@ -201,7 +201,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             return {"status": "error", "message": str(e)}
 
     async def load_adapter(
-        self, adapter_type: str, adapter_id: str, config: dict, auto_start: bool = True, handler_name: str = "default"
+        self, adapter_type: str, adapter_id: str, config: Dict[str, Any], auto_start: bool = True, handler_name: str = "default"
     ) -> AdapterInfo:
         """Load a new adapter instance"""
         if self._shutting_down:

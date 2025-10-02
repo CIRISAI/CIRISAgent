@@ -7,7 +7,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import Service
@@ -23,7 +23,7 @@ class BusMessage:
     id: str
     handler_name: str
     timestamp: datetime
-    metadata: dict
+    metadata: Dict[str, Any]
 
 
 # Define the service type variable
@@ -47,11 +47,11 @@ class BaseBus(ABC, Generic[ServiceT]):
         self.max_queue_size = max_queue_size
 
         # Message queue
-        self._queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
+        self._queue: asyncio.Queue[BusMessage] = asyncio.Queue(maxsize=max_queue_size)
 
         # Processing state
         self._running = False
-        self._process_task: Optional[asyncio.Task] = None
+        self._process_task: Optional[asyncio.Task[None]] = None
 
         # Metrics
         self._processed_count = 0
@@ -137,7 +137,7 @@ class BaseBus(ABC, Generic[ServiceT]):
         """Get current queue size"""
         return self._queue.qsize()
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> Dict[str, Any]:
         """Get bus statistics"""
         return {
             "service_type": self.service_type.value,

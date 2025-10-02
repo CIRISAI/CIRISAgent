@@ -4,7 +4,7 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -73,7 +73,7 @@ class LLMBusMessage(BusMessage):
     max_tokens: int = 1024
     temperature: float = 0.0
     # For async responses
-    future: Optional[asyncio.Future] = None
+    future: Optional[asyncio.Future[Any]] = None
 
 
 class LLMBus(BaseBus[LLMService]):
@@ -95,7 +95,7 @@ class LLMBus(BaseBus[LLMService]):
         time_service: TimeServiceProtocol,
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
         distribution_strategy: DistributionStrategy = DistributionStrategy.LATENCY_BASED,
-        circuit_breaker_config: Optional[dict] = None,
+        circuit_breaker_config: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
 
@@ -116,7 +116,7 @@ class LLMBus(BaseBus[LLMService]):
 
     async def call_llm_structured(
         self,
-        messages: List[dict],
+        messages: List[Dict[str, Any]],
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -209,7 +209,7 @@ class LLMBus(BaseBus[LLMService]):
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(
         self,
-        messages: List[dict],
+        messages: List[Dict[str, Any]],
         response_model: Type[BaseModel],
         handler_name: str,
         max_tokens: int = 1024,
@@ -242,7 +242,7 @@ class LLMBus(BaseBus[LLMService]):
             return LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.actions
         return True
 
-    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, dict]:
+    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, Dict[str, Any]]:
         """Get priority value and metadata for a service."""
         provider_info = self.service_registry.get_provider_info(service_type=ServiceType.LLM)
         priority_map = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3, "FALLBACK": 9}
@@ -255,7 +255,7 @@ class LLMBus(BaseBus[LLMService]):
 
         return 0, {}  # Default to highest priority, empty metadata
 
-    def _should_include_service_for_domain(self, service_metadata: dict, domain: Optional[str]) -> Tuple[bool, int]:
+    def _should_include_service_for_domain(self, service_metadata: Dict[str, Any], domain: Optional[str]) -> Tuple[bool, int]:
         """Check if service should be included based on domain and get priority adjustment.
 
         Returns:
@@ -479,7 +479,7 @@ class LLMBus(BaseBus[LLMService]):
         except Exception as e:
             logger.warning(f"Failed to record telemetry: {e}")
 
-    def get_service_stats(self) -> dict:
+    def get_service_stats(self) -> Dict[str, Any]:
         """Get detailed statistics for all services"""
         stats = {}
 
@@ -549,7 +549,7 @@ class LLMBus(BaseBus[LLMService]):
         else:
             logger.error(f"Unknown message type: {type(message)}")
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> Dict[str, Any]:
         """Get bus statistics including service stats"""
         base_stats = super().get_stats()
         base_stats["service_stats"] = self.get_service_stats()

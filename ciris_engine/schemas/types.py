@@ -51,6 +51,14 @@ ActionParameters = Dict[str, Any]
 # Used for adaptive filter configuration data
 FilterConfig = Dict[str, Any]
 
+# Node attributes - flexible graph node attribute dictionary
+# Used for additional attributes on graph nodes beyond typed fields
+NodeAttributes = Dict[str, Any]
+
+# Identity data - complete identity snapshot data
+# Used for identity variance monitoring and snapshots
+IdentityData = Dict[str, Any]
+
 # Export all type aliases
 __all__ = [
     "ConfigValue",
@@ -68,4 +76,6 @@ __all__ = [
     "ToolParameters",
     "ActionParameters",
     "FilterConfig",
+    "NodeAttributes",
+    "IdentityData",
 ]

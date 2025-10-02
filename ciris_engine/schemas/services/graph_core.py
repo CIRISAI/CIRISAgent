@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import NodeAttributes
+
 from ciris_engine.schemas.consent.core import ConsentStream
 
 
@@ -99,7 +101,7 @@ class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
     type: NodeType = Field(..., description="Type of node")
     scope: GraphScope = Field(..., description="Scope of the node")
-    attributes: Union[GraphNodeAttributes, Dict[str, Any]] = Field(
+    attributes: Union[GraphNodeAttributes, NodeAttributes] = Field(
         ..., description="Node attributes"
     )  # NOQA - Graph flexibility pattern
     version: int = Field(default=1, ge=1, description="Version number")
@@ -146,14 +148,14 @@ class ConnectedNodeInfo(BaseModel):
     node_id: str = Field(..., description="Connected node identifier")
     node_type: str = Field(..., description="Type of connected node")
     relationship: str = Field(..., description="Relationship type to the source node")
-    attributes: Dict[str, Any] = Field(
+    attributes: NodeAttributes = Field(
         default_factory=dict, description="Connected node attributes"
     )  # NOQA - Graph integration pattern
     source_service: str = Field(default="MemoryService", description="Service that provided connection info")
     retrieved_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When connection was retrieved"
     )
-    edge_metadata: Optional[Dict[str, Any]] = Field(
+    edge_metadata: Optional[NodeAttributes] = Field(
         None, description="Additional edge metadata from future sources"
     )  # NOQA - Future source extensibility
 
@@ -170,7 +172,7 @@ class SecretsData(BaseModel):
     retrieved_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When secrets data was retrieved"
     )
-    additional_data: Dict[str, Any] = Field(  # NOQA - Future source extensibility
+    additional_data: NodeAttributes = Field(  # NOQA - Future source extensibility
         default_factory=dict, description="Additional secrets data from future sources"
     )
 

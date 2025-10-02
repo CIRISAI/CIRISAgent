@@ -1,13 +1,15 @@
 """
 Telemetry operations schemas for graph telemetry service.
 
-Replaces Dict[str, Any] in telemetry service operations.
+Provides typed schemas for telemetry service operations.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class TelemetrySnapshotResult(BaseModel):
@@ -42,9 +44,7 @@ class BehavioralData(BaseModel):
     """Structured behavioral data (tasks/thoughts)."""
 
     data_type: str = Field(..., description="Type: task or thought")
-    content: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        ..., description="Behavioral content"
-    )
+    content: JSONDict = Field(..., description="Behavioral content")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
 
@@ -105,7 +105,7 @@ class ServiceCapabilities(BaseModel):
 
 
 class LLMUsageData(BaseModel):
-    """Structured LLM usage data to replace Dict[str, Any]."""
+    """Structured LLM usage data."""
 
     tokens_used: Optional[int] = Field(None, description="Total tokens used")
     tokens_input: Optional[int] = Field(None, description="Input tokens")
@@ -151,7 +151,7 @@ class AggregatedTelemetryMetadata(BaseModel):
 class MetricRecord(BaseModel):
     """Single metric record from persistence layer.
 
-    Used by query_metrics() to return typed data instead of Dict[str, Any].
+    Used by query_metrics() to return typed data.
     """
 
     metric_name: str = Field(..., description="Name of the metric")
@@ -201,7 +201,7 @@ class MetricAggregates(BaseModel):
 
 
 class AggregatedTelemetryResponse(BaseModel):
-    """Response from get_aggregated_telemetry() - replaces Dict[str, Any]."""
+    """Response from get_aggregated_telemetry()."""
 
     # System-wide aggregates
     system_healthy: bool = Field(..., description="Overall system health")

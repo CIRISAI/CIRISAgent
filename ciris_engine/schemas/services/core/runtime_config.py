@@ -1,13 +1,15 @@
 """
 Runtime configuration schemas for runtime control service.
 
-Replaces Dict[str, Any] in runtime control operations.
+Provides typed schemas for runtime control operations.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class AdapterConfig(BaseModel):
@@ -30,9 +32,7 @@ class AdapterConfig(BaseModel):
     timeout_seconds: float = Field(30.0, description="Operation timeout")
 
     # Custom settings
-    custom_settings: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        default_factory=dict, description="Adapter-specific settings"
-    )
+    custom_settings: JSONDict = Field(default_factory=dict, description="Adapter-specific settings")
 
 
 class ProcessorConfig(BaseModel):
@@ -50,9 +50,7 @@ class ProcessorConfig(BaseModel):
     batch_size: int = Field(1, description="Batch processing size")
 
     # Custom settings
-    custom_settings: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        default_factory=dict, description="Processor-specific settings"
-    )
+    custom_settings: JSONDict = Field(default_factory=dict, description="Processor-specific settings")
 
 
 class RuntimeConfig(BaseModel):

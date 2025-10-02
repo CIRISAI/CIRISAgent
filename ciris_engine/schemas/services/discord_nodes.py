@@ -7,6 +7,7 @@ from pydantic import Field
 
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
+from ciris_engine.schemas.types import NodeAttributes as NodeAttributesDict
 
 
 @register_node_type("DISCORD_DEFERRAL")
@@ -33,7 +34,7 @@ class DiscordDeferralNode(TypedGraphNode):
     resolution: Optional[str] = None
 
     # Context
-    context: Dict[str, Any] = Field(default_factory=dict)
+    context: NodeAttributesDict = Field(default_factory=dict, description="Deferral context metadata")
 
     def to_graph_node(self) -> GraphNode:
         """Convert to generic GraphNode for storage."""
@@ -132,8 +133,8 @@ class DiscordApprovalNode(TypedGraphNode):
     resolver_name: Optional[str] = None
 
     # Additional context
-    context: Dict[str, Any] = Field(default_factory=dict)
-    action_params: Dict[str, Any] = Field(default_factory=dict)
+    context: NodeAttributesDict = Field(default_factory=dict, description="Approval context metadata")
+    action_params: NodeAttributesDict = Field(default_factory=dict, description="Action parameters")
 
     def to_graph_node(self) -> GraphNode:
         """Convert to generic GraphNode for storage."""

@@ -820,9 +820,9 @@ async def _broadcast_reasoning_event(
     CORRECT Step Point Mapping:
     0. START_ROUND → THOUGHT_START (thought + task metadata)
     1. GATHER_CONTEXT + PERFORM_DMAS → SNAPSHOT_AND_CONTEXT (snapshot + context)
-    2. PERFORM_ASPDMA → DMA_RESULTS (Results of the 3 DMAs)
-    3. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → ASPDMA_RESULT (result of ASPDMA, with is_recursive flag)
-    4. FINALIZE_ACTION → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
+    2. PERFORM_DMAS → DMA_RESULTS (Results of the 3 DMAs: CSDMA, DSDMA, PDMA)
+    3. PERFORM_ASPDMA → ASPDMA_RESULT (result of ASPDMA action selection)
+    4. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
     5. ACTION_COMPLETE → ACTION_RESULT (execution + audit)
     """
     logger.info(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
@@ -848,8 +848,8 @@ async def _broadcast_reasoning_event(
                 event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event)
 
         elif step == StepPoint.PERFORM_ASPDMA:
-            # Event 2: DMA_RESULTS
-            event = _create_dma_results_event(step_data, timestamp, create_reasoning_event)
+            # Event 2: DMA_RESULTS - result parameter contains InitialDMAResults from PERFORM_DMAS
+            event = _create_dma_results_event(step_data, timestamp, result, create_reasoning_event)
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
             # Event 3: ASPDMA_RESULT
@@ -1143,18 +1143,40 @@ def _create_snapshot_and_context_event(step_data: StepDataUnion, timestamp: str,
     )
 
 
-def _create_dma_results_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create DMA_RESULTS reasoning event."""
+def _create_dma_results_event(
+    step_data: StepDataUnion, timestamp: str, dma_results: Any, create_reasoning_event: Any
+) -> Any:
+    """
+    Create DMA_RESULTS reasoning event from InitialDMAResults.
+
+    This event is broadcast at the START of PERFORM_ASPDMA step, using the
+    result parameter which contains InitialDMAResults from PERFORM_DMAS.
+    """
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    # Extract the 3 DMA results from InitialDMAResults object
+    csdma_result = None
+    dsdma_result = None
+    pdma_result = None
+
+    if dma_results and hasattr(dma_results, "csdma"):
+        # Extract CSDMA result
+        csdma_result = dma_results.csdma.model_dump() if dma_results.csdma else None
+
+        # Extract DSDMA result
+        dsdma_result = dma_results.dsdma.model_dump() if dma_results.dsdma else None
+
+        # Extract PDMA result (stored as ethical_pdma)
+        pdma_result = dma_results.ethical_pdma.model_dump() if dma_results.ethical_pdma else None
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
         thought_id=step_data.thought_id,
         task_id=step_data.task_id,
         timestamp=timestamp,
-        csdma=getattr(step_data, "csdma", None),
-        dsdma=getattr(step_data, "dsdma", None),
-        aspdma_options=getattr(step_data, "aspdma", None),
+        csdma=csdma_result,
+        dsdma=dsdma_result,
+        pdma=pdma_result,  # Correct name is PDMA (from ethical_pdma)
     )
 
 

@@ -102,10 +102,19 @@ class RecallHandler(BaseActionHandler):
             recall_result = RecallResult(success=True, query_description=query_desc, total_results=len(nodes))
 
             for n in nodes:
+                # Serialize attributes to JSON-compatible types
+                attributes = {}
+                if isinstance(n.attributes, dict):
+                    from datetime import datetime
+
+                    for key, value in n.attributes.items():
+                        if isinstance(value, datetime):
+                            attributes[key] = value.isoformat()
+                        else:
+                            attributes[key] = value
+
                 # Create typed node info
-                node_info = RecalledNodeInfo(
-                    type=n.type, scope=n.scope, attributes=n.attributes if isinstance(n.attributes, dict) else {}
-                )
+                node_info = RecalledNodeInfo(type=n.type, scope=n.scope, attributes=attributes)
 
                 # Get connected nodes for each recalled node
                 try:
@@ -127,9 +136,16 @@ class RecallHandler(BaseActionHandler):
                                 )
                                 if connected_results:
                                     connected_node = connected_results[0]
-                                    connected_attrs = (
-                                        connected_node.attributes if isinstance(connected_node.attributes, dict) else {}
-                                    )
+
+                                    # Serialize connected node attributes
+                                    connected_attrs = {}
+                                    if isinstance(connected_node.attributes, dict):
+                                        for key, value in connected_node.attributes.items():
+                                            if isinstance(value, datetime):
+                                                connected_attrs[key] = value.isoformat()
+                                            else:
+                                                connected_attrs[key] = value
+
                                     connected_node_info = ConnectedNodeInfo(
                                         node_id=connected_node.id,
                                         node_type=connected_node.type,

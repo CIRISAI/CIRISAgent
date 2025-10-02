@@ -10,7 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import ConfigDict as ConfigDictType, NodeAttributes
+from ciris_engine.schemas.types import ConfigDict as ConfigDictType
+from ciris_engine.schemas.types import NodeAttributes
 
 from .metadata import ServiceMetadata
 

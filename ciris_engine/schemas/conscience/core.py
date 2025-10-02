@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class ConscienceStatus(str, Enum):
     """Status of a conscience check"""
@@ -73,7 +75,7 @@ class EpistemicData(BaseModel):
 
     # Optional replacement action for conscience checks that override the selected action
     # Used by ThoughtDepthGuardrail and UpdatedStatusConscience
-    replacement_action: Optional[Dict[str, Any]] = Field(
+    replacement_action: Optional[JSONDict] = Field(
         default=None, description="Replacement action when conscience overrides"
     )
 

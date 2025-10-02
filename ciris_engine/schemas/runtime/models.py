@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 from .enums import TaskStatus, ThoughtStatus, ThoughtType
 
 
@@ -52,7 +54,7 @@ class FinalAction(BaseModel):
     """Typed final action from thought processing."""
 
     action_type: str = Field(..., description="Action type chosen")
-    action_params: Dict[str, Any] = Field(..., description="Action parameters (will be typed per action)")
+    action_params: JSONDict = Field(..., description="Action parameters (will be typed per action)")
     reasoning: str = Field(..., description="Why this action was chosen")
 
     model_config = ConfigDict(extra="forbid")

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.types import EventData, JSONDict
+from ciris_engine.schemas.types import EventData, JSONDict, NodeAttributes
 
 
 # Request/Response schemas for benchmarks
@@ -113,7 +113,7 @@ class AssessmentSubmission(BaseModel):
 
     assessment_id: str = Field(..., description="Assessment ID")
     agent_id: str = Field(..., description="Agent taking assessment")
-    answers: List[Dict[str, Any]] = Field(..., description="Assessment answers")
+    answers: List[NodeAttributes] = Field(..., description="Assessment answers as attribute dictionaries")
 
 
 class AssessmentResult(BaseModel):

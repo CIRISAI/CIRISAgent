@@ -10,10 +10,9 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from ciris_engine.schemas.types import NodeAttributes
-
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class IncidentSeverity(str, Enum):

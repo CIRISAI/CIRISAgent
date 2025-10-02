@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import NodeAttributes
+
 from ..runtime.enums import SensitivityLevel
 
 
@@ -75,7 +77,7 @@ class FilterUpdateResult(BaseModel):
 
     success: bool = Field(..., description="Whether update succeeded")
     error: Optional[str] = Field(None, description="Error message if failed")
-    results: Optional[List[Dict[str, Any]]] = Field(None, description="Update results")
+    results: Optional[List[NodeAttributes]] = Field(None, description="Update results as attribute dictionaries")
     accessor: Optional[str] = Field(None, description="Accessor who performed update")
     stats: Optional[FilterStats] = Field(None, description="Update statistics")
 

@@ -15,13 +15,13 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.logic.adapters.base_observer import CreditCheckFailed, CreditDenied
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
-from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, Permission, UserRole
+from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 
 from ..constants import DESC_CURRENT_COGNITIVE_STATE, ERROR_MEMORY_SERVICE_NOT_AVAILABLE
-from ..dependencies.auth import AuthContext, require_observer
+from ..dependencies.auth import require_observer
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class AgentStatus(BaseModel):
     # System state
     services_active: int = Field(..., description="Number of active services")
     memory_usage_mb: float = Field(..., description="Current memory usage in MB")
-    multi_provider_services: Optional[dict] = Field(None, description="Services with provider counts")
+    multi_provider_services: Optional[Dict[str, Any]] = Field(None, description="Services with provider counts")
 
 
 class AgentIdentity(BaseModel):
@@ -161,7 +161,8 @@ def _check_send_messages_permission(auth: AuthContext, request: Request) -> None
         # Set permission request timestamp
         user.permission_requested_at = datetime.now(timezone.utc)
         # Store the updated user
-        auth_service._users[user.wa_id] = user
+        if auth_service is not None and hasattr(auth_service, "_users"):
+            auth_service._users[user.wa_id] = user  # Access private attribute for permission tracking
 
         # Don't log potentially sensitive email addresses
         logger.info(f"Auto-created permission request for OAuth user ID: {user.wa_id}")
@@ -326,7 +327,7 @@ def _attach_credit_metadata(
     )
 
 
-def _get_runtime_processor(request: Request):
+def _get_runtime_processor(request: Request) -> Any:
     """Get runtime processor if available and valid."""
     runtime = getattr(request.app.state, "runtime", None)
     if not (runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor):
@@ -334,7 +335,7 @@ def _get_runtime_processor(request: Request):
     return runtime.agent_processor
 
 
-def _is_processor_paused(processor) -> bool:
+def _is_processor_paused(processor: Any) -> bool:
     """Check if processor is in paused state."""
     return hasattr(processor, "_is_paused") and processor._is_paused
 
@@ -347,17 +348,20 @@ async def _handle_paused_message(request: Request, msg: IncomingMessage) -> None
         raise HTTPException(status_code=503, detail="Message handler not configured")
 
 
-def _get_processor_cognitive_state(processor) -> str:
+def _get_processor_cognitive_state(processor: Any) -> str:
     """Get current cognitive state from processor with fallback."""
     try:
         if hasattr(processor, "get_current_state"):
-            return processor.get_current_state()
+            state = processor.get_current_state()
+            return str(state) if state is not None else "WORK"
     except Exception:
         pass
     return "WORK"  # Default
 
 
-def _create_paused_response(message_id: str, cognitive_state: str, processing_time: int) -> SuccessResponse:
+def _create_paused_response(
+    message_id: str, cognitive_state: str, processing_time: int
+) -> SuccessResponse[InteractResponse]:
     """Create response for paused processor state."""
     return SuccessResponse(
         data=InteractResponse(
@@ -371,7 +375,7 @@ def _create_paused_response(message_id: str, cognitive_state: str, processing_ti
 
 async def _check_processor_pause_status(
     request: Request, msg: IncomingMessage, message_id: str, start_time: datetime
-) -> Optional[SuccessResponse]:
+) -> Optional[SuccessResponse[InteractResponse]]:
     """Check if processor is paused and handle accordingly. Returns response if paused, None if not paused."""
     try:
         processor = _get_runtime_processor(request)
@@ -553,7 +557,7 @@ async def get_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _get_cognitive_state(runtime) -> str:
+def _get_cognitive_state(runtime: Any) -> str:
     """Get the agent's cognitive state with proper None checking."""
     if runtime is None:
         logger.warning("Runtime is None")
@@ -575,7 +579,7 @@ def _get_cognitive_state(runtime) -> str:
     return "UNKNOWN"  # Don't default to WORK - be explicit about unknown state
 
 
-def _calculate_uptime(time_service) -> float:
+def _calculate_uptime(time_service: Any) -> float:
     """Calculate the agent's uptime in seconds."""
     if not time_service:
         return 0.0
@@ -584,11 +588,13 @@ def _calculate_uptime(time_service) -> float:
     if hasattr(time_service, "get_status"):
         time_status = time_service.get_status()
         if hasattr(time_status, "uptime_seconds"):
-            return time_status.uptime_seconds
+            uptime = time_status.uptime_seconds
+            return float(uptime) if uptime is not None else 0.0
 
     # Calculate uptime manually
     if hasattr(time_service, "_start_time") and hasattr(time_service, "now"):
-        return (time_service.now() - time_service._start_time).total_seconds()
+        delta = time_service.now() - time_service._start_time
+        return float(delta.total_seconds())
 
     return 0.0
 
@@ -621,10 +627,10 @@ def _count_wakeup_tasks(uptime: float) -> int:
         return 0
 
 
-def _count_active_services(service_registry) -> tuple[int, dict]:
+def _count_active_services(service_registry: Any) -> Tuple[int, Dict[str, Any]]:
     """Count active services and get multi-provider service details."""
     multi_provider_count = 0
-    multi_provider_services = {}
+    multi_provider_services: Dict[str, Any] = {}
 
     if service_registry:
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -672,7 +678,7 @@ def _build_channels_to_query(auth: AuthContext, request: Request) -> List[str]:
     return channels_to_query
 
 
-def _convert_timestamp(timestamp) -> datetime:
+def _convert_timestamp(timestamp: Any) -> datetime:
     """Convert timestamp string or datetime to datetime object."""
     if isinstance(timestamp, str):
         try:
@@ -685,7 +691,7 @@ def _convert_timestamp(timestamp) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _create_conversation_message_from_mock(msg: dict, is_response: bool = False) -> ConversationMessage:
+def _create_conversation_message_from_mock(msg: Dict[str, Any], is_response: bool = False) -> ConversationMessage:
     """Create ConversationMessage from mock message data."""
     if is_response:
         return ConversationMessage(
@@ -705,7 +711,7 @@ def _create_conversation_message_from_mock(msg: dict, is_response: bool = False)
         )
 
 
-def _expand_mock_messages(user_messages: List[dict]) -> List[ConversationMessage]:
+def _expand_mock_messages(user_messages: List[Dict[str, Any]]) -> List[ConversationMessage]:
     """Expand mock messages into user message + response pairs."""
     all_messages = []
     for msg in user_messages:
@@ -725,7 +731,7 @@ def _apply_message_limit(messages: List[ConversationMessage], limit: int) -> Lis
 
 
 async def _get_history_from_mock(
-    message_history: List[dict], channels_to_query: List[str], limit: int
+    message_history: List[Dict[str, Any]], channels_to_query: List[str], limit: int
 ) -> ConversationHistory:
     """Process conversation history from mock data."""
     # Filter messages for requested channels
@@ -744,7 +750,7 @@ async def _get_history_from_mock(
     )
 
 
-async def _get_history_from_memory(memory_service, channel_id: str, limit: int) -> ConversationHistory:
+async def _get_history_from_memory(memory_service: Any, channel_id: str, limit: int) -> ConversationHistory:
     """Query conversation history from memory service."""
     from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
     from ciris_engine.schemas.services.operations import MemoryQuery
@@ -776,7 +782,7 @@ async def _get_history_from_memory(memory_service, channel_id: str, limit: int) 
     return ConversationHistory(messages=messages, total_count=len(messages), has_more=len(messages) == limit)
 
 
-def _safe_convert_message_timestamp(msg) -> datetime:
+def _safe_convert_message_timestamp(msg: Any) -> datetime:
     """Safely convert message timestamp with fallback."""
     timestamp_val = msg.timestamp
     if isinstance(timestamp_val, datetime):
@@ -789,7 +795,7 @@ def _safe_convert_message_timestamp(msg) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _convert_service_message_to_conversation(msg) -> ConversationMessage:
+def _convert_service_message_to_conversation(msg: Any) -> ConversationMessage:
     """Convert communication service message to ConversationMessage."""
     return ConversationMessage(
         id=str(msg.message_id or ""),
@@ -800,7 +806,7 @@ def _convert_service_message_to_conversation(msg) -> ConversationMessage:
     )
 
 
-async def _fetch_messages_from_channels(comm_service, channels_to_query: List[str], fetch_limit: int) -> List:
+async def _fetch_messages_from_channels(comm_service: Any, channels_to_query: List[str], fetch_limit: int) -> List[Any]:
     """Fetch messages from all specified channels."""
     fetched_messages = []
     for channel in channels_to_query:
@@ -818,7 +824,7 @@ async def _fetch_messages_from_channels(comm_service, channels_to_query: List[st
     return fetched_messages
 
 
-def _sort_and_filter_messages(fetched_messages: List, before: Optional[datetime]) -> List:
+def _sort_and_filter_messages(fetched_messages: List[Any], before: Optional[datetime]) -> List[Any]:
     """Sort messages by timestamp and apply time filter."""
     # Sort messages by timestamp (newest first)
     sorted_messages = sorted(
@@ -834,7 +840,7 @@ def _sort_and_filter_messages(fetched_messages: List, before: Optional[datetime]
 
 
 async def _get_history_from_communication_service(
-    comm_service, channels_to_query: List[str], limit: int, before: Optional[datetime]
+    comm_service: Any, channels_to_query: List[str], limit: int, before: Optional[datetime]
 ) -> ConversationHistory:
     """Get conversation history from communication service."""
     # Fetch more messages to allow filtering
@@ -856,11 +862,12 @@ async def _get_history_from_communication_service(
     )
 
 
-def _get_current_task_info(request: Request):
+def _get_current_task_info(request: Request) -> Optional[str]:
     """Get current task information from task scheduler."""
     task_scheduler = getattr(request.app.state, "task_scheduler", None)
     if task_scheduler and hasattr(task_scheduler, "get_current_task"):
-        return task_scheduler.get_current_task()
+        task = task_scheduler.get_current_task()
+        return str(task) if task is not None else None
     return None
 
 
@@ -872,12 +879,14 @@ def _get_memory_usage(request: Request) -> float:
     return 0.0
 
 
-def _get_version_info() -> tuple[str, str, str]:
+def _get_version_info() -> Tuple[str, str, Optional[str]]:
     """Get version information including codename and code hash."""
     from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
 
     try:
-        from version import __version__ as code_hash
+        from version import __version__ as code_hash_val
+
+        code_hash: Optional[str] = code_hash_val
     except ImportError:
         code_hash = None
 
@@ -885,12 +894,11 @@ def _get_version_info() -> tuple[str, str, str]:
 
 
 async def _build_agent_status(
-    request: Request, cognitive_state: str, uptime: float, messages_processed: int, runtime
+    request: Request, cognitive_state: str, uptime: float, messages_processed: int, runtime: Any
 ) -> AgentStatus:
     """Build AgentStatus object with all required information."""
-    # Get current task
-    current_task_coro = _get_current_task_info(request)
-    current_task = await current_task_coro if current_task_coro else None
+    # Get current task (synchronous call, not awaitable)
+    current_task = _get_current_task_info(request)
 
     # Get resource usage
     memory_usage_mb = _get_memory_usage(request)
@@ -922,7 +930,7 @@ async def _build_agent_status(
     )
 
 
-def _get_agent_identity_info(runtime) -> tuple[str, str]:
+def _get_agent_identity_info(runtime: Any) -> Tuple[str, str]:
     """Get agent ID and name."""
     agent_id = "ciris_agent"
     agent_name = "CIRIS"
@@ -1098,7 +1106,7 @@ async def get_identity(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _convert_to_channel_info(ch, adapter_type: str) -> ChannelInfo:
+def _convert_to_channel_info(ch: Any, adapter_type: str) -> ChannelInfo:
     """Convert adapter channel data to ChannelInfo format."""
     if hasattr(ch, "channel_id"):
         # Pydantic model format
@@ -1124,7 +1132,7 @@ def _convert_to_channel_info(ch, adapter_type: str) -> ChannelInfo:
         )
 
 
-async def _get_channels_from_adapter(adapter, adapter_type: str) -> List[ChannelInfo]:
+async def _get_channels_from_adapter(adapter: Any, adapter_type: str) -> List[ChannelInfo]:
     """Get channels from a single adapter."""
     channels = []
     if hasattr(adapter, "get_active_channels"):
@@ -1137,7 +1145,7 @@ async def _get_channels_from_adapter(adapter, adapter_type: str) -> List[Channel
     return channels
 
 
-async def _get_channels_from_bootstrap_adapters(runtime) -> List[ChannelInfo]:
+async def _get_channels_from_bootstrap_adapters(runtime: Any) -> List[ChannelInfo]:
     """Get channels from bootstrap adapters."""
     channels = []
     if runtime and hasattr(runtime, "adapters"):
@@ -1148,7 +1156,7 @@ async def _get_channels_from_bootstrap_adapters(runtime) -> List[ChannelInfo]:
     return channels
 
 
-def _get_control_service(runtime, request):
+def _get_control_service(runtime: Any, request: Request) -> Any:
     """Get the runtime control service from app state or registry."""
     # Try app state first
     control_service = getattr(request.app.state, "main_runtime_control_service", None)
@@ -1165,7 +1173,7 @@ def _get_control_service(runtime, request):
     return providers[0] if providers else None
 
 
-def _get_adapter_manager(control_service):
+def _get_adapter_manager(control_service: Any) -> Any:
     """Get adapter manager from control service."""
     if not control_service:
         return None
@@ -1174,7 +1182,7 @@ def _get_adapter_manager(control_service):
     return control_service.adapter_manager
 
 
-async def _collect_unique_channels(adapter_manager) -> List[ChannelInfo]:
+async def _collect_unique_channels(adapter_manager: Any) -> List[ChannelInfo]:
     """Collect unique channels from loaded adapters."""
     if not adapter_manager or not hasattr(adapter_manager, "loaded_adapters"):
         return []
@@ -1194,7 +1202,7 @@ async def _collect_unique_channels(adapter_manager) -> List[ChannelInfo]:
     return channels
 
 
-async def _get_channels_from_dynamic_adapters(runtime, request) -> List[ChannelInfo]:
+async def _get_channels_from_dynamic_adapters(runtime: Any, request: Request) -> List[ChannelInfo]:
     """Get channels from dynamically loaded adapters."""
     control_service = _get_control_service(runtime, request)
     adapter_manager = _get_adapter_manager(control_service)
@@ -1306,7 +1314,9 @@ async def _authenticate_websocket_user(websocket: WebSocket, api_key: str) -> Op
     )
 
 
-async def _handle_websocket_subscription_action(websocket: WebSocket, data: dict, subscribed_channels: set) -> None:
+async def _handle_websocket_subscription_action(
+    websocket: WebSocket, data: Dict[str, Any], subscribed_channels: set[str]
+) -> None:
     """Handle websocket subscribe/unsubscribe actions."""
     action = data.get("action")
     channels = data.get("channels", [])

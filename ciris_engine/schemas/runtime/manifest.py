@@ -10,9 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import NodeAttributes
-
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class ServicePriority(str, Enum):

@@ -1,7 +1,7 @@
 """
 Typed models for TSDB consolidation internals.
 
-Replaces Dict[str, Any] usage in tsdb_consolidation service.
+Provides typed schemas for tsdb_consolidation service.
 Follows 'No Dicts' principle.
 """
 
@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class SummaryAttributes(BaseModel):
@@ -38,10 +40,14 @@ class SummaryAttributes(BaseModel):
     telemetry_refs: List[str] = Field(default_factory=list, description="References to telemetry data")
 
     # Dynamic data fields (for backward compatibility during migration)
-    messages_by_channel: Optional[Dict[str, Union[int, Dict[str, Any]]]] = Field(default=None)
-    participants: Optional[Dict[str, Dict[str, Any]]] = Field(default=None)
+    messages_by_channel: Optional[Dict[str, Union[int, NodeAttributes]]] = Field(
+        default=None, description="Messages by channel - flexible for migration"
+    )
+    participants: Optional[Dict[str, NodeAttributes]] = Field(
+        default=None, description="Participant data - flexible for migration"
+    )
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow")  # NOQA - Migration flexibility pattern
 
 
 class CompressionResult(BaseModel):

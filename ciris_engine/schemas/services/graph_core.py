@@ -11,9 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import NodeAttributes
-
 from ciris_engine.schemas.consent.core import ConsentStream
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class GraphScope(str, Enum):

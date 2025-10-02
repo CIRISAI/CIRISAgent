@@ -1372,8 +1372,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             if not metrics:
                 return {"count": 0.0, "sum": 0.0, "min": 0.0, "max": 0.0, "avg": 0.0}
 
-            # Calculate summary statistics
-            values = [m["value"] for m in metrics if isinstance(m["value"], (int, float))]
+            # Calculate summary statistics (MetricRecord objects now)
+            values = [m.value for m in metrics if isinstance(m.value, (int, float))]
 
             return {
                 "count": float(len(values)),

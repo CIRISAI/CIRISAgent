@@ -14,7 +14,7 @@ from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
 
 
 @pytest.fixture
-def telemetry_setup():
+def telemetry_setup(monkeypatch):
     """Set up test fixtures for telemetry tests."""
     # Create mock memory bus
     mock_memory_bus = AsyncMock()
@@ -25,6 +25,26 @@ def telemetry_setup():
 
     # Create telemetry service
     telemetry_service = GraphTelemetryService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+
+    # Mock database connection for get_average_thought_depth
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = (2.5,)
+    mock_conn.cursor.return_value = mock_cursor
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.__exit__.return_value = None
+    monkeypatch.setattr("ciris_engine.logic.persistence.get_db_connection", lambda **kwargs: mock_conn)
+
+    # Mock runtime control for queue saturation
+    mock_runtime_bus = MagicMock()
+    mock_runtime = AsyncMock()
+    mock_queue_status = MagicMock()
+    mock_queue_status.queue_size = 5
+    mock_queue_status.max_size = 100
+    mock_runtime.get_processor_queue_status.return_value = mock_queue_status
+    mock_runtime_bus.get_service.return_value = mock_runtime
+    setattr(telemetry_service, "_runtime_control_bus", mock_runtime_bus)
+    setattr(telemetry_service, "_start_time", datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc))
 
     return telemetry_service, mock_memory_bus, mock_time_service
 
@@ -70,11 +90,11 @@ async def test_query_metrics_filters_by_name(telemetry_setup):
     # Should only return llm.tokens.total metrics
     assert len(results) == 2
     for result in results:
-        assert result["metric_name"] == "llm.tokens.total"
+        assert result.metric_name == "llm.tokens.total"
 
     # Verify values
-    assert results[0]["value"] == 100.0
-    assert results[1]["value"] == 150.0
+    assert results[0].value == 100.0
+    assert results[1].value == 150.0
 
 
 @pytest.mark.asyncio
@@ -86,12 +106,14 @@ async def test_get_telemetry_summary_queries_correct_metrics(telemetry_setup):
     queried_metrics = []
 
     async def mock_query_metrics(metric_name, **kwargs):
+        from ciris_engine.schemas.services.graph.telemetry import MetricRecord
+
         queried_metrics.append(metric_name)
         # Return some dummy data
         if "tokens" in metric_name:
-            return [{"value": 100.0, "timestamp": mock_time_service.now()}]
+            return [MetricRecord(metric_name=metric_name, value=100.0, timestamp=mock_time_service.now(), tags={})]
         elif "cost" in metric_name:
-            return [{"value": 0.1, "timestamp": mock_time_service.now()}]
+            return [MetricRecord(metric_name=metric_name, value=0.1, timestamp=mock_time_service.now(), tags={})]
         return []
 
     # Patch query_metrics
@@ -167,8 +189,8 @@ async def test_query_metrics_filters_by_tags(telemetry_setup):
 
     # Should only return metrics with matching tags
     assert len(results) == 1
-    assert results[0]["value"] == 100.0
-    assert results[0]["tags"]["model"] == "gpt-4"
+    assert results[0].value == 100.0
+    assert results[0].tags["model"] == "gpt-4"
 
 
 @pytest.mark.asyncio

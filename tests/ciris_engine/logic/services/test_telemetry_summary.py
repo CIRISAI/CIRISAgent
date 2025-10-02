@@ -10,6 +10,7 @@ import pytest_asyncio
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 from ciris_engine.schemas.runtime.system_context import TelemetrySummary
+from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
 class TestTelemetrySummary:
@@ -29,28 +30,53 @@ class TestTelemetrySummary:
         return Mock(spec=MemoryBus)
 
     @pytest_asyncio.fixture
-    async def telemetry_service(self, mock_memory_bus: Mock, mock_time_service: Mock) -> GraphTelemetryService:
+    async def telemetry_service(
+        self, mock_memory_bus: Mock, mock_time_service: Mock, monkeypatch
+    ) -> GraphTelemetryService:
         """Create telemetry service with mocks."""
         service = GraphTelemetryService(memory_bus=mock_memory_bus, time_service=mock_time_service)
         # Set start time for uptime calculation
         setattr(service, "_start_time", datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc))
+
+        # Mock the database connection to avoid "unable to open database file" errors
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (2.5,)  # Average thought depth
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+
+        monkeypatch.setattr("ciris_engine.logic.persistence.get_db_connection", lambda **kwargs: mock_conn)
+
+        # Mock runtime control bus for queue saturation
+        mock_runtime_bus = Mock()
+        mock_runtime = AsyncMock()
+        mock_queue_status = Mock()
+        mock_queue_status.queue_size = 5
+        mock_queue_status.max_size = 100
+        mock_runtime.get_processor_queue_status.return_value = mock_queue_status
+        mock_runtime_bus.get_service.return_value = mock_runtime
+        setattr(service, "_runtime_control_bus", mock_runtime_bus)
+
         return service
 
     def create_mock_metrics(
         self, base_time: datetime, metric_name: str, values: List[float], service: str = "test_service"
-    ) -> List[Dict[str, Any]]:
+    ) -> List[MetricRecord]:
         """Helper to create mock metric data."""
         metrics = []
         for i, value in enumerate(values):
             # Create timestamps that are within the last hour
             timestamp = base_time - timedelta(minutes=i * 5)  # Space out by 5 minutes
             metrics.append(
-                {
-                    "metric_name": metric_name,
-                    "value": value,
-                    "timestamp": timestamp.isoformat(),  # Convert to ISO format string
-                    "tags": {"service": service},
-                }
+                MetricRecord(
+                    metric_name=metric_name,
+                    value=value,
+                    timestamp=timestamp,
+                    tags={"service": service},
+                )
             )
         return metrics
 
@@ -63,7 +89,7 @@ class TestTelemetrySummary:
         # Mock query_metrics to return test data
         async def mock_query_metrics(
             metric_name: str, start_time: datetime, end_time: datetime, tags: Optional[Dict[str, Any]] = None
-        ) -> List[Dict[str, Any]]:
+        ) -> List[MetricRecord]:
             # Always ensure we return metrics with the correct metric_name
             if metric_name == "llm.tokens.total":
                 return self.create_mock_metrics(
@@ -107,7 +133,7 @@ class TestTelemetrySummary:
 
         async def mock_query_metrics(
             metric_name: str, start_time: datetime, end_time: datetime, tags: Optional[Dict[str, Any]] = None
-        ) -> List[Dict[str, Any]]:
+        ) -> List[MetricRecord]:
             nonlocal call_count
             call_count += 1
             return self.create_mock_metrics(mock_time_service.now(), metric_name, [100])
@@ -144,18 +170,16 @@ class TestTelemetrySummary:
         # Mock query_metrics to raise an error
         async def mock_query_metrics(
             metric_name: str, start_time: datetime, end_time: datetime, tags: Optional[Dict[str, Any]] = None
-        ) -> List[Dict[str, Any]]:
+        ) -> List[MetricRecord]:
             raise Exception("Database error")
 
         telemetry_service.query_metrics = mock_query_metrics
 
-        # Should return empty summary on error
-        summary = await telemetry_service.get_telemetry_summary()
+        # Should raise MetricCollectionError (fail fast and loud)
+        from ciris_engine.logic.services.graph.telemetry_service.exceptions import MetricCollectionError
 
-        assert isinstance(summary, TelemetrySummary)
-        assert summary.tokens_last_hour == 0.0
-        assert summary.cost_last_hour_cents == 0.0
-        assert summary.messages_processed_24h == 0
+        with pytest.raises(MetricCollectionError):
+            await telemetry_service.get_telemetry_summary()
 
     @pytest.mark.asyncio
     async def test_telemetry_summary_service_breakdown(
@@ -165,7 +189,7 @@ class TestTelemetrySummary:
 
         async def mock_query_metrics(
             metric_name: str, start_time: datetime, end_time: datetime, tags: Optional[Dict[str, Any]] = None
-        ) -> List[Dict[str, Any]]:
+        ) -> List[MetricRecord]:
             if metric_name == "llm.tokens.total":
                 metrics = []
                 # Create metrics from different services
@@ -176,24 +200,24 @@ class TestTelemetrySummary:
                 return metrics
             elif metric_name == "llm.latency.ms":
                 return [
-                    {
-                        "metric_name": metric_name,
-                        "value": 150.0,
-                        "timestamp": mock_time_service.now().isoformat(),
-                        "tags": {"service": "openai"},
-                    },
-                    {
-                        "metric_name": metric_name,
-                        "value": 200.0,
-                        "timestamp": mock_time_service.now().isoformat(),
-                        "tags": {"service": "openai"},
-                    },
-                    {
-                        "metric_name": metric_name,
-                        "value": 100.0,
-                        "timestamp": mock_time_service.now().isoformat(),
-                        "tags": {"service": "anthropic"},
-                    },
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=150.0,
+                        timestamp=mock_time_service.now(),
+                        tags={"service": "openai"},
+                    ),
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=200.0,
+                        timestamp=mock_time_service.now(),
+                        tags={"service": "openai"},
+                    ),
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=100.0,
+                        timestamp=mock_time_service.now(),
+                        tags={"service": "anthropic"},
+                    ),
                 ]
             return []
 

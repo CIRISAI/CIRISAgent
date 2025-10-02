@@ -73,7 +73,7 @@ def _get_service_shutdown_priority(service: Any) -> int:
     return 5  # Default priority for unmatched services
 
 
-async def execute_final_maintenance_tasks(runtime) -> None:
+async def execute_final_maintenance_tasks(runtime: Any) -> None:
     """Run final maintenance and consolidation before services stop."""
     logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ async def execute_final_maintenance_tasks(runtime) -> None:
     logger.info("=" * 60)
 
 
-async def _transition_agent_to_shutdown_state(runtime, current_state) -> bool:
+async def _transition_agent_to_shutdown_state(runtime: Any, current_state: Any) -> bool:
     """Transition agent processor to shutdown state."""
     from ciris_engine.schemas.processors.states import AgentState
 
@@ -119,7 +119,7 @@ async def _transition_agent_to_shutdown_state(runtime, current_state) -> bool:
     return True
 
 
-async def _handle_processing_loop_shutdown(runtime) -> None:
+async def _handle_processing_loop_shutdown(runtime: Any) -> None:
     """Handle shutdown of processing loop or direct shutdown processor."""
     import asyncio
 
@@ -133,7 +133,7 @@ async def _handle_processing_loop_shutdown(runtime) -> None:
         await _execute_shutdown_processor_directly(runtime)
 
 
-async def _execute_shutdown_processor_directly(runtime) -> None:
+async def _execute_shutdown_processor_directly(runtime: Any) -> None:
     """Execute shutdown processor directly when processing loop is not running."""
     import asyncio
 
@@ -153,7 +153,7 @@ async def _execute_shutdown_processor_directly(runtime) -> None:
             await asyncio.sleep(0.1)
 
 
-async def _wait_for_shutdown_processor_completion(runtime) -> None:
+async def _wait_for_shutdown_processor_completion(runtime: Any) -> None:
     """Wait for shutdown processor to complete with timeout."""
     import asyncio
 
@@ -177,7 +177,7 @@ async def _wait_for_shutdown_processor_completion(runtime) -> None:
     logger.debug("Shutdown negotiation complete or timed out")
 
 
-async def handle_agent_processor_shutdown(runtime) -> None:
+async def handle_agent_processor_shutdown(runtime: Any) -> None:
     """Handle graceful agent processor shutdown negotiation."""
     from ciris_engine.schemas.processors.states import AgentState
 
@@ -213,7 +213,7 @@ async def handle_agent_processor_shutdown(runtime) -> None:
 # ============================================================================
 
 
-def validate_shutdown_preconditions(runtime) -> bool:
+def validate_shutdown_preconditions(runtime: Any) -> bool:
     """Validate system state before shutdown initiation.
 
     Returns True if shutdown can proceed safely, False otherwise.
@@ -236,7 +236,7 @@ def validate_shutdown_preconditions(runtime) -> bool:
     return True
 
 
-def _collect_scheduled_services(runtime) -> List[Any]:
+def _collect_scheduled_services(runtime: Any) -> List[Any]:
     """Collect services that have scheduled tasks."""
     scheduled_services = []
     if runtime.service_registry:
@@ -248,7 +248,7 @@ def _collect_scheduled_services(runtime) -> List[Any]:
     return scheduled_services
 
 
-async def _stop_service_task(service) -> None:
+async def _stop_service_task(service: Any) -> None:
     """Stop a specific service's task safely."""
     import asyncio
 
@@ -264,14 +264,15 @@ async def _stop_service_task(service) -> None:
             await service._task
         except asyncio.CancelledError:
             # Only re-raise if we're being cancelled ourselves
-            if asyncio.current_task() and asyncio.current_task().cancelled():
+            current = asyncio.current_task()
+            if current is not None and current.cancelled():
                 raise
             # Otherwise, this is a normal stop - don't propagate the cancellation
     elif hasattr(service, "stop_scheduler"):
         await service.stop_scheduler()
 
 
-async def prepare_shutdown_maintenance_tasks(runtime) -> List[Any]:
+async def prepare_shutdown_maintenance_tasks(runtime: Any) -> List[Any]:
     """Prepare and schedule final maintenance operations.
 
     Returns list of scheduled services that need to be stopped.
@@ -298,7 +299,7 @@ async def prepare_shutdown_maintenance_tasks(runtime) -> List[Any]:
     return scheduled_services
 
 
-def _collect_all_services_to_stop(runtime):
+def _collect_all_services_to_stop(runtime: Any) -> List[Any]:
     """Collect all services that need to be stopped."""
     services_to_stop = []
     seen_ids = set()
@@ -327,7 +328,7 @@ def _collect_all_services_to_stop(runtime):
     return services_to_stop
 
 
-def _get_direct_service_references(runtime):
+def _get_direct_service_references(runtime: Any) -> List[Any]:
     """Get direct service references for backward compatibility."""
     return [
         # From service_initializer
@@ -358,7 +359,7 @@ def _get_direct_service_references(runtime):
     ]
 
 
-async def _execute_service_stop_tasks(services_to_stop):
+async def _execute_service_stop_tasks(services_to_stop: List[Any]) -> Tuple[List[Any], List[str]]:
     """Execute stop tasks for all services."""
     import asyncio
 
@@ -382,7 +383,7 @@ async def _execute_service_stop_tasks(services_to_stop):
     return [], []
 
 
-async def _wait_for_service_stops(stop_tasks, service_names):
+async def _wait_for_service_stops(stop_tasks: List[Any], service_names: List[str]) -> Tuple[List[Any], List[str]]:
     """Wait for service stop tasks with timeout handling."""
     import asyncio
 
@@ -401,7 +402,7 @@ async def _wait_for_service_stops(stop_tasks, service_names):
     return stop_tasks, service_names
 
 
-async def _handle_hanging_services(pending, stop_tasks, service_names):
+async def _handle_hanging_services(pending: Set[Any], stop_tasks: List[Any], service_names: List[str]) -> None:
     """Handle services that didn't stop in time."""
     import asyncio
 
@@ -427,7 +428,7 @@ async def _handle_hanging_services(pending, stop_tasks, service_names):
         await asyncio.gather(*pending, return_exceptions=True)
 
 
-async def _check_service_stop_errors(done, stop_tasks, service_names):
+async def _check_service_stop_errors(done: Set[Any], stop_tasks: List[Any], service_names: List[str]) -> None:
     """Check for errors in completed service stop tasks."""
     logger = logging.getLogger(__name__)
 
@@ -442,7 +443,7 @@ async def _check_service_stop_errors(done, stop_tasks, service_names):
                 logger.error(f"Error checking task result: {e}")
 
 
-async def execute_service_shutdown_sequence(runtime) -> Tuple[List[Any], List[str]]:
+async def execute_service_shutdown_sequence(runtime: Any) -> Tuple[List[Any], List[str]]:
     """Execute orderly shutdown of all services by priority.
 
     Returns tuple of (services_to_stop, service_names).
@@ -463,7 +464,7 @@ async def execute_service_shutdown_sequence(runtime) -> Tuple[List[Any], List[st
     return services_to_stop, service_names
 
 
-async def handle_adapter_shutdown_cleanup(runtime) -> None:
+async def handle_adapter_shutdown_cleanup(runtime: Any) -> None:
     """Clean up adapter connections and resources."""
     import asyncio
     import logging
@@ -496,7 +497,7 @@ async def handle_adapter_shutdown_cleanup(runtime) -> None:
     logger.debug("Adapters stopped.")
 
 
-async def preserve_critical_system_state(runtime) -> None:
+async def preserve_critical_system_state(runtime: Any) -> None:
     """Preserve essential state before shutdown."""
     logger = logging.getLogger(__name__)
 
@@ -509,7 +510,7 @@ async def preserve_critical_system_state(runtime) -> None:
             logger.error(f"Failed to preserve continuity during shutdown: {e}")
 
 
-async def finalize_shutdown_logging(_) -> None:
+async def finalize_shutdown_logging(_: Any) -> None:
     """Complete logging and audit trail for shutdown."""
     import logging
 
@@ -529,7 +530,7 @@ async def finalize_shutdown_logging(_) -> None:
     logger.info("CIRIS Runtime shutdown complete")
 
 
-async def cleanup_runtime_resources(runtime) -> None:
+async def cleanup_runtime_resources(runtime: Any) -> None:
     """Release all runtime resources and connections."""
     import logging
 
@@ -550,7 +551,7 @@ async def cleanup_runtime_resources(runtime) -> None:
         logger.debug("Shutdown event set.")
 
 
-def validate_shutdown_completion(runtime) -> None:
+def validate_shutdown_completion(runtime: Any) -> None:
     """Verify complete and clean shutdown."""
     import logging
 
@@ -780,17 +781,17 @@ async def verify_adapter_service_registration(runtime: Any) -> bool:
 # ============================================================================
 
 
-def identify_critical_service_dependencies():
+def identify_critical_service_dependencies() -> None:
     """Determine critical services and dependency order"""
     pass
 
 
-def execute_critical_service_health_checks():
+def execute_critical_service_health_checks() -> None:
     """Perform comprehensive health validation"""
     pass
 
 
-def handle_critical_service_failures():
+def handle_critical_service_failures() -> None:
     """Implement failure recovery for critical services"""
     pass
 
@@ -800,17 +801,17 @@ def handle_critical_service_failures():
 # ============================================================================
 
 
-def prepare_service_registration_context():
+def prepare_service_registration_context() -> None:
     """Set up context for service registration"""
     pass
 
 
-def execute_service_registration_workflow():
+def execute_service_registration_workflow() -> None:
     """Register services with proper dependency handling"""
     pass
 
 
-def validate_service_registration_integrity():
+def validate_service_registration_integrity() -> None:
     """Verify successful service registration"""
     pass
 
@@ -820,12 +821,12 @@ def validate_service_registration_integrity():
 # ============================================================================
 
 
-def capture_runtime_continuity_state():
+def capture_runtime_continuity_state() -> None:
     """Capture current continuity and cognitive state"""
     pass
 
 
-def persist_continuity_for_recovery():
+def persist_continuity_for_recovery() -> None:
     """Store continuity state for future recovery"""
     pass
 
@@ -835,41 +836,41 @@ def persist_continuity_for_recovery():
 # ============================================================================
 
 
-def validate_runtime_configuration():
+def validate_runtime_configuration() -> None:
     """Comprehensive runtime configuration validation"""
     pass
 
 
-def create_runtime_error_context():
+def create_runtime_error_context() -> None:
     """Create structured error context for debugging"""
     pass
 
 
-def measure_runtime_performance_metrics():
+def measure_runtime_performance_metrics() -> None:
     """Collect and analyze runtime performance data"""
     pass
 
 
-def handle_runtime_resource_limits():
+def handle_runtime_resource_limits() -> None:
     """Monitor and enforce resource constraints"""
     pass
 
 
-def synchronize_runtime_state_transitions():
+def synchronize_runtime_state_transitions() -> None:
     """Ensure thread-safe state transitions"""
     pass
 
 
-def audit_runtime_operations():
+def audit_runtime_operations() -> None:
     """Create audit trail for runtime operations"""
     pass
 
 
-def optimize_runtime_memory_usage():
+def optimize_runtime_memory_usage() -> None:
     """Manage memory allocation and cleanup"""
     pass
 
 
-def coordinate_runtime_service_lifecycle():
+def coordinate_runtime_service_lifecycle() -> None:
     """Orchestrate service start/stop sequences"""
     pass

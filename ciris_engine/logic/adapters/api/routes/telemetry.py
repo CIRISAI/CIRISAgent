@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_serializer
 
+from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.telemetry import (
     APIResponseThoughtStep,
@@ -30,7 +31,7 @@ from ..constants import (
     DESC_START_TIME,
     ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE,
 )
-from ..dependencies.auth import AuthContext, require_admin, require_observer
+from ..dependencies.auth import require_admin, require_observer
 
 # Error message constants to avoid duplication
 ERROR_TELEMETRY_NOT_INITIALIZED = "Critical system failure: Telemetry service not initialized"
@@ -101,7 +102,7 @@ class MetricsResponse(BaseModel):
     timestamp: datetime = Field(..., description="Response timestamp")
 
     @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
+    def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
         return timestamp.isoformat() if timestamp else None
 
 
@@ -120,7 +121,7 @@ class ReasoningTraceData(BaseModel):
     outcome: Optional[str] = Field(None, description="Final outcome")
 
     @field_serializer("start_time")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
+    def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
         return timestamp.isoformat() if timestamp else None
 
 
@@ -132,7 +133,7 @@ class TracesResponse(BaseModel):
     has_more: bool = Field(False, description="More traces available")
 
 
-class LogEntry(BaseModel):
+class LogEntryResponse(BaseModel):
     """System log entry."""
 
     timestamp: datetime = Field(..., description="Log timestamp")
@@ -143,14 +144,14 @@ class LogEntry(BaseModel):
     trace_id: Optional[str] = Field(None, description="Associated trace ID")
 
     @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
+    def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
         return timestamp.isoformat() if timestamp else None
 
 
 class LogsResponse(BaseModel):
     """System logs response."""
 
-    logs: List[LogEntry] = Field(..., description="Log entries")
+    logs: List[LogEntryResponse] = Field(..., description="Log entries")
     total: int = Field(..., description="Total matching logs")
     has_more: bool = Field(False, description="More logs available")
 
@@ -168,7 +169,7 @@ class TelemetryQuery(BaseModel):
     limit: int = Field(100, ge=1, le=1000, description="Result limit")
 
     @field_serializer("start_time", "end_time")
-    def serialize_times(self, dt: Optional[datetime], _info) -> Optional[str]:
+    def serialize_times(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -184,7 +185,7 @@ class QueryResponse(BaseModel):
 # Helper functions
 
 
-async def _update_telemetry_summary(overview: SystemOverview, telemetry_service) -> None:
+async def _update_telemetry_summary(overview: SystemOverview, telemetry_service: Any) -> None:
     """Update overview with telemetry summary metrics."""
     if telemetry_service and hasattr(telemetry_service, "get_telemetry_summary"):
         try:
@@ -208,7 +209,7 @@ async def _update_telemetry_summary(overview: SystemOverview, telemetry_service)
             )
 
 
-async def _update_visibility_state(overview: SystemOverview, visibility_service) -> None:
+async def _update_visibility_state(overview: SystemOverview, visibility_service: Any) -> None:
     """Update overview with visibility state information."""
     if visibility_service:
         try:
@@ -254,7 +255,7 @@ def _create_empty_system_overview() -> SystemOverview:
     )
 
 
-def _validate_critical_services(telemetry_service, time_service):
+def _validate_critical_services(telemetry_service: Any, time_service: Any) -> None:
     """Validate that critical services are available."""
     if not telemetry_service:
         raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
@@ -262,7 +263,7 @@ def _validate_critical_services(telemetry_service, time_service):
         raise HTTPException(status_code=503, detail="Critical system failure: Time service not initialized")
 
 
-def _update_uptime(overview: SystemOverview, time_service):
+def _update_uptime(overview: SystemOverview, time_service: Any) -> None:
     """Update overview with system uptime."""
     if not time_service:
         return
@@ -276,14 +277,14 @@ def _update_uptime(overview: SystemOverview, time_service):
         )
 
 
-def _update_cognitive_state(overview: SystemOverview, request: Request):
+def _update_cognitive_state(overview: SystemOverview, request: Request) -> None:
     """Update overview with cognitive state from runtime."""
     runtime = getattr(request.app.state, "runtime", None)
     if runtime and hasattr(runtime, "state_manager"):
         overview.cognitive_state = runtime.state_manager.current_state
 
 
-def _update_resource_usage(overview: SystemOverview, resource_monitor):
+def _update_resource_usage(overview: SystemOverview, resource_monitor: Any) -> None:
     """Update overview with resource usage metrics."""
     if not resource_monitor:
         return
@@ -334,7 +335,7 @@ def _get_service_health_counts(request: Request) -> tuple[int, int]:
     return healthy, degraded
 
 
-async def _update_incident_count(overview: SystemOverview, incident_service):
+async def _update_incident_count(overview: SystemOverview, incident_service: Any) -> None:
     """Update overview with recent incident count."""
     if not incident_service:
         return
@@ -348,7 +349,7 @@ async def _update_incident_count(overview: SystemOverview, incident_service):
         )
 
 
-async def _update_deferral_count(overview: SystemOverview, wise_authority):
+async def _update_deferral_count(overview: SystemOverview, wise_authority: Any) -> None:
     """Update overview with active deferral count."""
     if not wise_authority:
         return
@@ -362,7 +363,7 @@ async def _update_deferral_count(overview: SystemOverview, wise_authority):
         )
 
 
-async def _update_metrics_count(overview: SystemOverview, telemetry_service, healthy_services: int):
+async def _update_metrics_count(overview: SystemOverview, telemetry_service: Any, healthy_services: int) -> None:
     """Update overview with telemetry metrics count."""
     if not telemetry_service:
         return
@@ -383,7 +384,7 @@ async def _update_metrics_count(overview: SystemOverview, telemetry_service, hea
         )
 
 
-async def _estimate_metrics_count(telemetry_service) -> int:
+async def _estimate_metrics_count(telemetry_service: Any) -> int:
     """Estimate total metrics count from common metric queries."""
     metric_names = [
         "llm.tokens.total",  # Total tokens used
@@ -448,7 +449,7 @@ async def _get_system_overview(request: Request) -> SystemOverview:
 # Endpoints
 
 
-async def _export_otlp_metrics(telemetry_service):
+async def _export_otlp_metrics(telemetry_service: Any) -> Dict[str, Any]:
     """Export metrics in OTLP format."""
     if not telemetry_service:
         raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
@@ -475,7 +476,7 @@ async def _export_otlp_metrics(telemetry_service):
     return convert_to_otlp_json(telemetry_dict)
 
 
-def _extract_basic_trace_fields(correlation):
+def _extract_basic_trace_fields(correlation: Any) -> Dict[str, Any]:
     """Extract basic trace fields from correlation object."""
     return {
         "trace_id": (correlation.trace_context.trace_id if correlation.trace_context else correlation.correlation_id),
@@ -491,7 +492,7 @@ def _extract_basic_trace_fields(correlation):
     }
 
 
-def _extract_request_data_fields(correlation, trace_data):
+def _extract_request_data_fields(correlation: Any, trace_data: Dict[str, Any]) -> None:
     """Extract task/thought linkage from request data."""
     if not correlation.request_data:
         return
@@ -502,7 +503,7 @@ def _extract_request_data_fields(correlation, trace_data):
         trace_data["thought_id"] = correlation.request_data.thought_id
 
 
-def _extract_response_data_fields(correlation, trace_data):
+def _extract_response_data_fields(correlation: Any, trace_data: Dict[str, Any]) -> None:
     """Extract performance data from response data."""
     if not correlation.response_data:
         return
@@ -515,7 +516,7 @@ def _extract_response_data_fields(correlation, trace_data):
         trace_data["error"] = correlation.response_data.error_message
 
 
-def _extract_span_attributes(correlation, trace_data):
+def _extract_span_attributes(correlation: Any, trace_data: Dict[str, Any]) -> None:
     """Extract span attributes from trace context."""
     if not correlation.trace_context:
         return
@@ -530,7 +531,7 @@ def _extract_span_attributes(correlation, trace_data):
     )
 
 
-def _build_trace_data_from_correlation(correlation):
+def _build_trace_data_from_correlation(correlation: Any) -> Dict[str, Any]:
     """Build trace data dictionary from correlation object."""
     trace_data = _extract_basic_trace_fields(correlation)
     _extract_request_data_fields(correlation, trace_data)
@@ -539,7 +540,7 @@ def _build_trace_data_from_correlation(correlation):
     return trace_data
 
 
-async def _export_otlp_traces(visibility_service, limit):
+async def _export_otlp_traces(visibility_service: Any, limit: int) -> Dict[str, Any]:
     """Export traces in OTLP format."""
     if not visibility_service:
         raise HTTPException(status_code=503, detail="Visibility service not available")
@@ -562,7 +563,7 @@ async def _export_otlp_traces(visibility_service, limit):
     return convert_traces_to_otlp_json(traces)
 
 
-def _build_log_data_from_entry(log_entry):
+def _build_log_data_from_entry(log_entry: Any) -> Dict[str, Any]:
     """Build log data dictionary from log entry."""
     log_data = {
         "timestamp": log_entry.timestamp.isoformat(),
@@ -589,7 +590,7 @@ def _build_log_data_from_entry(log_entry):
     return log_data
 
 
-async def _export_otlp_logs(limit, start_time, end_time):
+async def _export_otlp_logs(limit: int, start_time: Optional[datetime], end_time: Optional[datetime]) -> Dict[str, Any]:
     """Export logs in OTLP format."""
     logs = []
     try:
@@ -627,7 +628,7 @@ async def get_otlp_telemetry(
     limit: int = Query(100, ge=1, le=1000, description="Maximum items to return"),
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
-) -> Dict:
+) -> Dict[str, Any]:
     """
     OpenTelemetry Protocol (OTLP) JSON export.
 
@@ -653,6 +654,10 @@ async def get_otlp_telemetry(
             return await _export_otlp_traces(request.app.state.visibility_service, limit)
         elif signal == "logs":
             return await _export_otlp_logs(limit, start_time, end_time)
+        else:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid signal type: {signal}. Must be one of: metrics, traces, logs"
+            )
 
     except HTTPException:
         raise
@@ -856,7 +861,7 @@ def _calculate_trend(values: List[float]) -> str:
     return "stable"
 
 
-async def _process_metric_data(telemetry_service, metric_name: str, now: datetime) -> Optional[DetailedMetric]:
+async def _process_metric_data(telemetry_service: Any, metric_name: str, now: datetime) -> Optional[DetailedMetric]:
     """Process metric data for a single metric name."""
     if not hasattr(telemetry_service, "query_metrics"):
         return None
@@ -904,9 +909,9 @@ async def _process_metric_data(telemetry_service, metric_name: str, now: datetim
     )
 
 
-def _get_legacy_metrics(telemetry_service) -> List[DetailedMetric]:
+def _get_legacy_metrics(telemetry_service: Any) -> List[DetailedMetric]:
     """Get metrics from legacy get_metrics method."""
-    metrics = []
+    metrics: List[DetailedMetric] = []
     if not (hasattr(telemetry_service, "get_metrics") and not hasattr(telemetry_service, "query_metrics")):
         return metrics
 
@@ -1015,7 +1020,7 @@ async def get_detailed_metrics(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _get_trace_from_task(task, visibility_service):
+async def _get_trace_from_task(task: Any, visibility_service: Any) -> Optional[ReasoningTraceData]:
     """Extract a reasoning trace from a task via visibility service."""
     if not hasattr(visibility_service, "get_reasoning_trace"):
         return None
@@ -1048,9 +1053,9 @@ async def _get_trace_from_task(task, visibility_service):
     )
 
 
-async def _get_traces_from_task_history(visibility_service, limit):
+async def _get_traces_from_task_history(visibility_service: Any, limit: int) -> List[ReasoningTraceData]:
     """Get traces from task history via visibility service."""
-    traces = []
+    traces: List[ReasoningTraceData] = []
     if not hasattr(visibility_service, "get_task_history"):
         return traces
 
@@ -1064,7 +1069,7 @@ async def _get_traces_from_task_history(visibility_service, limit):
     return traces
 
 
-async def _get_current_reasoning_trace(visibility_service):
+async def _get_current_reasoning_trace(visibility_service: Any) -> Optional[ReasoningTraceData]:
     """Get current reasoning trace via visibility service."""
     if not hasattr(visibility_service, "get_current_reasoning"):
         return None
@@ -1087,52 +1092,63 @@ async def _get_current_reasoning_trace(visibility_service):
     )
 
 
-def _extract_content_from_thought_data(thought_data):
+def _extract_content_from_thought_data(thought_data: Any) -> str:
     """Extract content from thought data with fallbacks."""
     if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "content"):
-        return thought_data.thought.content
+        return str(thought_data.thought.content)
     if isinstance(thought_data, dict):
-        return thought_data.get("content", "")
+        return str(thought_data.get("content", ""))
     return str(thought_data)
 
 
-def _extract_timestamp_from_thought_data(thought_data):
+def _extract_timestamp_from_thought_data(thought_data: Any) -> datetime:
     """Extract timestamp from thought data with fallbacks."""
     if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "timestamp"):
-        return thought_data.thought.timestamp
+        ts = thought_data.thought.timestamp
+        if isinstance(ts, datetime):
+            return ts
+        return datetime.now(timezone.utc)
     if isinstance(thought_data, dict):
-        return datetime.fromisoformat(thought_data.get("timestamp", datetime.now(timezone.utc).isoformat()))
+        ts_str = thought_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+        if isinstance(ts_str, str):
+            return datetime.fromisoformat(ts_str)
     return datetime.now(timezone.utc)
 
 
-def _extract_depth_from_thought_data(thought_data):
+def _extract_depth_from_thought_data(thought_data: Any) -> int:
     """Extract depth from thought data with fallbacks."""
     if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "depth"):
-        return thought_data.thought.depth
+        depth = thought_data.thought.depth
+        return int(depth) if depth is not None else 0
     if isinstance(thought_data, dict):
-        return thought_data.get("depth", 0)
+        depth = thought_data.get("depth", 0)
+        return int(depth) if depth is not None else 0
     return 0
 
 
-def _extract_action_from_thought_data(thought_data):
+def _extract_action_from_thought_data(thought_data: Any) -> Optional[str]:
     """Extract action from thought data with fallbacks."""
     if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "action"):
-        return thought_data.thought.action
+        action = thought_data.thought.action
+        return str(action) if action is not None else None
     if isinstance(thought_data, dict):
-        return thought_data.get("action")
+        action = thought_data.get("action")
+        return str(action) if action is not None else None
     return None
 
 
-def _extract_confidence_from_thought_data(thought_data):
+def _extract_confidence_from_thought_data(thought_data: Any) -> Optional[float]:
     """Extract confidence from thought data with fallbacks."""
     if hasattr(thought_data, "thought") and hasattr(thought_data.thought, "confidence"):
-        return thought_data.thought.confidence
+        conf = thought_data.thought.confidence
+        return float(conf) if conf is not None else None
     if isinstance(thought_data, dict):
-        return thought_data.get("confidence")
+        conf = thought_data.get("confidence")
+        return float(conf) if conf is not None else None
     return None
 
 
-def _convert_thought_to_api_response(step_index, thought_data):
+def _convert_thought_to_api_response(step_index: int, thought_data: Any) -> APIResponseThoughtStep:
     """Convert thought data to APIResponseThoughtStep."""
     return APIResponseThoughtStep(
         step=step_index,
@@ -1144,7 +1160,7 @@ def _convert_thought_to_api_response(step_index, thought_data):
     )
 
 
-async def _get_traces_from_visibility_service(visibility_service, limit):
+async def _get_traces_from_visibility_service(visibility_service: Any, limit: int) -> List[ReasoningTraceData]:
     """Get reasoning traces from visibility service."""
     traces = await _get_traces_from_task_history(visibility_service, limit)
 
@@ -1157,7 +1173,7 @@ async def _get_traces_from_visibility_service(visibility_service, limit):
     return traces
 
 
-def _parse_timestamp(timestamp_value):
+def _parse_timestamp(timestamp_value: Any) -> datetime:
     """Parse timestamp from various formats."""
     if isinstance(timestamp_value, str):
         return datetime.fromisoformat(timestamp_value)
@@ -1167,7 +1183,9 @@ def _parse_timestamp(timestamp_value):
         return datetime.now(timezone.utc)
 
 
-async def _get_traces_from_audit_service(audit_service, start_time, end_time, limit):
+async def _get_traces_from_audit_service(
+    audit_service: Any, start_time: Optional[datetime], end_time: Optional[datetime], limit: int
+) -> List[ReasoningTraceData]:
     """Get reasoning traces from audit service as fallback."""
     # Query audit entries related to reasoning
     entries = await audit_service.query_events(
@@ -1191,7 +1209,7 @@ async def _get_traces_from_audit_service(audit_service, start_time, end_time, li
     return traces
 
 
-def _build_trace_from_audit_entries(trace_id, entries):
+def _build_trace_from_audit_entries(trace_id: str, entries: List[Any]) -> ReasoningTraceData:
     """Build a ReasoningTraceData from audit entries."""
     # Sort entries by timestamp
     entries.sort(key=lambda e: _parse_timestamp(e.get("timestamp")))
@@ -1272,7 +1290,7 @@ async def get_reasoning_traces(
     )
 
 
-def _validate_audit_service(audit_service):
+def _validate_audit_service(audit_service: Any) -> None:
     """Validate that audit service is available."""
     if not audit_service:
         raise HTTPException(status_code=503, detail=ERROR_AUDIT_NOT_INITIALIZED)
@@ -1308,9 +1326,9 @@ def _should_include_log(
     return True
 
 
-def _build_log_entry(entry, log_level: str, log_service: str) -> LogEntry:
+def _build_log_entry(entry: Any, log_level: str, log_service: str) -> LogEntryResponse:
     """Build LogEntry from audit entry."""
-    return LogEntry(
+    return LogEntryResponse(
         timestamp=entry.timestamp,
         level=log_level,
         service=log_service,
@@ -1328,13 +1346,13 @@ def _build_log_entry(entry, log_level: str, log_service: str) -> LogEntry:
 
 
 async def _get_logs_from_audit_service(
-    audit_service,
+    audit_service: Any,
     start_time: Optional[datetime],
     end_time: Optional[datetime],
     level: Optional[str],
     service: Optional[str],
     limit: int,
-) -> List[LogEntry]:
+) -> List[LogEntryResponse]:
     """Get logs from audit service with filtering."""
     logs = []
     try:
@@ -1366,12 +1384,13 @@ async def _get_logs_from_file_reader(
     limit: int,
     start_time: Optional[datetime],
     end_time: Optional[datetime],
-) -> List[LogEntry]:
+) -> List[LogEntryResponse]:
     """Get logs from file reader if available."""
     try:
         from .telemetry_logs_reader import log_reader
 
-        return log_reader.read_logs(
+        # The log_reader returns List[LogEntry] from telemetry_models, need to convert
+        logs = log_reader.read_logs(
             level=level,
             service=service,
             limit=limit,
@@ -1379,6 +1398,8 @@ async def _get_logs_from_file_reader(
             end_time=end_time,
             include_incidents=True,
         )
+        # Convert LogEntry to LogEntryResponse (they are the same structure now)
+        return [LogEntryResponse(**log.model_dump()) for log in logs]
     except ImportError:
         logger.debug("Log reader not available, using audit entries only")
         return []
@@ -1421,9 +1442,9 @@ async def get_system_logs(
     )
 
 
-async def _query_metrics(telemetry_service, query) -> List[QueryResult]:
+async def _query_metrics(telemetry_service: Any, query: TelemetryQuery) -> List[QueryResult]:
     """Query metrics data."""
-    results = []
+    results: List[QueryResult] = []
     if not (telemetry_service and hasattr(telemetry_service, "query_metrics")):
         return results
 
@@ -1448,9 +1469,9 @@ async def _query_metrics(telemetry_service, query) -> List[QueryResult]:
     return results
 
 
-async def _query_traces(visibility_service, query) -> List[QueryResult]:
+async def _query_traces(visibility_service: Any, query: TelemetryQuery) -> List[QueryResult]:
     """Query reasoning traces."""
-    results = []
+    results: List[QueryResult] = []
     if not visibility_service:
         return results
 
@@ -1479,7 +1500,7 @@ async def _query_traces(visibility_service, query) -> List[QueryResult]:
     return results
 
 
-def _should_include_log_entry(entry, filters):
+def _should_include_log_entry(entry: Any, filters: Any) -> bool:
     """Check if log entry should be included based on filters."""
     if not filters:
         return True
@@ -1495,9 +1516,9 @@ def _should_include_log_entry(entry, filters):
     return True
 
 
-async def _query_logs(audit_service, query) -> List[QueryResult]:
+async def _query_logs(audit_service: Any, query: TelemetryQuery) -> List[QueryResult]:
     """Query logs data."""
-    results = []
+    results: List[QueryResult] = []
     if not audit_service:
         return results
 
@@ -1525,9 +1546,9 @@ async def _query_logs(audit_service, query) -> List[QueryResult]:
     return results
 
 
-async def _query_incidents(incident_service, query) -> List[QueryResult]:
+async def _query_incidents(incident_service: Any, query: TelemetryQuery) -> List[QueryResult]:
     """Query incidents data."""
-    results = []
+    results: List[QueryResult] = []
     if not incident_service:
         return results
 
@@ -1556,9 +1577,9 @@ async def _query_incidents(incident_service, query) -> List[QueryResult]:
     return results
 
 
-async def _query_insights(incident_service, query) -> List[QueryResult]:
+async def _query_insights(incident_service: Any, query: TelemetryQuery) -> List[QueryResult]:
     """Query adaptation insights."""
-    results = []
+    results: List[QueryResult] = []
     if not (incident_service and hasattr(incident_service, "get_insights")):
         return results
 
@@ -1584,7 +1605,9 @@ async def _query_insights(incident_service, query) -> List[QueryResult]:
     return results
 
 
-def _apply_aggregations(results: List[QueryResult], aggregations: List[str], query_type: str) -> List[QueryResult]:
+def _apply_aggregations(
+    results: List[QueryResult], aggregations: Optional[List[str]], query_type: str
+) -> List[QueryResult]:
     """Apply aggregations to query results."""
     if not aggregations:
         return results
@@ -1605,7 +1628,8 @@ def _apply_aggregations(results: List[QueryResult], aggregations: List[str], que
             grouped: Dict[str, int] = defaultdict(int)
             for r in results:
                 # Access service from the data field
-                service = r.data.get("service", "unknown")
+                service_val = r.data.get("service", "unknown")
+                service = str(service_val) if service_val is not None else "unknown"
                 grouped[service] += 1
 
             # Convert grouped results to QueryResult objects
@@ -1621,7 +1645,9 @@ def _apply_aggregations(results: List[QueryResult], aggregations: List[str], que
     return results
 
 
-def _validate_query_services(telemetry_service, visibility_service, audit_service, incident_service):
+def _validate_query_services(
+    telemetry_service: Any, visibility_service: Any, audit_service: Any, incident_service: Any
+) -> None:
     """Validate that all required services are available for queries."""
     if not telemetry_service:
         raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_NOT_INITIALIZED)
@@ -1634,7 +1660,7 @@ def _validate_query_services(telemetry_service, visibility_service, audit_servic
 
 
 async def _route_query_to_handler(
-    query: TelemetryQuery, telemetry_service, visibility_service, audit_service, incident_service
+    query: TelemetryQuery, telemetry_service: Any, visibility_service: Any, audit_service: Any, incident_service: Any
 ) -> List[QueryResult]:
     """Route query to appropriate handler based on query type."""
     if query.query_type == "metrics":
@@ -1814,7 +1840,7 @@ async def get_unified_telemetry(
     ),
     format: str = Query("json", description="Output format: json|prometheus|graphite"),
     live: bool = Query(False, description="Force live collection (bypass cache)"),
-) -> Dict | Response:
+) -> Dict[str, Any] | Response:
     """
     Unified enterprise telemetry endpoint.
 

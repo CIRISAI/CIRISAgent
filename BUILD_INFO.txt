@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: f37f98e6152d
-Build Time: 2025-10-02T12:08:13.775455
-Git Commit: be729ebaf24e682ca477c00189b444a0c616e111
-Git Branch: 1.2.1
+Code Hash: 2404446107da
+Build Time: 2025-10-02T13:40:01.784431
+Git Commit: bde31d1c0058cb207b390f4325c8c8bfdaf56fa7
+Git Branch: mypy-stream-a
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

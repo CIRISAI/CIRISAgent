@@ -5,7 +5,7 @@ These schemas provide type-safe alternatives to Dict[str, Any] returns.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,9 @@ class ServiceCorrelationQueryResult(BaseModel):
     trace_spans: List[TraceSpanData] = Field(default_factory=list, description="Trace span correlations")
     task_correlations: List[TaskCorrelationData] = Field(default_factory=list, description="Task correlations")
 
-    def to_dict_by_type(self) -> Dict[str, List[BaseModel]]:
+    def to_dict_by_type(
+        self,
+    ) -> Dict[str, Union[List[ServiceInteractionData], List[MetricCorrelationData], List[TraceSpanData], List[TaskCorrelationData]]]:
         """Convert to dictionary keyed by correlation type."""
         return {
             "service_interactions": self.service_interactions,
@@ -46,7 +48,7 @@ class TSDBNodeQueryResult(BaseModel):
     period_end: datetime = Field(..., description="Query period end")
     count: int = Field(0, description="Number of nodes found")
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         self.count = len(self.nodes)
 

@@ -136,7 +136,7 @@ class ConfigValue(BaseModel):
     float_value: Optional[float] = None
     bool_value: Optional[bool] = None
     list_value: Optional[List[Union[str, int, float, bool]]] = None
-    dict_value: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = None  # Allow None values in dict
+    dict_value: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]]] = None  # Allow None values in dict
 
     @property
     def value(
@@ -267,7 +267,7 @@ class IdentitySnapshot(TypedGraphNode):
     # Additional fields from other versions
     behavioral_patterns: Dict[str, float] = Field(default_factory=dict, description="Behavioral pattern scores")
     config_preferences: Dict[str, str] = Field(default_factory=dict, description="Configuration preferences")
-    attributes: dict = Field(default_factory=dict, description="Additional attributes")
+    attributes: Dict[str, Any] = Field(default_factory=dict, description="Additional attributes")
     reason: str = Field(default="", description="Why snapshot was taken")
     system_state: Optional[Dict[str, str]] = Field(None, description="System state at snapshot time")
     active_tasks: List[str] = Field(default_factory=list, description="Active tasks at time")

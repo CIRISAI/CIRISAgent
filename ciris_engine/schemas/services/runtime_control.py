@@ -372,6 +372,11 @@ class ThoughtInPipeline(BaseModel):
     recursion_count: int = Field(0, description="Number of ASPDMA recursions")
 
 
+def _create_empty_pipeline_steps() -> Dict[str, List["ThoughtInPipeline"]]:
+    """Create empty pipeline step dictionary with proper typing."""
+    return {step.value: [] for step in StepPoint}
+
+
 class PipelineState(BaseModel):
     """Complete state of the processing pipeline."""
 
@@ -380,7 +385,7 @@ class PipelineState(BaseModel):
 
     # Thoughts at each step point
     thoughts_by_step: Dict[str, List[ThoughtInPipeline]] = Field(
-        default_factory=lambda: {step.value: [] for step in StepPoint},
+        default_factory=_create_empty_pipeline_steps,
         description="Thoughts grouped by their current step point",
     )
 

@@ -77,7 +77,9 @@ class HandlerResult(BaseModel):
 
     success: bool = Field(..., description="Whether the handler succeeded")
     message: Optional[str] = Field(None, description="Result message")
-    data: Optional[Dict[str, Union[str, int, float, bool, List[Any]]]] = Field(None, description="Additional result data")
+    data: Optional[Dict[str, Union[str, int, float, bool, List[Any]]]] = Field(
+        None, description="Additional result data"
+    )
     error: Optional[str] = Field(None, description="Error message if failed")
 
     model_config = ConfigDict(extra="forbid")

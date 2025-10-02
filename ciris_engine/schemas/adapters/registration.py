@@ -34,7 +34,7 @@ class AdapterServiceRegistration:
     def __post_init__(self) -> None:
         # Ensure handlers is either None or a list
         if self.handlers is not None and not isinstance(self.handlers, list):
-            self.handlers = [self.handlers]  # type: ignore[unreachable]
+            self.handlers = [self.handlers]
 
 
 __all__ = ["AdapterServiceRegistration"]

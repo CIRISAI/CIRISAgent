@@ -200,11 +200,16 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_get_user_allowed_channel_ids_no_oauth(self):
         """Test channel IDs with no OAuth links."""
+        from unittest.mock import MagicMock
+
         auth_service = Mock()
-        mock_db = AsyncMock()
-        mock_conn = AsyncMock()
+        mock_conn = MagicMock()
         mock_conn.execute_fetchall = AsyncMock(return_value=[])
-        mock_db.connection = AsyncMock(return_value=mock_conn)
+        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
+
+        mock_db = Mock()
+        mock_db.connection = Mock(return_value=mock_conn)
         auth_service.db_manager = mock_db
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
@@ -239,9 +244,15 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_get_user_allowed_channel_ids_exception(self):
         """Test channel IDs handles exceptions gracefully."""
+        from unittest.mock import MagicMock
+
         auth_service = Mock()
-        mock_db = AsyncMock()
-        mock_db.connection = AsyncMock(side_effect=Exception("DB Error"))
+        mock_conn = MagicMock()
+        mock_conn.__aenter__ = AsyncMock(side_effect=Exception("DB Error"))
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
+
+        mock_db = Mock()
+        mock_db.connection = Mock(return_value=mock_conn)
         auth_service.db_manager = mock_db
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
@@ -286,9 +297,15 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_exception(self):
         """Test batch fetching handles exceptions."""
+        from unittest.mock import MagicMock
+
         auth_service = Mock()
-        mock_db = AsyncMock()
-        mock_db.connection = AsyncMock(side_effect=Exception("DB Error"))
+        mock_conn = MagicMock()
+        mock_conn.__aenter__ = AsyncMock(side_effect=Exception("DB Error"))
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
+
+        mock_db = Mock()
+        mock_db.connection = Mock(return_value=mock_conn)
         auth_service.db_manager = mock_db
 
         result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])

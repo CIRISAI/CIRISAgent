@@ -853,7 +853,7 @@ async def _broadcast_reasoning_event(
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
             # Event 3: ASPDMA_RESULT
-            is_recursive_step = (step == StepPoint.RECURSIVE_CONSCIENCE)
+            is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
             event = _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
 
         elif step == StepPoint.FINALIZE_ACTION:

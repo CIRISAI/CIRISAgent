@@ -38,7 +38,7 @@ class APIAdapterProtocol(BaseAdapterProtocol):
         ...
 
     @abstractmethod
-    def add_middleware(self, middleware: Callable) -> None:
+    def add_middleware(self, middleware: Callable[..., Any]) -> None:
         """Add middleware to the API."""
         ...
 

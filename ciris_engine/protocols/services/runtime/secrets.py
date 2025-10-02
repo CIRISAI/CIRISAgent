@@ -1,7 +1,7 @@
 """Secrets Service Protocol."""
 
 from abc import abstractmethod
-from typing import List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from ciris_engine.schemas.secrets.core import SecretReference
 from ciris_engine.schemas.secrets.service import (
@@ -45,8 +45,8 @@ class SecretsServiceProtocol(ServiceProtocol, Protocol):
 
     @abstractmethod
     async def decapsulate_secrets_in_parameters(
-        self, action_type: str, action_params: dict, context: DecapsulationContext
-    ) -> dict:
+        self, action_type: str, action_params: Dict[str, Any], context: DecapsulationContext
+    ) -> Dict[str, Any]:
         """Replace secret UUIDs with decrypted values in action parameters."""
         ...
 
@@ -56,7 +56,7 @@ class SecretsServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def get_filter_config(self) -> dict:
+    async def get_filter_config(self) -> Dict[str, Any]:
         """Get current filter configuration."""
         ...
 

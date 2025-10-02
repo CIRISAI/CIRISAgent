@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class MetricTags(BaseModel):
     """Standard metric tags."""
@@ -48,8 +50,8 @@ class LogContext(BaseModel):
     correlation_id: Optional[str] = Field(None, description="Correlation ID")
     user_id: Optional[str] = Field(None, description="User ID if applicable")
     entity_id: Optional[str] = Field(None, description="Entity being operated on")
-    error_details: Optional[Dict[str, Any]] = Field(None, description="Error specifics if error log")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    error_details: Optional[JSONDict] = Field(None, description="Error specifics if error log")
+    metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
 
 
 class QueryFilter(BaseModel):
@@ -80,7 +82,7 @@ class QueryResult(BaseModel):
     id: str = Field(..., description="Result ID")
     type: str = Field(..., description="Result type")
     timestamp: datetime = Field(..., description="Result timestamp")
-    data: Dict[str, Any] = Field(..., description="Result data (type-specific)")
+    data: JSONDict = Field(..., description="Result data (type-specific)")
 
 
 class TimeSyncStatus(BaseModel):
@@ -104,4 +106,4 @@ class ServiceMetrics(BaseModel):
     error_count: Optional[int] = Field(None, description="Error count")
     avg_response_time_ms: Optional[float] = Field(None, description="Average response time")
     memory_mb: Optional[float] = Field(None, description="Memory usage")
-    custom_metrics: Optional[Dict[str, Any]] = Field(None, description="Service-specific metrics")
+    custom_metrics: Optional[JSONDict] = Field(None, description="Service-specific metrics")

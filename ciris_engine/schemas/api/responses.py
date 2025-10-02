@@ -9,6 +9,7 @@ from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, Field, field_serializer
 
+from ciris_engine.schemas.types import JSONDict
 from ciris_engine.utils.serialization import serialize_timestamp
 
 T = TypeVar("T")
@@ -42,7 +43,7 @@ class ErrorDetail(BaseModel):
 
     code: str = Field(..., description="Error code (e.g., RESOURCE_NOT_FOUND)")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
+    details: Optional[JSONDict] = Field(None, description="Additional error context")
 
 
 class ErrorResponse(BaseModel):

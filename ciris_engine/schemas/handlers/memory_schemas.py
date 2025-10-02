@@ -4,9 +4,11 @@ Memory handler schemas for typed memory operations.
 Replaces Dict[str, Any] usage in memory handlers.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class ConnectedNodeInfo(BaseModel):
@@ -16,7 +18,7 @@ class ConnectedNodeInfo(BaseModel):
     node_type: str = Field(..., description="Type of the connected node")
     relationship: str = Field(..., description="Type of relationship/edge")
     direction: str = Field(..., description="Direction of the relationship (incoming/outgoing)")
-    attributes: Dict[str, Any] = Field(default_factory=dict, description="Attributes of the connected node")
+    attributes: JSONDict = Field(default_factory=dict, description="Attributes of the connected node")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -26,7 +28,7 @@ class RecalledNodeInfo(BaseModel):
 
     type: str = Field(..., description="Type of the node")
     scope: str = Field(..., description="Scope of the node (LOCAL/GLOBAL)")
-    attributes: Dict[str, Any] = Field(default_factory=dict, description="Node attributes")
+    attributes: JSONDict = Field(default_factory=dict, description="Node attributes")
     connected_nodes: Optional[List[ConnectedNodeInfo]] = Field(None, description="Connected nodes information")
 
     model_config = ConfigDict(extra="forbid")

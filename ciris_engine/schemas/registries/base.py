@@ -4,9 +4,11 @@ Schemas for registry operations.
 These replace all Dict[str, Any] usage in logic/registries/base.py.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class ServiceMetadata(BaseModel):
@@ -15,7 +17,7 @@ class ServiceMetadata(BaseModel):
     version: Optional[str] = Field(None, description="Service version")
     description: Optional[str] = Field(None, description="Service description")
     author: Optional[str] = Field(None, description="Service author")
-    additional_info: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    additional_info: JSONDict = Field(default_factory=dict, description="Additional metadata")
 
 
 class ProviderInfo(BaseModel):
@@ -26,7 +28,7 @@ class ProviderInfo(BaseModel):
     priority_group: int = Field(0, description="Priority group")
     strategy: str = Field(..., description="Selection strategy")
     capabilities: List[str] = Field(default_factory=list, description="Provider capabilities")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Provider metadata")
+    metadata: JSONDict = Field(default_factory=dict, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state")
 
 

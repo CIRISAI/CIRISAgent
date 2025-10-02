@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_serializer
 
+from ciris_engine.schemas.types import ConfigValue
+
 from .auth import UserRole
 
 
@@ -168,7 +170,7 @@ class ConfigValueResponse(BaseModel):
     """Response for a single configuration value."""
 
     key: str = Field(..., description="Configuration key")
-    value: Any = Field(..., description="Configuration value (may be redacted)")
+    value: ConfigValue = Field(..., description="Configuration value (may be redacted)")
     is_sensitive: bool = Field(..., description="Whether this is a sensitive key")
     is_redacted: bool = Field(..., description="Whether value was redacted")
     last_updated: Optional[datetime] = Field(None, description="When value was last updated")
@@ -207,7 +209,7 @@ def filter_config_for_role(
 class ConfigUpdateRequest(BaseModel):
     """Request to update configuration value."""
 
-    value: Any = Field(..., description="New configuration value")
+    value: ConfigValue = Field(..., description="New configuration value")
     comment: Optional[str] = Field(None, description="Optional comment about change")
 
 
@@ -224,8 +226,8 @@ class ConfigHistoryEntry(BaseModel):
     """Configuration change history entry."""
 
     key: str = Field(..., description="Configuration key")
-    old_value: Any = Field(..., description="Previous value (may be redacted)")
-    new_value: Any = Field(..., description="New value (may be redacted)")
+    old_value: ConfigValue = Field(..., description="Previous value (may be redacted)")
+    new_value: ConfigValue = Field(..., description="New value (may be redacted)")
     changed_at: datetime = Field(..., description="When change occurred")
     changed_by: str = Field(..., description="Who made the change")
     comment: Optional[str] = Field(None, description="Change comment")

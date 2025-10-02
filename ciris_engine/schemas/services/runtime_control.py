@@ -7,7 +7,7 @@ in the runtime control service, ensuring full type safety and validation.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,11 @@ from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
+
+# Type aliases for configuration values
+ConfigValue = Union[str, int, float, bool, List[Any], Dict[str, Any]]
+ConfigDict = Dict[str, ConfigValue]
+ConfigItem = Tuple[str, ConfigValue]
 
 # Field description constants (DRY principle - avoid duplication)
 DESC_THOUGHT_ID = "Thought being processed"
@@ -121,33 +126,31 @@ class SpanAttribute(BaseModel):
 class ConfigValueMap(BaseModel):
     """Typed map for configuration values."""
 
-    configs: Dict[str, str | int | float | bool | list | dict] = Field(
-        default_factory=dict, description="Configuration key-value pairs with typed values"
-    )
+    configs: ConfigDict = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
 
-    def get(self, key: str, default=None):
+    def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
         """Get a configuration value with optional default."""
         return self.configs.get(key, default)
 
-    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
+    def set(self, key: str, value: ConfigValue) -> None:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
+    def update(self, values: ConfigDict) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
-    def keys(self):
+    def keys(self) -> List[str]:
         """Get all configuration keys."""
-        return self.configs.keys()
+        return list(self.configs.keys())
 
-    def items(self):
+    def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
-        return self.configs.items()
+        return list(self.configs.items())
 
-    def values(self):
+    def values(self) -> List[ConfigValue]:
         """Get all configuration values."""
-        return self.configs.values()
+        return list(self.configs.values())
 
 
 class TaskSelectionCriteria(BaseModel):
@@ -162,21 +165,19 @@ class TaskSelectionCriteria(BaseModel):
     max_retry_count: int = Field(3, description="Maximum retry count for tasks")
     user_id_filter: Optional[str] = Field(None, description="User ID filter")
     batch_size: int = Field(10, description="Maximum number of tasks to select")
-    configs: Dict[str, str | int | float | bool | list | dict] = Field(
+    configs: ConfigDict = Field(
         default_factory=dict, description="Additional configuration key-value pairs with typed values"
     )
 
-    def get(
-        self, key: str, default: Optional[str | int | float | bool | list | dict] = None
-    ) -> Optional[str | int | float | bool | list | dict]:
+    def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
         """Get a configuration value with optional default."""
         return self.configs.get(key, default)
 
-    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
+    def set(self, key: str, value: ConfigValue) -> None:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
+    def update(self, values: ConfigDict) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
@@ -184,7 +185,7 @@ class TaskSelectionCriteria(BaseModel):
         """Get all configuration keys."""
         return list(self.configs.keys())
 
-    def items(self) -> List[tuple]:
+    def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
         return list(self.configs.items())
 
@@ -230,10 +231,8 @@ class ServiceProviderInfo(BaseModel):
     priority: str = Field(..., description="Priority level name")
     priority_group: int = Field(..., description="Priority group number")
     strategy: str = Field(..., description="Selection strategy")
-    capabilities: Optional[Dict[str, str | int | float | bool | list]] = Field(
-        None, description="Provider capabilities"
-    )
-    metadata: Optional[Dict[str, str | int | float | bool]] = Field(None, description="Provider metadata")
+    capabilities: Optional[ConfigDict] = Field(None, description="Provider capabilities")
+    metadata: Optional[ConfigDict] = Field(None, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state if available")
 
 
@@ -286,16 +285,14 @@ class WAPublicKeyMap(BaseModel):
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 
-    configs: Dict[str, str | int | float | bool | list | dict] = Field(
-        ..., description="Backed up configuration values"
-    )
+    configs: ConfigDict = Field(..., description="Backed up configuration values")
     backup_timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When the backup was created"
     )
     backup_version: str = Field(..., description="Version of the configuration")
     backup_by: str = Field("RuntimeControlService", description="Who created the backup")
 
-    def to_config_value(self) -> dict:
+    def to_config_value(self) -> Dict[str, Any]:
         """Convert to a format suitable for storage as a config value."""
         return {
             "configs": self.configs,
@@ -305,7 +302,7 @@ class ConfigBackupData(BaseModel):
         }
 
     @classmethod
-    def from_config_value(cls, data: dict) -> "ConfigBackupData":
+    def from_config_value(cls, data: Dict[str, Any]) -> "ConfigBackupData":
         """Create from a stored config value."""
         return cls(
             configs=data.get("configs", {}),

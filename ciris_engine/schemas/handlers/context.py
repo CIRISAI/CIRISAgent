@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.types import JSONDict, NodeAttributes
+
 
 class HandlerData(BaseModel):
     """Base class for handler-specific data."""
@@ -74,9 +76,7 @@ class ToolActionParams(ActionContextParams):
     """Parameters for TOOL action."""
 
     tool_name: str = Field(..., description="Tool to execute")
-    tool_args: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        ..., description="Tool arguments"
-    )
+    tool_args: JSONDict = Field(..., description="Tool arguments")
 
 
 class MemoryActionParams(ActionContextParams):
@@ -85,7 +85,7 @@ class MemoryActionParams(ActionContextParams):
     operation: str = Field(..., description="memorize, recall, or forget")
     node_id: Optional[str] = Field(None, description="Node ID for recall/forget")
     query: Optional[str] = Field(None, description="Query for recall")
-    content: Optional[Dict[str, Any]] = Field(None, description="Content for memorize")
+    content: Optional[NodeAttributes] = Field(None, description="Content for memorize")
 
 
 class ActionContext(BaseModel):

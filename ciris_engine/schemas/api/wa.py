@@ -10,10 +10,9 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
-from ciris_engine.schemas.types import NodeAttributes
-
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import WAPermission
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class DeferralListResponse(BaseModel):

@@ -180,12 +180,12 @@ def register_node_type(node_type: Union[str, "NodeType"]) -> Callable[[Type[Type
         # Handle both string and enum inputs
         if hasattr(node_type, "value") and hasattr(node_type, "name"):
             # It's an enum, register by multiple keys for flexibility
-            NodeTypeRegistry.register(node_type.value, cls)  # type: ignore[attr-defined]  # e.g., "config"
-            NodeTypeRegistry.register(node_type.name, cls)  # type: ignore[attr-defined]  # e.g., "CONFIG"
-            NodeTypeRegistry.register(node_type.value.upper(), cls)  # type: ignore[attr-defined]  # e.g., "CONFIG"
+            NodeTypeRegistry.register(node_type.value, cls)  # e.g., "config"
+            NodeTypeRegistry.register(node_type.name, cls)  # e.g., "CONFIG"
+            NodeTypeRegistry.register(node_type.value.upper(), cls)  # e.g., "CONFIG"
         else:
             # It's a string, register as-is and also lowercase version
-            NodeTypeRegistry.register(node_type, cls)  # type: ignore[arg-type]
+            NodeTypeRegistry.register(node_type, cls)
             if isinstance(node_type, str) and node_type.lower() != node_type:
                 NodeTypeRegistry.register(node_type.lower(), cls)
         return cls

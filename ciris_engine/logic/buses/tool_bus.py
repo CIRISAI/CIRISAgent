@@ -189,7 +189,9 @@ class ToolBus(BaseBus[ToolService]):
             logger.error(f"Error getting tool result: {e}", exc_info=True)
             return None
 
-    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any], handler_name: str = "default") -> bool:
+    async def validate_parameters(
+        self, tool_name: str, parameters: Dict[str, Any], handler_name: str = "default"
+    ) -> bool:
         """Validate parameters for a tool"""
         service = await self.get_service(handler_name=handler_name, required_capabilities=["validate_parameters"])
 

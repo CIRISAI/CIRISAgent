@@ -201,7 +201,12 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             return {"status": "error", "message": str(e)}
 
     async def load_adapter(
-        self, adapter_type: str, adapter_id: str, config: Dict[str, Any], auto_start: bool = True, handler_name: str = "default"
+        self,
+        adapter_type: str,
+        adapter_id: str,
+        config: Dict[str, Any],
+        auto_start: bool = True,
+        handler_name: str = "default",
     ) -> AdapterInfo:
         """Load a new adapter instance"""
         if self._shutting_down:

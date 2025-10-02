@@ -31,6 +31,26 @@ OAuthData = Dict[str, OAuthValue]
 # Structured data from epistemic faculties (ethical, common sense, domain-specific)
 EpistemicData = Dict[str, Union[str, int, float, bool, List[str], None]]
 
+# Step data - dynamic data passed between pipeline steps
+# Used for step-specific parameters that get unpacked into StepResult constructors
+StepData = Dict[str, Any]
+
+# Serialized model data - Pydantic model.model_dump() output
+# Represents the JSON-serializable dictionary form of a Pydantic model
+SerializedModel = Dict[str, Any]
+
+# Tool parameters - validated dict of tool execution parameters
+# Flexible type that accepts any JSON-serializable parameter values
+ToolParameters = Dict[str, Any]
+
+# Action parameters - validated dict of action handler parameters
+# Flexible type that accepts any JSON-serializable action values
+ActionParameters = Dict[str, Any]
+
+# Filter configuration - filter settings dictionary
+# Used for adaptive filter configuration data
+FilterConfig = Dict[str, Any]
+
 # Export all type aliases
 __all__ = [
     "ConfigValue",
@@ -43,4 +63,9 @@ __all__ = [
     "OAuthValue",
     "OAuthData",
     "EpistemicData",
+    "StepData",
+    "SerializedModel",
+    "ToolParameters",
+    "ActionParameters",
+    "FilterConfig",
 ]

@@ -16,7 +16,8 @@ from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.types import ConfigDict, ConfigValue, EpistemicData
+from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+from ciris_engine.schemas.types import ConfigDict, ConfigValue, EpistemicData, SerializedModel
 
 # Type aliases for configuration values
 ConfigItem = Tuple[str, ConfigValue]
@@ -286,7 +287,7 @@ class ConfigBackupData(BaseModel):
     backup_version: str = Field(..., description="Version of the configuration")
     backup_by: str = Field("RuntimeControlService", description="Who created the backup")
 
-    def to_config_value(self) -> Dict[str, Any]:
+    def to_config_value(self) -> SerializedModel:
         """Convert to a format suitable for storage as a config value."""
         return {
             "configs": self.configs,
@@ -296,7 +297,7 @@ class ConfigBackupData(BaseModel):
         }
 
     @classmethod
-    def from_config_value(cls, data: Dict[str, Any]) -> "ConfigBackupData":
+    def from_config_value(cls, data: SerializedModel) -> "ConfigBackupData":
         """Create from a stored config value."""
         return cls(
             configs=data.get("configs", {}),
@@ -881,7 +882,7 @@ class SnapshotAndContextResult(BaseModel):
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
     # System snapshot
-    system_snapshot: Dict[str, Any] = Field(..., description="Current system state")
+    system_snapshot: SystemSnapshot = Field(..., description="Current system state")
 
     # Gathered context
     context: str = Field(..., description="Context gathered for DMA processing")

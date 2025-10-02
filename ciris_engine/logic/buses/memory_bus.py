@@ -418,7 +418,9 @@ class MemoryBus(BaseBus[MemoryService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_telemetry_result(self, telemetry: Dict[str, Any], aggregated: Dict[str, Any], cache_rates: List[float]) -> None:
+    def _aggregate_telemetry_result(
+        self, telemetry: Dict[str, Any], aggregated: Dict[str, Any], cache_rates: List[float]
+    ) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
             aggregated["providers"].append(telemetry.get("service_name", "unknown"))

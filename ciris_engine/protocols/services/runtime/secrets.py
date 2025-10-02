@@ -11,6 +11,7 @@ from ciris_engine.schemas.secrets.service import (
     SecretRecallResult,
 )
 from ciris_engine.schemas.services.core.secrets import SecretsServiceStats
+from ciris_engine.schemas.types import ActionParameters, FilterConfig
 
 from ...runtime.base import ServiceProtocol
 
@@ -45,8 +46,8 @@ class SecretsServiceProtocol(ServiceProtocol, Protocol):
 
     @abstractmethod
     async def decapsulate_secrets_in_parameters(
-        self, action_type: str, action_params: Dict[str, Any], context: DecapsulationContext
-    ) -> Dict[str, Any]:
+        self, action_type: str, action_params: ActionParameters, context: DecapsulationContext
+    ) -> ActionParameters:
         """Replace secret UUIDs with decrypted values in action parameters."""
         ...
 
@@ -56,7 +57,7 @@ class SecretsServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def get_filter_config(self) -> Dict[str, Any]:
+    async def get_filter_config(self) -> FilterConfig:
         """Get current filter configuration."""
         ...
 

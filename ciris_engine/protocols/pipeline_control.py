@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResultUnion, ThoughtInPipeline
+from ciris_engine.schemas.types import SerializedModel, StepData
 
 
 # Pydantic models for pipeline control results
@@ -28,9 +29,9 @@ class SingleStepResult(BaseModel):
     message: str = Field(..., description="Result message")
     thoughts_advanced: int = Field(default=0, description="Number of thoughts advanced")
     thought_id: Optional[str] = Field(None, description="Thought ID if applicable")
-    step_results: List[Dict[str, Any]] = Field(default_factory=list, description="Step-specific results")
+    step_results: List[SerializedModel] = Field(default_factory=list, description="Step-specific result summaries")
     processing_time_ms: float = Field(..., description="Processing time in milliseconds")
-    pipeline_state: Dict[str, Any] = Field(default_factory=dict, description="Current pipeline state")
+    pipeline_state: SerializedModel = Field(default_factory=dict, description="Current pipeline state (serialized)")
 
 
 class ThoughtProcessingResult(BaseModel):
@@ -41,7 +42,7 @@ class ThoughtProcessingResult(BaseModel):
     task_id: str = Field(..., description="Source task ID")
     step_point: str = Field(..., description="Step point identifier")
     success: bool = Field(..., description="Whether processing succeeded")
-    step_data: Dict[str, Any] = Field(default_factory=dict, description="Step-specific data")
+    step_data: StepData = Field(default_factory=dict, description="Step-specific data")
     processing_time_ms: float = Field(..., description="Processing time in milliseconds")
     timestamp: float = Field(..., description="Unix timestamp")
 
@@ -221,7 +222,7 @@ class PipelineController:
         return None
 
     def _update_thought_data(
-        self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Optional[Dict[str, Any]]
+        self, thought: ThoughtInPipeline, step_point: StepPoint, step_data: Optional[StepData]
     ) -> None:
         """Update thought with step-specific data."""
         if step_data is None:
@@ -242,7 +243,7 @@ class PipelineController:
             thought.handler_result = step_data.get("handler_result")  # type: ignore[assignment]  # Optional field assignment
             thought.bus_operations = step_data.get("bus_operations")  # type: ignore[assignment]  # Optional field assignment
 
-    def _create_step_result(self, step_point: StepPoint, step_data: Optional[Dict[str, Any]]) -> StepResultUnion:
+    def _create_step_result(self, step_point: StepPoint, step_data: Optional[StepData]) -> StepResultUnion:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
         if step_data is None:
             step_data = {}
@@ -284,7 +285,7 @@ class PipelineController:
         # FAIL FAST AND LOUD - only 9 real H3ERE steps allowed!
         raise ValueError(f"Invalid step point: {step_point}. Only 9 real H3ERE pipeline steps are supported!")
 
-    def _get_pipeline_state_dict(self) -> Dict[str, Any]:
+    def _get_pipeline_state_dict(self) -> SerializedModel:
         """Get pipeline state as dictionary with fallback."""
         pipeline_state = self.get_pipeline_state()
         return pipeline_state.model_dump() if hasattr(pipeline_state, "model_dump") else {}
@@ -410,7 +411,9 @@ class PipelineController:
 
         # No paused thoughts - need to start new thoughts in the pipeline
         from ciris_engine.logic import persistence  # type: ignore[attr-defined]  # Dynamic module import
-        from ciris_engine.schemas.runtime.models import ThoughtStatus  # type: ignore[attr-defined]  # Module export issue
+        from ciris_engine.schemas.runtime.models import (
+            ThoughtStatus,  # type: ignore[attr-defined]  # Module export issue
+        )
 
         pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)  # type: ignore[no-untyped-call]  # External untyped function
         if not pending_thoughts:
@@ -557,7 +560,9 @@ class PipelineController:
 
         # Always broadcast step results to connected clients
         try:
-            from ciris_engine.logic.infrastructure.step_streaming import step_result_stream  # type: ignore[attr-defined]  # Dynamic module import
+            from ciris_engine.logic.infrastructure.step_streaming import (
+                step_result_stream,  # type: ignore[attr-defined]  # Dynamic module import
+            )
             from ciris_engine.schemas.services.runtime_control import SpanAttribute, StepResultData, TraceContext
 
             # Create proper StepResultData object for streaming

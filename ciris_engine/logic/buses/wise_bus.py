@@ -320,7 +320,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 limit=5,  # Prevent unbounded fan-out
             )
             # Handle both sync and async returns
-            if hasattr(services_result, '__await__'):
+            if hasattr(services_result, "__await__"):
                 services = await services_result
             else:
                 services = services_result
@@ -352,7 +352,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             return asyncio.create_task(self._fetch_guidance_compat(svc, context, request.options))
         return None
 
-    async def _collect_guidance_responses(self, tasks: List[asyncio.Task[Any]], timeout: float) -> List[GuidanceResponse]:
+    async def _collect_guidance_responses(
+        self, tasks: List[asyncio.Task[Any]], timeout: float
+    ) -> List[GuidanceResponse]:
         """Collect responses from guidance tasks with timeout."""
         if not tasks:
             return []
@@ -570,7 +572,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         return prohibited_counts, total_prohibited, community_counts, total_community
 
     def _create_telemetry_base(
-        self, prohibited_counts: Dict[str, int], total_prohibited: int, community_counts: Dict[str, int], total_community: int
+        self,
+        prohibited_counts: Dict[str, int],
+        total_prohibited: int,
+        community_counts: Dict[str, int],
+        total_community: int,
     ) -> Dict[str, Any]:
         """Create base telemetry dictionary."""
         return {

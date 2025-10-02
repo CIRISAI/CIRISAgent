@@ -255,7 +255,9 @@ class LLMBus(BaseBus[LLMService]):
 
         return 0, {}  # Default to highest priority, empty metadata
 
-    def _should_include_service_for_domain(self, service_metadata: Dict[str, Any], domain: Optional[str]) -> Tuple[bool, int]:
+    def _should_include_service_for_domain(
+        self, service_metadata: Dict[str, Any], domain: Optional[str]
+    ) -> Tuple[bool, int]:
         """Check if service should be included based on domain and get priority adjustment.
 
         Returns:

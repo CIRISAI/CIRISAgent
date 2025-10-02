@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from ciris_engine.schemas.infrastructure.base import BusMetrics
 
 from ciris_engine.protocols.runtime.base import BaseAdapterProtocol
+from ciris_engine.schemas.types import JSONDict, SerializedModel
 
 # ============================================================================
 # PLATFORM ADAPTER PROTOCOLS
@@ -33,7 +34,7 @@ class APIAdapterProtocol(BaseAdapterProtocol):
         ...
 
     @abstractmethod
-    def get_openapi_spec(self) -> Dict[str, Any]:
+    def get_openapi_spec(self) -> JSONDict:
         """Get OpenAPI specification."""
         ...
 
@@ -115,7 +116,7 @@ class SlackAdapterProtocol(BaseAdapterProtocol):
     """Protocol for Slack adapter (future)."""
 
     @abstractmethod
-    async def handle_event(self, event: Dict[str, Any]) -> None:
+    async def handle_event(self, event: SerializedModel) -> None:
         """Handle Slack event."""
         ...
 

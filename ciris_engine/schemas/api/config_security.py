@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_serializer
 
-from ciris_engine.schemas.types import ConfigValue
+from ciris_engine.schemas.types import ConfigDict, ConfigValue
 
 from .auth import UserRole
 
@@ -115,9 +115,7 @@ class ConfigSecurity:
         return "[REDACTED]"
 
     @classmethod
-    def filter_config(
-        cls, config: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]], role: UserRole
-    ) -> Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]:
+    def filter_config(cls, config: ConfigDict, role: UserRole) -> ConfigDict:
         """
         Filter entire configuration dictionary based on role.
 
@@ -184,15 +182,11 @@ class ConfigValueResponse(BaseModel):
 class ConfigListResponse(BaseModel):
     """Response for configuration list."""
 
-    configs: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        ..., description="Configuration values"
-    )
+    configs: ConfigDict = Field(..., description="Configuration values")
     metadata: Dict[str, Union[str, int, float, bool]] = Field(..., description="Response metadata")
 
 
-def filter_config_for_role(
-    config: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]], role: UserRole
-) -> Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]:
+def filter_config_for_role(config: ConfigDict, role: UserRole) -> ConfigDict:
     """
     Filter configuration values based on user role.
 
@@ -236,9 +230,7 @@ class ConfigHistoryEntry(BaseModel):
 class ConfigValidationRequest(BaseModel):
     """Request to validate configuration changes."""
 
-    changes: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        ..., description="Proposed changes"
-    )
+    changes: ConfigDict = Field(..., description="Proposed changes")
 
 
 class ConfigValidationResponse(BaseModel):

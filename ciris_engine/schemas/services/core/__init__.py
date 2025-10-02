@@ -20,7 +20,7 @@ class ServiceCapabilities(BaseModel):
     actions: List[str] = Field(..., description="Actions this service can perform")
     version: str = Field(..., description="Service version")
     dependencies: List[str] = Field(default_factory=list, description="Required dependencies")
-    metadata: Optional[dict] = Field(None, description="Additional capability metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional capability metadata")
 
 
 class ServiceStatus(BaseModel):
@@ -115,7 +115,7 @@ class BusMessage(BaseModel):
     from_service: str = Field(..., description="Sending service")
     to_service: str = Field(..., description="Target service")
     action: str = Field(..., description="Action to perform")
-    payload: dict = Field(..., description="Message payload")
+    payload: Dict[str, Any] = Field(..., description="Message payload")
     correlation_id: str = Field(..., description="Correlation ID for tracing")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     reply_to: Optional[str] = Field(None, description="Where to send reply")

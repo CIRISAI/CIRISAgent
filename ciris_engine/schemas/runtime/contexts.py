@@ -4,7 +4,7 @@ Context schemas for CIRIS Trinity Architecture.
 Type-safe contexts for action dispatch and processing.
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,7 +46,7 @@ class DispatchContext(BaseModel):
 
     # conscience and processing context - OPTIONAL
     conscience_failure_context: Optional[ConscienceResult] = Field(None, description="Context from conscience failures")
-    epistemic_data: Optional[dict] = Field(None, description="Epistemic faculty evaluation data")
+    epistemic_data: Optional[Dict[str, Any]] = Field(None, description="Epistemic faculty evaluation data")
 
     # Correlation tracking
     correlation_id: Optional[str] = Field(None, description="Correlation ID for distributed tracing")

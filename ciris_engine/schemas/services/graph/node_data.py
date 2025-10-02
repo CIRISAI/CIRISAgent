@@ -5,7 +5,7 @@ Replaces the generic NodeAttributes.data: Dict[str, Union[...]] with specific ty
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -144,7 +144,7 @@ class EnvironmentNodeData(BaseNodeData):
 NodeData = Union[ConfigNodeData, TelemetryNodeData, AuditNodeData, MemoryNodeData, TaskNodeData, EnvironmentNodeData]
 
 
-def create_node_data(node_type: str, data: dict) -> NodeData:
+def create_node_data(node_type: str, data: Dict[str, Any]) -> NodeData:
     """Factory function to create appropriate node data based on type."""
     type_map = {
         "config": ConfigNodeData,

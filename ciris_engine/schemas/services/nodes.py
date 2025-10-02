@@ -150,7 +150,7 @@ class ConfigValue(BaseModel):
             float,
             bool,
             List[Union[str, int, float, bool]],
-            Dict[str, Union[str, int, float, bool, list, dict, None]],
+            Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]],
         ]
     ]:
         """Get the actual value."""

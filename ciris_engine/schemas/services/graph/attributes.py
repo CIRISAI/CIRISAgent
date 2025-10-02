@@ -186,9 +186,7 @@ class TelemetryNodeAttributes(NodeAttributes):
 AnyNodeAttributes = Union[NodeAttributes, MemoryNodeAttributes, ConfigNodeAttributes, TelemetryNodeAttributes]
 
 
-def create_node_attributes(
-    node_type: str, data: Dict[str, JSONValue], created_by: str
-) -> AnyNodeAttributes:
+def create_node_attributes(node_type: str, data: Dict[str, JSONValue], created_by: str) -> AnyNodeAttributes:
     """
     Factory function to create appropriate node attributes based on type.
 

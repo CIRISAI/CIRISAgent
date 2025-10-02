@@ -1,12 +1,14 @@
 """
 Schemas for CLI adapter operations.
 
-These replace all Dict[str, Any] usage in logic/adapters/cli/cli_adapter.py.
+Provides typed schemas for logic/adapters/cli/cli_adapter.py.
 """
 
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class CLIMessage(BaseModel):

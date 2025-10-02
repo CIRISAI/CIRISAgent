@@ -4,7 +4,7 @@ Main coordinator that executes the 7 phases of ethical reasoning.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -18,8 +18,9 @@ from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProt
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
-from ciris_engine.schemas.runtime.models import Thought, ThoughtStatus
+from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -89,7 +90,7 @@ class ThoughtProcessor(
         self._pipeline_controller = None  # Will be deprecated
 
     async def process_thought(
-        self, thought_item: ProcessingQueueItem, context: Optional[dict] = None
+        self, thought_item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None
     ) -> Optional[ActionSelectionDMAResult]:
         """
         Main H3ERE pipeline orchestration.
@@ -119,9 +120,10 @@ class ThoughtProcessor(
 
         # Complete the round
         final_result = await self._round_complete_step(thought_item, pipeline_result)
-        return final_result
+        # _round_complete_step returns the same type as pipeline_result (ConscienceApplicationResult or ActionSelectionDMAResult)
+        return final_result  # type: ignore[no-any-return]
 
-    def _initialize_correlation(self, thought_item: ProcessingQueueItem, start_time):
+    def _initialize_correlation(self, thought_item: ProcessingQueueItem, start_time: Any) -> ServiceCorrelation:
         """Initialize correlation tracking for the thought processing."""
         correlation = ServiceCorrelation(
             correlation_id=f"thought_processing_{thought_item.thought_id}_{start_time.timestamp()}",
@@ -136,7 +138,7 @@ class ThoughtProcessor(
         persistence.add_correlation(correlation, self._time_service)
         return correlation
 
-    async def _fetch_and_validate_thought(self, thought_item: ProcessingQueueItem):
+    async def _fetch_and_validate_thought(self, thought_item: ProcessingQueueItem) -> Optional[Thought]:
         """Fetch and validate thought exists."""
         logger.info(f"ThoughtProcessor.process_thought: About to fetch thought_id={thought_item.thought_id}")
         thought = await self._fetch_thought(thought_item.thought_id)
@@ -147,7 +149,9 @@ class ThoughtProcessor(
             logger.warning(f"ThoughtProcessor: Could not fetch thought {thought_item.thought_id}")
         return thought
 
-    async def _execute_pipeline_phases(self, thought_item, thought, context, correlation, start_time):
+    async def _execute_pipeline_phases(
+        self, thought_item: ProcessingQueueItem, thought: Thought, context: Optional[Dict[str, Any]], correlation: ServiceCorrelation, start_time: Any
+    ) -> ConscienceApplicationResult:
         """Execute the main H3ERE pipeline phases."""
         # Phase 0: Initialize processing round
         await self._start_round_step(thought_item, context)
@@ -164,8 +168,6 @@ class ThoughtProcessor(
                 f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
             )
             # Wrap in ConscienceApplicationResult before returning
-            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
-
             return ConscienceApplicationResult(
                 original_action=dma_results,
                 final_action=dma_results,
@@ -178,8 +180,6 @@ class ThoughtProcessor(
             await self._handle_critical_failure(correlation, start_time)
             deferral_result = self._create_deferral_result(dma_results, thought)
             # Wrap in ConscienceApplicationResult before returning
-            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
-
             return ConscienceApplicationResult(
                 original_action=deferral_result,
                 final_action=deferral_result,
@@ -194,9 +194,12 @@ class ThoughtProcessor(
         action_from_conscience = self._handle_special_cases(action_result["conscience_result"])
         final_result = await self._finalize_action_step(thought_item, action_from_conscience)
 
-        return final_result
+        # _finalize_action_step returns ConscienceApplicationResult based on conscience_result input
+        return final_result  # type: ignore[no-any-return]
 
-    async def _perform_action_selection_phase(self, thought_item, thought, thought_context, dma_results):
+    async def _perform_action_selection_phase(
+        self, thought_item: ProcessingQueueItem, thought: Thought, thought_context: Any, dma_results: Any
+    ) -> Dict[str, Any]:
         """Execute action selection and conscience validation phases."""
         # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
         action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
@@ -219,7 +222,7 @@ class ThoughtProcessor(
 
         return {"action_result": action_result, "conscience_result": conscience_result}
 
-    def _log_action_selection_result(self, action_result, thought):
+    def _log_action_selection_result(self, action_result: Any, thought: Thought) -> None:
         """Log action selection results."""
         if action_result:
             selected_action = getattr(action_result, "selected_action", "UNKNOWN")
@@ -232,17 +235,18 @@ class ThoughtProcessor(
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
 
-    def _should_retry_with_conscience_guidance(self, conscience_result):
+    def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
         """Check if we should retry action selection with conscience guidance."""
         return (
-            conscience_result
+            conscience_result is not None
             and conscience_result.overridden
             and conscience_result.final_action.selected_action == HandlerActionType.PONDER
         )
 
     async def _handle_conscience_retry(
-        self, thought_item, thought, thought_context, dma_results, conscience_result, profile_name
-    ):
+        self, thought_item: ProcessingQueueItem, thought: Thought, thought_context: Any, dma_results: Any,
+        conscience_result: ConscienceApplicationResult, profile_name: str
+    ) -> Tuple[Any, ConscienceApplicationResult]:
         """Handle conscience retry logic when PONDER override occurs."""
         logger.info(
             f"ThoughtProcessor: conscience override to PONDER for {thought.thought_id}. Attempting re-run with guidance."
@@ -273,7 +277,9 @@ class ThoughtProcessor(
 
         return conscience_result.original_action, conscience_result
 
-    def _prepare_conscience_retry_context(self, thought_item, thought_context, conscience_result):
+    def _prepare_conscience_retry_context(
+        self, thought_item: ProcessingQueueItem, thought_context: Any, conscience_result: ConscienceApplicationResult
+    ) -> Any:
         """Prepare context for conscience retry."""
         override_reason = conscience_result.override_reason or "Action failed conscience checks"
         attempted_action = self._describe_action(conscience_result.original_action)
@@ -305,8 +311,9 @@ class ThoughtProcessor(
         return retry_context
 
     async def _process_conscience_retry_result(
-        self, thought_item, thought, dma_results, retry_context, retry_result, original_conscience_result
-    ):
+        self, thought_item: ProcessingQueueItem, thought: Thought, dma_results: Any, retry_context: Any,
+        retry_result: Any, original_conscience_result: ConscienceApplicationResult
+    ) -> Tuple[Any, ConscienceApplicationResult]:
         """Process the result of a conscience retry."""
         logger.info(f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}")
 
@@ -321,14 +328,14 @@ class ThoughtProcessor(
             self._log_retry_failure(retry_result, original_conscience_result)
             return original_conscience_result.original_action, original_conscience_result
 
-    def _log_retry_failure(self, retry_result, original_conscience_result):
+    def _log_retry_failure(self, retry_result: Any, original_conscience_result: ConscienceApplicationResult) -> None:
         """Log details when retry also fails consciences."""
         logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} also failed consciences")
         if retry_result.selected_action == original_conscience_result.original_action.selected_action:
             logger.info("ThoughtProcessor: Same action type but with different parameters still failed")
         logger.info("ThoughtProcessor: Proceeding with PONDER")
 
-    def _log_final_action_results(self, action_result, conscience_result, thought):
+    def _log_final_action_results(self, action_result: Any, conscience_result: Optional[ConscienceApplicationResult], thought: Thought) -> None:
         """Log final action and conscience results."""
         if action_result.selected_action == HandlerActionType.OBSERVE:
             logger.debug("ThoughtProcessor: OBSERVE action after consciences for thought %s", thought.thought_id)
@@ -340,7 +347,7 @@ class ThoughtProcessor(
                     f"ThoughtProcessor: conscience result for {thought.thought_id}: final_action={final_action}"
                 )
 
-    async def _handle_critical_failure(self, correlation, start_time):
+    async def _handle_critical_failure(self, correlation: ServiceCorrelation, start_time: Any) -> None:
         """Handle critical DMA failure."""
         end_time = self._time_service.now()
         from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
@@ -359,7 +366,7 @@ class ThoughtProcessor(
         )
         persistence.update_correlation(update_req, self._time_service)
 
-    async def _record_processing_completion(self, thought, final_result):
+    async def _record_processing_completion(self, thought: Thought, final_result: Optional[ConscienceApplicationResult]) -> None:
         """Record telemetry for successful processing completion."""
         if not self.telemetry_service:
             return
@@ -383,7 +390,7 @@ class ThoughtProcessor(
                 },
             )
 
-    async def _finalize_correlation(self, correlation, final_result, start_time):
+    async def _finalize_correlation(self, correlation: ServiceCorrelation, final_result: Optional[ConscienceApplicationResult], start_time: Any) -> None:
         """Update correlation with final success status."""
         end_time = self._time_service.now()
         from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
@@ -429,7 +436,7 @@ class ThoughtProcessor(
             )
             raise
 
-    def _has_critical_failure(self, dma_results) -> bool:
+    def _has_critical_failure(self, dma_results: Any) -> bool:
         """Check if DMA results indicate critical failure requiring escalation."""
         if not dma_results:
             return True
@@ -443,7 +450,7 @@ class ThoughtProcessor(
 
         return False
 
-    def _create_deferral_result(self, dma_results, thought) -> ActionSelectionDMAResult:
+    def _create_deferral_result(self, dma_results: Any, thought: Thought) -> ActionSelectionDMAResult:
         """Create a deferral result for failed processing."""
         defer_reason = "Critical DMA failure or conscience override."
         # Convert dma_results to string representation for context
@@ -486,7 +493,7 @@ class ThoughtProcessor(
         logger.debug(f"Determined profile name '{profile_name}' for thought {thought.thought_id}")
         return profile_name
 
-    def _describe_action(self, action_result) -> str:
+    def _describe_action(self, action_result: Any) -> str:
         """Generate a human-readable description of an action."""
         if not hasattr(action_result, "selected_action"):
             return "unknown action"
@@ -494,7 +501,7 @@ class ThoughtProcessor(
         action_type = action_result.selected_action
         params = action_result.action_parameters
 
-        descriptions = {
+        descriptions: Dict[HandlerActionType, Callable[[Any], str]] = {
             HandlerActionType.SPEAK: lambda p: self._format_speak_description(p),
             HandlerActionType.TOOL: lambda p: f"use tool '{p.tool_name}'" if hasattr(p, "tool_name") else "use a tool",
             HandlerActionType.OBSERVE: lambda p: (
@@ -505,25 +512,24 @@ class ThoughtProcessor(
             HandlerActionType.FORGET: lambda p: "forget information",
         }
 
-        desc_func = descriptions.get(action_type, lambda p: f"{action_type.value}")
+        desc_func: Callable[[Any], str] = descriptions.get(action_type, lambda p: str(action_type.value))
         try:
-            return desc_func(params)
+            result = desc_func(params)
+            return str(result)
         except Exception as e:
             logger.warning(
                 f"Failed to generate action description for {action_type.value}: {e}. Using default description."
             )
-            return f"{action_type.value}"
+            return str(action_type.value)
 
     async def _apply_conscience_simple(
         self,
         action_result: ActionSelectionDMAResult,
         thought: Thought,
-        dma_results_dict: dict,
+        dma_results_dict: Dict[str, Any],
         processing_context: Optional[Any] = None,
-    ) -> Any:
+    ) -> ConscienceApplicationResult:
         """Simple conscience application without orchestrator."""
-        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
-
         is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
 
         if self._is_exempt_from_conscience_checks(action_result):
@@ -531,7 +537,7 @@ class ThoughtProcessor(
                 original_action=action_result, final_action=action_result, overridden=False, override_reason=None
             )
 
-        context = {"thought": thought, "dma_results": dma_results_dict}
+        context: Dict[str, Any] = {"thought": thought, "dma_results": dma_results_dict}
         conscience_result = await self._run_conscience_checks(action_result, context)
 
         if is_conscience_retry and not conscience_result["overridden"]:
@@ -561,7 +567,7 @@ class ThoughtProcessor(
         }
         return action_result.selected_action in exempt_actions
 
-    async def _run_conscience_checks(self, action_result: ActionSelectionDMAResult, context: dict) -> dict:
+    async def _run_conscience_checks(self, action_result: ActionSelectionDMAResult, context: Dict[str, Any]) -> Dict[str, Any]:
         """Run all conscience checks and return the results."""
         final_action = action_result
         overridden = False
@@ -590,7 +596,7 @@ class ThoughtProcessor(
             "epistemic_data": epistemic_data,
         }
 
-    async def _check_single_conscience(self, entry, action_result, context):
+    async def _check_single_conscience(self, entry: Any, action_result: ActionSelectionDMAResult, context: Dict[str, Any]) -> Dict[str, Any]:
         """Check a single conscience and handle errors."""
         conscience = entry.conscience
         cb = entry.circuit_breaker
@@ -621,7 +627,7 @@ class ThoughtProcessor(
             "replacement_action": replacement_action,
         }
 
-    def _create_replacement_action(self, conscience_result, original_action, conscience_name):
+    def _create_replacement_action(self, conscience_result: Any, original_action: ActionSelectionDMAResult, conscience_name: str) -> ActionSelectionDMAResult:
         """Create replacement action based on conscience result."""
         if not conscience_result.passed:
             # Check for replacement_action on ConscienceCheckResult (top-level field)
@@ -631,7 +637,7 @@ class ThoughtProcessor(
                 return self._create_ponder_replacement(original_action, conscience_result, conscience_name)
         return original_action
 
-    def _create_ponder_replacement(self, action_result, conscience_result, conscience_name):
+    def _create_ponder_replacement(self, action_result: ActionSelectionDMAResult, conscience_result: Any, conscience_name: str) -> ActionSelectionDMAResult:
         """Create PONDER action as replacement."""
         attempted_action_desc = self._describe_action(action_result)
         questions = [
@@ -652,7 +658,7 @@ class ThoughtProcessor(
             resource_usage=None,
         )
 
-    def _handle_conscience_retry_without_override(self, conscience_result, action_result):
+    def _handle_conscience_retry_without_override(self, conscience_result: Dict[str, Any], action_result: ActionSelectionDMAResult) -> Dict[str, Any]:
         """Handle conscience retry when no override occurred."""
         has_depth_guardrail = any(
             "ThoughtDepthGuardrail" in entry.conscience.__class__.__name__
@@ -680,10 +686,8 @@ class ThoughtProcessor(
 
         return conscience_result
 
-    def _create_conscience_application_result(self, action_result, conscience_result):
+    def _create_conscience_application_result(self, action_result: ActionSelectionDMAResult, conscience_result: Dict[str, Any]) -> ConscienceApplicationResult:
         """Create the final ConscienceApplicationResult."""
-        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
-
         result = ConscienceApplicationResult(
             original_action=action_result,
             final_action=conscience_result["final_action"],
@@ -694,7 +698,7 @@ class ThoughtProcessor(
             result.epistemic_data = conscience_result["epistemic_data"]
         return result
 
-    def _format_speak_description(self, params):
+    def _format_speak_description(self, params: Any) -> str:
         """Format description for SPEAK action parameters."""
         if not hasattr(params, "content"):
             return "speak"
@@ -705,7 +709,7 @@ class ThoughtProcessor(
         else:
             return f"speak: '{content_str}'"
 
-    def _handle_special_cases(self, conscience_result):
+    def _handle_special_cases(self, conscience_result: Optional[ConscienceApplicationResult]) -> Optional[ConscienceApplicationResult]:
         """Handle special processing cases (PONDER, DEFER overrides)."""
         # Return the full ConscienceApplicationResult to preserve all conscience data
         # The full result includes epistemic_data, override_reason, etc.

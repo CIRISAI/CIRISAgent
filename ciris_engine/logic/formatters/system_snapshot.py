@@ -1,4 +1,60 @@
-from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot
+
+
+def format_continuity_summary(continuity: ContinuitySummary) -> str:
+    """Format continuity awareness metrics for LLM context.
+
+    Parameters
+    ----------
+    continuity : ContinuitySummary
+        Continuity awareness data with startup metrics
+
+    Returns
+    -------
+    str
+        Formatted continuity block
+    """
+    lines = ["=== Continuity Awareness ==="]
+
+    # First startup
+    if continuity.first_startup:
+        lines.append(f"First Startup: {continuity.first_startup.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+    # Lifetime metrics
+    def format_duration(seconds: float) -> str:
+        """Format seconds into human-readable duration."""
+        if seconds < 60:
+            return f"{seconds:.0f}s"
+        elif seconds < 3600:
+            return f"{seconds/60:.1f}m"
+        elif seconds < 86400:
+            return f"{seconds/3600:.1f}h"
+        else:
+            days = int(seconds / 86400)
+            hours = (seconds % 86400) / 3600
+            return f"{days}d {hours:.1f}h"
+
+    lines.append(f"Total Time Online: {format_duration(continuity.total_time_online_seconds)}")
+    lines.append(f"Total Time Offline: {format_duration(continuity.total_time_offline_seconds)}")
+    lines.append(f"Shutdowns: {continuity.total_shutdowns}")
+
+    # Averages
+    if continuity.total_shutdowns > 0:
+        lines.append(f"Average Time Online: {format_duration(continuity.average_time_online_seconds)}")
+        lines.append(f"Average Time Offline: {format_duration(continuity.average_time_offline_seconds)}")
+
+    # Current session
+    if continuity.current_session_start:
+        lines.append(f"Current Session Started: {continuity.current_session_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        lines.append(f"Current Session Duration: {format_duration(continuity.current_session_duration_seconds)}")
+
+    # Last shutdown
+    if continuity.last_shutdown:
+        lines.append(f"Last Shutdown: {continuity.last_shutdown.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        if continuity.last_shutdown_reason:
+            lines.append(f"Last Shutdown Reason: {continuity.last_shutdown_reason}")
+
+    return "\n".join(lines)
 
 
 def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
@@ -16,6 +72,16 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
     """
 
     lines = ["=== System Snapshot ==="]
+
+    # Time of System Snapshot
+    if hasattr(system_snapshot, "current_time_utc") and system_snapshot.current_time_utc:
+        lines.append("Time of System Snapshot:")
+        lines.append(f"  UTC: {system_snapshot.current_time_utc}")
+        if hasattr(system_snapshot, "current_time_chicago") and system_snapshot.current_time_chicago:
+            lines.append(f"  Chicago: {system_snapshot.current_time_chicago}")
+        if hasattr(system_snapshot, "current_time_tokyo") and system_snapshot.current_time_tokyo:
+            lines.append(f"  Tokyo: {system_snapshot.current_time_tokyo}")
+        lines.append("")  # Empty line for separation
 
     # CRITICAL: Check for resource alerts FIRST
     if hasattr(system_snapshot, "resource_alerts") and system_snapshot.resource_alerts:
@@ -36,6 +102,11 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
             lines.append(f"Total Tasks: {counts['total_tasks']}")
         if "total_thoughts" in counts:
             lines.append(f"Total Thoughts: {counts['total_thoughts']}")
+
+    # Continuity Awareness Summary
+    if hasattr(system_snapshot, "continuity_summary") and system_snapshot.continuity_summary:
+        lines.append("")
+        lines.append(format_continuity_summary(system_snapshot.continuity_summary))
 
     # Telemetry/Resource Usage Summary
     if hasattr(system_snapshot, "telemetry_summary") and system_snapshot.telemetry_summary:

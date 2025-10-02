@@ -28,6 +28,7 @@ class QueryBuilder:
     SQL_EXCLUDE_METRICS = "AND NOT (node_type = 'tsdb_data' AND node_id LIKE 'metric_%')"
     SQL_WHERE_SCOPE = "AND scope = ?"
     SQL_WHERE_NODE_TYPE = "AND node_type = ?"
+    SQL_WHERE_ATTR_LIKE = "attributes_json LIKE ?"
     SQL_ORDER_BY = "ORDER BY updated_at DESC"
     SQL_LIMIT = "LIMIT ?"
 
@@ -39,8 +40,20 @@ class QueryBuilder:
         node_type: Optional[str] = None,
         exclude_metrics: bool = True,
         limit: int = 100,
+        user_filter_ids: Optional[List[str]] = None,
     ) -> Tuple[str, List[Any]]:
-        """Build a timeline query with filters."""
+        """
+        Build a timeline query with filters.
+
+        Args:
+            start_time: Start of time range
+            end_time: End of time range
+            scope: Optional scope filter
+            node_type: Optional node type filter
+            exclude_metrics: Whether to exclude metric nodes
+            limit: Maximum results
+            user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
+        """
         query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, QueryBuilder.SQL_WHERE_TIME_RANGE]
         params = [start_time.isoformat(), end_time.isoformat()]
 
@@ -54,6 +67,10 @@ class QueryBuilder:
         if node_type:
             query_parts.append(QueryBuilder.SQL_WHERE_NODE_TYPE)
             params.append(node_type.value if hasattr(node_type, "value") else str(node_type))
+
+        # SECURITY LAYER 1: SQL-level user filtering
+        if user_filter_ids:
+            QueryBuilder._add_user_filter(query_parts, params, user_filter_ids)
 
         query_parts.append(QueryBuilder.SQL_ORDER_BY)
         query_parts.append(QueryBuilder.SQL_LIMIT)
@@ -71,8 +88,22 @@ class QueryBuilder:
         tags: Optional[List[str]] = None,
         limit: int = 20,
         offset: int = 0,
+        user_filter_ids: Optional[List[str]] = None,
     ) -> Tuple[str, List[Any]]:
-        """Build a search query with multiple filters."""
+        """
+        Build a search query with multiple filters.
+
+        Args:
+            query: Text search query
+            node_type: Filter by node type
+            scope: Filter by scope
+            since: Filter by minimum timestamp
+            until: Filter by maximum timestamp
+            tags: Filter by tags
+            limit: Maximum results
+            offset: Pagination offset
+            user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
+        """
         query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, "WHERE 1=1"]
         params = []
 
@@ -93,18 +124,67 @@ class QueryBuilder:
             params.append(until.isoformat())
 
         if query:
-            query_parts.append("AND attributes_json LIKE ?")
+            query_parts.append(f"AND {QueryBuilder.SQL_WHERE_ATTR_LIKE}")
             params.append(f"%{query}%")
 
         if tags:
             for tag in tags:
-                query_parts.append("AND attributes_json LIKE ?")
+                query_parts.append(f"AND {QueryBuilder.SQL_WHERE_ATTR_LIKE}")
                 params.append(f'%"{tag}"%')
+
+        # SECURITY LAYER 1: SQL-level user filtering
+        if user_filter_ids:
+            QueryBuilder._add_user_filter(query_parts, params, user_filter_ids)
 
         query_parts.append(QueryBuilder.SQL_ORDER_BY)
         query_parts.append(f"LIMIT {limit} OFFSET {offset}")
 
         return " ".join(query_parts), params
+
+    @staticmethod
+    def _add_user_filter(query_parts: List[str], params: List[Any], user_filter_ids: List[str]) -> None:
+        """
+        Add SQL-level user filtering to query (SECURITY LAYER 1).
+
+        Filters nodes by checking if ANY of the user_filter_ids appear in:
+        - json_extract(attributes_json, '$.created_by')
+        - json_extract(attributes_json, '$.user_list') (as JSON array)
+        - attributes_json LIKE patterns for task_summaries and conversations
+
+        This is a comprehensive OR-based filter that matches the Layer 2 logic.
+        """
+        if not user_filter_ids:
+            return
+
+        # Build OR conditions for user attribution
+        or_conditions = []
+
+        # 1. Direct creator: json_extract(attributes_json, '$.created_by') IN (...)
+        placeholders_created_by = ",".join("?" * len(user_filter_ids))
+        or_conditions.append(f"json_extract(attributes_json, '$.created_by') IN ({placeholders_created_by})")
+        params.extend(user_filter_ids)
+
+        # 2. User list participants: Check if user_id appears in user_list JSON array
+        # For each user_id, check if attributes_json contains it in user_list
+        for user_id in user_filter_ids:
+            # SQLite: Check if user_id is in the user_list array
+            # Using LIKE is safe here as we're checking JSON array membership
+            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
+            params.append(f'%"user_list"%{user_id}%')
+
+        # 3. Task summaries: Check if user_id appears in task_summaries
+        for user_id in user_filter_ids:
+            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
+            params.append(f'%"task_summaries"%"user_id"%{user_id}%')
+
+        # 4. Conversations: Check if user_id appears as author_id in conversations
+        for user_id in user_filter_ids:
+            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
+            params.append(f'%"author_id"%{user_id}%')
+
+        # Combine all conditions with OR
+        combined_condition = f"AND ({' OR '.join(or_conditions)})"
+        query_parts.append(combined_condition)
 
 
 class AttributeParser:

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.utils import map_row_to_task
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import TaskStatus
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus
 from ciris_engine.schemas.runtime.models import Task
 
 if TYPE_CHECKING:
@@ -52,9 +52,11 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
     task_dict = task.model_dump(mode="json")
     sql = """
         INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at,
-                           parent_task_id, context_json, outcome_json, signed_by, signature, signed_at)
+                           parent_task_id, context_json, outcome_json, signed_by, signature, signed_at,
+                           updated_info_available, updated_info_content)
         VALUES (:task_id, :channel_id, :description, :status, :priority, :created_at, :updated_at,
-                :parent_task_id, :context, :outcome, :signed_by, :signature, :signed_at)
+                :parent_task_id, :context, :outcome, :signed_by, :signature, :signed_at,
+                :updated_info_available, :updated_info_content)
     """
     params = {
         **task_dict,
@@ -64,6 +66,8 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
         "signed_by": task_dict.get("signed_by"),
         "signature": task_dict.get("signature"),
         "signed_at": task_dict.get("signed_at"),
+        "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
+        "updated_info_content": task_dict.get("updated_info_content"),
     }
     try:
         with get_db_connection(db_path) as conn:
@@ -255,3 +259,88 @@ def get_tasks_older_than(older_than_timestamp: str, db_path: Optional[str] = Non
     except Exception as e:
         logger.exception(f"Failed to get tasks older than {older_than_timestamp}: {e}")
     return tasks_list
+
+
+def get_active_task_for_channel(channel_id: str, db_path: Optional[str] = None) -> Optional[Task]:
+    """Get the active task for a specific channel, if one exists.
+
+    Args:
+        channel_id: The channel to check
+        db_path: Optional database path
+
+    Returns:
+        The active task for the channel, or None if no active task exists
+    """
+    sql = "SELECT * FROM tasks WHERE channel_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1"
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (channel_id, TaskStatus.ACTIVE.value))
+            row = cursor.fetchone()
+            if row:
+                return map_row_to_task(row)
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get active task for channel {channel_id}: {e}")
+        return None
+
+
+def set_task_updated_info_flag(
+    task_id: str, updated_content: str, time_service: TimeServiceProtocol, db_path: Optional[str] = None
+) -> bool:
+    """Set the updated_info_available flag on a task with new observation content.
+
+    This function checks if the task has already passed conscience checks. If the task
+    has passed conscience with any action OTHER than PONDER, it returns False (too late).
+    If the task hasn't passed conscience yet, or passed with PONDER, it sets the flag
+    and returns True.
+
+    Args:
+        task_id: The task to update
+        updated_content: The new observation content
+        time_service: Time service for timestamps
+        db_path: Optional database path
+
+    Returns:
+        True if flag was set successfully, False if task already committed to action
+    """
+    # First, check if task has any completed thoughts
+    from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
+
+    thoughts = get_thoughts_by_task_id(task_id, db_path=db_path)
+
+    # Check if any thought is completed with a non-PONDER action
+    for thought in thoughts:
+        if thought.status == TaskStatus.COMPLETED:  # Thoughts have same enum
+            # Check if final_action exists and is not PONDER
+            if thought.final_action:
+                action_type = thought.final_action.action_type
+                # If action is anything other than PONDER, it's too late
+                if action_type != "PONDER" and action_type != HandlerActionType.PONDER.value:
+                    logger.info(
+                        f"Task {task_id} already committed to action {action_type}, "
+                        f"cannot set updated_info_available flag"
+                    )
+                    return False
+
+    # Safe to update - either no thoughts completed yet, or only PONDER actions
+    sql = """
+        UPDATE tasks
+        SET updated_info_available = 1,
+            updated_info_content = ?,
+            updated_at = ?
+        WHERE task_id = ?
+    """
+    params = (updated_content, time_service.now_iso(), task_id)
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"Set updated_info_available flag for task {task_id}")
+                return True
+            logger.warning(f"Task {task_id} not found for update")
+            return False
+    except Exception as e:
+        logger.exception(f"Failed to set updated_info_available flag for task {task_id}: {e}")
+        return False

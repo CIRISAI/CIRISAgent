@@ -34,6 +34,7 @@ async def query_timeline_nodes(
     node_type: Optional[str] = None,
     limit: int = 100,
     exclude_metrics: bool = True,
+    user_filter_ids: Optional[List[str]] = None,
 ) -> List[GraphNode]:
     """
     Query nodes from memory within a time range.
@@ -45,6 +46,7 @@ async def query_timeline_nodes(
         node_type: Optional node type filter
         limit: Maximum number of results
         exclude_metrics: Whether to exclude metric nodes
+        user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
 
     Returns:
         List of GraphNode objects
@@ -57,7 +59,7 @@ async def query_timeline_nodes(
     # Calculate time range
     start_time, end_time = TimeRangeCalculator.calculate_range(hours)
 
-    # Build query with all filters
+    # Build query with all filters (including user filtering for OBSERVER users)
     query, params = QueryBuilder.build_timeline_query(
         start_time=start_time,
         end_time=end_time,
@@ -65,6 +67,7 @@ async def query_timeline_nodes(
         node_type=node_type,
         exclude_metrics=exclude_metrics,
         limit=limit,
+        user_filter_ids=user_filter_ids,
     )
 
     # Execute query and get rows
@@ -151,6 +154,7 @@ async def search_nodes(
     tags: Optional[List[str]] = None,
     limit: int = 20,
     offset: int = 0,
+    user_filter_ids: Optional[List[str]] = None,
 ) -> List[GraphNode]:
     """
     Search for nodes in memory with various filters.
@@ -165,6 +169,7 @@ async def search_nodes(
         tags: Filter by tags
         limit: Maximum results
         offset: Pagination offset
+        user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
 
     Returns:
         List of matching GraphNode objects
@@ -174,9 +179,17 @@ async def search_nodes(
     if not db_path:
         return []
 
-    # Build search query with all filters
+    # Build search query with all filters (including user filtering for OBSERVER users)
     sql_query, params = QueryBuilder.build_search_query(
-        query=query, node_type=node_type, scope=scope, since=since, until=until, tags=tags, limit=limit, offset=offset
+        query=query,
+        node_type=node_type,
+        scope=scope,
+        since=since,
+        until=until,
+        tags=tags,
+        limit=limit,
+        offset=offset,
+        user_filter_ids=user_filter_ids,
     )
 
     # Execute query and get rows

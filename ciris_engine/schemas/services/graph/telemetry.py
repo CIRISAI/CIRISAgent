@@ -5,7 +5,7 @@ Replaces Dict[str, Any] in telemetry service operations.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -42,7 +42,9 @@ class BehavioralData(BaseModel):
     """Structured behavioral data (tasks/thoughts)."""
 
     data_type: str = Field(..., description="Type: task or thought")
-    content: Dict[str, Union[str, int, float, bool, list, dict]] = Field(..., description="Behavioral content")
+    content: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
+        ..., description="Behavioral content"
+    )
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
 

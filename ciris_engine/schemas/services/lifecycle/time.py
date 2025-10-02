@@ -38,7 +38,6 @@ class LocalizedTimeData(BaseModel):
     generated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When this data was generated"
     )
-    timezone_data: Optional[dict] = Field(None, description="Additional timezone data from future sources")
 
 
 class TimeServiceStatus(BaseModel):

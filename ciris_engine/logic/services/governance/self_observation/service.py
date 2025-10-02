@@ -1056,7 +1056,6 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
                 average_improvement=0.0,  # Would need metrics
                 last_applied=None,
                 recommendation="monitor",  # or "apply", "ignore"
-                confidence_score=0.0,
             )
 
         return None

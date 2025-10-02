@@ -141,7 +141,12 @@ class StateManager:
         import datetime
 
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}] [STATE] Transition: {old_state.value} -> {target_state.value}")  # Print to console
+        try:
+            print(f"[{timestamp}] [STATE] Transition: {old_state.value} -> {target_state.value}")  # Print to console
+        except OSError:
+            # Stdout closed during shutdown - this is expected in some contexts (e.g., QA runner)
+            # Note: BrokenPipeError is a subclass of OSError, so catching OSError handles both
+            pass
 
         # Initialize metadata for new state if needed
         if target_state not in self.state_metadata:

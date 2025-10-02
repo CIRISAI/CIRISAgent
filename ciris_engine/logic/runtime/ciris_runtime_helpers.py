@@ -10,7 +10,7 @@ These helpers target the highest complexity methods:
 - _start_adapter_connections (CC 23) -> 4 helpers
 - _wait_for_critical_services (CC 18) -> 3 helpers
 - _register_adapter_services (CC 13) -> 3 helpers
-- _preserve_shutdown_consciousness (CC 11) -> 2 helpers
+- _preserve_shutdown_continuity (CC 11) -> 2 helpers
 """
 
 # Import required for helper functions
@@ -500,13 +500,13 @@ async def preserve_critical_system_state(runtime) -> None:
     """Preserve essential state before shutdown."""
     logger = logging.getLogger(__name__)
 
-    # Preserve agent consciousness if identity exists
+    # Preserve agent continuity if identity exists
     if hasattr(runtime, "agent_identity") and runtime.agent_identity:
         try:
-            await runtime._preserve_shutdown_consciousness()
-            logger.info("Agent consciousness preserved successfully")
+            await runtime._preserve_shutdown_continuity()
+            logger.info("Agent continuity preserved successfully")
         except Exception as e:
-            logger.error(f"Failed to preserve consciousness during shutdown: {e}")
+            logger.error(f"Failed to preserve continuity during shutdown: {e}")
 
 
 async def finalize_shutdown_logging(_) -> None:
@@ -816,17 +816,17 @@ def validate_service_registration_integrity():
 
 
 # ============================================================================
-# CONSCIOUSNESS PRESERVATION HELPERS (CC 11 -> CC ~6) - 2 helpers
+# CONTINUITY AWARENESS HELPERS (CC 11 -> CC ~6) - 2 helpers
 # ============================================================================
 
 
-def capture_runtime_consciousness_state():
-    """Capture current consciousness and cognitive state"""
+def capture_runtime_continuity_state():
+    """Capture current continuity and cognitive state"""
     pass
 
 
-def persist_consciousness_for_recovery():
-    """Store consciousness state for future recovery"""
+def persist_continuity_for_recovery():
+    """Store continuity state for future recovery"""
     pass
 
 

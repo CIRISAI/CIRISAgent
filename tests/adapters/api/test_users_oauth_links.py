@@ -66,7 +66,6 @@ async def test_link_and_unlink_oauth_account_route():
             request=link_request,
             auth=auth_context,
             auth_service=api_auth_service,
-            _=None,
         )
 
         assert any(acc.provider == "google" for acc in detail.linked_oauth_accounts)
@@ -85,7 +84,6 @@ async def test_link_and_unlink_oauth_account_route():
             request=link_request,
             auth=auth_context,
             auth_service=api_auth_service,
-            _=None,
         )
 
         assert any(acc.provider == "discord" for acc in detail.linked_oauth_accounts)
@@ -96,7 +94,6 @@ async def test_link_and_unlink_oauth_account_route():
             external_id="google-foo",
             auth=auth_context,
             auth_service=api_auth_service,
-            _=None,
         )
 
         assert all(acc.provider != "google" for acc in detail.linked_oauth_accounts)

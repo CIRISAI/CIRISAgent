@@ -205,6 +205,15 @@ class TestDiscordAdapterCore:
             ),
         ]
 
+        # Mock channel with async history method
+        async def mock_history_iterator(limit):
+            for msg in mock_messages:
+                yield msg
+
+        mock_channel = Mock()
+        mock_channel.history = mock_history_iterator
+        discord_adapter._client.get_channel = Mock(return_value=mock_channel)
+
         # Mock the get_correlations_by_channel function
         mock_correlations = [
             Mock(

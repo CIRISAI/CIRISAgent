@@ -5,7 +5,7 @@ Replaces Dict[str, Any] in WA service operations.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -97,7 +97,7 @@ class DeferralResolution(BaseModel):
     # Guidance
     guidance: Optional[str] = Field(None, description="WA guidance")
     modified_action: Optional[str] = Field(None, description="Modified action if changed")
-    modified_parameters: Optional[Dict[str, Union[str, int, float, bool, list]]] = Field(
+    modified_parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any]]]] = Field(
         None, description="Modified parameters"
     )
 

@@ -68,7 +68,7 @@ class SystemSnapshot(BaseModel):
     )
 
     # Agent identity (loaded once from graph memory)
-    agent_identity: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
+    agent_identity: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
         default_factory=dict, description="Raw agent identity data from graph node - typed values only"
     )
     identity_purpose: Optional[str] = Field(None, description="Agent's purpose statement extracted from identity")
@@ -117,6 +117,11 @@ class SystemSnapshot(BaseModel):
     # Telemetry summary for resource usage
     telemetry_summary: Optional["TelemetrySummary"] = Field(
         None, description="Aggregated telemetry data for resource usage tracking"
+    )
+
+    # Continuity awareness - agent lifecycle metrics
+    continuity_summary: Optional["ContinuitySummary"] = Field(
+        None, description="Continuity awareness metrics across shutdowns and restarts"
     )
 
     # Adapter channels - for agent visibility into available communication channels
@@ -338,6 +343,36 @@ class TelemetrySummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ContinuitySummary(BaseModel):
+    """Summary of agent continuity across shutdowns and restarts."""
+
+    # First startup time
+    first_startup: Optional[datetime] = Field(None, description="Timestamp of very first agent startup")
+
+    # Lifetime metrics
+    total_time_online_seconds: float = Field(0.0, description="Total cumulative time agent has been online")
+    total_time_offline_seconds: float = Field(0.0, description="Total cumulative time agent has been offline")
+    total_shutdowns: int = Field(0, description="Total number of shutdowns in agent's lifetime")
+
+    # Averages
+    average_time_online_seconds: float = Field(0.0, description="Average time online per session")
+    average_time_offline_seconds: float = Field(0.0, description="Average time offline between sessions")
+
+    # Current session
+    current_session_start: Optional[datetime] = Field(None, description="When current session started")
+    current_session_duration_seconds: float = Field(0.0, description="Duration of current session")
+
+    # Last shutdown
+    last_shutdown: Optional[datetime] = Field(None, description="When last shutdown occurred")
+    last_shutdown_reason: Optional[str] = Field(None, description="Reason for last shutdown")
+
+    @field_serializer("first_startup", "current_session_start", "last_shutdown")
+    def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
+        return dt.isoformat() if dt else None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 __all__ = [
     "SystemSnapshot",
     "TaskSummary",
@@ -348,4 +383,5 @@ __all__ = [
     "AuditVerification",
     "TelemetrySummary",
     "ThoughtSummary",
+    "ContinuitySummary",
 ]

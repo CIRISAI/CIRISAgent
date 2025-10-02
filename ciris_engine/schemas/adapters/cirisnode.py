@@ -5,7 +5,7 @@ These replace all Dict[str, Any] usage in cirisnode_client.py.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -74,7 +74,7 @@ class WAServiceRequest(BaseModel):
 
     service: str = Field(..., description="WA service name")
     action: str = Field(..., description="Action to perform")
-    params: dict = Field(default_factory=dict, description="Service parameters")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Service parameters")
 
 
 class WAServiceResponse(BaseModel):
@@ -83,7 +83,7 @@ class WAServiceResponse(BaseModel):
     service: str = Field(..., description="WA service name")
     action: str = Field(..., description="Action performed")
     success: bool = Field(..., description="Whether action succeeded")
-    result: Optional[dict] = Field(None, description="Action result")
+    result: Optional[Dict[str, Any]] = Field(None, description="Action result")
     error: Optional[str] = Field(None, description="Error message if failed")
 
 
@@ -92,7 +92,7 @@ class EventLogRequest(BaseModel):
     """Request to log an event."""
 
     event_type: str = Field(..., description="Type of event")
-    event_data: dict = Field(..., description="Event data")
+    event_data: Dict[str, Any] = Field(..., description="Event data")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     agent_id: Optional[str] = Field(None, description="Agent that generated event")
 
@@ -111,7 +111,7 @@ class AssessmentSubmission(BaseModel):
 
     assessment_id: str = Field(..., description="Assessment ID")
     agent_id: str = Field(..., description="Agent taking assessment")
-    answers: List[dict] = Field(..., description="Assessment answers")
+    answers: List[Dict[str, Any]] = Field(..., description="Assessment answers")
 
 
 class AssessmentResult(BaseModel):

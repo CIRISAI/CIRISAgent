@@ -59,7 +59,7 @@ class BaseGraphService(ABC, GraphServiceProtocol):
         """Set the time service for timestamps."""
         self._time_service = time_service
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the service."""
         self._start_time = datetime.now()
         # Initialize telemetry if available
@@ -79,7 +79,7 @@ class BaseGraphService(ABC, GraphServiceProtocol):
             self._telemetry_service.update_service_metrics(metrics)
         logger.info(f"{self.service_name} started")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the service."""
         logger.info(f"{self.service_name} stopped")
 

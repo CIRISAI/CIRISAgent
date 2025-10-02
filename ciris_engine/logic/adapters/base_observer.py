@@ -230,8 +230,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     def _create_protected_content(self, clean_content: str, message_number: int, total_messages: int) -> str:
         """Create anti-spoofing protected content with markers."""
+        timestamp = self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
         return (
-            f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START\n"
+            f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_START [Timestamp: {timestamp}]\n"
             f"{clean_content}\n"
             f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
         )
@@ -506,6 +507,30 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 passive_task_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
+            # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel
+            from ciris_engine.logic.persistence.models.tasks import (
+                get_active_task_for_channel,
+                set_task_updated_info_flag,
+            )
+
+            existing_task = get_active_task_for_channel(channel_id)
+            if existing_task and self.time_service:
+                # Try to update the existing task with new observation
+                update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
+                success = set_task_updated_info_flag(existing_task.task_id, update_content, self.time_service)
+                if success:
+                    logger.info(
+                        f"[OBSERVER] TASK UPDATE: Flagged existing task {existing_task.task_id} "
+                        f"with new observation from @{msg.author_name} in channel {channel_id}"  # type: ignore[attr-defined]
+                    )
+                    # Don't create a new task - the existing task will see the update via UpdatedStatusConscience
+                    return
+                else:
+                    logger.info(
+                        f"[OBSERVER] Task {existing_task.task_id} already committed to action, creating new task"
+                    )
+                    # Fall through to create new task
+
             # Build description based on whether this is priority or passive
             if filter_result and priority > 0:
                 description = f"PRIORITY: Respond to {getattr(filter_result.priority, 'value', 'high')} message from @{msg.author_name} (ID: {msg.author_id}): '{formatted_passive_content}'"  # type: ignore[attr-defined]
@@ -554,14 +579,17 @@ class BaseObserver[MessageT: BaseModel](ABC):
             await self._add_custom_context_sections(task_lines, msg, history_context)
 
             task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
-            task_lines.append("CIRIS_OBSERVATION_START")
+            observation_timestamp = (
+                self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
+            )
+            task_lines.append(f"CIRIS_OBSERVATION_START [Timestamp: {observation_timestamp}]")
 
             # Build user lookup and format history lines
             user_lookup = self._build_user_lookup_from_history(msg, history_context)
             history_lines = self._format_history_lines(history_context, user_lookup)
             task_lines.extend(history_lines)
 
-            task_lines.append("CIRIS_OBSERVATION_END")
+            task_lines.append(f"CIRIS_OBSERVATION_END [Timestamp: {observation_timestamp}]")
 
             task_lines.append(
                 "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="

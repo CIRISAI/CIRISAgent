@@ -685,20 +685,18 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
     # SERVICE PROTOCOL METHODS
     # ============================================================================
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the memory service."""
-        # Don't call super() as BaseService has async start
-        self._started = True
+        await super().start()
         self._initialized = True
         if self._time_service:
             self._start_time = self._time_service.now()
         logger.info("LocalGraphMemoryService started")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the memory service."""
         logger.info("LocalGraphMemoryService stopped")
-        # Don't call super() as BaseService has async stop
-        self._started = False
+        await super().stop()
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect memory-specific metrics from v1.4.3 set."""

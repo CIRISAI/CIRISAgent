@@ -67,7 +67,8 @@ def create_test_step_result_data(
         processing_time_ms=processing_time_ms,
         success=success,
         selected_action=kwargs.get("selected_action", "test_action"),
-        selection_reasoning=kwargs.get("selection_reasoning", "test reasoning"),
+        conscience_passed=kwargs.get("conscience_passed", True),
+        conscience_override_reason=kwargs.get("conscience_override_reason", None),
     )
 
     return StepResultData(

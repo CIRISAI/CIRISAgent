@@ -17,20 +17,20 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, Node
 from ciris_engine.schemas.services.operations import MemoryQuery
 
 
-@pytest.fixture
-def memory_service(tmp_path):
+@pytest_asyncio.fixture
+async def memory_service(tmp_path):
     """Create memory service instance."""
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
 
     db_path = tmp_path / "test.db"
     time_service = TimeService()
-    time_service.start()
+    await time_service.start()
 
     service = LocalGraphMemoryService(db_path=str(db_path), time_service=time_service)
-    service.start()
+    await service.start()
     yield service
-    service.stop()
-    time_service.stop()
+    await service.stop()
+    await time_service.stop()
 
 
 @pytest.fixture

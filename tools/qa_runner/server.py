@@ -75,9 +75,9 @@ class APIServerManager:
                 # Try graceful shutdown first
                 self.process.terminate()
 
-                # Wait up to 5 seconds for graceful shutdown
+                # Wait up to 15 seconds for graceful shutdown (agent needs time for shutdown state processing)
                 try:
-                    self.process.wait(timeout=5)
+                    self.process.wait(timeout=15)
                     self.console.print("[green]✅ Server stopped gracefully[/green]")
                 except subprocess.TimeoutExpired:
                     # Force kill if needed
@@ -101,9 +101,10 @@ class APIServerManager:
             return False
 
     def _wait_for_server(self) -> bool:
-        """Wait for server to be ready."""
+        """Wait for server to be ready and reach WORK state."""
         start_time = time.time()
 
+        # First, wait for server to respond to health checks
         while time.time() - start_time < self.config.server_startup_timeout:
             # Check if process is still alive
             if self.process and self.process.poll() is not None:
@@ -114,10 +115,61 @@ class APIServerManager:
 
             # Check if server is responding
             if self._is_server_running():
-                return True
+                break
+
+            time.sleep(1)
+        else:
+            # Timeout waiting for health check
+            return False
+
+        # Now wait for agent to reach WORK state
+        self.console.print("[cyan]⏳ Waiting for agent to reach WORK state...[/cyan]")
+
+        # Get auth token for checking cognitive state
+        token = None
+        try:
+            auth_response = requests.post(
+                f"{self.config.base_url}/v1/auth/login",
+                json={"username": self.config.admin_username, "password": self.config.admin_password},
+                timeout=5,
+            )
+            if auth_response.status_code == 200:
+                token = auth_response.json()["access_token"]
+        except:
+            self.console.print("[yellow]⚠️  Could not authenticate for state check[/yellow]")
+
+        while time.time() - start_time < self.config.server_startup_timeout:
+            try:
+                headers = {}
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+
+                response = requests.get(f"{self.config.base_url}/v1/agent/status", headers=headers, timeout=2)
+                if response.status_code == 200:
+                    data = response.json()
+                    # Get cognitive_state from data object
+                    cognitive_state = data.get("data", {}).get("cognitive_state", "")
+
+                    # Check for WORK state (handle both "work" and "AgentState.WORK" enum string)
+                    state_lower = cognitive_state.lower()
+                    is_work = (
+                        state_lower == "work" or state_lower == "agentstate.work" or cognitive_state.endswith(".WORK")
+                    )
+
+                    if is_work:
+                        self.console.print(f"[green]✅ Agent reached WORK state[/green]")
+                        return True
+
+                    # Show current state (clear the line properly)
+                    if cognitive_state:
+                        # Use \r to overwrite previous line
+                        self.console.print(f"[dim]Current state: {cognitive_state:<30}[/dim]", end="\r")
+            except Exception as e:
+                pass
 
             time.sleep(1)
 
+        self.console.print("[yellow]⚠️  Agent did not reach WORK state in time[/yellow]")
         return False
 
     def _kill_by_port(self):

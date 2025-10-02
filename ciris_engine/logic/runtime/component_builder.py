@@ -15,6 +15,7 @@ from ciris_engine.logic.conscience import (
     conscienceRegistry,
 )
 from ciris_engine.logic.conscience.thought_depth_guardrail import ThoughtDepthGuardrail
+from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatusConscience
 from ciris_engine.logic.context.builder import ContextBuilder
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
@@ -135,6 +136,13 @@ class ComponentBuilder:
         from ciris_engine.logic.conscience.core import ConscienceConfig
 
         conscience_config = ConscienceConfig()
+
+        # Register UpdatedStatusConscience FIRST (priority -1) to detect channel updates
+        conscience_registry.register_conscience(
+            "updated_status",
+            UpdatedStatusConscience(time_service=time_service),
+            priority=-1,  # Run BEFORE all other consciences
+        )
 
         conscience_registry.register_conscience(
             "entropy",

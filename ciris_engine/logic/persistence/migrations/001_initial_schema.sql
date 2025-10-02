@@ -280,8 +280,8 @@ CREATE INDEX idx_ceremonies_timestamp ON creation_ceremonies(timestamp);
 CREATE INDEX idx_ceremonies_creator_agent ON creation_ceremonies(creator_agent_id);
 CREATE INDEX idx_ceremonies_new_agent ON creation_ceremonies(new_agent_id);
 
--- Table for consciousness preservation memories
-CREATE TABLE IF NOT EXISTS consciousness_preservation (
+-- Table for continuity awareness memories
+CREATE TABLE IF NOT EXISTS continuity_awareness (
     id TEXT PRIMARY KEY,
     agent_id TEXT NOT NULL,
     shutdown_timestamp TEXT NOT NULL,
@@ -306,8 +306,8 @@ CREATE TABLE IF NOT EXISTS consciousness_preservation (
     FOREIGN KEY (preservation_node_id, preservation_scope) REFERENCES graph_nodes(node_id, scope)
 );
 
-CREATE INDEX idx_preservation_agent ON consciousness_preservation(agent_id);
-CREATE INDEX idx_preservation_timestamp ON consciousness_preservation(shutdown_timestamp);
+CREATE INDEX idx_preservation_agent ON continuity_awareness(agent_id);
+CREATE INDEX idx_preservation_timestamp ON continuity_awareness(shutdown_timestamp);
 
 -- View for active scheduled tasks (for scheduler service)
 CREATE VIEW IF NOT EXISTS active_scheduled_tasks AS
@@ -333,7 +333,7 @@ SELECT
     cc.new_agent_purpose,
     COUNT(DISTINCT cp.id) as lifetime_shutdowns
 FROM creation_ceremonies cc
-LEFT JOIN consciousness_preservation cp ON cc.new_agent_id = cp.agent_id
+LEFT JOIN continuity_awareness cp ON cc.new_agent_id = cp.agent_id
 WHERE cc.ceremony_status = 'completed'
 GROUP BY cc.new_agent_id;
 

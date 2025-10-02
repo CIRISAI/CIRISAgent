@@ -20,7 +20,6 @@ class HashChainAuditEntry(BaseModel):
     sequence_number: int = Field(..., description="Sequence number in chain")
     previous_hash: str = Field(..., description="Hash of previous entry or 'genesis'")
     entry_hash: Optional[str] = Field(None, description="Hash of this entry")
-    additional_fields: dict = Field(default_factory=dict, description="Additional audit fields")
 
 
 class HashChainVerificationResult(BaseModel):
@@ -45,4 +44,15 @@ class ChainSummary(BaseModel):
     error: Optional[str] = Field(None, description="Error if any")
 
 
-__all__ = ["HashChainAuditEntry", "HashChainVerificationResult", "ChainSummary"]
+class AuditEntryResult(BaseModel):
+    """Result from creating an audit entry with optional hash chain data."""
+
+    entry_id: str = Field(..., description="Unique ID of the audit entry")
+    sequence_number: Optional[int] = Field(None, description="Sequence number in hash chain (if enabled)")
+    entry_hash: Optional[str] = Field(None, description="Hash of this entry (if hash chain enabled)")
+    previous_hash: Optional[str] = Field(None, description="Hash of previous entry (if hash chain enabled)")
+    signature: Optional[str] = Field(None, description="Cryptographic signature (if hash chain enabled)")
+    signing_key_id: Optional[str] = Field(None, description="ID of key used for signing (if hash chain enabled)")
+
+
+__all__ = ["HashChainAuditEntry", "HashChainVerificationResult", "ChainSummary", "AuditEntryResult"]

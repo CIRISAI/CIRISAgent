@@ -2,6 +2,10 @@
 Filter configuration and testing module - uses agent/interact endpoint with mock LLM.
 Tests adaptive and secrets filters by configuring them via MEMORIZE actions.
 Includes comprehensive RECALL before/after tests and secrets tool functionality.
+
+NOTE: Filter tests use longer timeouts (120s) because each message triggers
+task creation and processing through the full H3ERE pipeline. Tests must
+complete their task before the next test starts to avoid interference.
 """
 
 from typing import List
@@ -39,6 +43,7 @@ class FilterTestModule:
                 expected_status=200,
                 requires_auth=True,
                 description="RECALL before MEMORIZE - should indicate not found",
+                timeout=120.0,
             ),
             # === Adaptive Filter MEMORIZE Tests ===
             # Configure spam threshold

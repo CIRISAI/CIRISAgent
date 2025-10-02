@@ -7,7 +7,7 @@ and management of sensitive information within the CIRIS pipeline.
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -229,9 +229,9 @@ class ConfigExport(BaseModel):
     filter_id: str = Field("config_based", description="Filter identifier")
     version: int = Field(1, description="Configuration version")
     builtin_patterns_enabled: bool = Field(True, description="Whether builtin patterns are enabled")
-    custom_patterns: list = Field(default_factory=list, description="Custom patterns")
+    custom_patterns: List[SecretPattern] = Field(default_factory=list, description="Custom patterns")
     disabled_patterns: List[str] = Field(default_factory=list, description="Disabled pattern names")
-    sensitivity_overrides: dict = Field(default_factory=dict, description="Sensitivity overrides")
+    sensitivity_overrides: Dict[str, Any] = Field(default_factory=dict, description="Sensitivity overrides")
     require_confirmation_for: List[str] = Field(default_factory=list, description="Actions requiring confirmation")
     auto_decrypt_for_actions: List[str] = Field(default_factory=list, description="Actions that auto-decrypt")
 
@@ -241,7 +241,7 @@ class ConfigExport(BaseModel):
 class FilterConfigUpdate(BaseModel):
     """Update to filter configuration."""
 
-    updates: dict = Field(..., description="Configuration updates to apply")
+    updates: Dict[str, Any] = Field(..., description="Configuration updates to apply")
     update_type: str = Field("config", description="Type of update")
     validation_errors: List[str] = Field(default_factory=list, description="Validation errors if any")
 

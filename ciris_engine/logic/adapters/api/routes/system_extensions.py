@@ -152,55 +152,79 @@ async def _get_queue_depth(runtime_control) -> int:
         return 0
 
 
+def _get_pipeline_controller(runtime):
+    """Safely extract pipeline controller from runtime."""
+    if not runtime:
+        return None
+    if not hasattr(runtime, "pipeline_controller"):
+        return None
+    return runtime.pipeline_controller
+
+
+def _get_pipeline_state(pipeline_controller) -> Optional[Any]:
+    """Get current pipeline state, returning None on error."""
+    if not pipeline_controller:
+        return None
+    try:
+        return pipeline_controller.get_current_state()
+    except Exception as e:
+        logger.debug(f"Could not get pipeline state: {e}")
+        return None
+
+
+def _get_latest_step_data(pipeline_controller) -> tuple[Optional[Any], Optional[Dict[str, Any]]]:
+    """Extract step point and result from pipeline controller."""
+    if not pipeline_controller:
+        return None, None
+
+    try:
+        latest_step_result = pipeline_controller.get_latest_step_result()
+        if not latest_step_result:
+            return None, None
+
+        step_point = latest_step_result.step_point
+        step_result = (
+            latest_step_result.model_dump() if hasattr(latest_step_result, "model_dump") else dict(latest_step_result)
+        )
+        return step_point, step_result
+    except Exception as e:
+        logger.debug(f"Could not get step result: {e}")
+        return None, None
+
+
+def _get_processing_metrics(pipeline_controller) -> tuple[float, Optional[int]]:
+    """Extract processing time and token usage from metrics."""
+    if not pipeline_controller:
+        return 0.0, None
+
+    try:
+        metrics = pipeline_controller.get_processing_metrics()
+        if not metrics:
+            return 0.0, None
+
+        processing_time_ms = metrics.get("total_processing_time_ms", 0.0)
+        tokens_used = metrics.get("tokens_used")
+        return processing_time_ms, tokens_used
+    except Exception as e:
+        logger.debug(f"Could not get processing metrics: {e}")
+        return 0.0, None
+
+
 def _extract_pipeline_data(
     runtime,
 ) -> tuple[Optional[Any], Optional[Dict[str, Any]], Optional[Any], float, Optional[int], Optional[Dict[str, Any]]]:
     """Extract pipeline state, step result, and processing metrics."""
-    step_point = None
-    step_result = None
-    pipeline_state = None
-    processing_time_ms = 0.0
-    tokens_used = None
-    demo_data = None
-
     try:
-        if runtime and hasattr(runtime, "pipeline_controller") and runtime.pipeline_controller:
-            pipeline_controller = runtime.pipeline_controller
+        pipeline_controller = _get_pipeline_controller(runtime)
+        pipeline_state = _get_pipeline_state(pipeline_controller)
+        step_point, step_result = _get_latest_step_data(pipeline_controller)
+        processing_time_ms, tokens_used = _get_processing_metrics(pipeline_controller)
+        demo_data = None  # Demo data removed - using transparency_data from real step results
 
-            # Get current pipeline state
-            try:
-                pipeline_state = pipeline_controller.get_current_state()
-            except Exception as e:
-                logger.debug(f"Could not get pipeline state: {e}")
-
-            # Get latest step result
-            try:
-                latest_step_result = pipeline_controller.get_latest_step_result()
-                if latest_step_result:
-                    step_point = latest_step_result.step_point
-                    step_result = (
-                        latest_step_result.model_dump()
-                        if hasattr(latest_step_result, "model_dump")
-                        else dict(latest_step_result)
-                    )
-            except Exception as e:
-                logger.debug(f"Could not get step result: {e}")
-
-            # Get processing metrics
-            try:
-                metrics = pipeline_controller.get_processing_metrics()
-                if metrics:
-                    processing_time_ms = metrics.get("total_processing_time_ms", 0.0)
-                    tokens_used = metrics.get("tokens_used")
-                    # Demo data removed - using transparency_data from real step results
-                    demo_data = None
-            except Exception as e:
-                logger.debug(f"Could not get processing metrics: {e}")
-
+        return step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data
     except Exception as e:
         logger.debug(f"Could not extract enhanced data: {e}")
-
-    return step_point, step_result, pipeline_state, processing_time_ms, tokens_used, demo_data
+        return None, None, None, 0.0, None, None
 
 
 def _get_runtime_control_service_for_step(request: Request):
@@ -580,6 +604,81 @@ async def get_processor_states(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _determine_user_role(current_user: dict):
+    """Determine user role from current_user dict."""
+    from ciris_engine.schemas.api.auth import UserRole
+
+    user_role = current_user.get("role", UserRole.OBSERVER)
+    if isinstance(user_role, str):
+        try:
+            user_role = UserRole(user_role)
+        except ValueError:
+            user_role = UserRole.OBSERVER
+    return user_role
+
+
+async def _get_user_allowed_channel_ids(auth_service, user_id: str) -> set[str]:
+    """Get set of channel IDs user is allowed to see (user_id + OAuth links)."""
+    allowed_channel_ids = {user_id}
+
+    try:
+        db = auth_service.db_manager
+        query = """
+            SELECT oauth_provider, oauth_external_id
+            FROM wa_cert
+            WHERE user_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL
+        """
+        async with db.connection() as conn:
+            rows = await conn.execute_fetchall(query, (user_id,))
+            for row in rows:
+                oauth_provider, oauth_external_id = row
+                allowed_channel_ids.add(f"{oauth_provider}:{oauth_external_id}")
+                allowed_channel_ids.add(oauth_external_id)
+    except Exception as e:
+        logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
+
+    return allowed_channel_ids
+
+
+async def _batch_fetch_task_channel_ids(auth_service, task_ids: list[str]) -> dict[str, str]:
+    """Batch fetch channel_ids for multiple task_ids."""
+    task_channel_map = {}
+    if not task_ids:
+        return task_channel_map
+
+    try:
+        db = auth_service.db_manager
+        placeholders = ",".join("?" * len(task_ids))
+        query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
+        async with db.connection() as conn:
+            rows = await conn.execute_fetchall(query, task_ids)
+            for row in rows:
+                tid, cid = row
+                task_channel_map[tid] = cid
+    except Exception as e:
+        logger.error(f"Error batch fetching task channel_ids: {e}", exc_info=True)
+
+    return task_channel_map
+
+
+def _filter_events_by_channel_access(
+    events: list, allowed_channel_ids: set[str], task_channel_cache: dict[str, str]
+) -> list:
+    """Filter events to only those the user can access based on channel_id whitelist."""
+    filtered_events = []
+    for event in events:
+        task_id = event.get("task_id")
+        if not task_id:
+            # No task_id means system event - skip for non-admin users
+            continue
+
+        channel_id = task_channel_cache.get(task_id)
+        if channel_id and channel_id in allowed_channel_ids:
+            filtered_events.append(event)
+
+    return filtered_events
+
+
 @router.get("/runtime/reasoning-stream")
 async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)):
     """
@@ -594,6 +693,8 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
     from fastapi.responses import StreamingResponse
 
+    from ciris_engine.schemas.api.auth import UserRole
+
     # Get runtime control service
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
@@ -601,15 +702,35 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
 
+    # Get authentication service for OAuth lookup
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        raise HTTPException(status_code=503, detail="Authentication service not available")
+
+    # SECURITY: Determine if user can see all events (ADMIN or higher)
+    user_role = auth.role
+    can_see_all = user_role in (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
+
+    # SECURITY: Get user's allowed channel IDs (user_id + linked OAuth accounts)
+    allowed_channel_ids: set[str] = set()
+    task_channel_cache: dict[str, str] = {}  # Cache task_id -> channel_id lookups
+
+    if not can_see_all:
+        user_id = auth.user_id
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in token")
+
+        allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
+
     async def stream_reasoning_steps():
         """Generate Server-Sent Events for live reasoning steps."""
         try:
-            # Subscribe to the global step result stream
-            from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
+            # Subscribe to the global reasoning event stream
+            from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
             # Create a queue for this client
             stream_queue = asyncio.Queue(maxsize=100)
-            step_result_stream.subscribe(stream_queue)
+            reasoning_event_stream.subscribe(stream_queue)
 
             try:
                 # Send initial connection event
@@ -620,6 +741,37 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                     try:
                         # Wait for step results with timeout to send keepalive
                         step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
+
+                        # SECURITY: Filter events for OBSERVER users
+                        # ADMIN+ users bypass filtering and see all events
+                        if not can_see_all:
+                            events = step_update.get("events", [])
+                            if not events:
+                                continue
+
+                            # Batch lookup uncached task IDs
+                            uncached_task_ids = [
+                                event.get("task_id")
+                                for event in events
+                                if event.get("task_id") and event.get("task_id") not in task_channel_cache
+                            ]
+
+                            # SECURITY: Batch fetch channel_ids for efficiency
+                            if uncached_task_ids:
+                                new_mappings = await _batch_fetch_task_channel_ids(auth_service, uncached_task_ids)
+                                task_channel_cache.update(new_mappings)
+
+                            # Filter events based on channel_id whitelist
+                            filtered_events = _filter_events_by_channel_access(
+                                events, allowed_channel_ids, task_channel_cache
+                            )
+
+                            # Replace events with filtered list
+                            if filtered_events:
+                                step_update = {"events": filtered_events}
+                            else:
+                                # No events for this user, skip this update silently
+                                continue
 
                         # Stream the step update
                         yield f"event: step_update\ndata: {json.dumps(step_update, default=str)}\n\n"
@@ -635,7 +787,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
             finally:
                 # Clean up subscription
-                step_result_stream.unsubscribe(stream_queue)
+                reasoning_event_stream.unsubscribe(stream_queue)
 
         except Exception as e:
             logger.error(f"Error in reasoning stream: {e}")

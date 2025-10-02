@@ -102,7 +102,7 @@ def mock_runtime():
 
     # Mock common runtime attributes
     runtime.agent_identity = Mock()
-    runtime._preserve_shutdown_consciousness = AsyncMock()
+    runtime._preserve_shutdown_continuity = AsyncMock()
     runtime.adapters = []
     runtime.bus_manager = None
     runtime.maintenance_service = None
@@ -129,9 +129,9 @@ def mock_runtime_with_services(mock_runtime, mock_services_collection):
 
 @pytest.fixture
 def mock_runtime_with_identity(mock_runtime):
-    """Mock runtime with agent identity for consciousness preservation."""
+    """Mock runtime with agent identity for continuity awareness."""
     mock_runtime.agent_identity = Mock()
-    mock_runtime._preserve_shutdown_consciousness = AsyncMock()
+    mock_runtime._preserve_shutdown_continuity = AsyncMock()
     return mock_runtime
 
 

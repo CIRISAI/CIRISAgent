@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, List, Optional, Protocol
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
+    from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 
 from ciris_engine.schemas.runtime.audit import AuditActionContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -26,8 +27,12 @@ class AuditServiceProtocol(GraphServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> None:
-        """Log a general audit event."""
+    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> "AuditEntryResult":
+        """Log a general audit event.
+
+        Returns:
+            AuditEntryResult with entry_id and hash chain data (if hash chain enabled)
+        """
         ...
 
     @abstractmethod

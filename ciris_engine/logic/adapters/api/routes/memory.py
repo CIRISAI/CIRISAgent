@@ -20,6 +20,7 @@ from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
 
 from ..dependencies.auth import AuthContext, require_admin, require_observer
+from .memory_filters import filter_nodes_by_user_attribution, get_user_allowed_ids, should_apply_user_filtering
 
 # Import extracted modules
 from .memory_models import MemoryStats, QueryRequest, StoreRequest, TimelineResponse
@@ -32,6 +33,248 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 
 # Constants
 MEMORY_SERVICE_NOT_AVAILABLE = "Memory service not available"
+AUTH_SERVICE_NOT_AVAILABLE = "Authentication service not available"
+USER_ID_NOT_FOUND = "User ID not found in token"
+
+
+# ============================================================================
+# DEPENDENCY INJECTION
+# ============================================================================
+
+
+def get_memory_service(request: Request):
+    """Dependency to get memory service from app state (DRY helper)."""
+    memory_service = getattr(request.app.state, "memory_service", None)
+    if not memory_service:
+        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
+    return memory_service
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+
+async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) -> Optional[List[str]]:
+    """
+    Get user filter IDs for OBSERVER role users.
+
+    Returns None for ADMIN users (no filtering).
+    Returns list of allowed user IDs for OBSERVER users.
+
+    Raises HTTPException if authentication service not available or user_id missing.
+    """
+    from ciris_engine.schemas.api.auth import UserRole
+
+    user_role = auth.role
+
+    if not should_apply_user_filtering(user_role):
+        return None
+
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        raise HTTPException(status_code=503, detail=AUTH_SERVICE_NOT_AVAILABLE)
+
+    user_id = auth.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail=USER_ID_NOT_FOUND)
+
+    allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+    return list(allowed_user_ids)
+
+
+def calculate_time_buckets(nodes: List[GraphNode], hours: int) -> Dict[str, int]:
+    """
+    Calculate time buckets for nodes based on hours range.
+
+    Buckets by hour if <= 48 hours, otherwise by day.
+    Returns dict mapping bucket key to node count.
+    """
+    buckets = {}
+    bucket_size = "hour" if hours <= 48 else "day"
+
+    for node in nodes:
+        if node.updated_at:
+            if bucket_size == "hour":
+                bucket_key = node.updated_at.strftime("%Y-%m-%d %H:00")
+            else:
+                bucket_key = node.updated_at.strftime("%Y-%m-%d")
+
+            buckets[bucket_key] = buckets.get(bucket_key, 0) + 1
+
+    return buckets
+
+
+def _convert_to_graph_scope(scope: Any) -> "GraphScope":
+    """Convert scope value to GraphScope enum."""
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    if isinstance(scope, str):
+        return GraphScope(scope)
+    return scope
+
+
+def _is_edge_valid(edge: "GraphEdge", node_ids: set, seen_edges: set) -> bool:
+    """
+    Check if an edge is valid for visualization.
+
+    Args:
+        edge: Edge to validate
+        node_ids: Set of node IDs in visualization
+        seen_edges: Set of already seen edge pairs
+
+    Returns:
+        True if edge should be included
+    """
+    # Only include edges where both nodes are in visualization
+    if edge.target not in node_ids:
+        return False
+
+    # Check for duplicates (bidirectional)
+    edge_key = (edge.source, edge.target)
+    reverse_key = (edge.target, edge.source)
+
+    return edge_key not in seen_edges and reverse_key not in seen_edges
+
+
+def _collect_edges_for_node(
+    node: "GraphNode", node_ids: set, seen_edges: set, max_edges: int, current_edges: List["GraphEdge"]
+) -> bool:
+    """
+    Collect edges for a single node.
+
+    Args:
+        node: Node to query edges for
+        node_ids: Set of all node IDs in visualization
+        seen_edges: Set of seen edge pairs (modified in place)
+        max_edges: Maximum edges allowed
+        current_edges: List of current edges (modified in place)
+
+    Returns:
+        True if max_edges reached, False otherwise
+    """
+    from ciris_engine.logic.persistence.models.graph import get_edges_for_node
+
+    scope_enum = _convert_to_graph_scope(node.scope)
+    node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
+
+    for edge_data in node_edges:
+        if _is_edge_valid(edge_data, node_ids, seen_edges):
+            current_edges.append(edge_data)
+            seen_edges.add((edge_data.source, edge_data.target))
+
+            if len(current_edges) >= max_edges:
+                return True
+
+    return False
+
+
+def query_edges_for_visualization(nodes: List[GraphNode], max_edges: int = 500) -> List[GraphEdge]:
+    """
+    Query edges for graph visualization.
+
+    Args:
+        nodes: List of nodes to get edges for
+        max_edges: Maximum number of edges to return
+
+    Returns:
+        List of edges between the provided nodes
+    """
+    if not nodes:
+        return []
+
+    edges = []
+    node_ids = set(node.id for node in nodes)
+    seen_edges = set()
+
+    try:
+        for node in nodes[:500]:  # Query edges for up to 500 nodes
+            if _collect_edges_for_node(node, node_ids, seen_edges, max_edges, edges):
+                break  # Max edges reached
+
+        logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
+
+    except Exception as e:
+        logger.warning(f"Failed to query edges for visualization: {e}")
+
+    return edges
+
+
+def generate_html_wrapper(svg: str, hours: int, layout: str, node_count: int, width: int) -> str:
+    """
+    Generate HTML wrapper for SVG visualization.
+
+    Args:
+        svg: The SVG content
+        hours: Time range in hours
+        layout: Layout type
+        node_count: Number of nodes
+        width: SVG width
+
+    Returns:
+        HTML string with embedded SVG
+    """
+    # Safely escape user-controlled values to prevent XSS
+    safe_hours = html.escape(str(hours))
+    safe_layout = html.escape(str(layout))
+    safe_node_count = html.escape(str(node_count))
+    safe_width = int(width) + 40  # Already validated as int by Query
+
+    # Wrap in HTML with escaped values
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Memory Graph Visualization</title>
+        <style>
+            body {{
+                font-family: monospace;
+                margin: 0;
+                padding: 20px;
+                background: #f3f4f6;
+            }}
+            .container {{
+                max-width: {safe_width}px;
+                margin: 0 auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }}
+            h1 {{
+                margin-top: 0;
+                color: #1f2937;
+            }}
+            .stats {{
+                margin-bottom: 20px;
+                padding: 10px;
+                background: #f9fafb;
+                border-radius: 4px;
+            }}
+            .svg-container {{
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                overflow: auto;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Memory Graph Visualization</h1>
+            <div class="stats">
+                <strong>Time Range:</strong> Last {safe_hours} hours<br>
+                <strong>Nodes:</strong> {safe_node_count}<br>
+                <strong>Layout:</strong> {safe_layout}
+            </div>
+            <div class="svg-container">
+                {svg}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html_content
 
 
 # ============================================================================
@@ -44,6 +287,7 @@ async def store_memory(
     request: Request,
     body: StoreRequest,
     auth: AuthContext = Depends(require_admin),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult]:
     """
     Store typed nodes in memory (MEMORIZE).
@@ -51,9 +295,6 @@ async def store_memory(
     This is the primary way to add information to the agent's memory.
     Requires ADMIN role as this modifies system state.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
         # Store node via memory service
@@ -78,17 +319,20 @@ async def query_memory(
     request: Request,
     body: QueryRequest,
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphNode]]:
     """
     Query memories with flexible filters (RECALL).
 
     Supports querying by ID, type, text, time range, and relationships.
+
+    SECURITY: OBSERVER users only see nodes they created or participated in.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
+        # Determine user filtering (for OBSERVER users)
+        user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
+
         # If querying by specific ID
         if body.node_id:
             # Use recall method with a query for the specific node
@@ -107,7 +351,7 @@ async def query_memory(
                 scope=body.scope,
             )
 
-        # General search
+        # General search (with SQL Layer 1 filtering if OBSERVER)
         else:
             nodes = await search_nodes(
                 memory_service=memory_service,
@@ -119,7 +363,12 @@ async def query_memory(
                 tags=body.tags,
                 limit=body.limit,
                 offset=body.offset,
+                user_filter_ids=user_filter_ids,  # SECURITY LAYER 1: SQL-level filtering
             )
+
+        # SECURITY LAYER 2: Double-check with result filtering for defense in depth
+        if user_filter_ids:
+            nodes = filter_nodes_by_user_attribution(nodes, set(user_filter_ids))
 
         return SuccessResponse(
             data=nodes,
@@ -130,6 +379,8 @@ async def query_memory(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to query memory: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -140,15 +391,13 @@ async def forget_memory(
     request: Request,
     node_id: str = Path(..., description="Node ID to forget"),
     auth: AuthContext = Depends(require_admin),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult]:
     """
     Forget a specific memory node (FORGET).
 
     Requires ADMIN role as this permanently removes data.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
         # Create a minimal GraphNode with just the ID for deletion
@@ -190,42 +439,37 @@ async def get_timeline(
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.
 
     Returns memories organized chronologically with time buckets.
-    """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
+    SECURITY: OBSERVER users only see nodes they created or participated in.
+    """
     try:
-        # Query timeline nodes
+        # Determine user filtering before queries (for OBSERVER users)
+        user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
+
+        # Query timeline nodes (with SQL Layer 1 filtering if OBSERVER)
         nodes = await query_timeline_nodes(
             memory_service=memory_service,
             hours=hours,
             scope=scope,
             node_type=type,
             limit=1000,
+            user_filter_ids=user_filter_ids,  # SECURITY LAYER 1: SQL-level filtering
         )
+
+        # SECURITY LAYER 2: Double-check with result filtering for defense in depth
+        if user_filter_ids:
+            nodes = filter_nodes_by_user_attribution(nodes, set(user_filter_ids))
 
         # Calculate time buckets
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours)
-
-        # Bucket by hour if < 48 hours, otherwise by day
-        buckets = {}
-        bucket_size = "hour" if hours <= 48 else "day"
-
-        for node in nodes:
-            if node.updated_at:
-                if bucket_size == "hour":
-                    bucket_key = node.updated_at.strftime("%Y-%m-%d %H:00")
-                else:
-                    bucket_key = node.updated_at.strftime("%Y-%m-%d")
-
-                buckets[bucket_key] = buckets.get(bucket_key, 0) + 1
+        buckets = calculate_time_buckets(nodes, hours)
 
         response = TimelineResponse(
             memories=nodes,
@@ -252,16 +496,13 @@ async def get_timeline(
 async def get_stats(
     request: Request,
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[MemoryStats]:
     """
     Get statistics about memory storage.
 
     Returns counts, distributions, and metadata about the memory graph.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Get stats from database
         stats_data = await get_memory_stats(memory_service)
@@ -323,16 +564,13 @@ async def visualize_graph(
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> Response:
     """
     Generate an interactive SVG visualization of the memory graph.
 
     Returns an HTML page with an embedded SVG visualization.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Query nodes
         nodes = await query_timeline_nodes(
@@ -344,55 +582,7 @@ async def visualize_graph(
         )
 
         # Query edges between the nodes we have
-        edges = []
-        if nodes:
-            # Get all node IDs for filtering
-            node_ids = set(node.id for node in nodes)
-
-            # Query edges directly from persistence for these nodes
-            try:
-                # Import the edge query function
-                from ciris_engine.logic.persistence.models.graph import get_edges_for_node
-
-                # Get edges for each node (limit to prevent too many)
-                seen_edges = set()  # Track (source, target) pairs to avoid duplicates
-
-                for node in nodes[:500]:  # Query edges for up to 500 nodes
-                    # Get all edges for this node
-                    # get_edges_for_node expects a GraphScope enum, not a string
-                    from ciris_engine.schemas.services.graph_core import GraphScope
-
-                    # Convert scope to GraphScope enum if it's a string
-                    if isinstance(node.scope, str):
-                        scope_enum = GraphScope(node.scope)
-                    else:
-                        scope_enum = node.scope
-
-                    node_edges = get_edges_for_node(node_id=node.id, scope=scope_enum)
-
-                    for edge_data in node_edges:
-                        # Only include edges where both nodes are in our visualization
-                        if edge_data.target in node_ids:
-                            edge_key = (edge_data.source, edge_data.target)
-                            reverse_key = (edge_data.target, edge_data.source)
-
-                            # Avoid duplicate edges
-                            if edge_key not in seen_edges and reverse_key not in seen_edges:
-                                edges.append(edge_data)
-                                seen_edges.add(edge_key)
-
-                                # Limit total edges for performance
-                                if len(edges) >= 500:
-                                    break
-
-                    if len(edges) >= 500:
-                        break
-
-                logger.info(f"Found {len(edges)} edges for {len(nodes)} nodes in visualization")
-
-            except Exception as e:
-                logger.warning(f"Failed to query edges for visualization: {e}")
-                # Continue with empty edges if query fails
+        edges = query_edges_for_visualization(nodes, max_edges=500)
 
         # Generate SVG
         svg = generate_svg(
@@ -403,65 +593,8 @@ async def visualize_graph(
             height=height,
         )
 
-        # Safely escape user-controlled values to prevent XSS
-        safe_hours = html.escape(str(hours))
-        safe_layout = html.escape(str(layout))
-        safe_node_count = html.escape(str(len(nodes)))
-        safe_width = int(width) + 40  # Already validated as int by Query
-
-        # Wrap in HTML with escaped values
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Memory Graph Visualization</title>
-            <style>
-                body {{
-                    font-family: monospace;
-                    margin: 0;
-                    padding: 20px;
-                    background: #f3f4f6;
-                }}
-                .container {{
-                    max-width: {safe_width}px;
-                    margin: 0 auto;
-                    background: white;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                }}
-                h1 {{
-                    margin-top: 0;
-                    color: #1f2937;
-                }}
-                .stats {{
-                    margin-bottom: 20px;
-                    padding: 10px;
-                    background: #f9fafb;
-                    border-radius: 4px;
-                }}
-                .svg-container {{
-                    border: 1px solid #e5e7eb;
-                    border-radius: 4px;
-                    overflow: auto;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Memory Graph Visualization</h1>
-                <div class="stats">
-                    <strong>Time Range:</strong> Last {safe_hours} hours<br>
-                    <strong>Nodes:</strong> {safe_node_count}<br>
-                    <strong>Layout:</strong> {safe_layout}
-                </div>
-                <div class="svg-container">
-                    {svg}
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        # Generate HTML wrapper with XSS protection
+        html_content = generate_html_wrapper(svg=svg, hours=hours, layout=layout, node_count=len(nodes), width=width)
 
         return HTMLResponse(content=html_content)
 
@@ -484,16 +617,13 @@ async def get_node_edges(
     request: Request,
     node_id: str = Path(..., description="Node ID"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphEdge]]:
     """
     Get all edges connected to a node.
 
     Returns both incoming and outgoing edges.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Get edges from memory service
         edges = await memory_service.get_edges(node_id=node_id)
@@ -522,16 +652,15 @@ async def recall_by_id(
     request: Request,
     node_id: str = Path(..., description="Node ID to recall"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Recall a specific node by ID (legacy endpoint).
 
     Use GET /memory/{node_id} for new implementations.
-    """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
+    SECURITY: OBSERVER users can only access nodes they created or participated in.
+    """
     try:
         # Use recall method with a query for the specific node
         from ciris_engine.schemas.services.operations import MemoryQuery
@@ -546,7 +675,23 @@ async def recall_by_id(
         nodes = await memory_service.recall(query)
         if not nodes:
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
-        node = nodes[0]
+
+        # SECURITY LAYER 2: Filter by user attribution for OBSERVER users
+        user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
+
+        if user_filter_ids:
+            allowed_user_ids = set(user_filter_ids)
+            filtered_nodes = filter_nodes_by_user_attribution(nodes, allowed_user_ids)
+
+            # If filtering removed the node, return 403 Forbidden
+            if not filtered_nodes:
+                raise HTTPException(
+                    status_code=403, detail="Access denied: You do not have permission to view this memory node"
+                )
+
+            node = filtered_nodes[0]
+        else:
+            node = nodes[0]
 
         return SuccessResponse(
             data=node,
@@ -568,6 +713,7 @@ async def get_node(
     request: Request,
     node_id: str = Path(..., description="Node ID"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Get a specific node by ID.

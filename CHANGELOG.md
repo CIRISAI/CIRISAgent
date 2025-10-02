@@ -5,6 +5,73 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-10-01
+
+### Added
+- **⏰ System Time Display**: Fixed system snapshot formatter to display "Time of System Snapshot" with UTC, Chicago, and Tokyo times
+- **📋 Task Update Tracking**: New 6th conscience check (UpdatedStatusConscience) detects new observations arriving during task processing
+  - Automatically forces PONDER when new messages arrive in active task's channel
+  - Stores observations in thought payload under `CIRIS_OBSERVATION_UPDATED_STATUS`
+  - Only updates tasks that haven't committed to non-PONDER actions
+  - Database migration 003 adds `updated_info_available` and `updated_info_content` to tasks table
+- **🔐 Memory Access Control (OBSERVER Filtering)**: Complete role-based filtering for memory query/search endpoints
+  - **TaskSummaryNode Enhancement**: Now preserves user attribution data for DSAR/consent/filtering
+    - Added `user_list` (all unique user IDs involved in tasks)
+    - Added `tasks_by_user` (task count per user)
+    - Added `user_id` field to individual task summaries
+  - **Double-Protection Filtering**: Two-layer defense for OBSERVER users
+    - Layer 1: SQL-level filtering (ACTIVE - filters at database query level using JSON extraction and LIKE patterns)
+    - Layer 2: Post-query result filtering (ACTIVE - filters by `created_by`, `user_list`, `task_summaries[].user_id`, `conversations_by_channel[].author_id`)
+  - **Protected Endpoints**:
+    - `POST /memory/query` - OBSERVER users see only their memories
+    - `GET /memory/timeline` - Filtered timeline view
+    - `GET /memory/{node_id}` - Returns 403 Forbidden if unauthorized (not 404)
+    - `GET /memory/recall/{node_id}` - Same protection as above
+  - **OAuth Integration**: Automatically includes memories from linked Discord/Google accounts
+  - **ADMIN Bypass**: ADMIN/AUTHORITY/SYSTEM_ADMIN see all memories without filtering
+  - **DSAR Ready**: User attribution preserved across all consolidated nodes for GDPR compliance
+
+### Fixed
+- **🔐 OAuth Account Linking Permissions**: Users can now link/unlink their own OAuth accounts without admin privileges
+  - `POST /v1/users/{user_id}/oauth-links` - Users can link to their own account, SYSTEM_ADMIN can link to any
+  - `DELETE /v1/users/{user_id}/oauth-links/{provider}/{external_id}` - Users can unlink from their own account, SYSTEM_ADMIN can unlink from any
+  - Removed `users.write` permission requirement when operating on own account
+  - Enables self-service OAuth account management for all authenticated users
+- **🐛 Memory Service Startup**: Fixed missing `await` on `memory_service.start()` causing circuit breaker failures
+  - `service_initializer.py:268` - Added missing `await` keyword
+  - Resolves RuntimeWarning: "coroutine 'LocalGraphMemoryService.start' was never awaited"
+  - Prevents memory service circuit breaker opening during TSDB consolidation at startup
+- **🐛 ConscienceApplicationResult Handling**: Fixed handlers receiving wrong result type
+  - `action_dispatcher.py:93-100,193` - Extract `final_action` from `ConscienceApplicationResult` before passing to handlers
+  - `shutdown_processor.py:338-339,347` - Extract action type from `final_action`
+  - Handlers expect `ActionSelectionDMAResult` but were receiving `ConscienceApplicationResult`
+  - Architecture: ASDMA produces `ActionSelectionDMAResult`, conscience wraps it in `ConscienceApplicationResult` with `original_action` and `final_action` fields
+  - Resolves AttributeError: 'ConscienceApplicationResult' object has no attribute 'action_parameters'
+- **🐛 Graceful Shutdown BrokenPipeError**: Fixed crash during shutdown when stdout is closed
+  - `state_manager.py:144` - Wrapped `print()` in try-except to catch BrokenPipeError/OSError
+  - Prevents processing loop crashes during graceful shutdown in non-interactive contexts (QA runner, systemd)
+- **🎯 ACTION_RESULT Event Streaming**: Fixed critical bugs preventing ACTION_RESULT events from streaming
+  - **Attribute Access Bugs**: Fixed 3 bugs where code accessed `result.selected_action` instead of `result.final_action.selected_action`
+    - `thought_processor/main.py:357` - Fixed telemetry recording
+    - `thought_processor/round_complete.py:44` - Fixed metric recording
+    - `action_dispatcher.py:92` - **Root cause**: Fixed action type extraction from ConscienceApplicationResult
+  - All 5 reasoning events (SNAPSHOT_AND_CONTEXT, DMA_RESULTS, ASPDMA_RESULT, CONSCIENCE_RESULT, ACTION_RESULT) now streaming correctly via SSE
+- **🤝 Discord Inter-Agent Awareness**: Complete fix for agents seeing other agents' messages
+  - **Conversation History**: Changed Discord fetch_messages() to prioritize Discord API over correlation database
+    - Now includes messages from all users and bots in history lookups
+    - Maintains fallback to correlation database if Discord API unavailable
+  - **Real-time Observations**: Removed bot message filter from on_message handler
+    - Agents now create passive observations for messages from other agents
+    - Enables full multi-agent awareness in monitored Discord channels
+
+### Added
+- **🔐 Role-Based Event Filtering**: Secure event filtering for SSE reasoning stream endpoint
+  - **OBSERVER Role**: Users see only events for tasks they created (matched by user_id or linked OAuth accounts)
+  - **ADMIN+ Roles**: ADMIN/AUTHORITY/SYSTEM_ADMIN users see all events without filtering
+  - **Security**: Whitelist-based filtering with parameterized SQL queries to prevent SQL injection
+  - **Performance**: Batch database lookups and per-connection caching minimize database queries
+  - **OAuth Integration**: Automatically includes events from user's linked Discord/Google accounts
+
 ## [1.1.9] - 2025-09-30
 
 ### Fixed

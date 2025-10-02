@@ -6,7 +6,7 @@ These replace all Dict[str, Any] usage in logic/infrastructure/sub_services/conf
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,7 +30,7 @@ class PatternMetrics(BaseModel):
     time_range_hours: float = Field(24.0, description="Time range analyzed")
     data_points: int = Field(0, description="Number of data points")
     trend: str = Field("stable", description="Trend: increasing, decreasing, stable")
-    metadata: dict = Field(default_factory=dict, description="Additional metrics")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metrics")
 
 
 class DetectedPattern(BaseModel):

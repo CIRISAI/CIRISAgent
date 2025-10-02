@@ -30,11 +30,14 @@ class ActionFinalizationPhase:
 
     @streaming_step(StepPoint.FINALIZE_ACTION)
     @step_point(StepPoint.FINALIZE_ACTION)
-    async def _finalize_action_step(self, thought_item: ProcessingQueueItem, final_result):
-        """Step 5: Final action determination."""
-        if not final_result:
-            # If no final result, create ponder action
-            return ActionSelectionDMAResult(
+    async def _finalize_action_step(self, thought_item: ProcessingQueueItem, conscience_result):
+        """Step 5: Final action determination with full conscience data."""
+        # Import here to avoid circular imports
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+        if not conscience_result:
+            # If no conscience result, create ponder action and wrap in ConscienceApplicationResult
+            ponder_action = ActionSelectionDMAResult(
                 selected_action=HandlerActionType.PONDER,
                 action_parameters=PonderParams(
                     reason="No valid action could be determined",
@@ -42,8 +45,13 @@ class ActionFinalizationPhase:
                     should_generate_follow_up=True,
                 ),
                 rationale="Failed to determine valid action - pondering instead",
-                confidence_score=0.1,
                 resource_usage=None,
             )
+            return ConscienceApplicationResult(
+                original_action=ponder_action,
+                final_action=ponder_action,
+                overridden=False,
+                override_reason=None,
+            )
 
-        return final_result
+        return conscience_result

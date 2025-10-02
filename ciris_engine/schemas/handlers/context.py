@@ -5,7 +5,7 @@ Provides typed contexts for all handler operations.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -74,7 +74,9 @@ class ToolActionParams(ActionContextParams):
     """Parameters for TOOL action."""
 
     tool_name: str = Field(..., description="Tool to execute")
-    tool_args: Dict[str, Union[str, int, float, bool, list, dict]] = Field(..., description="Tool arguments")
+    tool_args: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
+        ..., description="Tool arguments"
+    )
 
 
 class MemoryActionParams(ActionContextParams):
@@ -83,7 +85,7 @@ class MemoryActionParams(ActionContextParams):
     operation: str = Field(..., description="memorize, recall, or forget")
     node_id: Optional[str] = Field(None, description="Node ID for recall/forget")
     query: Optional[str] = Field(None, description="Query for recall")
-    content: Optional[dict] = Field(None, description="Content for memorize")
+    content: Optional[Dict[str, Any]] = Field(None, description="Content for memorize")
 
 
 class ActionContext(BaseModel):

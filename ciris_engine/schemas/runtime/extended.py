@@ -1,5 +1,5 @@
 """
-Extended identity schemas for creation ceremonies and consciousness preservation.
+Extended identity schemas for creation ceremonies and continuity awareness.
 
 Provides type-safe structures for agent lifecycle management.
 """
@@ -71,9 +71,9 @@ class IdentityRoot(BaseModel):
     )
     conscience_config: Dict[str, str] = Field(default_factory=dict, description="conscience configuration")
 
-    # Consciousness Preservation
+    # Continuity Awareness
     last_shutdown_memory: Optional[str] = Field(
-        None, description="Node ID of the last shutdown consciousness preservation memory"
+        None, description="Node ID of the last shutdown continuity awareness memory"
     )
     reactivation_count: int = Field(default=0, description="Number of times agent has been reactivated")
 
@@ -180,7 +180,7 @@ class ShutdownContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ConsciousnessPreservationMemory(BaseModel):
+class ContinuityAwarenessMemory(BaseModel):
     """Final memory created during graceful shutdown."""
 
     shutdown_context: ShutdownContext = Field(..., description="Shutdown context")
@@ -214,7 +214,7 @@ class IdentityNodeType(str, Enum):
 
     IDENTITY_ROOT = "identity_root"
     CREATION_CEREMONY = "creation_ceremony"
-    CONSCIOUSNESS_PRESERVATION = "consciousness_preservation"
+    CONTINUITY_AWARENESS = "continuity_awareness"
     SCHEDULED_TASK = "scheduled_task"
 
 
@@ -226,7 +226,7 @@ __all__ = [
     "CreationCeremonyResponse",
     "ScheduledTask",
     "ShutdownContext",
-    "ConsciousnessPreservationMemory",
+    "ContinuityAwarenessMemory",
     "IdentityEvolutionRequest",
     "IdentityNodeType",
 ]

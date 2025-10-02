@@ -3,7 +3,7 @@ Agent API response schemas - fully typed replacements for Dict[str, Any].
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,7 @@ class MessageContext(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel/conversation ID")
     thread_id: Optional[str] = Field(None, description="Thread ID if in thread")
     reply_to_id: Optional[str] = Field(None, description="Message being replied to")
-    metadata: Optional[dict] = Field(None, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 class AgentLineage(BaseModel):

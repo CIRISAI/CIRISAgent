@@ -5,7 +5,7 @@ All API responses follow these patterns - NO Dict[str, Any]!
 """
 
 from datetime import datetime, timezone
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -42,7 +42,7 @@ class ErrorDetail(BaseModel):
 
     code: str = Field(..., description="Error code (e.g., RESOURCE_NOT_FOUND)")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[dict] = Field(None, description="Additional error context")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
 
 
 class ErrorResponse(BaseModel):

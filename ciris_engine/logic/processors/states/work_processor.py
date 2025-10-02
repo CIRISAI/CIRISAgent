@@ -190,7 +190,11 @@ class WorkProcessor(BaseProcessor):
         """Dispatch the result of thought processing."""
         thought_id = item.thought_id
 
-        logger.debug(f"Dispatching action {result.selected_action} " f"for thought {thought_id}")
+        # Extract action from ConscienceApplicationResult if needed
+        action_result = result.final_action if hasattr(result, "final_action") else result
+        selected_action = action_result.selected_action if hasattr(action_result, "selected_action") else "unknown"
+
+        logger.debug(f"Dispatching action {selected_action} for thought {thought_id}")
 
         thought_obj = await persistence.async_get_thought_by_id(thought_id)
         if not thought_obj:
@@ -205,7 +209,7 @@ class WorkProcessor(BaseProcessor):
             app_config=self.config,
             round_number=getattr(item, "round_number", 0),
             extra_context=getattr(item, "initial_context", {}),
-            action_type=result.selected_action if result else None,
+            action_type=selected_action if result else None,
         )
 
         try:

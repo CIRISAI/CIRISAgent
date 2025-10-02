@@ -362,3 +362,173 @@ class TestSystemSnapshotIntegration:
         assert "⚠️ Error Rate: 2.5%" in formatted
         assert "Service Usage:" in formatted
         assert "- openai: 100 calls" in formatted
+
+    def test_system_snapshot_formatting_with_time_fields(self) -> None:
+        """Test formatting of system snapshot with time fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot with time fields
+        snapshot = SystemSnapshot(
+            channel_id="test",
+            current_time_utc="2025-10-01T14:30:00+00:00",
+            current_time_london="2025-10-01T15:30:00+01:00",
+            current_time_chicago="2025-10-01T09:30:00-05:00",
+            current_time_tokyo="2025-10-01T23:30:00+09:00",
+        )
+
+        # Format the snapshot
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify output contains time information
+        assert "Time of System Snapshot:" in formatted
+        assert "UTC: 2025-10-01T14:30:00+00:00" in formatted
+        assert "Chicago: 2025-10-01T09:30:00-05:00" in formatted
+        assert "Tokyo: 2025-10-01T23:30:00+09:00" in formatted
+        # London should NOT be displayed
+        assert "London" not in formatted
+
+    def test_system_snapshot_formatting_without_time_fields(self) -> None:
+        """Test formatting of system snapshot without time fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot without time fields
+        snapshot = SystemSnapshot(channel_id="test")
+
+        # Format the snapshot
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify output does not contain time section
+        assert "Time of System Snapshot:" not in formatted
+        assert "UTC:" not in formatted
+
+    def test_system_snapshot_formatting_with_partial_time_fields(self) -> None:
+        """Test formatting of system snapshot with only some time fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot with only UTC time
+        snapshot = SystemSnapshot(
+            channel_id="test",
+            current_time_utc="2025-10-01T14:30:00+00:00",
+        )
+
+        # Format the snapshot
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify output contains time section with UTC only
+        assert "Time of System Snapshot:" in formatted
+        assert "UTC: 2025-10-01T14:30:00+00:00" in formatted
+        assert "Chicago:" not in formatted
+        assert "Tokyo:" not in formatted
+
+
+class TestContinuitySummaryFormatting:
+    """Test continuity summary formatting."""
+
+    def test_format_continuity_summary_full(self) -> None:
+        """Test formatting continuity summary with all fields."""
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.formatters.system_snapshot import format_continuity_summary
+        from ciris_engine.schemas.runtime.system_context import ContinuitySummary
+
+        continuity = ContinuitySummary(
+            first_startup=datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            total_time_online_seconds=86400.0,  # 1 day
+            total_time_offline_seconds=3600.0,  # 1 hour
+            total_shutdowns=5,
+            average_time_online_seconds=17280.0,  # 4.8 hours
+            average_time_offline_seconds=720.0,  # 12 minutes
+            current_session_start=datetime(2024, 1, 2, 12, 0, 0, tzinfo=timezone.utc),
+            current_session_duration_seconds=7200.0,  # 2 hours
+            last_shutdown=datetime(2024, 1, 2, 10, 0, 0, tzinfo=timezone.utc),
+            last_shutdown_reason="Maintenance",
+        )
+
+        formatted = format_continuity_summary(continuity)
+
+        # Verify all sections are present
+        assert "=== Continuity Awareness ===" in formatted
+        assert "First Startup: 2024-01-01" in formatted
+        assert "Total Time Online: 1d 0.0h" in formatted
+        assert "Total Time Offline: 1.0h" in formatted
+        assert "Shutdowns: 5" in formatted
+        assert "Average Time Online: 4.8h" in formatted
+        assert "Average Time Offline: 12.0m" in formatted
+        assert "Current Session Started: 2024-01-02" in formatted
+        assert "Current Session Duration: 2.0h" in formatted
+        assert "Last Shutdown: 2024-01-02" in formatted
+        assert "Last Shutdown Reason: Maintenance" in formatted
+
+    def test_format_continuity_summary_minimal(self) -> None:
+        """Test formatting continuity summary with minimal fields."""
+        from ciris_engine.logic.formatters.system_snapshot import format_continuity_summary
+        from ciris_engine.schemas.runtime.system_context import ContinuitySummary
+
+        continuity = ContinuitySummary(
+            total_time_online_seconds=3600.0,
+            total_time_offline_seconds=0.0,
+            total_shutdowns=0,
+        )
+
+        formatted = format_continuity_summary(continuity)
+
+        # Verify basic fields are present
+        assert "=== Continuity Awareness ===" in formatted
+        assert "Total Time Online: 1.0h" in formatted
+        assert "Total Time Offline: 0s" in formatted
+        assert "Shutdowns: 0" in formatted
+        # Averages should NOT appear when shutdowns = 0
+        assert "Average Time Online" not in formatted
+        assert "Average Time Offline" not in formatted
+
+    def test_format_continuity_duration_formats(self) -> None:
+        """Test duration formatting for various time scales."""
+        from ciris_engine.logic.formatters.system_snapshot import format_continuity_summary
+        from ciris_engine.schemas.runtime.system_context import ContinuitySummary
+
+        # Test seconds
+        continuity = ContinuitySummary(total_time_online_seconds=45.0, total_shutdowns=0)
+        formatted = format_continuity_summary(continuity)
+        assert "45s" in formatted
+
+        # Test minutes
+        continuity = ContinuitySummary(total_time_online_seconds=180.0, total_shutdowns=0)
+        formatted = format_continuity_summary(continuity)
+        assert "3.0m" in formatted
+
+        # Test hours
+        continuity = ContinuitySummary(total_time_online_seconds=7200.0, total_shutdowns=0)
+        formatted = format_continuity_summary(continuity)
+        assert "2.0h" in formatted
+
+        # Test days
+        continuity = ContinuitySummary(total_time_online_seconds=172800.0, total_shutdowns=0)
+        formatted = format_continuity_summary(continuity)
+        assert "2d 0.0h" in formatted
+
+    def test_system_snapshot_with_continuity_summary(self) -> None:
+        """Test system snapshot formatting includes continuity summary."""
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot
+
+        continuity = ContinuitySummary(
+            first_startup=datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            total_time_online_seconds=86400.0,
+            total_shutdowns=3,
+            average_time_online_seconds=28800.0,
+        )
+
+        snapshot = SystemSnapshot(channel_id="test", continuity_summary=continuity)
+
+        formatted = format_system_snapshot(snapshot)
+
+        # Verify continuity section is present
+        assert "=== Continuity Awareness ===" in formatted
+        assert "First Startup:" in formatted
+        assert "Total Time Online:" in formatted
+        assert "Shutdowns: 3" in formatted

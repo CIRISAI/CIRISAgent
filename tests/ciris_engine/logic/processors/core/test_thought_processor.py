@@ -15,6 +15,7 @@ from ciris_engine.logic.processors.support.processing_queue import ProcessingQue
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams, SpeakParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Thought
 
@@ -161,9 +162,17 @@ class TestThoughtProcessor:
         mock_context_builder = Mock()
         mock_context_builder.build_thought_context = AsyncMock(return_value=Mock())
 
+        # Mock conscience application - should return ConscienceApplicationResult
+        mock_conscience_result = ConscienceApplicationResult(
+            original_action=mock_action_result,
+            final_action=mock_action_result,  # Same as original (not overridden)
+            overridden=False,
+            override_reason=None,
+        )
+
         mock_conscience_registry = Mock()
         mock_conscience_registry.apply_consciences = AsyncMock(
-            return_value=(mock_action_result, [])  # Return result and empty overrides
+            return_value=(mock_conscience_result, [])  # Return ConscienceApplicationResult and empty overrides
         )
         mock_conscience_registry.get_consciences = Mock(return_value=[])  # Empty list of consciences
 
@@ -227,7 +236,7 @@ class TestThoughtProcessor:
 
         assert result is not None
         # The conscience system may change the action, so check that we got a valid result
-        assert result.selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]
+        assert result.final_action.selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]
 
     @pytest.mark.asyncio
     async def test_process_thought_with_ponder(
@@ -274,7 +283,8 @@ class TestThoughtProcessor:
         result = await thought_processor.process_thought(item)
 
         assert result is not None
-        assert result.selected_action == HandlerActionType.PONDER
+        # Result is ConscienceApplicationResult, so access final_action.selected_action
+        assert result.final_action.selected_action == HandlerActionType.PONDER
 
     @pytest.mark.asyncio
     async def test_process_thought_with_defer(
@@ -321,7 +331,8 @@ class TestThoughtProcessor:
         result = await thought_processor.process_thought(item)
 
         assert result is not None
-        assert result.selected_action == HandlerActionType.DEFER
+        # Result is ConscienceApplicationResult, so access final_action.selected_action
+        assert result.final_action.selected_action == HandlerActionType.DEFER
 
     @pytest.mark.asyncio
     async def test_process_thought_with_error(
@@ -358,12 +369,12 @@ class TestThoughtProcessor:
         # Process should handle error gracefully
         result = await thought_processor.process_thought(item)
 
-        # Should return DEFER result on DMA error
+        # Should return DEFER result on DMA error (wrapped in ConscienceApplicationResult)
         assert result is not None
-        assert result.selected_action == HandlerActionType.DEFER
+        assert result.final_action.selected_action == HandlerActionType.DEFER
         # Check that it's a DeferParams with the expected reason
-        assert isinstance(result.action_parameters, DeferParams)
-        assert "DMA timeout" in result.action_parameters.reason
+        assert isinstance(result.final_action.action_parameters, DeferParams)
+        assert "DMA timeout" in result.final_action.action_parameters.reason
 
     @pytest.mark.asyncio
     async def test_process_thought_with_circuit_breaker(
@@ -501,7 +512,8 @@ class TestThoughtProcessor:
         result = await thought_processor.process_thought(item)
 
         assert result is not None
-        assert result.selected_action == HandlerActionType.TASK_COMPLETE
+        # Result is ConscienceApplicationResult, so access final_action.selected_action
+        assert result.final_action.selected_action == HandlerActionType.TASK_COMPLETE
 
     @pytest.mark.asyncio
     async def test_process_thought_with_context(

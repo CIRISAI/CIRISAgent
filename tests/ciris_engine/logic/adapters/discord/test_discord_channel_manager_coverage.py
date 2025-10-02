@@ -244,16 +244,49 @@ class TestDiscordChannelManagerCoverage:
         await manager.on_message(mock_message)
 
     @pytest.mark.asyncio
-    async def test_on_message_bot_message(self):
-        """Test on_message with bot message - should be ignored."""
+    async def test_on_message_own_bot_message(self):
+        """Test on_message with the bot's own message - should be ignored."""
+        # Set up client with bot user
+        self.mock_client.user = Mock()
+        self.mock_client.user.id = 999888777  # Bot's own ID
+
         mock_message = Mock(spec=discord.Message)
         mock_message.author = Mock()
         mock_message.author.bot = True
+        mock_message.author.id = 999888777  # Same as bot's own ID
 
         await self.manager.on_message(mock_message)
 
-        # Callback should not be called for bot messages
+        # Callback should not be called for bot's own messages
         self.mock_callback.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_on_message_other_bot_message(self):
+        """Test on_message with another bot's message - should be observed."""
+        # Set up client with bot user
+        self.mock_client.user = Mock()
+        self.mock_client.user.id = 999888777  # This bot's ID
+
+        mock_message = Mock(spec=discord.Message)
+        mock_message.author = Mock()
+        mock_message.author.bot = True
+        mock_message.author.id = 111222333  # Different bot's ID
+        mock_message.author.display_name = "OtherBot"
+        mock_message.channel = Mock()
+        mock_message.channel.id = 123456789
+        mock_message.content = "Message from another bot"
+        mock_message.id = 555666777
+        mock_message.guild = Mock()
+        mock_message.guild.id = 444555666
+
+        await self.manager.on_message(mock_message)
+
+        # Callback SHOULD be called for other bots' messages
+        self.mock_callback.assert_called_once()
+        call_args = self.mock_callback.call_args[0][0]
+        assert isinstance(call_args, DiscordMessage)
+        assert call_args.is_bot is True
+        assert call_args.author_id == "111222333"
 
     @pytest.mark.asyncio
     async def test_on_message_success(self):

@@ -163,12 +163,29 @@ class ThoughtProcessor(
             logger.info(
                 f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
             )
-            return dma_results
+            # Wrap in ConscienceApplicationResult before returning
+            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+            return ConscienceApplicationResult(
+                original_action=dma_results,
+                final_action=dma_results,
+                overridden=False,
+                override_reason=None,
+            )
 
         # Check for critical failures
         if self._has_critical_failure(dma_results):
             await self._handle_critical_failure(correlation, start_time)
-            return self._create_deferral_result(dma_results, thought)
+            deferral_result = self._create_deferral_result(dma_results, thought)
+            # Wrap in ConscienceApplicationResult before returning
+            from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+            return ConscienceApplicationResult(
+                original_action=deferral_result,
+                final_action=deferral_result,
+                overridden=False,
+                override_reason=None,
+            )
 
         # Phase 3: Action selection
         action_result = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)
@@ -354,13 +371,13 @@ class ThoughtProcessor(
         )
 
         if final_result:
-            action_metric = f"action_selected_{final_result.selected_action.value}"
+            action_metric = f"action_selected_{final_result.final_action.selected_action.value}"
             await self.telemetry_service.record_metric(
                 action_metric,
                 value=1.0,
                 tags={
                     "thought_id": thought.thought_id,
-                    "action": final_result.selected_action.value,
+                    "action": final_result.final_action.selected_action.value,
                     "path_type": "hot",
                     "source_module": "thought_processor",
                 },
@@ -375,7 +392,7 @@ class ThoughtProcessor(
             correlation_id=correlation.correlation_id,
             response_data={
                 "success": "true",
-                "result_summary": f"Successfully processed thought with action: {final_result.selected_action if final_result else 'none'}",
+                "result_summary": f"Successfully processed thought with action: {final_result.final_action.selected_action if final_result else 'none'}",
                 "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                 "response_timestamp": end_time.isoformat(),
             },
@@ -694,8 +711,6 @@ class ThoughtProcessor(
 
     def _handle_special_cases(self, conscience_result):
         """Handle special processing cases (PONDER, DEFER overrides)."""
-        # This method handles edge cases and will be kept in main.py
-        # Implementation would go here based on current logic
-        if conscience_result and hasattr(conscience_result, "final_action"):
-            return conscience_result.final_action
-        return None
+        # Return the full ConscienceApplicationResult to preserve all conscience data
+        # The full result includes epistemic_data, override_reason, etc.
+        return conscience_result

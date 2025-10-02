@@ -6,7 +6,7 @@ These schemas ensure type safety across all graph node operations.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -185,7 +185,7 @@ AnyNodeAttributes = Union[NodeAttributes, MemoryNodeAttributes, ConfigNodeAttrib
 
 
 def create_node_attributes(
-    node_type: str, data: Dict[str, Union[str, int, float, bool, list, dict, None]], created_by: str
+    node_type: str, data: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]], created_by: str
 ) -> AnyNodeAttributes:
     """
     Factory function to create appropriate node attributes based on type.

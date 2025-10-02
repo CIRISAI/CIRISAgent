@@ -69,13 +69,14 @@ class IncidentCaptureHandler(logging.Handler):
 
     def _create_symlink(self) -> None:
         """Create or update the symlink to the latest incident log."""
-        if self.latest_link.exists():
-            self.latest_link.unlink()
         try:
+            # Check if symlink exists (even if target is invalid)
+            if self.latest_link.is_symlink() or self.latest_link.exists():
+                self.latest_link.unlink()
             self.latest_link.symlink_to(self.log_file.name)
-        except Exception:
-            # Symlinks might not work on all systems
-            pass
+        except Exception as e:
+            # Symlinks might not work on all systems - log warning but don't fail
+            logging.warning(f"Failed to create/update incidents_latest.log symlink: {e}")
 
     def emit(self, record: logging.LogRecord) -> None:
         """

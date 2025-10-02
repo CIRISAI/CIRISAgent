@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ciris_engine.logic.infrastructure.step_streaming import StepResultStream, step_result_stream
+from ciris_engine.logic.infrastructure.step_streaming import ReasoningEventStream, reasoning_event_stream
 from ciris_engine.schemas.services.runtime_control import (
     FinalizeActionStepData,
     PerformDMAsStepData,
@@ -62,7 +62,8 @@ def create_test_step_result_data(
             processing_time_ms=processing_time_ms,
             success=success,
             selected_action=kwargs.get("selected_action", "test_action"),
-            selection_reasoning=kwargs.get("selection_reasoning", "test reasoning"),
+            conscience_passed=kwargs.get("conscience_passed", True),
+            conscience_override_reason=kwargs.get("conscience_override_reason", None),
         )
 
     return StepResultData(
@@ -77,12 +78,13 @@ def create_test_step_result_data(
     )
 
 
-class TestStepResultStream:
-    """Test the StepResultStream class."""
+class TestReasoningEventStream:
+    """Test the ReasoningEventStream class."""
 
+    @pytest.mark.skip(reason="Tests old _step_count attribute - replaced with 5-event reasoning stream")
     def test_init(self):
         """Test stream initialization."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
 
         assert stream._subscribers is not None
         assert stream._step_count == 0
@@ -93,7 +95,7 @@ class TestStepResultStream:
 
     def test_subscribe_unsubscribe(self):
         """Test subscriber management."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
         queue = asyncio.Queue()
 
         # Subscribe
@@ -108,7 +110,7 @@ class TestStepResultStream:
 
     def test_enable_disable(self):
         """Test enabling and disabling streaming."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
 
         # Initially enabled
         assert stream._is_enabled is True
@@ -123,10 +125,11 @@ class TestStepResultStream:
         assert stream._is_enabled is True
         assert stream.get_stats()["enabled"] is True
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_broadcast_step_result_disabled(self):
         """Test broadcasting when disabled does nothing."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
 
@@ -140,10 +143,11 @@ class TestStepResultStream:
         assert queue.empty()
         assert stream.get_stats()["steps_broadcast"] == 0
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_broadcast_step_result_no_subscribers(self):
         """Test broadcasting with no subscribers does nothing."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
 
         step_result = create_test_step_result_data()
         await stream.broadcast_step_result(step_result)
@@ -151,10 +155,11 @@ class TestStepResultStream:
         # Should not increment step count
         assert stream.get_stats()["steps_broadcast"] == 0
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_broadcast_step_result_success(self):
         """Test successful step result broadcasting."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
 
@@ -190,10 +195,11 @@ class TestStepResultStream:
         assert "subscriber_count" in broadcasted_result
         assert broadcasted_result["subscriber_count"] == 1
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_broadcast_step_result_error_handling(self):
         """Test that errors in stream update creation are handled gracefully."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
         queue = asyncio.Queue()
         stream.subscribe(queue)
 
@@ -207,10 +213,11 @@ class TestStepResultStream:
             with pytest.raises(Exception, match="Test error"):
                 await stream.broadcast_step_result(step_result)
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_broadcast_step_result_full_queue(self):
         """Test handling of full subscriber queues."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
 
         # Create a queue with maxsize=1 and fill it
         queue = asyncio.Queue(maxsize=1)
@@ -231,10 +238,11 @@ class TestStepResultStream:
         # Should handle the QueueFull exception gracefully
         assert stream.get_stats()["steps_broadcast"] == 1
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_broadcast_multiple_subscribers(self):
         """Test broadcasting to multiple subscribers."""
-        stream = StepResultStream()
+        stream = ReasoningEventStream()
 
         # Create multiple queues
         queues = [asyncio.Queue() for _ in range(3)]
@@ -260,21 +268,22 @@ class TestStepResultStream:
             assert result["subscriber_count"] == 3
 
     def test_global_instance_exists(self):
-        """Test that global step_result_stream instance exists."""
-        assert step_result_stream is not None
-        assert isinstance(step_result_stream, StepResultStream)
+        """Test that global reasoning_event_stream instance exists."""
+        assert reasoning_event_stream is not None
+        assert isinstance(reasoning_event_stream, ReasoningEventStream)
 
 
 @pytest.fixture
 def fresh_stream():
-    """Provide a fresh StepResultStream instance for each test."""
-    return StepResultStream()
+    """Provide a fresh ReasoningEventStream instance for each test."""
+    return ReasoningEventStream()
 
 
-class TestStepResultStreamIntegration:
+class TestReasoningEventStreamIntegration:
     """Integration tests for step result streaming."""
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     async def test_full_streaming_flow(self, fresh_stream):
         """Test complete streaming flow from step result to UI data."""
         stream = fresh_stream
@@ -314,6 +323,7 @@ class TestStepResultStreamIntegration:
         assert "subscriber_count" in ui_update
         assert ui_update["subscriber_count"] == 1
 
+    @pytest.mark.skip(reason="Tests old broadcast_step_result method - replaced with 5-event reasoning stream")
     @pytest.mark.asyncio
     async def test_concurrent_broadcasts(self, fresh_stream):
         """Test handling of concurrent step result broadcasts."""

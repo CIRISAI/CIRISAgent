@@ -113,7 +113,7 @@ def streaming_step(step: StepPoint):
 
                 return result
 
-            except Exception as e:
+            except Exception:
                 # Stream error result
                 end_timestamp = time_service.now()
                 processing_time_ms = (end_timestamp - start_timestamp).total_seconds() * 1000
@@ -830,7 +830,7 @@ async def _broadcast_reasoning_event(
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
-        logger.info(f"[BROADCAST DEBUG] Imports successful")
+        logger.info("[BROADCAST DEBUG] Imports successful")
 
         event = None
         timestamp = step_data.timestamp or datetime.now().isoformat()

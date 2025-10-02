@@ -79,71 +79,88 @@ class FilterTestHelper:
         return False
 
     def _monitor_stream(self):
-        """Monitor SSE stream in background thread."""
-        try:
-            headers = {"Authorization": f"Bearer {self.token}", "Accept": "text/event-stream"}
+        """Monitor SSE stream in background thread with auto-reconnect."""
+        retry_count = 0
+        max_retries = 10
 
-            response = requests.get(
-                f"{self.base_url}/v1/system/runtime/reasoning-stream",
-                headers=headers,
-                stream=True,
-                timeout=5,
-            )
+        while not self.should_stop.is_set() and retry_count < max_retries:
+            try:
+                headers = {"Authorization": f"Bearer {self.token}", "Accept": "text/event-stream"}
 
-            if response.status_code != 200:
-                self.stream_error.set()
-                return
+                response = requests.get(
+                    f"{self.base_url}/v1/system/runtime/reasoning-stream",
+                    headers=headers,
+                    stream=True,
+                    timeout=None,  # No timeout for streaming
+                )
 
-            self.stream_connected.set()
-
-            # Parse SSE stream
-            for line in response.iter_lines():
-                if self.should_stop.is_set():
-                    break
-
-                if not line:
+                if response.status_code != 200:
+                    retry_count += 1
+                    time.sleep(1)
                     continue
 
-                line = line.decode("utf-8") if isinstance(line, bytes) else line
+                self.stream_connected.set()
+                retry_count = 0  # Reset on successful connection
 
-                # Only process data lines
-                if line.startswith("data:"):
-                    try:
-                        data = json.loads(line[6:])
+                # Parse SSE stream
+                for line in response.iter_lines():
+                    if self.should_stop.is_set():
+                        break
 
-                        # Extract events from stream update
-                        events = data.get("events", [])
+                    if not line:
+                        continue
 
-                        for event in events:
-                            event_type = event.get("event_type")
+                    line = line.decode("utf-8") if isinstance(line, bytes) else line
 
-                            # Look for action_result events with TASK_COMPLETE action
-                            if event_type == "action_result":
-                                action_executed = event.get("action_executed", "")
-                                execution_success = event.get("execution_success", False)
-                                task_id = event.get("task_id", "unknown")
-                                thought_id = event.get("thought_id", "unknown")
+                    # Only process data lines
+                    if line.startswith("data:"):
+                        try:
+                            data = json.loads(line[6:])
 
-                                if self.verbose:
-                                    print(
-                                        f"[SSE] ACTION_RESULT: task={task_id[:8]}, thought={thought_id[:8]}, "
-                                        f"action={action_executed}, success={execution_success}"
-                                    )
+                            # Extract events from stream update
+                            events = data.get("events", [])
 
-                                # Check if this is a TASK_COMPLETE action that succeeded
-                                if "TASK_COMPLETE" in action_executed and execution_success:
+                            for event in events:
+                                event_type = event.get("event_type")
+
+                                # Look for action_result events with TASK_COMPLETE action
+                                if event_type == "action_result":
+                                    action_executed = event.get("action_executed", "")
+                                    execution_success = event.get("execution_success", False)
+                                    task_id = event.get("task_id", "unknown")
+                                    thought_id = event.get("thought_id", "unknown")
+
                                     if self.verbose:
-                                        print(f"[SSE] ✅ TASK_COMPLETE detected for task {task_id}")
-                                    if task_id:
-                                        self.completed_tasks.add(task_id)
+                                        print(
+                                            f"[SSE] ACTION_RESULT: task={task_id[:8]}, thought={thought_id[:8]}, "
+                                            f"action={action_executed}, success={execution_success}"
+                                        )
 
-                    except json.JSONDecodeError:
-                        pass
-                    except Exception:
-                        pass
+                                    # Check if this is a TASK_COMPLETE action that succeeded
+                                    if "TASK_COMPLETE" in action_executed and execution_success:
+                                        if self.verbose:
+                                            print(f"[SSE] ✅ TASK_COMPLETE detected for task {task_id}")
+                                        if task_id:
+                                            self.completed_tasks.add(task_id)
 
-        except Exception:
-            self.stream_error.set()
+                        except json.JSONDecodeError:
+                            pass
+                        except Exception:
+                            pass
+
+            except (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError) as e:
+                # Connection lost - will retry
+                if self.verbose:
+                    print(f"[SSE] Connection lost, reconnecting... ({e})")
+                self.stream_connected.clear()
+                retry_count += 1
+                time.sleep(1)
+                continue
+            except Exception as e:
+                if self.verbose:
+                    print(f"[SSE] Error: {e}")
+                self.stream_error.set()
+                break
 
 
 def wait_for_filter_test_completion(

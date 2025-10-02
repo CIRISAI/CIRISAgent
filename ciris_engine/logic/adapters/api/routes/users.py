@@ -141,6 +141,36 @@ def _build_linked_accounts(user) -> List[LinkedOAuthAccount]:
     return accounts
 
 
+def _build_user_detail(user_id: str, user, auth_service: APIAuthService) -> UserDetail:
+    """Build UserDetail response from user object (DRY helper)."""
+    permissions = auth_service.get_permissions_for_role(user.api_role)
+    api_keys = auth_service.list_user_api_keys(user_id)
+
+    return UserDetail(
+        user_id=user_id,
+        username=user.name,
+        auth_type=user.auth_type,
+        api_role=user.api_role,
+        wa_role=user.wa_role,
+        wa_id=user.wa_id if user.wa_role else None,
+        oauth_provider=user.oauth_provider,
+        oauth_email=user.oauth_email,
+        oauth_name=user.oauth_name,
+        oauth_picture=user.oauth_picture,
+        permission_requested_at=user.permission_requested_at,
+        oauth_external_id=user.oauth_external_id,
+        created_at=user.created_at,
+        last_login=user.last_login,
+        is_active=user.is_active,
+        permissions=permissions,
+        custom_permissions=user.custom_permissions,
+        wa_parent_id=user.wa_parent_id,
+        wa_auto_minted=user.wa_auto_minted,
+        api_keys_count=len(api_keys),
+        linked_oauth_accounts=_build_linked_accounts(user),
+    )
+
+
 class UpdateUserRequest(BaseModel):
     """Request to update user information."""
 
@@ -422,35 +452,7 @@ async def get_user(
     if not user:
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
-    # Get permissions based on role
-    permissions = auth_service.get_permissions_for_role(user.api_role)
-
-    # Count API keys
-    api_keys = auth_service.list_user_api_keys(user_id)
-
-    return UserDetail(
-        user_id=user_id,  # Return the actual user_id passed to endpoint, not wa_id
-        username=user.name,
-        auth_type=user.auth_type,
-        api_role=user.api_role,
-        wa_role=user.wa_role,
-        wa_id=user.wa_id if user.wa_role else None,
-        oauth_provider=user.oauth_provider,
-        oauth_email=user.oauth_email,
-        oauth_name=user.oauth_name,
-        oauth_picture=user.oauth_picture,
-        permission_requested_at=user.permission_requested_at,
-        oauth_external_id=user.oauth_external_id,
-        created_at=user.created_at,
-        last_login=user.last_login,
-        is_active=user.is_active,
-        permissions=permissions,
-        custom_permissions=user.custom_permissions,
-        wa_parent_id=user.wa_parent_id,
-        wa_auto_minted=user.wa_auto_minted,
-        api_keys_count=len(api_keys),
-        linked_oauth_accounts=_build_linked_accounts(user),
-    )
+    return _build_user_detail(user_id, user, auth_service)
 
 
 @router.put("/{user_id}", response_model=UserDetail)
@@ -543,33 +545,7 @@ async def link_oauth_account(
     if not user:
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
-    # Build UserDetail response directly (no permission check needed for self)
-    permissions = auth_service.get_permissions_for_role(user.api_role)
-    api_keys = auth_service.list_user_api_keys(user_id)
-
-    return UserDetail(
-        user_id=user_id,
-        username=user.name,
-        auth_type=user.auth_type,
-        api_role=user.api_role,
-        wa_role=user.wa_role,
-        wa_id=user.wa_id if user.wa_role else None,
-        oauth_provider=user.oauth_provider,
-        oauth_email=user.oauth_email,
-        oauth_name=user.oauth_name,
-        oauth_picture=user.oauth_picture,
-        permission_requested_at=user.permission_requested_at,
-        oauth_external_id=user.oauth_external_id,
-        created_at=user.created_at,
-        last_login=user.last_login,
-        is_active=user.is_active,
-        permissions=permissions,
-        custom_permissions=user.custom_permissions,
-        wa_parent_id=user.wa_parent_id,
-        wa_auto_minted=user.wa_auto_minted,
-        api_keys_count=len(api_keys),
-        linked_oauth_accounts=_build_linked_accounts(user),
-    )
+    return _build_user_detail(user_id, user, auth_service)
 
 
 @router.delete("/{user_id}/oauth-links/{provider}/{external_id}", response_model=UserDetail)
@@ -594,33 +570,7 @@ async def unlink_oauth_account(
     if not user:
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
-    # Build UserDetail response directly (no permission check needed for self)
-    permissions = auth_service.get_permissions_for_role(user.api_role)
-    api_keys = auth_service.list_user_api_keys(user_id)
-
-    return UserDetail(
-        user_id=user_id,
-        username=user.name,
-        auth_type=user.auth_type,
-        api_role=user.api_role,
-        wa_role=user.wa_role,
-        wa_id=user.wa_id if user.wa_role else None,
-        oauth_provider=user.oauth_provider,
-        oauth_email=user.oauth_email,
-        oauth_name=user.oauth_name,
-        oauth_picture=user.oauth_picture,
-        permission_requested_at=user.permission_requested_at,
-        oauth_external_id=user.oauth_external_id,
-        created_at=user.created_at,
-        last_login=user.last_login,
-        is_active=user.is_active,
-        permissions=permissions,
-        custom_permissions=user.custom_permissions,
-        wa_parent_id=user.wa_parent_id,
-        wa_auto_minted=user.wa_auto_minted,
-        api_keys_count=len(api_keys),
-        linked_oauth_accounts=_build_linked_accounts(user),
-    )
+    return _build_user_detail(user_id, user, auth_service)
 
 
 @router.post("/{user_id}/mint-wa", response_model=UserDetail)

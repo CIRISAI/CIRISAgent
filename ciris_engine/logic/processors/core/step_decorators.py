@@ -118,16 +118,6 @@ def streaming_step(step: StepPoint):
                 end_timestamp = time_service.now()
                 processing_time_ms = (end_timestamp - start_timestamp).total_seconds() * 1000
 
-                # Create error step data using base step data structure
-                base_error_data = {
-                    "timestamp": start_timestamp.isoformat(),
-                    "thought_id": thought_id,
-                    "processing_time_ms": processing_time_ms,
-                    "success": False,
-                    "error": str(e),
-                }
-                error_step_data = BaseStepData(**base_error_data)
-
                 # Don't broadcast errors as reasoning events - handled at higher level
                 raise
 
@@ -854,7 +844,7 @@ async def _broadcast_reasoning_event(
         elif step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
             if step == StepPoint.PERFORM_DMAS:
-                logger.info(f"[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
+                logger.info("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
                 event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event)
 
         elif step == StepPoint.PERFORM_ASPDMA:
@@ -863,7 +853,7 @@ async def _broadcast_reasoning_event(
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
             # Event 3: ASPDMA_RESULT
-            is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
+            is_recursive_step = (step == StepPoint.RECURSIVE_CONSCIENCE)
             event = _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
 
         elif step == StepPoint.FINALIZE_ACTION:

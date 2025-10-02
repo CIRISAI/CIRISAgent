@@ -194,7 +194,7 @@ class WorkProcessor(BaseProcessor):
         action_result = result.final_action if hasattr(result, "final_action") else result
         selected_action = action_result.selected_action if hasattr(action_result, "selected_action") else "unknown"
 
-        logger.debug(f"Dispatching action {selected_action} " f"for thought {thought_id}")
+        logger.debug(f"Dispatching action {selected_action} for thought {thought_id}")
 
         thought_obj = await persistence.async_get_thought_by_id(thought_id)
         if not thought_obj:

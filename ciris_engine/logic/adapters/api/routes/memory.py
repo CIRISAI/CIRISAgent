@@ -36,6 +36,19 @@ MEMORY_SERVICE_NOT_AVAILABLE = "Memory service not available"
 
 
 # ============================================================================
+# DEPENDENCY INJECTION
+# ============================================================================
+
+
+def get_memory_service(request: Request):
+    """Dependency to get memory service from app state (DRY helper)."""
+    memory_service = getattr(request.app.state, "memory_service", None)
+    if not memory_service:
+        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
+    return memory_service
+
+
+# ============================================================================
 # CORE ENDPOINTS
 # ============================================================================
 
@@ -45,6 +58,7 @@ async def store_memory(
     request: Request,
     body: StoreRequest,
     auth: AuthContext = Depends(require_admin),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult]:
     """
     Store typed nodes in memory (MEMORIZE).
@@ -52,9 +66,6 @@ async def store_memory(
     This is the primary way to add information to the agent's memory.
     Requires ADMIN role as this modifies system state.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
         # Store node via memory service
@@ -79,6 +90,7 @@ async def query_memory(
     request: Request,
     body: QueryRequest,
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphNode]]:
     """
     Query memories with flexible filters (RECALL).
@@ -87,9 +99,6 @@ async def query_memory(
 
     SECURITY: OBSERVER users only see nodes they created or participated in.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
         # Determine user filtering (for OBSERVER users)
@@ -167,15 +176,13 @@ async def forget_memory(
     request: Request,
     node_id: str = Path(..., description="Node ID to forget"),
     auth: AuthContext = Depends(require_admin),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult]:
     """
     Forget a specific memory node (FORGET).
 
     Requires ADMIN role as this permanently removes data.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
 
     try:
         # Create a minimal GraphNode with just the ID for deletion
@@ -217,6 +224,7 @@ async def get_timeline(
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.
@@ -225,10 +233,6 @@ async def get_timeline(
 
     SECURITY: OBSERVER users only see nodes they created or participated in.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Determine user filtering before queries (for OBSERVER users)
         from ciris_engine.schemas.api.auth import UserRole
@@ -304,16 +308,13 @@ async def get_timeline(
 async def get_stats(
     request: Request,
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[MemoryStats]:
     """
     Get statistics about memory storage.
 
     Returns counts, distributions, and metadata about the memory graph.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Get stats from database
         stats_data = await get_memory_stats(memory_service)
@@ -375,16 +376,13 @@ async def visualize_graph(
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> Response:
     """
     Generate an interactive SVG visualization of the memory graph.
 
     Returns an HTML page with an embedded SVG visualization.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Query nodes
         nodes = await query_timeline_nodes(
@@ -536,16 +534,13 @@ async def get_node_edges(
     request: Request,
     node_id: str = Path(..., description="Node ID"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphEdge]]:
     """
     Get all edges connected to a node.
 
     Returns both incoming and outgoing edges.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Get edges from memory service
         edges = await memory_service.get_edges(node_id=node_id)
@@ -574,6 +569,7 @@ async def recall_by_id(
     request: Request,
     node_id: str = Path(..., description="Node ID to recall"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Recall a specific node by ID (legacy endpoint).
@@ -582,10 +578,6 @@ async def recall_by_id(
 
     SECURITY: OBSERVER users can only access nodes they created or participated in.
     """
-    memory_service = getattr(request.app.state, "memory_service", None)
-    if not memory_service:
-        raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
-
     try:
         # Use recall method with a query for the specific node
         from ciris_engine.schemas.services.operations import MemoryQuery
@@ -648,6 +640,7 @@ async def get_node(
     request: Request,
     node_id: str = Path(..., description="Node ID"),
     auth: AuthContext = Depends(require_observer),
+    memory_service=Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Get a specific node by ID.

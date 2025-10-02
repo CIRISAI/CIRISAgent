@@ -28,6 +28,7 @@ class QueryBuilder:
     SQL_EXCLUDE_METRICS = "AND NOT (node_type = 'tsdb_data' AND node_id LIKE 'metric_%')"
     SQL_WHERE_SCOPE = "AND scope = ?"
     SQL_WHERE_NODE_TYPE = "AND node_type = ?"
+    SQL_WHERE_ATTR_LIKE = "attributes_json LIKE ?"
     SQL_ORDER_BY = "ORDER BY updated_at DESC"
     SQL_LIMIT = "LIMIT ?"
 
@@ -123,12 +124,12 @@ class QueryBuilder:
             params.append(until.isoformat())
 
         if query:
-            query_parts.append("AND attributes_json LIKE ?")
+            query_parts.append(f"AND {QueryBuilder.SQL_WHERE_ATTR_LIKE}")
             params.append(f"%{query}%")
 
         if tags:
             for tag in tags:
-                query_parts.append("AND attributes_json LIKE ?")
+                query_parts.append(f"AND {QueryBuilder.SQL_WHERE_ATTR_LIKE}")
                 params.append(f'%"{tag}"%')
 
         # SECURITY LAYER 1: SQL-level user filtering
@@ -168,17 +169,17 @@ class QueryBuilder:
         for user_id in user_filter_ids:
             # SQLite: Check if user_id is in the user_list array
             # Using LIKE is safe here as we're checking JSON array membership
-            or_conditions.append("attributes_json LIKE ?")
+            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
             params.append(f'%"user_list"%{user_id}%')
 
         # 3. Task summaries: Check if user_id appears in task_summaries
         for user_id in user_filter_ids:
-            or_conditions.append("attributes_json LIKE ?")
+            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
             params.append(f'%"task_summaries"%"user_id"%{user_id}%')
 
         # 4. Conversations: Check if user_id appears as author_id in conversations
         for user_id in user_filter_ids:
-            or_conditions.append("attributes_json LIKE ?")
+            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
             params.append(f'%"author_id"%{user_id}%')
 
         # Combine all conditions with OR

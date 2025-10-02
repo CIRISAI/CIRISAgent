@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import NodeAttributes
+
 
 class GraphQLVariable(BaseModel):
     """Base model for GraphQL variables"""
@@ -56,7 +58,7 @@ class GraphQLError(BaseModel):
 
     message: str = Field(description="Error message")
     path: Optional[List[str]] = Field(default=None, description="Path to error in query")
-    extensions: Optional[Dict[str, Any]] = Field(default=None, description="Additional error details")
+    extensions: Optional[NodeAttributes] = Field(default=None, description="Additional error details")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -64,9 +66,9 @@ class GraphQLError(BaseModel):
 class GraphQLResponse(BaseModel):
     """Generic GraphQL response wrapper"""
 
-    data: Optional[Dict[str, Any]] = Field(default=None, description="Response data")
+    data: Optional[NodeAttributes] = Field(default=None, description="Response data")
     errors: Optional[List[GraphQLError]] = Field(default=None, description="GraphQL errors")
-    extensions: Optional[Dict[str, Any]] = Field(default=None, description="Response extensions")
+    extensions: Optional[NodeAttributes] = Field(default=None, description="Response extensions")
 
     model_config = ConfigDict(extra="forbid")
 

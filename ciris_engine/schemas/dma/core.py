@@ -1,7 +1,7 @@
 """
 Core DMA schemas for typed decision-making.
 
-Replaces Dict[str, Any] with properly typed structures.
+Provides typed schemas with properly typed structures.
 """
 
 from datetime import datetime
@@ -19,7 +19,7 @@ from .results import CSDMAResult, DSDMAResult, EthicalDMAResult
 
 
 class DMAInputData(BaseModel):
-    """Structured input for DMA evaluation - replaces Dict[str, Any]."""
+    """Structured input for DMA evaluation - provides typed schemas."""
 
     # Core thought being processed
     original_thought: Thought = Field(..., description="The thought being evaluated")

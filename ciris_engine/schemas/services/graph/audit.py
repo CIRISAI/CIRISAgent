@@ -1,7 +1,7 @@
 """
 Graph audit service schemas.
 
-Replaces Dict[str, Any] in audit service operations.
+Provides typed schemas in audit service operations.
 """
 
 from datetime import datetime

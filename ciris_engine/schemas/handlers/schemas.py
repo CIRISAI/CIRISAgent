@@ -1,7 +1,7 @@
 """
 Handler schemas for contract-driven architecture.
 
-Replaces Dict[str, Any] in handler contexts and results.
+Provides typed schemas in handler contexts and results.
 """
 
 from typing import Any, Dict, List, Optional, Union

@@ -1,7 +1,7 @@
 """
 Faculty-related schemas for DMA system.
 
-Replaces Dict[str, Any] with properly typed structures for faculty integration.
+Provides typed schemas with properly typed structures for faculty integration.
 """
 
 from typing import Any, Dict, List, Optional, Union

@@ -1,7 +1,7 @@
 """
 Memory handler schemas for typed memory operations.
 
-Replaces Dict[str, Any] usage in memory handlers.
+Provides typed schemas usage in memory handlers.
 """
 
 from typing import Dict, List, Optional

@@ -1,6 +1,6 @@
 """
 State transition schemas for processor state management.
-Replaces Dict[str, Any] usage in state history and transitions.
+Provides typed schemas usage in state history and transitions.
 """
 
 from datetime import datetime

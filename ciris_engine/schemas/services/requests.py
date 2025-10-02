@@ -1,7 +1,7 @@
 """
 Service request/response schemas for contract-driven architecture.
 
-Replaces Dict[str, Any] in service method calls.
+Provides typed schemas in service method calls.
 """
 
 from datetime import datetime, timezone

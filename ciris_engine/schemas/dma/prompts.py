@@ -1,7 +1,7 @@
 """
 Prompt-related schemas for DMA system.
 
-Replaces Dict[str, Any] with properly typed structures for prompt management.
+Provides typed schemas with properly typed structures for prompt management.
 """
 
 from typing import Any, Dict, List, Optional

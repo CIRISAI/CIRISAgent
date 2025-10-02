@@ -1,7 +1,7 @@
 """
 Service manifest schemas for typed module loading.
 
-Replaces Dict[str, Any] in service loading and module manifests.
+Provides typed schemas in service loading and module manifests.
 """
 
 from datetime import datetime, timezone

@@ -1,7 +1,7 @@
 """
 Graph memory service schemas.
 
-Replaces Dict[str, Any] in memory service operations.
+Provides typed schemas in memory service operations.
 """
 
 from datetime import datetime

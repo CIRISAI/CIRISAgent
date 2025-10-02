@@ -7,17 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.1] - 2025-10-02
 
+### Added
+- **🆔 Identity Context Formatting**: Created human-readable identity formatter for system snapshots
+  - Replaces raw escaped dict dump with clean formatted text
+  - Shows "First Start" from earliest startup or shutdown event
+  - Displays last 5 shutdowns with timestamps
+  - Supports both old ("consciousness_preservation") and new ("continuity_awareness") terminology
+  - Provides foundation for future uptime/downtime statistics
+- **⏱️ Startup Node Tracking**: Added automatic startup node creation for continuity awareness
+  - Creates GraphNode on each startup with tags `["startup", "continuity_awareness"]`
+  - Stored in IDENTITY scope alongside shutdown nodes
+  - Enables future calculation of session duration and availability metrics
+
+### Changed
+- **🧠 Conscience Schema Refactoring**: Separated epistemic metrics from conscience override fields
+  - `EpistemicData` now contains only pure epistemic metrics (entropy, coherence, uncertainty, reasoning transparency)
+  - Moved `replacement_action` and `CIRIS_OBSERVATION_UPDATED_STATUS` to `ConscienceCheckResult` top-level fields
+  - Updated `UpdatedStatusConscience` and `ThoughtDepthGuardrail` to use new structure
+  - Updated conscience execution logic in `conscience_execution.py` and `main.py` to access `replacement_action` from top level
+- **🔧 Type Safety**: Eliminated 97% of `Dict[str, Any]` from schemas/protocols (225 replacements)
+  - Replaced with semantic type aliases: `NodeAttributes`, `JSONDict`, `JSONValue`
+  - All internal schemas now use typed structures
+  - Only external interfaces (OTLP, GraphQL, OAuth) retain `Dict[str, Any]` with NOQA markers
+
 ### Fixed
 - **📊 DMA Results Streaming**: Fixed DMA_RESULTS SSE event showing null values
   - Corrected field names: `csdma`, `dsdma`, `pdma` (was incorrectly using `aspdma_options`)
   - Now properly extracts DMA result objects from `InitialDMAResults` at PERFORM_ASPDMA step
   - Event broadcasts with actual CSDMA, DSDMA, and PDMA (ethical) decision results
-
-### Changed
-- **🔧 Type Safety**: Eliminated 97% of `Dict[str, Any]` from schemas/protocols (225 replacements)
-  - Replaced with semantic type aliases: `NodeAttributes`, `JSONDict`, `JSONValue`
-  - All internal schemas now use typed structures
-  - Only external interfaces (OTLP, GraphQL, OAuth) retain `Dict[str, Any]` with NOQA markers
+- **📡 ACTION_RESULT Event Data**: Fixed missing follow_up_thought_id and audit trail data
+  - Added `follow_up_thought_id` field to `ActionCompleteStepData` schema
+  - Updated `_create_action_complete_data` to extract audit fields from dispatch_result dict
+  - ACTION_RESULT events now include full audit trail (entry_id, sequence_number, hash, signature)
+- **🧪 Test Fixes**: Updated 8 tests for schema changes
+  - Fixed DMA_RESULTS event test to pass `dma_results` parameter with proper InitialDMAResults mock
+  - Fixed ACTION_RESULT event tests to use `follow_up_thought_id` from step_data
+  - Fixed ConversationSummaryNode test to include required `correlation_id` field
+  - Fixed UpdatedStatusConscience tests to access `replacement_action` from top level instead of `epistemic_data`
 
 ## [1.2.0] - 2025-10-01
 

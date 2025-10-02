@@ -22,6 +22,33 @@ ConfigValue = Union[str, int, float, bool, List[Any], Dict[str, Any]]
 ConfigDict = Dict[str, ConfigValue]
 ConfigItem = Tuple[str, ConfigValue]
 
+
+class ConfigDictMixin:
+    """Mixin providing standard config dict access methods.
+
+    Classes using this mixin must have a 'configs: ConfigDict' field.
+    DRY pattern to avoid code duplication across classes with config fields.
+    """
+
+    configs: ConfigDict  # Type hint for IDEs
+
+    def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
+        """Get a configuration value with optional default."""
+        return self.configs.get(key, default)
+
+    def set(self, key: str, value: ConfigValue) -> None:
+        """Set a configuration value."""
+        self.configs[key] = value
+
+    def update(self, values: ConfigDict) -> None:
+        """Update multiple configuration values."""
+        self.configs.update(values)
+
+    def keys(self) -> List[str]:
+        """Get all configuration keys."""
+        return list(self.configs.keys())
+
+
 # Field description constants (DRY principle - avoid duplication)
 DESC_THOUGHT_ID = "Thought being processed"
 DESC_TIMESTAMP = "Event timestamp"
@@ -123,26 +150,10 @@ class SpanAttribute(BaseModel):
     )  # NOQA - OTLP standard requires Dict[str, Any]
 
 
-class ConfigValueMap(BaseModel):
+class ConfigValueMap(ConfigDictMixin, BaseModel):
     """Typed map for configuration values."""
 
     configs: ConfigDict = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
-
-    def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
-        """Get a configuration value with optional default."""
-        return self.configs.get(key, default)
-
-    def set(self, key: str, value: ConfigValue) -> None:
-        """Set a configuration value."""
-        self.configs[key] = value
-
-    def update(self, values: ConfigDict) -> None:
-        """Update multiple configuration values."""
-        self.configs.update(values)
-
-    def keys(self) -> List[str]:
-        """Get all configuration keys."""
-        return list(self.configs.keys())
 
     def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
@@ -153,7 +164,7 @@ class ConfigValueMap(BaseModel):
         return list(self.configs.values())
 
 
-class TaskSelectionCriteria(BaseModel):
+class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
     """Criteria used for task selection in processing rounds."""
 
     max_priority: Optional[int] = Field(None, description="Maximum priority threshold")
@@ -168,22 +179,6 @@ class TaskSelectionCriteria(BaseModel):
     configs: ConfigDict = Field(
         default_factory=dict, description="Additional configuration key-value pairs with typed values"
     )
-
-    def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
-        """Get a configuration value with optional default."""
-        return self.configs.get(key, default)
-
-    def set(self, key: str, value: ConfigValue) -> None:
-        """Set a configuration value."""
-        self.configs[key] = value
-
-    def update(self, values: ConfigDict) -> None:
-        """Update multiple configuration values."""
-        self.configs.update(values)
-
-    def keys(self) -> List[str]:
-        """Get all configuration keys."""
-        return list(self.configs.keys())
 
     def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""

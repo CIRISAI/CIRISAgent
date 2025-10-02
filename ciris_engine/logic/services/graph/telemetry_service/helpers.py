@@ -1,0 +1,435 @@
+"""
+Helper functions for telemetry service refactoring.
+
+These break down the complex get_telemetry_summary method into focused,
+testable components. All functions fail fast and loud - no fallback data.
+"""
+
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional, Tuple
+
+from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
+    InvalidTimestampError,
+    MemoryBusUnavailableError,
+    MetricCollectionError,
+    NoThoughtDataError,
+    QueueStatusUnavailableError,
+    RuntimeControlBusUnavailableError,
+    ServiceStartTimeUnavailableError,
+    ThoughtDepthQueryError,
+    UnknownMetricTypeError,
+)
+from ciris_engine.schemas.runtime.system_context import TelemetrySummary
+from ciris_engine.schemas.services.graph.telemetry import MetricAggregates, MetricRecord
+
+# Metric types to query - moved from inline definition
+METRIC_TYPES = [
+    ("llm.tokens.total", "tokens"),
+    ("llm_tokens_used", "tokens"),  # Legacy metric name
+    ("llm.tokens.input", "tokens"),
+    ("llm.tokens.output", "tokens"),
+    ("llm.cost.cents", "cost"),
+    ("llm.environmental.carbon_grams", "carbon"),
+    ("llm.environmental.energy_kwh", "energy"),
+    ("llm.latency.ms", "latency"),
+    ("thought_processing_completed", "thoughts"),
+    ("thought_processing_started", "thoughts"),
+    ("action_selected_task_complete", "tasks"),
+    ("handler_invoked_total", "messages"),
+    ("error.occurred", "errors"),
+]
+
+
+# ============================================================================
+# METRIC COLLECTION HELPERS
+# ============================================================================
+
+
+async def collect_metric_aggregates(
+    telemetry_service,
+    metric_types: List[Tuple[str, str]],
+    window_start_24h: datetime,
+    window_start_1h: datetime,
+    window_end: datetime,
+) -> MetricAggregates:
+    """Collect and aggregate metrics across time windows.
+
+    Args:
+        telemetry_service: The telemetry service instance
+        metric_types: List of (metric_name, metric_type) tuples to query
+        window_start_24h: Start of 24-hour window
+        window_start_1h: Start of 1-hour window
+        window_end: End of both windows
+
+    Returns:
+        MetricAggregates schema with all collected metrics
+
+    Raises:
+        MetricCollectionError: If metric collection fails
+        InvalidMetricDataError: If metric data is invalid
+    """
+    aggregates = MetricAggregates()
+
+    try:
+        for metric_name, metric_type in metric_types:
+            # Get 24h data
+            day_metrics: List[MetricRecord] = await telemetry_service.query_metrics(
+                metric_name=metric_name, start_time=window_start_24h, end_time=window_end
+            )
+
+            for metric in day_metrics:
+                # Aggregate into appropriate counter
+                aggregate_metric_by_type(
+                    metric_type, metric.value, metric.timestamp, metric.tags, aggregates, window_start_1h
+                )
+
+        return aggregates
+
+    except Exception as e:
+        raise MetricCollectionError(f"Failed to collect metric aggregates: {e}") from e
+
+
+def aggregate_metric_by_type(
+    metric_type: str,
+    value: float,
+    timestamp: datetime,
+    tags: Dict[str, str],
+    aggregates: MetricAggregates,
+    window_start_1h: datetime,
+) -> None:
+    """Aggregate a single metric value into the appropriate counters.
+
+    Args:
+        metric_type: Type of metric (tokens, cost, carbon, etc.)
+        value: Numeric value from metric
+        timestamp: When the metric occurred
+        tags: Metric tags (service, etc.)
+        aggregates: MetricAggregates object to update (mutated)
+        window_start_1h: Start of 1-hour window for filtering
+
+    Raises:
+        UnknownMetricTypeError: If metric_type is not recognized
+    """
+    # Check if timestamp is in 1h window
+    in_1h_window = timestamp >= window_start_1h
+
+    if metric_type == "tokens":
+        aggregates.tokens_24h += int(value)
+        if in_1h_window:
+            aggregates.tokens_1h += int(value)
+
+    elif metric_type == "cost":
+        aggregates.cost_24h_cents += float(value)
+        if in_1h_window:
+            aggregates.cost_1h_cents += float(value)
+
+    elif metric_type == "carbon":
+        aggregates.carbon_24h_grams += float(value)
+        if in_1h_window:
+            aggregates.carbon_1h_grams += float(value)
+
+    elif metric_type == "energy":
+        aggregates.energy_24h_kwh += float(value)
+        if in_1h_window:
+            aggregates.energy_1h_kwh += float(value)
+
+    elif metric_type == "messages":
+        aggregates.messages_24h += int(value)
+        if in_1h_window:
+            aggregates.messages_1h += int(value)
+
+    elif metric_type == "thoughts":
+        aggregates.thoughts_24h += int(value)
+        if in_1h_window:
+            aggregates.thoughts_1h += int(value)
+
+    elif metric_type == "tasks":
+        aggregates.tasks_24h += int(value)
+
+    elif metric_type == "errors":
+        aggregates.errors_24h += int(value)
+        if in_1h_window:
+            aggregates.errors_1h += int(value)
+        # Track errors by service
+        service = tags.get("service", "unknown")
+        aggregates.service_errors[service] = aggregates.service_errors.get(service, 0) + 1
+
+    elif metric_type == "latency":
+        service = tags.get("service", "unknown")
+        if service not in aggregates.service_latency:
+            aggregates.service_latency[service] = []
+        aggregates.service_latency[service].append(float(value))
+
+    else:
+        raise UnknownMetricTypeError(f"Unknown metric type: {metric_type}")
+
+    # Track service calls
+    if "service" in tags:
+        service = tags["service"]
+        aggregates.service_calls[service] = aggregates.service_calls.get(service, 0) + 1
+
+
+# ============================================================================
+# EXTERNAL DATA COLLECTION HELPERS
+# ============================================================================
+
+
+async def get_average_thought_depth(
+    memory_bus,
+    window_start: datetime,
+) -> float:
+    """Get average thought depth from the last 24 hours.
+
+    Args:
+        memory_bus: Memory bus to access persistence
+        window_start: Start of time window
+
+    Returns:
+        Average thought depth (must be valid positive number)
+
+    Raises:
+        MemoryBusUnavailableError: If memory bus not available
+        ThoughtDepthQueryError: If database query fails
+        NoThoughtDataError: If no thought data available in window
+    """
+    if not memory_bus:
+        raise MemoryBusUnavailableError("Memory bus is not available")
+
+    try:
+        from ciris_engine.logic.persistence import get_db_connection
+
+        # Get the memory service to access its db_path
+        memory_service = await memory_bus.get_service(handler_name="telemetry_service")
+        if not memory_service:
+            raise MemoryBusUnavailableError("Memory service not found on memory bus")
+
+        db_path = getattr(memory_service, "db_path", None)
+        if not db_path:
+            raise ThoughtDepthQueryError("Memory service has no db_path attribute")
+
+        with get_db_connection(db_path=db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT AVG(thought_depth) as avg_depth
+                FROM thoughts
+                WHERE created_at >= datetime('now', '-24 hours')
+            """
+            )
+            result = cursor.fetchone()
+            if result and result[0] is not None:
+                return float(result[0])
+            else:
+                raise NoThoughtDataError("No thought data available in the last 24 hours")
+
+    except NoThoughtDataError:
+        raise  # Re-raise as-is
+    except Exception as e:
+        raise ThoughtDepthQueryError(f"Failed to query thought depth: {e}") from e
+
+
+async def get_queue_saturation(
+    runtime_control_bus,
+) -> float:
+    """Get current processor queue saturation (0.0-1.0).
+
+    Args:
+        runtime_control_bus: Runtime control bus to access queue status
+
+    Returns:
+        Queue saturation ratio between 0.0 and 1.0
+
+    Raises:
+        RuntimeControlBusUnavailableError: If runtime control bus not available
+        QueueStatusUnavailableError: If queue status cannot be retrieved
+    """
+    if not runtime_control_bus:
+        raise RuntimeControlBusUnavailableError("Runtime control bus is not available")
+
+    try:
+        runtime_control = await runtime_control_bus.get_service(handler_name="telemetry_service")
+        if not runtime_control:
+            raise RuntimeControlBusUnavailableError("Runtime control service not found on bus")
+
+        processor_queue_status = await runtime_control.get_processor_queue_status()
+        if not processor_queue_status:
+            raise QueueStatusUnavailableError("get_processor_queue_status returned None")
+
+        if processor_queue_status.max_size <= 0:
+            raise QueueStatusUnavailableError(f"Invalid max_size: {processor_queue_status.max_size}")
+
+        queue_saturation = processor_queue_status.queue_size / processor_queue_status.max_size
+        # Clamp to 0-1 range
+        return min(1.0, max(0.0, queue_saturation))
+
+    except (RuntimeControlBusUnavailableError, QueueStatusUnavailableError):
+        raise  # Re-raise as-is
+    except Exception as e:
+        raise QueueStatusUnavailableError(f"Failed to get queue saturation: {e}") from e
+
+
+def get_service_uptime(
+    start_time: Optional[datetime],
+    now: datetime,
+) -> float:
+    """Get service uptime in seconds.
+
+    Args:
+        start_time: When the service started (or None)
+        now: Current time
+
+    Returns:
+        Uptime in seconds
+
+    Raises:
+        ServiceStartTimeUnavailableError: If start_time is None
+    """
+    if start_time is None:
+        raise ServiceStartTimeUnavailableError("Service start_time has not been set")
+
+    return (now - start_time).total_seconds()
+
+
+# ============================================================================
+# CALCULATION HELPERS
+# ============================================================================
+
+
+def calculate_error_rate(
+    errors_24h: int,
+    total_operations: int,
+) -> float:
+    """Calculate error rate percentage.
+
+    Args:
+        errors_24h: Number of errors in 24h window
+        total_operations: Total operations (messages + thoughts + tasks)
+
+    Returns:
+        Error rate as percentage (0.0-100.0)
+    """
+    if total_operations == 0:
+        return 0.0
+    return (errors_24h / total_operations) * 100.0
+
+
+def calculate_average_latencies(
+    service_latency: Dict[str, List[float]],
+) -> Dict[str, float]:
+    """Calculate average latency per service.
+
+    Args:
+        service_latency: Map of service name to list of latency values
+
+    Returns:
+        Map of service name to average latency in ms
+    """
+    result = {}
+    for service, latencies in service_latency.items():
+        if latencies:
+            result[service] = sum(latencies) / len(latencies)
+    return result
+
+
+# ============================================================================
+# CACHE HELPERS
+# ============================================================================
+
+
+def check_summary_cache(
+    cache: Dict[str, Tuple[datetime, TelemetrySummary]],
+    cache_key: str,
+    now: datetime,
+    ttl_seconds: int,
+) -> Optional[TelemetrySummary]:
+    """Check if cached telemetry summary is still valid.
+
+    Args:
+        cache: Summary cache dictionary
+        cache_key: Key to look up in cache
+        now: Current time
+        ttl_seconds: Cache TTL in seconds
+
+    Returns:
+        Cached TelemetrySummary if valid, None otherwise
+    """
+    if cache_key in cache:
+        cached_time, cached_summary = cache[cache_key]
+        if (now - cached_time).total_seconds() < ttl_seconds:
+            return cached_summary
+    return None
+
+
+def store_summary_cache(
+    cache: Dict[str, Tuple[datetime, TelemetrySummary]],
+    cache_key: str,
+    now: datetime,
+    summary: TelemetrySummary,
+) -> None:
+    """Store telemetry summary in cache.
+
+    Args:
+        cache: Summary cache dictionary (mutated)
+        cache_key: Key to store under
+        now: Current time
+        summary: Summary to cache
+    """
+    cache[cache_key] = (now, summary)
+
+
+# ============================================================================
+# SCHEMA BUILDERS
+# ============================================================================
+
+
+def build_telemetry_summary(
+    window_start: datetime,
+    window_end: datetime,
+    uptime_seconds: float,
+    aggregates: MetricAggregates,
+    error_rate: float,
+    avg_thought_depth: float,
+    queue_saturation: float,
+    service_latency_ms: Dict[str, float],
+) -> TelemetrySummary:
+    """Build TelemetrySummary from collected data.
+
+    Args:
+        window_start: Start of time window
+        window_end: End of time window
+        uptime_seconds: Service uptime
+        aggregates: Collected metric aggregates
+        error_rate: Calculated error rate percentage
+        avg_thought_depth: Average thought depth
+        queue_saturation: Queue saturation ratio
+        service_latency_ms: Service latency map
+
+    Returns:
+        Validated TelemetrySummary schema
+    """
+    return TelemetrySummary(
+        window_start=window_start,
+        window_end=window_end,
+        uptime_seconds=uptime_seconds,
+        messages_processed_24h=aggregates.messages_24h,
+        thoughts_processed_24h=aggregates.thoughts_24h,
+        tasks_completed_24h=aggregates.tasks_24h,
+        errors_24h=aggregates.errors_24h,
+        messages_current_hour=aggregates.messages_1h,
+        thoughts_current_hour=aggregates.thoughts_1h,
+        errors_current_hour=aggregates.errors_1h,
+        service_calls=aggregates.service_calls,
+        service_errors=aggregates.service_errors,
+        service_latency_ms=service_latency_ms,
+        tokens_last_hour=float(aggregates.tokens_1h),
+        cost_last_hour_cents=aggregates.cost_1h_cents,
+        carbon_last_hour_grams=aggregates.carbon_1h_grams,
+        energy_last_hour_kwh=aggregates.energy_1h_kwh,
+        tokens_24h=float(aggregates.tokens_24h),
+        cost_24h_cents=aggregates.cost_24h_cents,
+        carbon_24h_grams=aggregates.carbon_24h_grams,
+        energy_24h_kwh=aggregates.energy_24h_kwh,
+        error_rate_percent=error_rate,
+        avg_thought_depth=avg_thought_depth,
+        queue_saturation=queue_saturation,
+    )

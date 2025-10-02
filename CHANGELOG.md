@@ -5,6 +5,20 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-10-02
+
+### Fixed
+- **📊 DMA Results Streaming**: Fixed DMA_RESULTS SSE event showing null values
+  - Corrected field names: `csdma`, `dsdma`, `pdma` (was incorrectly using `aspdma_options`)
+  - Now properly extracts DMA result objects from `InitialDMAResults` at PERFORM_ASPDMA step
+  - Event broadcasts with actual CSDMA, DSDMA, and PDMA (ethical) decision results
+
+### Changed
+- **🔧 Type Safety**: Eliminated 97% of `Dict[str, Any]` from schemas/protocols (225 replacements)
+  - Replaced with semantic type aliases: `NodeAttributes`, `JSONDict`, `JSONValue`
+  - All internal schemas now use typed structures
+  - Only external interfaces (OTLP, GraphQL, OAuth) retain `Dict[str, Any]` with NOQA markers
+
 ## [1.2.0] - 2025-10-01
 
 ### Added

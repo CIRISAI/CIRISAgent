@@ -40,7 +40,7 @@ from .system_snapshot_helpers import (
 logger = logging.getLogger(__name__)
 
 
-def json_serial(obj):
+def json_serial(obj: Any) -> Any:
     """JSON serializer for objects not serializable by default json code"""
     if hasattr(obj, "isoformat"):
         return obj.isoformat()

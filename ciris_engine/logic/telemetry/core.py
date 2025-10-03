@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Optional, Tuple
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.models.correlations import add_correlation
@@ -42,7 +42,7 @@ class BasicTelemetryCollector(BaseService):
         if not self._time_service:
             self._time_service = TimeService()
         self.start_time = self._time_service.now()
-        self._store_task: Optional[asyncio.Task] = None
+        self._store_task: Optional[asyncio.Task[Any]] = None
         # Note: _started is now provided by BaseService
 
     async def start(self) -> None:
@@ -94,7 +94,7 @@ class BasicTelemetryCollector(BaseService):
 
         # Store enhanced metrics in separate history for TSDB capabilities
         if not hasattr(self, "_enhanced_history"):
-            self._enhanced_history: Dict[str, Deque[dict]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
+            self._enhanced_history: Dict[str, Deque[Dict[str, Any]]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
 
         self._enhanced_history[name].append(metric_entry)
 

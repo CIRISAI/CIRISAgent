@@ -228,7 +228,9 @@ class LLMPricingCalculator:
             "carbon_intensity_global": self.pricing_config.get_carbon_intensity(),
         }
 
-    def list_available_models(self, provider_name: Optional[str] = None, active_only: bool = True) -> List[Dict[str, object]]:
+    def list_available_models(
+        self, provider_name: Optional[str] = None, active_only: bool = True
+    ) -> List[Dict[str, object]]:
         """
         List available models with their pricing information.
 

@@ -10,7 +10,7 @@ import logging
 import sqlite3
 import time
 from contextlib import contextmanager
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Iterator, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ def with_retry(
 
 
 @contextmanager
-def get_db_connection_with_retry(db_path: str | None = None, busy_timeout: int = 5000):
+def get_db_connection_with_retry(db_path: str | None = None, busy_timeout: int = 5000) -> Iterator[sqlite3.Connection]:
     """
     Get a database connection with busy timeout configured.
 
@@ -147,7 +147,7 @@ def execute_with_retry(
     """
 
     @with_retry(max_retries=max_retries, base_delay=base_delay)
-    def _execute():
+    def _execute() -> T:
         with get_db_connection_with_retry(db_path) as conn:
             return operation(conn)
 

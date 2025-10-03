@@ -19,17 +19,17 @@ logger = logging.getLogger(__name__)
 class ReasoningEventStream:
     """Global broadcaster for H3ERE reasoning events (5 simplified events only)."""
 
-    def __init__(self):
-        self._subscribers: WeakSet = WeakSet()
+    def __init__(self) -> None:
+        self._subscribers: WeakSet[asyncio.Queue[Any]] = WeakSet()
         self._sequence_number = 0
         self._is_enabled = True
 
-    def subscribe(self, queue: asyncio.Queue) -> None:
+    def subscribe(self, queue: asyncio.Queue[Any]) -> None:
         """Subscribe a queue to receive reasoning events."""
         self._subscribers.add(queue)
         logger.debug(f"New subscriber added, total: {len(self._subscribers)}")
 
-    def unsubscribe(self, queue: asyncio.Queue) -> None:
+    def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
         """Unsubscribe a queue from reasoning events."""
         self._subscribers.discard(queue)
         logger.debug(f"Subscriber removed, total: {len(self._subscribers)}")

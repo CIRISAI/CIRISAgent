@@ -46,9 +46,9 @@ class ApiPlatform(Service):
 
     config: APIAdapterConfig  # type: ignore[assignment]
 
-    def __init__(self, runtime: Any, context: Optional["AdapterStartupContext"] = None, **kwargs: Any) -> None:
+    def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
         """Initialize API adapter."""
-        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+        # Import moved to top-level to avoid forward reference issues
 
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
@@ -375,21 +375,21 @@ class ApiPlatform(Service):
         channels = []
         for data in channels_data:
             # Determine allowed actions based on admin status
-            is_admin = is_admin_channel(data["channel_id"])
+            is_admin = is_admin_channel(data.channel_id)
             allowed_actions = ["speak", "observe", "memorize", "recall", "tool"]
             if is_admin:
                 allowed_actions.extend(["wa_defer", "runtime_control"])
 
             channel = ChannelContext(
-                channel_id=data["channel_id"],
+                channel_id=data.channel_id,
                 channel_type="api",
-                created_at=data.get("last_activity", datetime.now()),
-                channel_name=data["channel_id"],  # API channels use ID as name
+                created_at=data.last_activity if data.last_activity else datetime.now(timezone.utc),
+                channel_name=data.channel_name or data.channel_id,  # API channels use ID as name if no name
                 is_private=False,  # API channels are not private
                 participants=[],  # Could track user IDs if needed
-                is_active=data.get("is_active", True),
-                last_activity=data.get("last_activity"),
-                message_count=data.get("message_count", 0),
+                is_active=data.is_active,
+                last_activity=data.last_activity,
+                message_count=data.message_count,
                 allowed_actions=allowed_actions,
                 moderation_level="standard",
             )
@@ -404,6 +404,8 @@ class ApiPlatform(Service):
             return False
 
         # Check if the server task is still running
+        if self._server_task is None:
+            return False
         return not self._server_task.done()
 
     def get_metrics(self) -> dict[str, float]:

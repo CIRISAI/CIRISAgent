@@ -133,11 +133,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # Get essential_config - it must exist
             essential_config = getattr(self.runtime, "essential_config", None)
             if not essential_config:
-                # Create minimal essential config if not present
-                essential_config = EssentialConfig(
-                    agent_name=getattr(self.runtime, "agent_name", "ciris"),
-                    agent_version=getattr(self.runtime, "agent_version", "1.0.0"),
-                )
+                # Create minimal essential config if not present (all fields have defaults)
+                essential_config = EssentialConfig()
 
             startup_context = AdapterStartupContext(
                 essential_config=essential_config,
@@ -152,7 +149,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             adapter_kwargs = config_params.settings if config_params else {}
 
             # All adapters must support context - no fallback
-            adapter = adapter_class(self.runtime, context=startup_context, **adapter_kwargs)
+            # Type ignore: adapter_class is dynamically loaded, mypy can't verify constructor signature
+            adapter = adapter_class(self.runtime, context=startup_context, **adapter_kwargs)  # type: ignore[call-arg]
 
             instance = AdapterInstance(
                 adapter_id=adapter_id,
@@ -454,9 +452,18 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         elif hasattr(tool_service, "list_tools"):
                             tool_names = await tool_service.list_tools()
                             # Convert string names to ToolInfo objects for schema compliance
-                            from ciris_engine.schemas.adapters.tools import ToolInfo
+                            from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
-                            tools = [ToolInfo(name=name, description="") for name in tool_names]
+                            tools = [
+                                ToolInfo(
+                                    name=name,
+                                    description="",
+                                    parameters=ToolParameterSchema(
+                                        type="object", properties={}, required=[]
+                                    ),
+                                )
+                                for name in tool_names
+                            ]
                 except Exception as e:
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
 
@@ -528,7 +535,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         except Exception as e:
             return [{"error": f"Failed to get service registrations: {e}"}]
 
-    async def _get_adapter_tools_info(self, adapter_id: str, instance: AdapterInstance) -> Optional[List]:
+    async def _get_adapter_tools_info(self, adapter_id: str, instance: AdapterInstance) -> Optional[List[Any]]:
         """Get tool information from adapter if available - strict typing, no fallbacks."""
         try:
             if not (hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service):
@@ -538,14 +545,19 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             if hasattr(tool_service, "get_all_tool_info"):
                 tool_infos = await tool_service.get_all_tool_info()
-                return tool_infos  # Pass ToolInfo objects directly
+                # Type checking: tool_infos should be List[ToolInfo]
+                return list(tool_infos) if tool_infos else None  # Pass ToolInfo objects directly
             elif hasattr(tool_service, "list_tools"):
                 tool_names = await tool_service.list_tools()
                 # Convert string names to ToolInfo objects for schema compliance
-                from ciris_engine.schemas.adapters.tools import ToolInfo
+                from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
                 return [
-                    ToolInfo(name=name, description="", parameters={"type": "object", "properties": {}, "required": []})
+                    ToolInfo(
+                        name=name,
+                        description="",
+                        parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+                    )
                     for name in tool_names
                 ]
             else:
@@ -957,7 +969,15 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         # If it's a full config update (adapter.X.config), reload the adapter
         if len(parts) == 3 and parts[2] == "config":
             logger.info(f"Full config update detected for adapter {adapter_id}, reloading adapter")
-            await self.reload_adapter(adapter_id, new_value if isinstance(new_value, dict) else None)
+            # Convert dict to AdapterConfig if valid
+            config_param = None
+            if isinstance(new_value, dict):
+                config_param = AdapterConfig(
+                    adapter_type=instance.adapter_type,
+                    enabled=new_value.get("enabled", True),
+                    settings=new_value.get("settings", {}),
+                )
+            await self.reload_adapter(adapter_id, config_param)
             return
 
         # For individual config values, check if the adapter supports hot reload

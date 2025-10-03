@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.dependencies.auth import require_admin, require_observer
 from ciris_engine.logic.adapters.api.routes.telemetry import router
+from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
 def override_auth():
@@ -39,7 +40,7 @@ def full_app():
 
     # Telemetry service with comprehensive methods
     telemetry_service = MagicMock()
-    telemetry_service.get_metrics = Mock(
+    telemetry_service.get_metrics = AsyncMock(
         return_value={
             "system_uptime": 3600.0,
             "total_requests": 1000,
@@ -75,7 +76,7 @@ def full_app():
     # Mock query_metrics is defined later with more complete implementation
 
     # Add get_metrics for the metrics endpoint
-    telemetry_service.get_metrics = Mock(
+    telemetry_service.get_metrics = AsyncMock(
         return_value={
             "system_uptime": 3600.0,
             "total_requests": 1000,
@@ -167,11 +168,12 @@ def full_app():
             # Start low and increase significantly - double the value over time
             value = base_value * (1 + i * 0.1)  # 10% increase per data point = 200% total increase
             data_points.append(
-                {
-                    "timestamp": timestamp.isoformat(),
-                    "value": value,
-                    "tags": {"service": "test_service", "environment": "test"},
-                }
+                MetricRecord(
+                    metric_name=metric_name or "test_metric",
+                    timestamp=timestamp,
+                    value=value,
+                    tags={"service": "test_service", "environment": "test"},
+                )
             )
 
         return data_points

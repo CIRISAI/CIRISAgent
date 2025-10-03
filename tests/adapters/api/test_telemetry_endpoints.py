@@ -268,7 +268,7 @@ class TestTelemetryMetricsEndpoint:
 
         # The get_metrics method returns a dict of metric_name -> value
         # The endpoint then builds DetailedMetric objects from this
-        mock_app_state.telemetry_service.get_metrics = MagicMock(
+        mock_app_state.telemetry_service.get_metrics = AsyncMock(
             return_value={
                 "llm_tokens_used": 16670.0,
                 "cpu_percent": 25.0,

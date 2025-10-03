@@ -10,6 +10,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.routes import telemetry
+from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
 class TestTelemetryAPIMetrics:
@@ -50,8 +51,18 @@ class TestTelemetryAPIMetrics:
             # Return dummy data based on metric type
             if "llm" in metric_name:
                 return [
-                    {"value": 100.0, "timestamp": datetime.now(timezone.utc)},
-                    {"value": 150.0, "timestamp": datetime.now(timezone.utc) - timedelta(hours=1)},
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=100.0,
+                        timestamp=datetime.now(timezone.utc),
+                        tags={},
+                    ),
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=150.0,
+                        timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+                        tags={},
+                    ),
                 ]
             return []
 

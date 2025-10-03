@@ -5,9 +5,22 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.1] - 2025-10-02
+## [1.2.1] - 2025-10-03
 
 ### Added
+- **📬 Async Message API Endpoint**: New `/agent/message` endpoint for immediate task_id return
+  - Returns immediately with `task_id` for tracking (no blocking wait)
+  - Comprehensive status tracking via `MessageHandlingStatus` enum (9 status types)
+  - Rejection reasons: FILTERED_OUT, CREDIT_DENIED, CREDIT_CHECK_FAILED, PROCESSOR_PAUSED, etc.
+  - Adaptive filter integration with priority levels (CRITICAL, HIGH, MEDIUM, LOW, IGNORE)
+  - Existing task update detection (tracks when messages update existing tasks vs creating new)
+  - Credit policy enforcement with detailed rejection messages
+  - 39 comprehensive tests covering all scenarios
+- **📊 Message Handling Schemas**: New typed schemas for complete message flow
+  - `MessageHandlingStatus` enum: TASK_CREATED, UPDATED_EXISTING_TASK, FILTERED_OUT, CREDIT_DENIED, etc.
+  - `PassiveObservationResult`: Result of observation task creation with metadata
+  - `MessageHandlingResult`: Complete message handling result with status, task_id, and rejection info
+  - Full propagation of results through BaseObserver call chain
 - **🆔 Identity Context Formatting**: Created human-readable identity formatter for system snapshots
   - Replaces raw escaped dict dump with clean formatted text
   - Shows "First Start" from earliest startup or shutdown event

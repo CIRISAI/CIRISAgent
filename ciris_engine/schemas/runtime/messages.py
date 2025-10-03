@@ -4,9 +4,48 @@ Message schemas for CIRIS Trinity Architecture.
 Typed message structures for all communication types.
 """
 
+from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class MessageHandlingStatus(str, Enum):
+    """Status of message handling after submission."""
+
+    TASK_CREATED = "TASK_CREATED"  # Task successfully created
+    AGENT_OWN_MESSAGE = "AGENT_OWN_MESSAGE"  # Message from agent itself (ignored)
+    FILTERED_OUT = "FILTERED_OUT"  # Filtered by adaptive filter
+    CREDIT_DENIED = "CREDIT_DENIED"  # Insufficient credits
+    CREDIT_CHECK_FAILED = "CREDIT_CHECK_FAILED"  # Credit provider error
+    PROCESSOR_PAUSED = "PROCESSOR_PAUSED"  # Agent processor paused
+    RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
+    CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
+    UPDATED_EXISTING_TASK = "UPDATED_EXISTING_TASK"  # Flagged existing task with new info
+
+
+class PassiveObservationResult(BaseModel):
+    """Result of creating a passive observation (task + thought)."""
+
+    task_id: str = Field(..., description="Task ID (newly created or existing task that was updated)")
+    task_created: bool = Field(..., description="True if new task created, False if existing task updated")
+    thought_id: Optional[str] = Field(None, description="Thought ID if created")
+    existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
+
+
+class MessageHandlingResult(BaseModel):
+    """Result of handling an incoming message through the observer pipeline."""
+
+    status: MessageHandlingStatus = Field(..., description="Status of message handling")
+    task_id: Optional[str] = Field(None, description="Task ID if created or updated")
+    message_id: str = Field(..., description="Original message ID")
+    channel_id: str = Field(..., description="Channel ID where message was sent")
+    filtered: bool = Field(default=False, description="Whether message was filtered out")
+    filter_reasoning: Optional[str] = Field(None, description="Filter reasoning if filtered")
+    credit_denied: bool = Field(default=False, description="Whether denied by credit policy")
+    credit_denial_reason: Optional[str] = Field(None, description="Credit denial reason")
+    task_priority: int = Field(default=0, description="Priority of created task (0=passive, 5=high, 10=critical)")
+    existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
 
 
 class IncomingMessage(BaseModel):
@@ -55,6 +94,9 @@ class FetchedMessage(BaseModel):
 
 
 __all__ = [
+    "MessageHandlingStatus",
+    "PassiveObservationResult",
+    "MessageHandlingResult",
     "IncomingMessage",
     "DiscordMessage",
     "FetchedMessage",

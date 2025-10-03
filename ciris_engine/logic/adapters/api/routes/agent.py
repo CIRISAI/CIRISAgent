@@ -8,6 +8,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -33,6 +34,18 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 # Request/Response schemas
 
 
+class MessageRejectionReason(str, Enum):
+    """Reasons why a message submission was rejected or not processed."""
+
+    AGENT_OWN_MESSAGE = "AGENT_OWN_MESSAGE"  # Message from agent itself
+    FILTERED_OUT = "FILTERED_OUT"  # Filtered by adaptive filter
+    CREDIT_DENIED = "CREDIT_DENIED"  # Insufficient credits
+    CREDIT_CHECK_FAILED = "CREDIT_CHECK_FAILED"  # Credit provider error
+    PROCESSOR_PAUSED = "PROCESSOR_PAUSED"  # Agent processor paused
+    RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
+    CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
+
+
 class InteractRequest(BaseModel):
     """Request to interact with the agent."""
 
@@ -47,6 +60,25 @@ class InteractResponse(BaseModel):
     response: str = Field(..., description="Agent's response")
     state: str = Field(..., description="Agent's cognitive state after processing")
     processing_time_ms: int = Field(..., description="Time taken to process")
+
+
+class MessageRequest(BaseModel):
+    """Request to send a message to the agent (async pattern)."""
+
+    message: str = Field(..., description="Message to send to the agent")
+    context: Optional[MessageContext] = Field(None, description="Optional context")
+
+
+class MessageSubmissionResponse(BaseModel):
+    """Response from message submission (returns immediately with task ID or rejection reason)."""
+
+    message_id: str = Field(..., description="Unique message ID for tracking")
+    task_id: Optional[str] = Field(None, description="Task ID created (if accepted)")
+    channel_id: str = Field(..., description="Channel where message was sent")
+    submitted_at: str = Field(..., description="ISO timestamp of submission")
+    accepted: bool = Field(..., description="Whether message was accepted for processing")
+    rejection_reason: Optional[MessageRejectionReason] = Field(None, description="Reason if rejected")
+    rejection_detail: Optional[str] = Field(None, description="Additional detail about rejection")
 
 
 class ConversationMessage(BaseModel):
@@ -421,6 +453,115 @@ def _cleanup_interaction_tracking(message_id: str) -> None:
     """Clean up interaction tracking for given message ID."""
     _response_events.pop(message_id, None)
     _message_responses.pop(message_id, None)
+
+
+@router.post("/message", response_model=SuccessResponse[MessageSubmissionResponse])
+async def submit_message(
+    request: Request, body: MessageRequest, auth: AuthContext = Depends(require_observer)
+) -> SuccessResponse[MessageSubmissionResponse]:
+    """
+    Submit a message to the agent (async pattern - returns immediately).
+
+    This endpoint returns immediately with a task_id for tracking or rejection reason.
+    Use GET /agent/history to poll for the agent's response.
+
+    This is the recommended way to interact with the agent via API,
+    as it doesn't block waiting for processing to complete.
+
+    Requires: SEND_MESSAGES permission (ADMIN+ by default, or OBSERVER with explicit grant)
+    """
+    from ciris_engine.schemas.runtime.messages import MessageHandlingStatus
+
+    # Check permissions
+    _check_send_messages_permission(auth, request)
+
+    # Create message and tracking
+    message_id, channel_id, msg = _create_interaction_message(auth, body)
+    msg = _attach_credit_metadata(msg, request, auth, channel_id)
+
+    # Handle consent for user
+    await _handle_consent_for_user(auth, channel_id, request)
+
+    # Track submission time
+    submitted_at = datetime.now(timezone.utc)
+
+    # Check if processor is paused
+    pause_response = await _check_processor_pause_status(request, msg, message_id, submitted_at)
+    if pause_response:
+        # Return rejection for paused processor
+        response = MessageSubmissionResponse(
+            message_id=message_id,
+            task_id=None,
+            channel_id=channel_id,
+            submitted_at=submitted_at.isoformat(),
+            accepted=False,
+            rejection_reason=MessageRejectionReason.PROCESSOR_PAUSED,
+            rejection_detail="Agent processor is paused",
+        )
+        return SuccessResponse(data=response)
+
+    # Submit message and get result (with credit enforcement)
+    try:
+        if hasattr(request.app.state, "on_message"):
+            result = await request.app.state.on_message(msg)
+        else:
+            raise HTTPException(status_code=503, detail="Message handler not configured")
+    except CreditDenied as exc:
+        # Return rejection for credit denial
+        response = MessageSubmissionResponse(
+            message_id=message_id,
+            task_id=None,
+            channel_id=channel_id,
+            submitted_at=submitted_at.isoformat(),
+            accepted=False,
+            rejection_reason=MessageRejectionReason.CREDIT_DENIED,
+            rejection_detail=exc.reason,
+        )
+        return SuccessResponse(data=response)
+    except CreditCheckFailed as exc:
+        # Return rejection for credit check failure
+        response = MessageSubmissionResponse(
+            message_id=message_id,
+            task_id=None,
+            channel_id=channel_id,
+            submitted_at=submitted_at.isoformat(),
+            accepted=False,
+            rejection_reason=MessageRejectionReason.CREDIT_CHECK_FAILED,
+            rejection_detail=str(exc),
+        )
+        return SuccessResponse(data=response)
+
+    # Map MessageHandlingResult to MessageSubmissionResponse
+    accepted = result.status in [MessageHandlingStatus.TASK_CREATED, MessageHandlingStatus.UPDATED_EXISTING_TASK]
+    rejection_reason = None
+    rejection_detail = None
+
+    if not accepted:
+        # Map status to rejection reason
+        status_to_reason = {
+            MessageHandlingStatus.AGENT_OWN_MESSAGE: MessageRejectionReason.AGENT_OWN_MESSAGE,
+            MessageHandlingStatus.FILTERED_OUT: MessageRejectionReason.FILTERED_OUT,
+            MessageHandlingStatus.CHANNEL_RESTRICTED: MessageRejectionReason.CHANNEL_RESTRICTED,
+            MessageHandlingStatus.RATE_LIMITED: MessageRejectionReason.RATE_LIMITED,
+        }
+        rejection_reason = status_to_reason.get(result.status)
+        rejection_detail = result.filter_reasoning if result.filtered else None
+    elif result.status == MessageHandlingStatus.UPDATED_EXISTING_TASK:
+        # Add detail that existing task was updated
+        rejection_detail = "Existing task updated with new information"
+
+    # Return result
+    response = MessageSubmissionResponse(
+        message_id=message_id,
+        task_id=result.task_id,
+        channel_id=channel_id,
+        submitted_at=submitted_at.isoformat(),
+        accepted=accepted,
+        rejection_reason=rejection_reason,
+        rejection_detail=rejection_detail,
+    )
+
+    return SuccessResponse(data=response)
 
 
 @router.post("/interact", response_model=SuccessResponse[InteractResponse])

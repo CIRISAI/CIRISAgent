@@ -458,9 +458,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                                 ToolInfo(
                                     name=name,
                                     description="",
-                                    parameters=ToolParameterSchema(
-                                        type="object", properties={}, required=[]
-                                    ),
+                                    parameters=ToolParameterSchema(type="object", properties={}, required=[]),
                                 )
                                 for name in tool_names
                             ]

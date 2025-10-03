@@ -285,7 +285,16 @@ class TestMessageObservation:
         priority_filter_result.context_hints = []
 
         # Mock the handler methods that would be called by the workflow
-        discord_observer._handle_priority_observation = AsyncMock()
+        from ciris_engine.schemas.runtime.messages import PassiveObservationResult
+
+        discord_observer._handle_priority_observation = AsyncMock(
+            return_value=PassiveObservationResult(
+                task_id="test-task-123",
+                task_created=True,
+                thought_id="test-thought-456",
+                existing_task_updated=False,
+            )
+        )
 
         await discord_observer.handle_incoming_message(msg)
 
@@ -321,7 +330,16 @@ class TestMessageObservation:
         passive_filter_result.context_hints = []
 
         # Mock the handler methods that would be called by the workflow
-        discord_observer._handle_passive_observation = AsyncMock()
+        from ciris_engine.schemas.runtime.messages import PassiveObservationResult
+
+        discord_observer._handle_passive_observation = AsyncMock(
+            return_value=PassiveObservationResult(
+                task_id="test-task-789",
+                task_created=True,
+                thought_id="test-thought-101",
+                existing_task_updated=False,
+            )
+        )
 
         await discord_observer.handle_incoming_message(msg)
 

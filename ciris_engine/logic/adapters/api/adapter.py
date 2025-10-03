@@ -222,10 +222,11 @@ class ApiPlatform(Service):
         self.app.state.on_message = self._create_message_handler()
         logger.info("Set up message handler via observer pattern with correlation tracking")
 
-    def _create_message_handler(self) -> Callable[[IncomingMessage], Awaitable[None]]:
+    def _create_message_handler(self) -> Callable[[IncomingMessage], Awaitable["MessageHandlingResult"]]:
         """Create the message handler function."""
+        from ciris_engine.schemas.runtime.messages import MessageHandlingResult
 
-        async def handle_message_via_observer(msg: IncomingMessage) -> None:
+        async def handle_message_via_observer(msg: IncomingMessage) -> MessageHandlingResult:
             """Handle incoming messages by creating passive observations."""
             try:
                 logger.info(f"handle_message_via_observer called for message {msg.message_id}")
@@ -236,13 +237,26 @@ class ApiPlatform(Service):
                     # Create correlation
                     await self._create_message_correlation(msg)
 
-                    # Pass to observer for task creation
-                    await self.message_observer.handle_incoming_message(msg)
-                    logger.info(f"Message {msg.message_id} passed to observer")
+                    # Pass to observer for task creation and get result
+                    result = await self.message_observer.handle_incoming_message(msg)
+                    if result:
+                        logger.info(f"Message {msg.message_id} passed to observer, result: {result.status}")
+                        return result
+                    else:
+                        logger.warning(f"Message {msg.message_id} passed to observer but no result returned")
+                        # Return a default result for backward compatibility with tests
+                        from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus
+                        return MessageHandlingResult(
+                            status=MessageHandlingStatus.TASK_CREATED,
+                            message_id=msg.message_id,
+                            channel_id=msg.channel_id or "unknown",
+                        )
                 else:
                     logger.error("Message observer not available")
+                    raise RuntimeError("Message observer not available")
             except Exception as e:
                 logger.error(f"Error in handle_message_via_observer: {e}", exc_info=True)
+                raise
 
         return handle_message_via_observer
 

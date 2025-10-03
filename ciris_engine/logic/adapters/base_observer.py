@@ -481,7 +481,15 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _create_passive_observation_result(
         self, msg: MessageT, priority: int = 0, filter_result: Optional[Any] = None
-    ) -> None:
+    ) -> Optional["PassiveObservationResult"]:
+        """
+        Create passive observation result (task + thought).
+
+        Returns:
+            Optional[PassiveObservationResult]: Result with task_id and metadata, None on error
+        """
+        from ciris_engine.schemas.runtime.messages import PassiveObservationResult
+
         try:
             import uuid
             from datetime import datetime, timezone
@@ -526,7 +534,12 @@ class BaseObserver[MessageT: BaseModel](ABC):
                         f"with new observation from @{msg.author_name} in channel {channel_id}"  # type: ignore[attr-defined]
                     )
                     # Don't create a new task - the existing task will see the update via UpdatedStatusConscience
-                    return
+                    # Return result for existing task update
+                    return PassiveObservationResult(
+                        task_id=existing_task.task_id,
+                        task_created=False,
+                        existing_task_updated=True,
+                    )
                 else:
                     logger.info(
                         f"[OBSERVER] Task {existing_task.task_id} already committed to action, creating new task"
@@ -636,29 +649,54 @@ class BaseObserver[MessageT: BaseModel](ABC):
             persistence.add_thought(thought)
             logger.info(f"Created task {task.task_id} for: {getattr(msg, 'content', 'unknown')[:50]}...")
 
+            # Return result for new task creation
+            return PassiveObservationResult(
+                task_id=task.task_id,
+                task_created=True,
+                thought_id=thought.thought_id,
+                existing_task_updated=False,
+            )
+
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error creating observation task: %s", e, exc_info=True)
+            return None
 
-    async def _create_priority_observation_result(self, msg: MessageT, filter_result: Any) -> None:
-        """Create priority observation by delegating to passive observation with higher priority."""
+    async def _create_priority_observation_result(self, msg: MessageT, filter_result: Any) -> Optional["PassiveObservationResult"]:
+        """
+        Create priority observation by delegating to passive observation with higher priority.
+
+        Returns:
+            Optional[PassiveObservationResult]: Result with task_id and metadata, None on error
+        """
         try:
             # Determine priority based on filter result
             task_priority = 10 if getattr(filter_result.priority, "value", "") == "critical" else 5
 
             # Delegate to passive observation with priority and filter information
-            await self._create_passive_observation_result(msg, priority=task_priority, filter_result=filter_result)
+            result = await self._create_passive_observation_result(msg, priority=task_priority, filter_result=filter_result)
 
-            logger.info(
-                f"[OBSERVER] PRIORITY OBSERVATION: Message {msg.message_id} from @{msg.author_name} "  # type: ignore[attr-defined]
-                f"triggered {filter_result.priority.value} priority "
-                f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
-            )
+            if result:
+                logger.info(
+                    f"[OBSERVER] PRIORITY OBSERVATION: Message {msg.message_id} from @{msg.author_name} "  # type: ignore[attr-defined]
+                    f"triggered {filter_result.priority.value} priority "
+                    f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
+                )
+
+            return result
 
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error creating priority observation task: %s", e, exc_info=True)
+            return None
 
-    async def handle_incoming_message(self, msg: MessageT) -> None:
-        """Standard message handling flow for all observers."""
+    async def handle_incoming_message(self, msg: MessageT) -> "MessageHandlingResult":
+        """
+        Standard message handling flow for all observers.
+
+        Returns:
+            MessageHandlingResult: Complete result of message handling including status and task_id
+        """
+        from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus
+
         msg_id = getattr(msg, "message_id", "unknown")
         channel_id = getattr(msg, "channel_id", "unknown")
         author = f"{getattr(msg, 'author_name', 'unknown')} (ID: {getattr(msg, 'author_id', 'unknown')})"
@@ -668,7 +706,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
 
-        # Enforce credit policy if configured
+        # Enforce credit policy if configured (may raise CreditDenied/CreditCheckFailed)
         await self._enforce_credit_policy(msg)
 
         # Process message for secrets detection and replacement
@@ -680,7 +718,11 @@ class BaseObserver[MessageT: BaseModel](ABC):
         # If it's the agent's message, stop here (no task creation)
         if is_agent_message:
             logger.info(f"[OBSERVER] Message {msg_id} is from agent itself - NO TASK CREATED")
-            return
+            return MessageHandlingResult(
+                status=MessageHandlingStatus.AGENT_OWN_MESSAGE,
+                message_id=msg_id,
+                channel_id=channel_id,
+            )
 
         # Apply adaptive filtering to determine message priority and processing
         filter_result = await self._apply_message_filtering(msg, self.origin_service)
@@ -689,7 +731,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 f"[OBSERVER] Message {msg_id} from {author} in channel {channel_id} FILTERED OUT by adaptive filter: "
                 f"{filter_result.reasoning} (triggered filters: {', '.join(filter_result.triggered_filters) or 'none'})"
             )
-            return
+            return MessageHandlingResult(
+                status=MessageHandlingStatus.FILTERED_OUT,
+                message_id=msg_id,
+                channel_id=channel_id,
+                filtered=True,
+                filter_reasoning=filter_result.reasoning,
+            )
 
         logger.info(
             f"[OBSERVER] Message {msg_id} PASSED filter with priority {filter_result.priority.value}: "
@@ -701,34 +749,71 @@ class BaseObserver[MessageT: BaseModel](ABC):
         setattr(processed_msg, "_filter_context", filter_result.context_hints)
         setattr(processed_msg, "_filter_reasoning", filter_result.reasoning)
 
-        # Process based on priority
+        # Determine task priority
+        task_priority = 10 if filter_result.priority.value == "critical" else (5 if filter_result.priority.value == "high" else 0)
+
+        # Process based on priority and capture result
+        obs_result: Optional["PassiveObservationResult"] = None
         if filter_result.priority.value in ["critical", "high"]:
             logger.info(f"Processing {filter_result.priority.value} priority message: {filter_result.reasoning}")
-            await self._handle_priority_observation(processed_msg, filter_result)
+            obs_result = await self._handle_priority_observation(processed_msg, filter_result)
         else:
-            await self._handle_passive_observation(processed_msg)
+            obs_result = await self._handle_passive_observation(processed_msg)
 
         # Recall relevant context
         await self._recall_context(processed_msg)
+
+        # Determine status and extract task_id
+        if obs_result:
+            task_id = obs_result.task_id
+            if obs_result.existing_task_updated:
+                status = MessageHandlingStatus.UPDATED_EXISTING_TASK
+            else:
+                status = MessageHandlingStatus.TASK_CREATED
+        else:
+            task_id = None
+            status = MessageHandlingStatus.CHANNEL_RESTRICTED
+
+        # Return result
+        return MessageHandlingResult(
+            status=status,
+            task_id=task_id,
+            message_id=msg_id,
+            channel_id=channel_id,
+            task_priority=task_priority,
+            existing_task_updated=obs_result.existing_task_updated if obs_result else False,
+        )
 
     async def _enhance_message(self, msg: MessageT) -> MessageT:
         """Hook for subclasses to enhance messages (e.g., vision processing)."""
         return msg
 
-    async def _handle_priority_observation(self, msg: MessageT, filter_result: Any) -> None:
-        """Handle high-priority messages - to be implemented by subclasses"""
+    async def _handle_priority_observation(self, msg: MessageT, filter_result: Any) -> Optional["PassiveObservationResult"]:
+        """
+        Handle high-priority messages.
+
+        Returns:
+            Optional[PassiveObservationResult]: Result if task created/updated, None otherwise
+        """
         # Default implementation: check if message should be processed by this observer
         if await self._should_process_message(msg):
-            await self._create_priority_observation_result(msg, filter_result)
+            return await self._create_priority_observation_result(msg, filter_result)
         else:
             logger.debug(f"Ignoring priority message from channel {getattr(msg, 'channel_id', 'unknown')}")
+            return None
 
-    async def _handle_passive_observation(self, msg: MessageT) -> None:
-        """Handle passive observation routing - to be implemented by subclasses"""
+    async def _handle_passive_observation(self, msg: MessageT) -> Optional["PassiveObservationResult"]:
+        """
+        Handle passive observation routing.
+
+        Returns:
+            Optional[PassiveObservationResult]: Result if task created/updated, None otherwise
+        """
         if await self._should_process_message(msg):
-            await self._create_passive_observation_result(msg)
+            return await self._create_passive_observation_result(msg)
         else:
             logger.debug(f"Ignoring passive message from channel {getattr(msg, 'channel_id', 'unknown')}")
+            return None
 
     async def _enforce_credit_policy(self, msg: MessageT) -> None:
         """Ensure external credit policy allows processing of this message."""

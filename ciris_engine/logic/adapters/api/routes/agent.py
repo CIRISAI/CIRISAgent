@@ -212,7 +212,9 @@ def _check_send_messages_permission(auth: AuthContext, request: Request) -> None
     raise HTTPException(status_code=403, detail=error_detail)
 
 
-def _create_interaction_message(auth: AuthContext, body: Union[InteractRequest, MessageRequest]) -> Tuple[str, str, IncomingMessage]:
+def _create_interaction_message(
+    auth: AuthContext, body: Union[InteractRequest, MessageRequest]
+) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
     channel_id = f"api_{auth.user_id}"  # User-specific channel

@@ -224,6 +224,7 @@ class ApiPlatform(Service):
 
     def _create_message_handler(self) -> Callable[[IncomingMessage], Awaitable[MessageHandlingResult]]:
         """Create the message handler function."""
+
         async def handle_message_via_observer(msg: IncomingMessage) -> MessageHandlingResult:
             """Handle incoming messages by creating passive observations."""
             try:

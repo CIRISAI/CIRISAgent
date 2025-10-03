@@ -62,7 +62,9 @@ async def emergency_shutdown(
 
 
 @router.get("/kill-switch/status")
-async def get_kill_switch_status(runtime_service: RuntimeControlServiceProtocol = Depends(get_runtime_service)) -> Dict[str, Any]:
+async def get_kill_switch_status(
+    runtime_service: RuntimeControlServiceProtocol = Depends(get_runtime_service),
+) -> Dict[str, Any]:
     """
     Get current kill switch configuration status.
 

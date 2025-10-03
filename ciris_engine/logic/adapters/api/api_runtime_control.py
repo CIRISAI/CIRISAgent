@@ -272,6 +272,7 @@ class APIRuntimeControlService(Service):
         adapter_config = None
         if config:
             from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
             adapter_config = AdapterConfig(**config)
 
         result = await self.adapter_manager.load_adapter(adapter_type, adapter_id, adapter_config)

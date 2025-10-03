@@ -1743,8 +1743,11 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
     async def start(self) -> None:
         """Start the telemetry service."""
+        from datetime import datetime, timezone
+
         # Don't call super() as BaseService has async start
         self._started = True
+        self._start_time = datetime.now(timezone.utc)
         logger.debug("GraphTelemetryService started - routing all metrics through memory graph")
 
     async def stop(self) -> None:

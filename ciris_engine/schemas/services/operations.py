@@ -89,6 +89,7 @@ class MemoryRecallResult(BaseModel):
 
 
 __all__ = [
+    "GraphScope",
     "MemoryOpStatus",
     "MemoryOpAction",
     "MemoryOpResult",

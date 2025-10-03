@@ -311,7 +311,7 @@ async def get_resource_usage(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _get_runtime_control_service(request: Request):
+def _get_runtime_control_service(request: Request) -> Any:
     """Get runtime control service from request, trying main service first."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
@@ -328,30 +328,30 @@ def _validate_runtime_action(action: str) -> None:
         raise HTTPException(status_code=400, detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}")
 
 
-async def _execute_pause_action(runtime_control, body: RuntimeAction) -> bool:
+async def _execute_pause_action(runtime_control: Any, body: RuntimeAction) -> bool:
     """Execute pause action and return success status."""
     # Check if the service expects a reason parameter (API runtime control) or not (main runtime control)
     import inspect
 
     sig = inspect.signature(runtime_control.pause_processing)
     if len(sig.parameters) > 0:  # API runtime control service
-        success = await runtime_control.pause_processing(body.reason or "API request")
+        success: bool = await runtime_control.pause_processing(body.reason or "API request")
     else:  # Main runtime control service
         control_response = await runtime_control.pause_processing()
         success = control_response.success
     return success
 
 
-def _extract_pipeline_state_info(request: Request) -> tuple[str, dict, dict]:
+def _extract_pipeline_state_info(request: Request) -> tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Extract pipeline state information for UI display.
 
     Returns:
         Tuple of (current_step, current_step_schema, pipeline_state)
     """
-    current_step = None
-    current_step_schema = None
-    pipeline_state = None
+    current_step: Optional[str] = None
+    current_step_schema: Optional[Dict[str, Any]] = None
+    pipeline_state: Optional[Dict[str, Any]] = None
 
     try:
         # Try to get current pipeline state from the runtime
@@ -393,7 +393,7 @@ def _extract_pipeline_state_info(request: Request) -> tuple[str, dict, dict]:
 
 
 def _create_pause_response(
-    success: bool, current_step: str, current_step_schema: dict, pipeline_state: dict
+    success: bool, current_step: Optional[str], current_step_schema: Optional[Dict[str, Any]], pipeline_state: Optional[Dict[str, Any]]
 ) -> RuntimeControlResponse:
     """Create pause action response."""
     # Create clear message based on success state
@@ -419,7 +419,7 @@ def _create_pause_response(
     return result
 
 
-async def _execute_resume_action(runtime_control) -> RuntimeControlResponse:
+async def _execute_resume_action(runtime_control: Any) -> RuntimeControlResponse:
     """Execute resume action."""
     # Check if the service returns a control response or just boolean
     resume_result = await runtime_control.resume_processing()
@@ -437,7 +437,7 @@ async def _execute_resume_action(runtime_control) -> RuntimeControlResponse:
     )
 
 
-async def _execute_state_action(runtime_control) -> RuntimeControlResponse:
+async def _execute_state_action(runtime_control: Any) -> RuntimeControlResponse:
     """Execute state query action."""
     # Get current state without changing it
     status = await runtime_control.get_runtime_status()
@@ -475,7 +475,8 @@ def _get_cognitive_state_safe(request: Request) -> Optional[str]:
         return None
 
     try:
-        return runtime.agent_processor.get_current_state()
+        state: str = runtime.agent_processor.get_current_state()
+        return state
     except Exception as e:
         logger.warning(
             f"Failed to retrieve cognitive state: {type(e).__name__}: {str(e)} - Agent processor may not be initialized"
@@ -487,18 +488,21 @@ def _check_initialization_status(request: Request) -> bool:
     """Check if system initialization is complete."""
     init_service = getattr(request.app.state, "initialization_service", None)
     if init_service and hasattr(init_service, "is_initialized"):
-        return init_service.is_initialized()
+        result: bool = init_service.is_initialized()
+        return result
     return True
 
 
-async def _check_provider_health(provider) -> bool:
+async def _check_provider_health(provider: Any) -> bool:
     """Check if a single provider is healthy."""
     try:
         if hasattr(provider, "is_healthy"):
             if asyncio.iscoroutinefunction(provider.is_healthy):
-                return await provider.is_healthy()
+                result: bool = await provider.is_healthy()
+                return result
             else:
-                return provider.is_healthy()
+                result_sync: bool = provider.is_healthy()
+                return result_sync
         else:
             return True  # Assume healthy if no method
     except Exception:
@@ -507,7 +511,7 @@ async def _check_provider_health(provider) -> bool:
 
 async def _collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
     """Collect service health data from service registry."""
-    services = {}
+    services: Dict[str, Dict[str, int]] = {}
     if not (hasattr(request.app.state, "service_registry") and request.app.state.service_registry is not None):
         return services
 
@@ -548,7 +552,8 @@ async def _check_processor_health(request: Request) -> bool:
 
         # Also check runtime status for additional validation
         runtime_status = await runtime_control.get_runtime_status()
-        return processor_healthy and runtime_status.is_running
+        combined_health: bool = processor_healthy and runtime_status.is_running
+        return combined_health
     except Exception as e:
         logger.warning(f"Failed to check processor health: {e}")
         return False
@@ -571,9 +576,9 @@ def _determine_overall_status(init_complete: bool, processor_healthy: bool, serv
         return "critical"
 
 
-def _get_cognitive_state(request: Request) -> str:
+def _get_cognitive_state(request: Request) -> Optional[str]:
     """Get cognitive state from agent processor if available."""
-    cognitive_state = None
+    cognitive_state: Optional[str] = None
     runtime = getattr(request.app.state, "runtime", None)
     if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None:
         try:
@@ -585,7 +590,7 @@ def _get_cognitive_state(request: Request) -> str:
     return cognitive_state
 
 
-def _create_final_response(base_result: RuntimeControlResponse, cognitive_state: str) -> RuntimeControlResponse:
+def _create_final_response(base_result: RuntimeControlResponse, cognitive_state: Optional[str]) -> RuntimeControlResponse:
     """Create final response with cognitive state and any enhanced fields."""
     response = RuntimeControlResponse(
         success=base_result.success,
@@ -784,7 +789,7 @@ def _parse_service_key(service_key: str) -> tuple[str, str]:
         return "unknown", service_key
 
 
-def _create_service_status(service_key: str, details: dict) -> ServiceStatus:
+def _create_service_status(service_key: str, details: Dict[str, Any]) -> ServiceStatus:
     """Create ServiceStatus from service key and details."""
     service_type, display_name = _parse_service_key(service_key)
 
@@ -798,7 +803,7 @@ def _create_service_status(service_key: str, details: dict) -> ServiceStatus:
     )
 
 
-def _update_service_summary(service_summary: dict, service_type: str, is_healthy: bool) -> None:
+def _update_service_summary(service_summary: Dict[str, Dict[str, int]], service_type: str, is_healthy: bool) -> None:
     """Update service summary with service type and health status."""
     if service_type not in service_summary:
         service_summary[service_type] = {"total": 0, "healthy": 0}
@@ -834,7 +839,7 @@ async def get_services_status(
 
         # Convert service details to ServiceStatus list using helper functions
         services = []
-        service_summary = {}
+        service_summary: Dict[str, Dict[str, int]] = {}
 
         # Include ALL services (both direct and registry)
         for service_key, details in health_status.service_details.items():
@@ -1240,7 +1245,7 @@ async def reload_adapter(
 
 # Tool endpoints
 @router.get("/tools")
-async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> dict:
+async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> Dict[str, Any]:
     """
     Get list of all available tools from all tool providers.
 

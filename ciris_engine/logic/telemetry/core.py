@@ -97,7 +97,9 @@ class BasicTelemetryCollector(BaseService):
 
         # Store enhanced metrics in separate history for TSDB capabilities
         if not hasattr(self, "_enhanced_history"):
-            self._enhanced_history: Dict[str, Deque[Dict[str, Any]]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
+            self._enhanced_history: Dict[str, Deque[Dict[str, Any]]] = defaultdict(
+                lambda: deque(maxlen=self.buffer_size)
+            )
 
         self._enhanced_history[name].append(metric_entry)
 

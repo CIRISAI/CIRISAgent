@@ -547,7 +547,9 @@ class PatternAnalysisLoop(BaseScheduledService):
 
     async def _get_action_frequency(self) -> Dict[str, ActionFrequency]:
         """Get frequency of different actions."""
-        action_data_raw: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"count": 0, "evidence": [], "last_seen": None})
+        action_data_raw: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {"count": 0, "evidence": [], "last_seen": None}
+        )
 
         # Query recent actions
         if not self._memory_bus:

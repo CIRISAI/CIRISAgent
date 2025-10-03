@@ -827,7 +827,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
     async def _create_trace_correlation(self, entry: AuditRequest, action_type: HandlerActionType) -> None:
         """Create a ServiceCorrelation for trace tracking."""
-        logger.info(f"Creating trace correlation for audit event {entry.entry_id}")
+        logger.debug(f"Creating trace correlation for audit event {entry.entry_id}")
         try:
             from ciris_engine.schemas.telemetry.core import (
                 CorrelationType,
@@ -898,7 +898,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             # Store correlation in telemetry service
             if hasattr(telemetry_service, "_store_correlation"):
                 await telemetry_service._store_correlation(correlation)
-                logger.info(f"Successfully stored trace correlation for audit event {entry.entry_id}")
+                logger.debug(f"Successfully stored trace correlation for audit event {entry.entry_id}")
             else:
                 logger.warning(f"Telemetry service does not have _store_correlation method")
 

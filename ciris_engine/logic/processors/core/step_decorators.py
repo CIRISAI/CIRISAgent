@@ -847,16 +847,16 @@ async def _broadcast_reasoning_event(
     4. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
     5. ACTION_COMPLETE → ACTION_RESULT (execution + audit)
     """
-    logger.info(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
+    logger.debug(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
     try:
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
-        logger.info("[BROADCAST DEBUG] Imports successful")
+        logger.debug("[BROADCAST DEBUG] Imports successful")
 
         event = None
         timestamp = step_data.timestamp or datetime.now().isoformat()
-        logger.info(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
+        logger.debug(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
 
         # Map step points to reasoning events using helper functions
         if step == StepPoint.START_ROUND:
@@ -866,7 +866,7 @@ async def _broadcast_reasoning_event(
         elif step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
             if step == StepPoint.PERFORM_DMAS:
-                logger.info("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
+                logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
                 event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
 
         elif step == StepPoint.PERFORM_ASPDMA:
@@ -893,13 +893,13 @@ async def _broadcast_reasoning_event(
 
         # Broadcast the event if we created one
         if event:
-            logger.info(f"[BROADCAST DEBUG] About to broadcast {event.event_type}")
+            logger.debug(f"[BROADCAST DEBUG] About to broadcast {event.event_type}")
             await reasoning_event_stream.broadcast_reasoning_event(event)
-            logger.info(
+            logger.debug(
                 f"[BROADCAST DEBUG] Broadcasted {event.event_type} reasoning event for thought {step_data.thought_id}"
             )
         else:
-            logger.info(f"[BROADCAST DEBUG] No event created for step {step.value}")
+            logger.debug(f"[BROADCAST DEBUG] No event created for step {step.value}")
 
     except Exception as e:
         logger.warning(f"Error broadcasting reasoning event for {step.value}: {e}")

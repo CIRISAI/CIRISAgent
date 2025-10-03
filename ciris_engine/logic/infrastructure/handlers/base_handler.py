@@ -185,10 +185,10 @@ class BaseActionHandler(ABC):
         from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 
         # Debug logging
-        self.logger.info(f"[AUDIT DEBUG] _audit_log called for {action_type.value} with outcome={outcome}")
-        self.logger.info(f"[AUDIT DEBUG] bus_manager has audit_service: {hasattr(self.bus_manager, 'audit_service')}")
+        self.logger.debug(f"[AUDIT DEBUG] _audit_log called for {action_type.value} with outcome={outcome}")
+        self.logger.debug(f"[AUDIT DEBUG] bus_manager has audit_service: {hasattr(self.bus_manager, 'audit_service')}")
         if hasattr(self.bus_manager, "audit_service"):
-            self.logger.info(f"[AUDIT DEBUG] audit_service is: {self.bus_manager.audit_service}")
+            self.logger.debug(f"[AUDIT DEBUG] audit_service is: {self.bus_manager.audit_service}")
 
         # FAIL FAST AND LOUD if audit service is missing
         if not hasattr(self.bus_manager, "audit_service"):
@@ -199,10 +199,10 @@ class BaseActionHandler(ABC):
 
         # Convert to proper audit event type
         audit_event_type = AuditEventType(f"handler_action_{action_type.value}")
-        self.logger.info(f"[AUDIT DEBUG] Creating audit event type: {audit_event_type}")
+        self.logger.debug(f"[AUDIT DEBUG] Creating audit event type: {audit_event_type}")
 
         # Use the audit service directly (it's not a bussed service) and capture result
-        self.logger.info(f"[AUDIT DEBUG] Calling audit_service.log_event with handler={self.__class__.__name__}")
+        self.logger.debug(f"[AUDIT DEBUG] Calling audit_service.log_event with handler={self.__class__.__name__}")
         audit_result = await self.bus_manager.audit_service.log_event(
             event_type=str(audit_event_type),
             event_data={
@@ -214,7 +214,7 @@ class BaseActionHandler(ABC):
                 "wa_authorized": dispatch_context.wa_authorized,
             },
         )
-        self.logger.info(f"[AUDIT DEBUG] Successfully logged audit event with entry_id={audit_result.entry_id}")
+        self.logger.debug(f"[AUDIT DEBUG] Successfully logged audit event with entry_id={audit_result.entry_id}")
         return audit_result
 
     async def _handle_error(

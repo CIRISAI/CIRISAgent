@@ -114,7 +114,7 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
 
         return metrics
 
-    def get_metrics(self) -> Dict[str, float]:
+    async def get_metrics(self) -> Dict[str, float]:
         """Get all initialization service metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()

@@ -1105,53 +1105,6 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
         """Check if all required dependencies are available."""
         return self._time_service is not None
 
-    def get_metrics(self) -> Dict[str, float]:
-        """
-        Return EXACTLY the v1.4.3 self-observation metrics.
-
-        Returns the 5 required metrics from the 362 v1.4.3 set:
-        - observations_recorded_total: Total observations recorded by the service
-        - patterns_detected_total: Total patterns detected by pattern analysis
-        - anomalies_detected_total: Total anomalies detected during observation
-        - self_health_score: Current health score (0-100 scale)
-        - observation_uptime_seconds: Service uptime in seconds
-
-        Uses real values from service state, not zeros.
-        """
-        # Calculate uptime in seconds
-        uptime_seconds = 0.0
-        if hasattr(self, "_start_time") and self._start_time:
-            current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-            # Ensure both timestamps are timezone-aware
-            if self._start_time.tzinfo is None:
-                self._start_time = self._start_time.replace(tzinfo=timezone.utc)
-            if current_time.tzinfo is None:
-                current_time = current_time.replace(tzinfo=timezone.utc)
-            uptime_seconds = (current_time - self._start_time).total_seconds()
-
-        # Calculate health score (0-100) based on service state
-        health_score = 100.0
-        if self._emergency_stop:
-            health_score = 0.0
-        elif self._consecutive_failures > 0:
-            # Reduce health by 25 points per failure, minimum 25
-            health_score = max(25.0, 100.0 - (self._consecutive_failures * 25.0))
-        elif self._current_state == ObservationState.REVIEWING:
-            health_score = 75.0  # Under review but functioning
-
-        # Get pattern count from pattern loop if available
-        pattern_count = self._patterns_detected
-        if self._pattern_loop and hasattr(self._pattern_loop, "_detected_patterns"):
-            pattern_count = len(self._pattern_loop._detected_patterns)
-
-        return {
-            "observations_recorded_total": float(self._observations_made),
-            "patterns_detected_total": float(pattern_count),
-            "anomalies_detected_total": float(self._anomalies_detected),
-            "self_health_score": health_score,
-            "observation_uptime_seconds": uptime_seconds,
-        }
-
     async def get_metrics(self) -> Dict[str, float]:
         """Get all self-observation metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics

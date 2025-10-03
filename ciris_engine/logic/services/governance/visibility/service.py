@@ -383,30 +383,6 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         except Exception as e:
             return f"Unable to explain action {action_id}: {str(e)}"
 
-    async def get_task_history(self, limit: int = 10) -> List[Task]:
-        """Get recent task history for the agent."""
-        tasks = []
-
-        # Get completed tasks
-        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED, db_path=self._db_path)
-
-        # Get failed tasks
-        failed_tasks = get_tasks_by_status(TaskStatus.FAILED, db_path=self._db_path)
-
-        # Combine and sort by most recent first
-        all_tasks = []
-        if completed_tasks:
-            all_tasks.extend(completed_tasks)
-        if failed_tasks:
-            all_tasks.extend(failed_tasks)
-
-        if all_tasks:
-            # Sort by updated_at (most recent first)
-            all_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
-            tasks = all_tasks[:limit]
-
-        return tasks
-
     def apply_redaction(self, content: str, redacted_content: str) -> str:
         """Apply redaction to content and track the operation."""
         self._redaction_operations += 1

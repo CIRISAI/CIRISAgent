@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from typing import Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 
 import instructor
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, InternalServerError, RateLimitError
@@ -39,7 +39,7 @@ class OpenAIConfig(BaseModel):
 logger = logging.getLogger(__name__)
 
 # Type for structured call functions that can be retried
-StructuredCallFunc = Callable[[List[dict], Type[BaseModel], int, float], Awaitable[Tuple[BaseModel, ResourceUsage]]]
+StructuredCallFunc = Callable[[List[MessageDict], Type[BaseModel], int, float], Awaitable[Tuple[BaseModel, ResourceUsage]]]
 
 
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
@@ -122,7 +122,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
         # Metrics tracking (no caching - we never cache LLM responses)
-        self._response_times = []  # List of response times in ms
+        self._response_times: List[float] = []  # List of response times in ms
         self._max_response_history = 100  # Keep last 100 response times
         self._total_api_calls = 0
         self._successful_api_calls = 0
@@ -314,7 +314,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self.circuit_breaker.check_and_raise()
 
         async def _make_structured_call(
-            msg_list: List[dict],
+            msg_list: List[MessageDict],
             resp_model: Type[BaseModel],
             max_toks: int,
             temp: float,
@@ -322,9 +322,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
             try:
                 # Use instructor but capture the completion for usage data
+                # Note: We cast to Any because instructor expects OpenAI-specific message types
+                # but we use our own MessageDict protocol for type safety at the service boundary
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
-                    messages=cast(List, msg_list),
+                    messages=cast(Any, msg_list),
                     response_model=resp_model,
                     max_retries=0,  # Disable instructor retries completely
                     max_tokens=max_toks,
@@ -400,7 +402,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         try:
             return await self._retry_with_backoff(
                 _make_structured_call,
-                cast(List[dict], messages),
+                messages,
                 response_model,
                 max_tokens,
                 temperature,
@@ -439,7 +441,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     async def _retry_with_backoff(
         self,
         func: StructuredCallFunc,
-        messages: List[dict],
+        messages: List[MessageDict],
         response_model: Type[BaseModel],
         max_tokens: int,
         temperature: float,

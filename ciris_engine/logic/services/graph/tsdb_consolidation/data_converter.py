@@ -245,7 +245,9 @@ class TSDBDataConverter:
                 response_data=response_data,
                 execution_time_ms=(
                     response_data.execution_time_ms
-                    if response_data and hasattr(response_data, "execution_time_ms") and response_data.execution_time_ms is not None
+                    if response_data
+                    and hasattr(response_data, "execution_time_ms")
+                    and response_data.execution_time_ms is not None
                     else 0.0
                 ),
                 success=(
@@ -253,9 +255,7 @@ class TSDBDataConverter:
                     if response_data and hasattr(response_data, "success") and response_data.success is not None
                     else True
                 ),
-                error_message=(
-                    response_data.error if response_data and hasattr(response_data, "error") else None
-                ),
+                error_message=(response_data.error if response_data and hasattr(response_data, "error") else None),
                 context=context,
             )
         except Exception as e:

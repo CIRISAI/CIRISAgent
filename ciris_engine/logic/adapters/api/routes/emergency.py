@@ -285,7 +285,7 @@ async def emergency_shutdown(command: WASignedCommand, request: Request) -> Succ
 
 
 @router.get("/emergency/test")
-async def test_emergency_endpoint() -> dict:
+async def test_emergency_endpoint() -> Dict[str, Any]:
     """
     Test endpoint to verify emergency routes are mounted.
 

@@ -43,7 +43,7 @@ class RateLimiter:
 
             # Cleanup old entries periodically
             if (now - self._last_cleanup).seconds > self._cleanup_interval:
-                await self._cleanup_old_entries()
+                self._cleanup_old_entries()
                 self._last_cleanup = now
 
             # Get or create bucket

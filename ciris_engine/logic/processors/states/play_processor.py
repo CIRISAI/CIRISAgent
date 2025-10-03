@@ -3,7 +3,7 @@ Play processor for creative and experimental processing.
 """
 
 import logging
-from typing import Any, List
+from typing import Dict, Any, List
 
 from ciris_engine.schemas.processors.results import PlayResult
 from ciris_engine.schemas.processors.states import AgentState
@@ -60,7 +60,7 @@ class PlayProcessor(WorkProcessor):
             duration_seconds=work_result.duration_seconds,
         )
 
-    def get_play_stats(self) -> dict:
+    def get_play_stats(self) -> Dict[str, Any]:
         """Get play-specific statistics."""
         base_stats = {
             "last_activity": self.last_activity_time.isoformat(),
@@ -130,7 +130,7 @@ class PlayProcessor(WorkProcessor):
 
         return secrets.randbelow(100) < 20
 
-    def get_status(self) -> dict:
+    def get_status(self) -> Dict[str, Any]:
         """Get current play processor status and metrics."""
         base_status = super().get_status()
         play_stats = self.get_play_stats()

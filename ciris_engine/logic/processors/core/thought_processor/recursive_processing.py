@@ -7,7 +7,7 @@ Handles retry logic when conscience validation fails, including:
 """
 
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -85,7 +85,7 @@ class RecursiveProcessingPhase:
 
         try:
             # Re-run action selection with guidance about why previous action failed
-            retry_result = await self._perform_aspdma_with_guidance(  # type: ignore[attr-defined]
+            retry_result = await self._perform_aspdma_with_guidance(
                 thought, thought_context, dma_results, override_reason, max_retries=3
             )
             return retry_result
@@ -143,7 +143,7 @@ class RecursiveProcessingPhase:
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
         last_error = None
-        retry_history = []
+        retry_history: List[Dict[str, Any]] = []
 
         for attempt in range(max_retries):
             try:

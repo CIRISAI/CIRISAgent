@@ -6,7 +6,7 @@ comprehensive multi-perspective analysis before action selection.
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Union
 
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
@@ -15,6 +15,10 @@ from ciris_engine.schemas.actions.parameters import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.runtime_control import StepPoint
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.processors.support.dma_orchestrator import DMAOrchestrator
+    from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +31,21 @@ class DMAExecutionPhase:
     - 3 parallel DMAs for comprehensive analysis
     - Multi-perspective decision insights
     - Preparation for action selection
+
+    Attributes (provided by ThoughtProcessor):
+        dma_orchestrator: DMA orchestration service
+        telemetry_service: Optional telemetry service for metrics
     """
+
+    if TYPE_CHECKING:
+        dma_orchestrator: "DMAOrchestrator"
+        telemetry_service: "TelemetryServiceProtocol | None"
 
     @streaming_step(StepPoint.PERFORM_DMAS)
     @step_point(StepPoint.PERFORM_DMAS)
-    async def _perform_dmas_step(self, thought_item: ProcessingQueueItem, thought_context):
+    async def _perform_dmas_step(
+        self, thought_item: ProcessingQueueItem, thought_context: Any
+    ) -> Union[Any, ActionSelectionDMAResult]:
         """
         Step 2: Execute 3 parallel Decision Making Algorithms.
 

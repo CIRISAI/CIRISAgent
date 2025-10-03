@@ -5,6 +5,7 @@ from typing import Any, List, Optional
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
+from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 

@@ -17,6 +17,7 @@ from ciris_engine.logic.utils.channel_utils import extract_channel_id
 from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import AuditEventType
+from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.runtime.contexts import DispatchContext

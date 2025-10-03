@@ -41,7 +41,7 @@ async def run_with_shutdown_handler(runtime: CIRISRuntime, num_rounds: Optional[
             pass  # Continue without signal handlers if not supported
 
     try:
-        await runtime.run(num_rounds=num_rounds)
+        await runtime.run(num_rounds)
     except Exception as e:
         logging.critical(f"Runtime execution failed: {e}", exc_info=True)
         # Ensure shutdown is requested if a top-level error occurs in runtime.run() itself

@@ -3,14 +3,14 @@ Telemetry helper functions - extracted from telemetry.py to reduce file size.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from ciris_engine.logic.services.graph.telemetry_service import TelemetryAggregator
 
 
 async def get_telemetry_from_service(
-    telemetry_service, view: str, category: Optional[str], format: str, live: bool
-) -> Dict:
+    telemetry_service: Any, view: str, category: Optional[str], format: str, live: bool
+) -> Dict[str, Any]:
     """Get telemetry from the service's built-in aggregator."""
     # Try to pass parameters if the method accepts them (for mocked services in tests)
     # Otherwise fall back to calling without parameters (for real service)
@@ -34,18 +34,23 @@ async def get_telemetry_from_service(
     # Convert Pydantic model to dict if needed
     from pydantic import BaseModel
 
+    result_dict: Dict[str, Any]
     if isinstance(result, BaseModel):
-        result = result.model_dump()
+        result_dict = result.model_dump()
+    else:
+        result_dict = cast(Dict[str, Any], result)
 
     # Ensure the view is included in the result (for backward compatibility)
-    if "view" not in result:
-        result["view"] = view
+    if "view" not in result_dict:
+        result_dict["view"] = view
 
     # Add or update metadata about the requested view and category
-    if "_metadata" not in result:
-        result["_metadata"] = {}
+    if "_metadata" not in result_dict:
+        result_dict["_metadata"] = {}
 
-    result["_metadata"].update(
+    # Ensure _metadata is a dict before updating
+    metadata_dict = cast(Dict[str, Any], result_dict["_metadata"])
+    metadata_dict.update(
         {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "view": view,
@@ -55,10 +60,10 @@ async def get_telemetry_from_service(
         }
     )
 
-    return result
+    return result_dict
 
 
-async def get_telemetry_fallback(app_state, view: str, category: Optional[str]) -> Dict:
+async def get_telemetry_fallback(app_state: Any, view: str, category: Optional[str]) -> Dict[str, Any]:
     """Fallback method to get telemetry using TelemetryAggregator."""
     # Get required services from app state
     service_registry = getattr(app_state, "service_registry", None)
@@ -83,17 +88,23 @@ async def get_telemetry_fallback(app_state, view: str, category: Optional[str]) 
 
     aggregator = TelemetryAggregator(service_registry, time_service)
     telemetry_data = await aggregator.collect_all_parallel()
-    result = aggregator.calculate_aggregates(telemetry_data)
+    result_data = aggregator.calculate_aggregates(telemetry_data)
 
-    if view != "detailed":
-        result = aggregator.apply_view_filter(result, view)
+    # Note: apply_view_filter was removed - view filtering now handled at API level
+    # if view != "detailed":
+    #     result_data = aggregator.apply_view_filter(result_data, view)
 
-    result["_metadata"] = {
+    # Convert result to proper dict type
+    result_dict = cast(Dict[str, Any], result_data)
+
+    # Create metadata dict separately to ensure proper typing
+    metadata: Dict[str, Any] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "view": view,
         "category": category,
         "cached": False,
         "format": "json",
     }
+    result_dict["_metadata"] = metadata
 
-    return result
+    return result_dict

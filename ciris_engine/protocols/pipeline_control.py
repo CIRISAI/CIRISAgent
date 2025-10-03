@@ -141,20 +141,24 @@ class PipelineController:
         """Pause execution at a step point."""
         # Create or update thought in pipeline
         if thought_id not in self._paused_thoughts:
+            from datetime import datetime
             step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
+            timestamp = step_data_dict.get("timestamp")
             thought = ThoughtInPipeline(
                 thought_id=thought_id,
                 task_id=str(step_data_dict.get("task_id", "")),
                 thought_type=str(step_data_dict.get("thought_type", "")),
                 current_step=step_point,
-                entered_step_at=step_data_dict.get("timestamp"),  # type: ignore[arg-type]  # Can be datetime or other types
+                entered_step_at=timestamp if isinstance(timestamp, datetime) else datetime.now(),
             )
             self._paused_thoughts[thought_id] = thought
         else:
             thought = self._paused_thoughts[thought_id]
             step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
             thought.current_step = step_point
-            thought.entered_step_at = step_data_dict.get("timestamp")  # type: ignore[assignment]
+            from datetime import datetime
+            timestamp = step_data_dict.get("timestamp")
+            thought.entered_step_at = timestamp if isinstance(timestamp, datetime) else datetime.now()
 
         # Update thought with step-specific data
         step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
@@ -229,19 +233,19 @@ class PipelineController:
             return
 
         if step_point == StepPoint.GATHER_CONTEXT:
-            thought.context_built = step_data.get("context")  # type: ignore[assignment]  # Optional field assignment
+            thought.context_built = step_data.get("context")
         elif step_point == StepPoint.PERFORM_DMAS:
             # Note: dma_results doesn't exist on ThoughtInPipeline - skip or use alternative
             pass
         elif step_point == StepPoint.PERFORM_ASPDMA:
-            thought.aspdma_result = step_data.get("aspdma_result")  # type: ignore[assignment]  # Optional field assignment
+            thought.aspdma_result = step_data.get("aspdma_result")
         elif step_point == StepPoint.CONSCIENCE_EXECUTION:
-            thought.conscience_results = step_data.get("conscience_results")  # type: ignore[assignment]  # Optional field assignment
+            thought.conscience_results = step_data.get("conscience_results")
         elif step_point == StepPoint.FINALIZE_ACTION:
-            thought.selected_action = step_data.get("selected_action")  # type: ignore[assignment]  # Optional field assignment
+            thought.selected_action = step_data.get("selected_action")
         elif step_point == StepPoint.ROUND_COMPLETE:
-            thought.handler_result = step_data.get("handler_result")  # type: ignore[assignment]  # Optional field assignment
-            thought.bus_operations = step_data.get("bus_operations")  # type: ignore[assignment]  # Optional field assignment
+            thought.handler_result = step_data.get("handler_result")
+            thought.bus_operations = step_data.get("bus_operations")
 
     def _create_step_result(self, step_point: StepPoint, step_data: Optional[StepData]) -> StepResultUnion:
         """Create StepResult using EXACT data from running H3ERE pipeline."""
@@ -300,11 +304,11 @@ class PipelineController:
         """Handle execution of paused thoughts."""
         from ciris_engine.logic.processors.core.step_decorators import execute_all_steps
 
-        result = await execute_all_steps()  # type: ignore[no-untyped-call]  # External untyped function
+        result = await execute_all_steps()
         processing_time_ms = self._calculate_processing_time(start_time)
 
         # Convert result to dict if needed for indexing
-        result_dict = result.model_dump() if hasattr(result, "model_dump") else result  # type: ignore[attr-defined,assignment]  # Dynamic model conversion
+        result_dict = result.model_dump() if hasattr(result, "model_dump") else result
 
         return SingleStepResult(
             success=result_dict["success"],  # type: ignore[index]  # Dict-like access on dynamic type
@@ -335,9 +339,9 @@ class PipelineController:
         return SingleStepResult(
             success=True,
             step_point="initiate_processing",
-            message=f"Initiated processing for thought {thought.thought_id} - will pause at first step",  # type: ignore[attr-defined]  # Dynamic thought object
-            thought_id=thought.thought_id,  # type: ignore[attr-defined]  # Dynamic thought object
-            step_results=[{"thought_id": thought.thought_id, "initiated": True}],  # type: ignore[attr-defined]  # Dynamic thought object
+            message=f"Initiated processing for thought {thought.thought_id} - will pause at first step",
+            thought_id=thought.thought_id,
+            step_results=[{"thought_id": thought.thought_id, "initiated": True}],
             processing_time_ms=processing_time_ms,
             pipeline_state=self._get_pipeline_state_dict(),
         )
@@ -368,7 +372,7 @@ class PipelineController:
 
     async def _initiate_thought_processing(self, thought: Any, start_time: float) -> SingleStepResult:
         """Initiate processing for a pending thought."""
-        if not (self.main_processor and self.main_processor.thought_processor):  # type: ignore[attr-defined]  # Dynamic main_processor object
+        if not (self.main_processor and self.main_processor.thought_processor):
             return self._handle_no_processor(start_time)
 
         try:
@@ -401,21 +405,19 @@ class PipelineController:
         start_time = asyncio.get_event_loop().time()
 
         # Enable single-step mode so that step decorators pause at each step
-        enable_single_step_mode()  # type: ignore[no-untyped-call]  # External untyped function
+        enable_single_step_mode()
 
         # Check if we have paused thoughts to advance
-        paused_thoughts = get_paused_thoughts()  # type: ignore[no-untyped-call]  # External untyped function
+        paused_thoughts = get_paused_thoughts()
 
         if paused_thoughts:
             return await self._handle_paused_thoughts(start_time)
 
         # No paused thoughts - need to start new thoughts in the pipeline
-        from ciris_engine.logic import persistence  # type: ignore[attr-defined]  # Dynamic module import
-        from ciris_engine.schemas.runtime.models import (
-            ThoughtStatus,  # type: ignore[attr-defined]  # Module export issue
-        )
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
-        pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)  # type: ignore[no-untyped-call]  # External untyped function
+        pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)
         if not pending_thoughts:
             return self._handle_no_pending_thoughts(start_time)
 
@@ -497,8 +499,8 @@ class PipelineController:
         """Get thoughts that need processing at this step point."""
         pipeline_state = self.get_pipeline_state()
 
-        if hasattr(pipeline_state, "thoughts_by_step") and step_point in pipeline_state.thoughts_by_step:  # type: ignore[attr-defined]  # Optional attribute on PipelineState
-            return pipeline_state.thoughts_by_step[step_point][:5]  # type: ignore[attr-defined]  # Optional attribute on PipelineState
+        if hasattr(pipeline_state, "thoughts_by_step") and step_point in pipeline_state.thoughts_by_step:
+            return pipeline_state.thoughts_by_step[step_point][:5]
 
         # For early steps, we may need to create mock thoughts
         return []
@@ -508,13 +510,13 @@ class PipelineController:
         from datetime import datetime
 
         return ThoughtInPipeline(
-            thought_id=thought.thought_id,  # type: ignore[attr-defined]  # Dynamic thought object
-            task_id=thought.source_task_id,  # type: ignore[attr-defined]  # Dynamic thought object
-            thought_type=thought.thought_type.value if thought.thought_type else "task_execution",  # type: ignore[attr-defined]  # Dynamic thought object
+            thought_id=thought.thought_id,
+            task_id=thought.source_task_id,
+            thought_type=thought.thought_type.value if thought.thought_type else "task_execution",
             current_step=step_point,
             entered_step_at=datetime.now(),
             step_data={
-                "content": thought.content,  # type: ignore[attr-defined]  # Dynamic thought object
+                "content": thought.content,
                 "created_at": self._extract_created_at_string(thought),
                 "tags": getattr(thought, "tags", []),
             },
@@ -522,13 +524,13 @@ class PipelineController:
 
     def _extract_created_at_string(self, thought: Any) -> Optional[str]:
         """Extract created_at as a string, handling various formats."""
-        if not thought.created_at:  # type: ignore[attr-defined]  # Dynamic thought object
+        if not thought.created_at:
             return None
 
         if hasattr(thought.created_at, "isoformat"):
-            return str(thought.created_at.isoformat())  # type: ignore[attr-defined]  # Dynamic thought object
+            return str(thought.created_at.isoformat())
         else:
-            return str(thought.created_at)  # type: ignore[attr-defined]  # Dynamic thought object
+            return str(thought.created_at)
 
     async def _execute_step_for_thought(self, step_point: StepPoint, thought: Any) -> ThoughtProcessingResult:
         """
@@ -544,7 +546,7 @@ class PipelineController:
         processing_time_ms = (asyncio.get_event_loop().time() - processing_start) * 1000
 
         # Create Pydantic result object
-        thought_id_str = thought.thought_id if hasattr(thought, "thought_id") else str(thought)  # type: ignore[attr-defined]  # Dynamic thought object
+        thought_id_str = thought.thought_id if hasattr(thought, "thought_id") else str(thought)
         task_id_str = getattr(thought, "task_id", getattr(thought, "source_task_id", ""))
 
         step_result = ThoughtProcessingResult(
@@ -558,47 +560,50 @@ class PipelineController:
             timestamp=asyncio.get_event_loop().time(),
         )
 
-        # Always broadcast step results to connected clients
-        try:
-            from ciris_engine.logic.infrastructure.step_streaming import (
-                step_result_stream,  # type: ignore[attr-defined]  # Dynamic module import
-            )
-            from ciris_engine.schemas.services.runtime_control import SpanAttribute, StepResultData, TraceContext
-
-            # Create proper StepResultData object for streaming
-            trace_context = TraceContext(
-                trace_id=f"trace_{thought_id_str}",
-                span_id=f"span_{step_point.value}",
-                span_name=f"Step: {step_point.value}",
-                operation_name=step_point.value,
-                start_time_ns=int(processing_start * 1_000_000_000),
-                end_time_ns=int((processing_start + processing_time_ms / 1000) * 1_000_000_000),
-                duration_ns=int(processing_time_ms * 1_000_000),
-            )
-
-            span_attributes = [
-                SpanAttribute(key="step_point", value={"stringValue": step_point.value}),
-                SpanAttribute(key="thought_id", value={"stringValue": thought_id_str}),
-                SpanAttribute(key="success", value={"boolValue": True}),
-            ]
-
-            step_result_data = StepResultData(
-                step_point=step_point.value,
-                success=True,
-                processing_time_ms=processing_time_ms,
-                thought_id=thought_id_str,
-                task_id=task_id_str,
-                step_data=step_data,
-                trace_context=trace_context,
-                span_attributes=span_attributes,
-            )
-
-            await step_result_stream.broadcast_step_result(step_result_data)
-        except Exception as e:
-            # Don't let streaming errors break step execution
-            import logging
-
-            logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
+        # TODO: Step result streaming disabled - step_result_stream module not implemented
+        # The step_streaming module only provides reasoning_event_stream, not step_result_stream
+        # This code is commented out until step_result_stream is implemented
+        # # Always broadcast step results to connected clients
+        # try:
+        #     from ciris_engine.logic.infrastructure.step_streaming import (
+        #         step_result_stream,
+        #     )
+        #     from ciris_engine.schemas.services.runtime_control import SpanAttribute, StepResultData, TraceContext
+        #
+        #     # Create proper StepResultData object for streaming
+        #     trace_context = TraceContext(
+        #         trace_id=f"trace_{thought_id_str}",
+        #         span_id=f"span_{step_point.value}",
+        #         span_name=f"Step: {step_point.value}",
+        #         operation_name=step_point.value,
+        #         start_time_ns=int(processing_start * 1_000_000_000),
+        #         end_time_ns=int((processing_start + processing_time_ms / 1000) * 1_000_000_000),
+        #         duration_ns=int(processing_time_ms * 1_000_000),
+        #     )
+        #
+        #     span_attributes = [
+        #         SpanAttribute(key="step_point", value={"stringValue": step_point.value}),
+        #         SpanAttribute(key="thought_id", value={"stringValue": thought_id_str}),
+        #         SpanAttribute(key="success", value={"boolValue": True}),
+        #     ]
+        #
+        #     step_result_data = StepResultData(
+        #         step_point=step_point.value,
+        #         success=True,
+        #         processing_time_ms=processing_time_ms,
+        #         thought_id=thought_id_str,
+        #         task_id=task_id_str,
+        #         step_data=step_data,
+        #         trace_context=trace_context,
+        #         span_attributes=span_attributes,
+        #     )
+        #
+        #     await step_result_stream.broadcast_step_result(step_result_data)
+        # except Exception as e:
+        #     # Don't let streaming errors break step execution
+        #     import logging
+        #
+        #     logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
 
         return step_result
 
@@ -639,6 +644,6 @@ class PipelineController:
 
             # Move thought to next step bucket in pipeline state
             if next_step and hasattr(pipeline_state, "thoughts_by_step"):
-                if next_step.value not in pipeline_state.thoughts_by_step:  # type: ignore[attr-defined]  # Optional attribute on PipelineState
-                    pipeline_state.thoughts_by_step[next_step.value] = []  # type: ignore[attr-defined]  # Optional attribute on PipelineState
-                pipeline_state.thoughts_by_step[next_step.value].append(thought)  # type: ignore[attr-defined]  # Optional attribute on PipelineState
+                if next_step.value not in pipeline_state.thoughts_by_step:
+                    pipeline_state.thoughts_by_step[next_step.value] = []
+                pipeline_state.thoughts_by_step[next_step.value].append(thought)

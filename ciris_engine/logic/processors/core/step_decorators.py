@@ -16,7 +16,7 @@ import asyncio
 import logging
 from datetime import datetime
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
 from ciris_engine.schemas.services.runtime_control import (
     ActionCompleteStepData,
@@ -47,7 +47,7 @@ _paused_thoughts: Dict[str, asyncio.Event] = {}
 _single_step_mode = False
 
 
-def _base_data_dict(base_data: BaseStepData) -> dict:
+def _base_data_dict(base_data: BaseStepData) -> Dict[str, Any]:
     """Convert BaseStepData to dict for **unpacking into step data constructors."""
     return {
         "timestamp": base_data.timestamp,
@@ -59,7 +59,7 @@ def _base_data_dict(base_data: BaseStepData) -> dict:
     }
 
 
-def streaming_step(step: StepPoint):
+def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that streams step results in real-time.
 
@@ -80,7 +80,7 @@ def streaming_step(step: StepPoint):
 
     def decorator[F: Callable[..., Any]](func: F) -> F:
         @wraps(func)
-        async def wrapper(self, thought_item, *args, **kwargs):
+        async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
             thought_id = getattr(thought_item, "thought_id", "unknown")
             time_service = getattr(self, "_time_service", None)
             if not time_service or not hasattr(time_service, "now"):
@@ -126,7 +126,7 @@ def streaming_step(step: StepPoint):
     return decorator
 
 
-def step_point(step: StepPoint):
+def step_point(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that handles pause/resume mechanics for single-step debugging.
 
@@ -148,7 +148,7 @@ def step_point(step: StepPoint):
 
     def decorator[F: Callable[..., Any]](func: F) -> F:
         @wraps(func)
-        async def wrapper(self, thought_item, *args, **kwargs):
+        async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
             thought_id = getattr(thought_item, "thought_id", "unknown")
 
             # Check if we should pause at this step point
@@ -195,7 +195,7 @@ async def _pause_thought_execution(thought_id: str) -> None:
     _paused_thoughts[thought_id].clear()
 
 
-def _get_step_data_creators() -> dict[StepPoint, callable]:
+def _get_step_data_creators() -> Dict[StepPoint, Callable[..., Any]]:
     """Get dispatch dictionary for step data creators."""
     return {
         StepPoint.START_ROUND: lambda base_data, result, args, kwargs, thought_item: _create_start_round_data(
@@ -252,7 +252,7 @@ def _log_step_debug_info(step: StepPoint, base_data: BaseStepData, thought_item:
 
 
 def _create_typed_step_data(
-    step: StepPoint, base_data: BaseStepData, thought_item: Any, result: Any, args: tuple, kwargs: dict
+    step: StepPoint, base_data: BaseStepData, thought_item: Any, result: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]
 ) -> StepDataUnion:
     """Create typed step data based on step type using dispatch pattern."""
     # Prepare base data with task_id
@@ -267,14 +267,14 @@ def _create_typed_step_data(
         raise ValueError(f"Unknown step point: {step.value}. No step data creator available.")
 
     # Create step-specific typed data - fail fast and loud on any errors
-    return step_creators[step](base_data, result, args, kwargs, thought_item)
+    return step_creators[step](base_data, result, args, kwargs, thought_item)  # type: ignore[no-any-return]
 
 
 # This function is now integrated into _create_typed_step_data
 # Keeping for potential backward compatibility but marked as deprecated
 
 
-def _create_start_round_data(base_data: BaseStepData, args: tuple) -> StartRoundStepData:
+def _create_start_round_data(base_data: BaseStepData, args: Tuple[Any, ...]) -> StartRoundStepData:
     """Create START_ROUND specific typed data."""
     if not args:
         raise ValueError("START_ROUND args is empty - thought list is required for processing")
@@ -338,7 +338,7 @@ def _validate_aspdma_result(result: Any) -> None:
         )
 
 
-def _extract_dma_results_from_args(args: tuple) -> Optional[str]:
+def _extract_dma_results_from_args(args: Tuple[Any, ...]) -> Optional[str]:
     """Extract and format DMA results from ASPDMA args."""
     # Extract dma_results from args - it's the second positional arg after thought_context
     # Function signature: _perform_aspdma_step(self, thought_item, thought_context, dma_results)
@@ -363,7 +363,7 @@ def _extract_dma_results_from_args(args: tuple) -> Optional[str]:
         return str(dma_results_obj)
 
 
-def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> PerformASPDMAStepData:
+def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> PerformASPDMAStepData:
     """Create PERFORM_ASPDMA specific typed data."""
     _validate_aspdma_result(result)
     dma_results = _extract_dma_results_from_args(args)
@@ -412,8 +412,9 @@ def _extract_conscience_execution_values(result: Any) -> tuple[str, bool, str, s
 
 
 def _build_conscience_result_from_check(
-    conscience_check_result: "ConscienceCheckResult", override_reason: str | None
-) -> "ConscienceResult":
+    conscience_check_result: Any,  # ConscienceCheckResult
+    override_reason: Optional[str]
+) -> Any:  # ConscienceResult
     """Build ConscienceResult from ConscienceCheckResult."""
     from ciris_engine.schemas.conscience.results import ConscienceResult
 
@@ -466,7 +467,7 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
     )
 
 
-def _create_entropy_check(passed: bool) -> "EntropyCheckResult":
+def _create_entropy_check(passed: bool) -> Any:  # EntropyCheckResult
     """Create entropy check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import EntropyCheckResult
 
@@ -482,7 +483,7 @@ def _create_entropy_check(passed: bool) -> "EntropyCheckResult":
     )
 
 
-def _create_coherence_check(passed: bool) -> "CoherenceCheckResult":
+def _create_coherence_check(passed: bool) -> Any:  # CoherenceCheckResult
     """Create coherence check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import CoherenceCheckResult
 
@@ -498,7 +499,7 @@ def _create_coherence_check(passed: bool) -> "CoherenceCheckResult":
     )
 
 
-def _create_optimization_veto_check(passed: bool) -> "OptimizationVetoResult":
+def _create_optimization_veto_check(passed: bool) -> Any:  # OptimizationVetoResult
     """Create optimization veto check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import OptimizationVetoResult
 
@@ -514,7 +515,7 @@ def _create_optimization_veto_check(passed: bool) -> "OptimizationVetoResult":
     )
 
 
-def _create_epistemic_humility_check(passed: bool) -> "EpistemicHumilityResult":
+def _create_epistemic_humility_check(passed: bool) -> Any:  # EpistemicHumilityResult
     """Create epistemic humility check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import EpistemicHumilityResult
 
@@ -530,7 +531,7 @@ def _create_epistemic_humility_check(passed: bool) -> "EpistemicHumilityResult":
     )
 
 
-def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResult":
+def _create_comprehensive_conscience_result(result: Any) -> Any:  # ConscienceCheckResult
     """Create comprehensive ConscienceCheckResult with all 4 typed evaluations for transparency."""
     from datetime import datetime, timezone
 
@@ -574,7 +575,7 @@ def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResu
     return conscience_result
 
 
-def _create_recursive_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> RecursiveASPDMAStepData:
+def _create_recursive_aspdma_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> RecursiveASPDMAStepData:
     """Create RECURSIVE_ASPDMA specific typed data."""
     if not args:
         raise ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")
@@ -640,7 +641,7 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
 
 
 def _create_perform_action_data(
-    base_data: BaseStepData, result: Any, args: tuple, kwargs: dict
+    base_data: BaseStepData, result: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]
 ) -> PerformActionStepData:
     """Create PERFORM_ACTION specific typed data."""
     # Extract selected_action - first try result, then args
@@ -727,7 +728,7 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
         )
 
 
-def _create_round_complete_data(base_data: BaseStepData, args: tuple) -> RoundCompleteStepData:
+def _create_round_complete_data(base_data: BaseStepData, args: Tuple[Any, ...]) -> RoundCompleteStepData:
     """Create ROUND_COMPLETE specific typed data."""
     if not args:
         raise ValueError("ROUND_COMPLETE args is empty - completed thought count is required")
@@ -735,7 +736,7 @@ def _create_round_complete_data(base_data: BaseStepData, args: tuple) -> RoundCo
     return RoundCompleteStepData(**_base_data_dict(base_data), round_status="completed", thoughts_processed=len(args))
 
 
-def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion):
+def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion) -> Any:
     """Create appropriate step result schema based on step type."""
     # Import here to avoid circular dependency
     from ciris_engine.schemas.services.runtime_control import (
@@ -774,7 +775,7 @@ def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion):
     return None
 
 
-def _extract_timing_data(step_data: StepDataUnion) -> tuple:
+def _extract_timing_data(step_data: StepDataUnion) -> Tuple[Any, Any]:
     """Extract and normalize timing data from typed step_data."""
     from datetime import datetime, timezone
 

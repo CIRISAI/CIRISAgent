@@ -36,9 +36,7 @@ class ActionExecutionPhase:
 
     @streaming_step(StepPoint.ACTION_COMPLETE)
     @step_point(StepPoint.ACTION_COMPLETE)
-    async def _action_complete_step(
-        self, thought_item: ProcessingQueueItem, dispatch_result: Any
-    ) -> Dict[str, Any]:
+    async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result: Any) -> Dict[str, Any]:
         """Step 7: Action execution completed."""
         # This step is handled by base_processor after dispatch
         # Mark the completion status

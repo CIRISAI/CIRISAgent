@@ -5,7 +5,7 @@ Wakeup processor handling the agent's initialization sequence.
 import asyncio
 import logging
 import uuid
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context

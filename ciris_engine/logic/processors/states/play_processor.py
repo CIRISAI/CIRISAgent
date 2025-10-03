@@ -3,7 +3,7 @@ Play processor for creative and experimental processing.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from ciris_engine.schemas.processors.results import PlayResult
 from ciris_engine.schemas.processors.states import AgentState

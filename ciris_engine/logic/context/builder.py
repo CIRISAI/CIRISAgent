@@ -62,7 +62,7 @@ class ContextBuilder:
                 logger.debug(f"[CONTEXT]   User {user_id}: {getattr(profile, 'name', 'unknown')}")
 
         # Get identity context from memory service
-        identity_context_str = self.memory_service.export_identity_context() if self.memory_service else None
+        identity_context_str = await self.memory_service.export_identity_context() if self.memory_service else None
 
         # --- Mission-Critical Channel ID Resolution ---
         # Use centralized channel resolution to avoid duplication

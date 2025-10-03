@@ -44,9 +44,7 @@ class ActionFinalizationPhase:
             # If no conscience result, create ponder action and wrap in ConscienceApplicationResult
             ponder_action = ActionSelectionDMAResult(
                 selected_action=HandlerActionType.PONDER,
-                action_parameters=PonderParams(
-                    questions=["No valid action could be determined - what should I do?"]
-                ),
+                action_parameters=PonderParams(questions=["No valid action could be determined - what should I do?"]),
                 rationale="Failed to determine valid action - pondering instead",
                 resource_usage=None,
             )

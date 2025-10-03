@@ -645,6 +645,149 @@ class EdgeManager:
             logger.error(f"Failed to cleanup orphaned edges: {e}")
             return 0
 
+    def _normalize_edge_specifications(
+        self, edges: List[EdgeSpecification]
+    ) -> Tuple[List[Tuple[str, str, str, Dict[str, Any], Optional[str]]], set[str]]:
+        """Convert EdgeSpecification objects to normalized format.
+
+        Returns:
+            Tuple of (normalized_edges, node_ids_to_check)
+        """
+        normalized_edges = []
+        node_ids_to_check = set()
+
+        for edge_spec in edges:
+            assert isinstance(edge_spec, EdgeSpecification)
+            node_ids_to_check.add(edge_spec.source_node_id)
+            node_ids_to_check.add(edge_spec.target_node_id)
+            normalized_edges.append(
+                (
+                    edge_spec.source_node_id,
+                    edge_spec.target_node_id,
+                    edge_spec.edge_type,
+                    edge_spec.attributes.model_dump(exclude_none=True),
+                    None,  # No scope info in EdgeSpecification
+                )
+            )
+
+        return normalized_edges, node_ids_to_check
+
+    def _normalize_edge_tuples(
+        self, edges: List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]
+    ) -> Tuple[List[Tuple[str, str, str, Dict[str, Any], Optional[str]]], set[str]]:
+        """Convert edge tuples to normalized format.
+
+        Returns:
+            Tuple of (normalized_edges, node_ids_to_check)
+        """
+        normalized_edges = []
+        node_ids_to_check = set()
+
+        for source_node, target_node, relationship, attrs in edges:
+            node_ids_to_check.add(source_node.id)
+            node_ids_to_check.add(target_node.id)
+            scope = source_node.scope.value if hasattr(source_node.scope, "value") else str(source_node.scope)
+            normalized_edges.append((source_node.id, target_node.id, relationship, attrs or {}, scope))
+
+        return normalized_edges, node_ids_to_check
+
+    def _create_missing_channel_node(self, cursor: Any, node_id: str, existing_nodes: set[str]) -> None:
+        """Create a missing channel node in the database."""
+        logger.info(f"Creating missing channel node: {node_id}")
+
+        # Extract channel type from ID (e.g., channel_cli_username_hostname)
+        parts = node_id.split("_", 2)
+        channel_type = parts[1] if len(parts) > 1 else "unknown"
+        channel_name = parts[2] if len(parts) > 2 else node_id
+
+        channel_attributes = {
+            "channel_id": node_id,
+            "channel_type": channel_type,
+            "channel_name": channel_name,
+            "created_by": "tsdb_consolidation",
+            "first_seen": datetime.now(timezone.utc).isoformat(),
+        }
+
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO graph_nodes
+            (node_id, scope, node_type, attributes_json,
+             version, updated_by, updated_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                node_id,
+                "local",
+                "channel",
+                json.dumps(channel_attributes),
+                1,
+                "tsdb_consolidation",
+                datetime.now(timezone.utc).isoformat(),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        existing_nodes.add(node_id)
+
+    def _create_missing_nodes(self, cursor: Any, missing_nodes: set[str], existing_nodes: set[str]) -> None:
+        """Create missing nodes if they are channels."""
+        if not missing_nodes:
+            return
+
+        logger.info(f"Found missing nodes referenced in edges: {missing_nodes}")
+
+        for node_id in missing_nodes:
+            if node_id.startswith("channel_"):
+                self._create_missing_channel_node(cursor, node_id, existing_nodes)
+            else:
+                logger.warning(f"Cannot auto-create node of unknown type: {node_id}")
+
+    def _build_edge_record(
+        self, source_id: str, target_id: str, relationship: str, attrs: Dict[str, Any], scope: str
+    ) -> Tuple[str, str, str, str, str, float, str, str]:
+        """Build a single edge record for database insertion.
+
+        Returns:
+            Tuple of (edge_id, source_id, target_id, scope, relationship, weight, attributes_json, created_at)
+        """
+        edge_id = f"edge_{uuid4().hex[:8]}"
+
+        # Handle self-references with special attributes
+        if source_id == target_id:
+            edge_attrs = attrs.copy()
+            edge_attrs["self_reference"] = True
+            attrs_json = json.dumps(edge_attrs)
+        else:
+            attrs_json = json.dumps(attrs)
+
+        return (
+            edge_id,
+            source_id,
+            target_id,
+            scope or "local",
+            relationship,
+            attrs.get("weight", 1.0),
+            attrs_json,
+            datetime.now(timezone.utc).isoformat(),
+        )
+
+    def _build_edge_data(
+        self, normalized_edges: List[Tuple[str, str, str, Dict[str, Any], Optional[str]]], existing_nodes: set[str]
+    ) -> List[Tuple[str, str, str, str, str, float, str, str]]:
+        """Build edge data for batch insertion."""
+        edge_data = []
+
+        for source_id, target_id, relationship, attrs, scope_opt in normalized_edges:
+            scope = scope_opt or "unknown"
+
+            # Skip edges if nodes don't exist
+            if source_id not in existing_nodes or target_id not in existing_nodes:
+                continue
+
+            edge_record = self._build_edge_record(source_id, target_id, relationship, attrs, scope)
+            edge_data.append(edge_record)
+
+        return edge_data
+
     def create_edges(
         self, edges: Union[List[EdgeSpecification], List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]]
     ) -> int:
@@ -666,42 +809,15 @@ class EdgeManager:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
-                edge_data = []
-
-                # First, ensure all nodes exist
-                node_ids_to_check: set[str] = set()
-                nodes_to_create: List[GraphNode] = []
-
-                # Convert to normalized format
-                normalized_edges: List[Tuple[str, str, str, Dict[str, Any], Optional[str]]] = []
-
-                # Check if we have EdgeSpecifications or tuples
+                # Normalize edges to common format
                 if edges and isinstance(edges[0], EdgeSpecification):
-                    # EdgeSpecification format
-                    edge_specs = cast(List[EdgeSpecification], edges)
-                    for edge_spec in edge_specs:
-                        assert isinstance(edge_spec, EdgeSpecification)
-                        node_ids_to_check.add(edge_spec.source_node_id)
-                        node_ids_to_check.add(edge_spec.target_node_id)
-                        normalized_edges.append(
-                            (
-                                edge_spec.source_node_id,
-                                edge_spec.target_node_id,
-                                edge_spec.edge_type,
-                                edge_spec.attributes.model_dump(exclude_none=True),
-                                None,  # No scope info in EdgeSpecification
-                            )
-                        )
+                    normalized_edges, node_ids_to_check = self._normalize_edge_specifications(
+                        cast(List[EdgeSpecification], edges)
+                    )
                 else:
-                    # Tuple format (GraphNode, GraphNode, str, dict)
-                    edge_tuples = cast(List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]], edges)
-                    for source_node, target_node, relationship, attrs in edge_tuples:
-                        node_ids_to_check.add(source_node.id)
-                        node_ids_to_check.add(target_node.id)
-                        scope = (
-                            source_node.scope.value if hasattr(source_node.scope, "value") else str(source_node.scope)
-                        )
-                        normalized_edges.append((source_node.id, target_node.id, relationship, attrs or {}, scope))
+                    normalized_edges, node_ids_to_check = self._normalize_edge_tuples(
+                        cast(List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]], edges)
+                    )
 
                 # Check which nodes already exist
                 placeholders = ",".join(["?"] * len(node_ids_to_check))
@@ -715,93 +831,12 @@ class EdgeManager:
 
                 existing_nodes = {row["node_id"] for row in cursor.fetchall()}
 
-                # Handle missing nodes by creating them if they're channels
+                # Create missing nodes (channels only)
                 missing_nodes = node_ids_to_check - existing_nodes
-                if missing_nodes:
-                    logger.info(f"Found missing nodes referenced in edges: {missing_nodes}")
+                self._create_missing_nodes(cursor, missing_nodes, existing_nodes)
 
-                    # Create missing channel nodes (similar to user node creation)
-                    for node_id in missing_nodes:
-                        if node_id.startswith("channel_"):
-                            logger.info(f"Creating missing channel node: {node_id}")
-
-                            # Extract channel type from ID (e.g., channel_cli_username_hostname)
-                            parts = node_id.split("_", 2)
-                            channel_type = parts[1] if len(parts) > 1 else "unknown"
-                            channel_name = parts[2] if len(parts) > 2 else node_id
-
-                            channel_attributes = {
-                                "channel_id": node_id,
-                                "channel_type": channel_type,
-                                "channel_name": channel_name,
-                                "created_by": "tsdb_consolidation",
-                                "first_seen": datetime.now(timezone.utc).isoformat(),
-                            }
-
-                            cursor.execute(
-                                """
-                                INSERT OR IGNORE INTO graph_nodes
-                                (node_id, scope, node_type, attributes_json,
-                                 version, updated_by, updated_at, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                                (
-                                    node_id,
-                                    "local",
-                                    "channel",
-                                    json.dumps(channel_attributes),
-                                    1,
-                                    "tsdb_consolidation",
-                                    datetime.now(timezone.utc).isoformat(),
-                                    datetime.now(timezone.utc).isoformat(),
-                                ),
-                            )
-                            existing_nodes.add(node_id)
-                        else:
-                            logger.warning(f"Cannot auto-create node of unknown type: {node_id}")
-
-                for source_id, target_id, relationship, attrs, scope_opt in normalized_edges:
-                    scope = scope_opt or "unknown"
-                    # Skip edges if nodes don't exist
-                    if source_id not in existing_nodes or target_id not in existing_nodes:
-                        continue
-
-                    # Handle self-references (where we store data in attributes)
-                    if source_id == target_id:
-                        # For self-references, we create edges with special attributes
-                        edge_id = f"edge_{uuid4().hex[:8]}"
-
-                        # Merge provided attributes with edge metadata
-                        edge_attrs = attrs.copy()
-                        edge_attrs["self_reference"] = True
-
-                        edge_data.append(
-                            (
-                                edge_id,
-                                source_id,
-                                target_id,
-                                scope or "local",
-                                relationship,
-                                attrs.get("weight", 1.0),
-                                json.dumps(edge_attrs),
-                                datetime.now(timezone.utc).isoformat(),
-                            )
-                        )
-                    else:
-                        # Normal edge between different nodes
-                        edge_id = f"edge_{uuid4().hex[:8]}"
-                        edge_data.append(
-                            (
-                                edge_id,
-                                source_id,
-                                target_id,
-                                scope or "local",
-                                relationship,
-                                attrs.get("weight", 1.0),
-                                json.dumps(attrs),
-                                datetime.now(timezone.utc).isoformat(),
-                            )
-                        )
+                # Build edge data for insertion
+                edge_data = self._build_edge_data(normalized_edges, existing_nodes)
 
                 if edge_data:
                     cursor.executemany(

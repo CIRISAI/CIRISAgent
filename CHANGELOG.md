@@ -65,6 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Parameter was accepted but ignored - SQL used hardcoded datetime('now', '-24 hours')
   - Now properly uses window_start parameter for timing consistency with other telemetry
   - Prevents timing drift between telemetry calculation start and SQL execution
+- **📉 Reduced Cognitive Complexity**: Refactored edge_manager.py create_edges method
+  - Cognitive complexity reduced from 39 → ~8 (below 15 threshold)
+  - Extracted 6 helper methods: _normalize_edge_specifications(), _normalize_edge_tuples(), _create_missing_channel_node(), _create_missing_nodes(), _build_edge_record(), _build_edge_data()
+  - Removed unused nodes_to_create variable (dead code - creation handled inline)
+  - All 144 edge-related tests pass, 19 tsdb_consolidation tests pass
 - **⚡ QA Test Optimization - 3x Performance Improvement**: Updated handlers and filters tests to use SSE streaming
   - Handlers tests: 48.38s (down from 151.93s) - 3.1x speedup
   - Filters tests: 169.40s (down from 600+s) - 3.5x+ speedup

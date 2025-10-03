@@ -169,8 +169,18 @@ class TestTelemetryAPIMetrics:
         async def mock_query_metrics_impl(metric_name, **kwargs):
             if metric_name == "llm.tokens.total":
                 return [
-                    {"value": 100.0, "timestamp": datetime.now(timezone.utc), "tags": {}},
-                    {"value": 200.0, "timestamp": datetime.now(timezone.utc) - timedelta(hours=1), "tags": {}},
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=100.0,
+                        timestamp=datetime.now(timezone.utc),
+                        tags={},
+                    ),
+                    MetricRecord(
+                        metric_name=metric_name,
+                        value=200.0,
+                        timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
+                        tags={},
+                    ),
                 ]
             return []
 

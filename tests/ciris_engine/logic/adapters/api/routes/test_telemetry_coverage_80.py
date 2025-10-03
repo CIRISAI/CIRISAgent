@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.dependencies.auth import require_admin, require_observer
 from ciris_engine.logic.adapters.api.routes.telemetry import router
+from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
 def override_auth():
@@ -67,7 +68,14 @@ def app_with_detailed_services():
             for i in range(20):
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = 50.0 + (i % 10) * 2  # Varies between 50-68%
-                values.append({"timestamp": timestamp.isoformat(), "value": value})
+                values.append(
+                    MetricRecord(
+                        metric_name=metric_name,
+                        timestamp=timestamp,
+                        value=value,
+                        tags={},
+                    )
+                )
             return values
         elif metric_name == "memory_mb":
             # Memory data between 400-600 MB
@@ -75,7 +83,14 @@ def app_with_detailed_services():
             for i in range(20):
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = 500.0 + (i % 10) * 10  # Varies between 500-590 MB
-                values.append({"timestamp": timestamp.isoformat(), "value": value})
+                values.append(
+                    MetricRecord(
+                        metric_name=metric_name,
+                        timestamp=timestamp,
+                        value=value,
+                        tags={},
+                    )
+                )
             return values
         elif metric_name == "disk_usage_bytes":
             # Disk data around 20GB
@@ -83,7 +98,14 @@ def app_with_detailed_services():
             for i in range(20):
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = 20000000000 + (i % 10) * 100000000  # Varies around 20GB
-                values.append({"timestamp": timestamp.isoformat(), "value": value})
+                values.append(
+                    MetricRecord(
+                        metric_name=metric_name,
+                        timestamp=timestamp,
+                        value=value,
+                        tags={},
+                    )
+                )
             return values
         else:
             # Default data for other metrics
@@ -93,11 +115,12 @@ def app_with_detailed_services():
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = base_value + (i % 10) * 2  # Create some variation
                 values.append(
-                    {
-                        "timestamp": timestamp.isoformat(),
-                        "value": value,
-                        "tags": {"service": "test_service", "environment": "test"},
-                    }
+                    MetricRecord(
+                        metric_name=metric_name or "test_metric",
+                        timestamp=timestamp,
+                        value=value,
+                        tags={"service": "test_service", "environment": "test"},
+                    )
                 )
             return values
 

@@ -2009,6 +2009,11 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         if self._telemetry_aggregator and cache_key in self._telemetry_aggregator.cache:
             cached_time, cached_data = self._telemetry_aggregator.cache[cache_key]
             if now - cached_time < self._telemetry_aggregator.cache_ttl:
+                # Mark cached response as cache hit
+                if isinstance(cached_data, AggregatedTelemetryResponse):
+                    if cached_data.metadata:
+                        cached_data.metadata.cache_hit = True
+                    return cached_data
                 return cached_data
         return None
 

@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: df54e28c11c7
-Build Time: 2025-10-03T14:51:15.657889
+Code Hash: 8bc9272c6a11
+Build Time: 2025-10-03T14:50:44.927809
 Git Commit: a4f202fcea320c5160829ba0174d2e0ad1975302
-Git Branch: mypy-fix-gather-context
+Git Branch: mypy-fix-base-observer
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

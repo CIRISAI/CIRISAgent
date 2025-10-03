@@ -141,20 +141,24 @@ class PipelineController:
         """Pause execution at a step point."""
         # Create or update thought in pipeline
         if thought_id not in self._paused_thoughts:
+            from datetime import datetime
             step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
+            timestamp = step_data_dict.get("timestamp")
             thought = ThoughtInPipeline(
                 thought_id=thought_id,
                 task_id=str(step_data_dict.get("task_id", "")),
                 thought_type=str(step_data_dict.get("thought_type", "")),
                 current_step=step_point,
-                entered_step_at=step_data_dict.get("timestamp"),
+                entered_step_at=timestamp if isinstance(timestamp, datetime) else datetime.now(),
             )
             self._paused_thoughts[thought_id] = thought
         else:
             thought = self._paused_thoughts[thought_id]
             step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
             thought.current_step = step_point
-            thought.entered_step_at = step_data_dict.get("timestamp")  # type: ignore[assignment]
+            from datetime import datetime
+            timestamp = step_data_dict.get("timestamp")
+            thought.entered_step_at = timestamp if isinstance(timestamp, datetime) else datetime.now()
 
         # Update thought with step-specific data
         step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
@@ -411,7 +415,7 @@ class PipelineController:
 
         # No paused thoughts - need to start new thoughts in the pipeline
         from ciris_engine.logic import persistence
-        from ciris_engine.schemas.runtime.models import ThoughtStatus
+        from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
         pending_thoughts = persistence.get_thoughts_by_status(ThoughtStatus.PENDING, limit=1)
         if not pending_thoughts:
@@ -556,45 +560,50 @@ class PipelineController:
             timestamp=asyncio.get_event_loop().time(),
         )
 
-        # Always broadcast step results to connected clients
-        try:
-            from ciris_engine.logic.infrastructure.step_streaming import step_result_stream
-            from ciris_engine.schemas.services.runtime_control import SpanAttribute, StepResultData, TraceContext
-
-            # Create proper StepResultData object for streaming
-            trace_context = TraceContext(
-                trace_id=f"trace_{thought_id_str}",
-                span_id=f"span_{step_point.value}",
-                span_name=f"Step: {step_point.value}",
-                operation_name=step_point.value,
-                start_time_ns=int(processing_start * 1_000_000_000),
-                end_time_ns=int((processing_start + processing_time_ms / 1000) * 1_000_000_000),
-                duration_ns=int(processing_time_ms * 1_000_000),
-            )
-
-            span_attributes = [
-                SpanAttribute(key="step_point", value={"stringValue": step_point.value}),
-                SpanAttribute(key="thought_id", value={"stringValue": thought_id_str}),
-                SpanAttribute(key="success", value={"boolValue": True}),
-            ]
-
-            step_result_data = StepResultData(
-                step_point=step_point.value,
-                success=True,
-                processing_time_ms=processing_time_ms,
-                thought_id=thought_id_str,
-                task_id=task_id_str,
-                step_data=step_data,
-                trace_context=trace_context,
-                span_attributes=span_attributes,
-            )
-
-            await step_result_stream.broadcast_step_result(step_result_data)
-        except Exception as e:
-            # Don't let streaming errors break step execution
-            import logging
-
-            logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
+        # TODO: Step result streaming disabled - step_result_stream module not implemented
+        # The step_streaming module only provides reasoning_event_stream, not step_result_stream
+        # This code is commented out until step_result_stream is implemented
+        # # Always broadcast step results to connected clients
+        # try:
+        #     from ciris_engine.logic.infrastructure.step_streaming import (
+        #         step_result_stream,
+        #     )
+        #     from ciris_engine.schemas.services.runtime_control import SpanAttribute, StepResultData, TraceContext
+        #
+        #     # Create proper StepResultData object for streaming
+        #     trace_context = TraceContext(
+        #         trace_id=f"trace_{thought_id_str}",
+        #         span_id=f"span_{step_point.value}",
+        #         span_name=f"Step: {step_point.value}",
+        #         operation_name=step_point.value,
+        #         start_time_ns=int(processing_start * 1_000_000_000),
+        #         end_time_ns=int((processing_start + processing_time_ms / 1000) * 1_000_000_000),
+        #         duration_ns=int(processing_time_ms * 1_000_000),
+        #     )
+        #
+        #     span_attributes = [
+        #         SpanAttribute(key="step_point", value={"stringValue": step_point.value}),
+        #         SpanAttribute(key="thought_id", value={"stringValue": thought_id_str}),
+        #         SpanAttribute(key="success", value={"boolValue": True}),
+        #     ]
+        #
+        #     step_result_data = StepResultData(
+        #         step_point=step_point.value,
+        #         success=True,
+        #         processing_time_ms=processing_time_ms,
+        #         thought_id=thought_id_str,
+        #         task_id=task_id_str,
+        #         step_data=step_data,
+        #         trace_context=trace_context,
+        #         span_attributes=span_attributes,
+        #     )
+        #
+        #     await step_result_stream.broadcast_step_result(step_result_data)
+        # except Exception as e:
+        #     # Don't let streaming errors break step execution
+        #     import logging
+        #
+        #     logging.getLogger(__name__).warning(f"Error broadcasting step result: {e}")
 
         return step_result
 

@@ -146,7 +146,7 @@ class DMAOrchestrator:
         from ciris_engine.schemas.processors.core import DMAResults
 
         results = DMAResults()
-        tasks: Dict[str, asyncio.Task] = {}
+        tasks: Dict[str, asyncio.Task[Any]] = {}
 
         # Ethical PDMA
         cb = self._circuit_breakers.get("ethical_pdma")

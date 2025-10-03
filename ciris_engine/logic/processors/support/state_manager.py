@@ -194,7 +194,7 @@ class StateManager:
         if self.current_state == AgentState.WAKEUP:
             # After successful wakeup, transition to WORK
             metadata = self.get_state_metadata()
-            if metadata.metrics.get("wakeup_complete", False):
+            if metadata.metrics.custom_metrics.get("wakeup_complete", False):
                 return AgentState.WORK
 
         # All other auto-transitions are removed as per the new requirements.

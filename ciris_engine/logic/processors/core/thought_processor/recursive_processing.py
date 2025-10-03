@@ -212,9 +212,7 @@ class RecursiveProcessingPhase:
 
                 # If this was the last attempt, raise the error
                 if attempt == max_retries - 1:
-                    logger.error(
-                        f"All {max_retries} ASPDMA retry attempts exhausted for thought {thought.thought_id}"
-                    )
+                    logger.error(f"All {max_retries} ASPDMA retry attempts exhausted for thought {thought.thought_id}")
                     raise last_error
 
                 # Otherwise, continue to next retry

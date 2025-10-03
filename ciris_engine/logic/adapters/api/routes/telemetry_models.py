@@ -3,7 +3,7 @@ Telemetry data models - extracted from telemetry.py to reduce file size.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -21,7 +21,7 @@ class MetricData(BaseModel):
     tags: MetricTags = Field(default_factory=lambda: MetricTags.model_validate({}), description="Metric tags")
 
     @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
+    def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
         return timestamp.isoformat() if timestamp else None
 
 
@@ -89,7 +89,7 @@ class ServiceHealth(BaseModel):
     details: Optional[str] = Field(None, description="Additional details")
 
     @field_serializer("last_seen")
-    def serialize_last_seen(self, last_seen: datetime, _info) -> Optional[str]:
+    def serialize_last_seen(self, last_seen: datetime, _info: Any) -> Optional[str]:
         return last_seen.isoformat() if last_seen else None
 
 
@@ -112,10 +112,10 @@ class LogEntry(BaseModel):
     service: str = Field(..., description=DESC_SERVICE_NAME)
     correlation_id: Optional[str] = Field(None, description="Correlation ID")
     user_id: Optional[str] = Field(None, description="User ID")
-    metadata: dict = Field(default_factory=dict, description="Additional metadata")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> Optional[str]:
+    def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
         return timestamp.isoformat() if timestamp else None
 
 
@@ -130,10 +130,10 @@ class TraceSpan(BaseModel):
     start_time: datetime = Field(..., description="Start time")
     duration_ms: float = Field(..., description="Duration in milliseconds")
     status: str = Field(..., description="Status: ok or error")
-    tags: dict = Field(default_factory=dict, description="Span tags")
+    tags: Dict[str, Any] = Field(default_factory=dict, description="Span tags")
 
     @field_serializer("start_time")
-    def serialize_start_time(self, start_time: datetime, _info) -> Optional[str]:
+    def serialize_start_time(self, start_time: datetime, _info: Any) -> Optional[str]:
         return start_time.isoformat() if start_time else None
 
 

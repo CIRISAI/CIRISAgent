@@ -55,7 +55,7 @@ class QueryBuilder:
             user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
         """
         query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, QueryBuilder.SQL_WHERE_TIME_RANGE]
-        params = [start_time.isoformat(), end_time.isoformat()]
+        params: List[Any] = [start_time.isoformat(), end_time.isoformat()]
 
         if exclude_metrics:
             query_parts.append(QueryBuilder.SQL_EXCLUDE_METRICS)
@@ -197,7 +197,8 @@ class AttributeParser:
             return {}
 
         try:
-            return json.loads(attributes_json)
+            result: Dict[str, Any] = json.loads(attributes_json)
+            return result
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse attributes for node {node_id}")
             return {}
@@ -235,7 +236,7 @@ class GraphNodeBuilder:
     """Builds GraphNode objects from database rows."""
 
     @staticmethod
-    def build_from_row(row: Tuple) -> Optional[GraphNode]:
+    def build_from_row(row: Tuple[Any, ...]) -> Optional[GraphNode]:
         """Build a GraphNode from a database row."""
         try:
             # Parse attributes JSON
@@ -273,7 +274,7 @@ class GraphNodeBuilder:
             return None
 
     @staticmethod
-    def build_from_rows(rows: List[Tuple]) -> List[GraphNode]:
+    def build_from_rows(rows: List[Tuple[Any, ...]]) -> List[GraphNode]:
         """Build multiple GraphNodes from database rows."""
         nodes = []
         for row in rows:
@@ -287,7 +288,7 @@ class DatabaseExecutor:
     """Executes database queries with proper error handling."""
 
     @staticmethod
-    def execute_query(db_path: str, query: str, params: List[Any]) -> List[Tuple]:
+    def execute_query(db_path: str, query: str, params: List[Any]) -> List[Tuple[Any, ...]]:
         """Execute a query and return results."""
         try:
             with get_db_connection(db_path=db_path) as conn:

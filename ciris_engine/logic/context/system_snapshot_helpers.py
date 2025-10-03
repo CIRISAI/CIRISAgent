@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from ciris_engine.logic import persistence
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.memory_service import LocalGraphMemoryService
+from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, IdentitySummary
 from ciris_engine.schemas.runtime.models import Task
@@ -89,7 +90,8 @@ def extract_node_attributes(
     elif isinstance(node.attributes, dict):
         return node.attributes
     elif hasattr(node.attributes, "model_dump"):
-        return node.attributes.model_dump()
+        # Cast to dict to satisfy type checker
+        return dict(node.attributes.model_dump())
     else:
         logger.warning(f"Unexpected node attributes type: {type(node.attributes)}")
         return {}
@@ -124,7 +126,7 @@ def get_channel_id_from_node(
     node: Any, attrs: Dict[str, Any]
 ) -> str:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract channel_id from node, with fallback to node.id."""
-    return attrs.get("channel_id", node.id.split("/")[-1] if "/" in node.id else node.id)
+    return str(attrs.get("channel_id", node.id.split("/")[-1] if "/" in node.id else node.id))
 
 
 # =============================================================================
@@ -214,7 +216,7 @@ async def _perform_direct_channel_lookup(memory_service: Any, channel_id: str) -
     logger.info(f"[DEBUG DB TIMING] About to query memory service for channel/{channel_id}")
     channel_nodes = await memory_service.recall(query)
     logger.info(f"[DEBUG DB TIMING] Completed memory service query for channel/{channel_id}")
-    return channel_nodes
+    return list(channel_nodes) if channel_nodes else []
 
 
 async def _perform_channel_search(memory_service: Any, channel_id: str) -> List[Any]:
@@ -225,7 +227,7 @@ async def _perform_channel_search(memory_service: Any, channel_id: str) -> List[
     logger.info(f"[DEBUG DB TIMING] About to search memory service for channel {channel_id}")
     search_results = await memory_service.search(query=channel_id, filters=search_filter)
     logger.info(f"[DEBUG DB TIMING] Completed memory service search for channel {channel_id}")
-    return search_results
+    return list(search_results) if search_results else []
 
 
 def _extract_channel_from_search_results(search_results: List[Any], channel_id: str) -> Optional[Any]:
@@ -726,6 +728,8 @@ async def _collect_adapter_channels(runtime: Optional[Any]) -> Dict[str, List[Ch
 
     if _has_valid_adapter_manager(runtime):
         try:
+            # Assert runtime is not None since we checked it
+            assert runtime is not None
             adapter_manager = runtime.adapter_manager
             # Get all active adapters
             for adapter_name, adapter in adapter_manager._adapters.items():
@@ -766,7 +770,7 @@ def _get_tool_services(service_registry: Any) -> List[Any]:
         return []
 
 
-async def _call_async_or_sync_method(obj: Any, method_name: str, *args) -> Any:
+async def _call_async_or_sync_method(obj: Any, method_name: str, *args: Any) -> Any:
     """Call a method that might be async or sync."""
     import inspect
 
@@ -830,6 +834,8 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
         return available_tools
 
     try:
+        # Assert runtime is not None since we validated it
+        assert runtime is not None
         service_registry = runtime.service_registry
         tool_services = _get_tool_services(service_registry)
 
@@ -934,7 +940,7 @@ def _extract_users_from_correlation_history(task: Optional[Task], user_ids: Set[
 
 def _extract_user_ids_from_context(task: Optional[Task], thought: Any) -> Set[str]:
     """Extract user IDs from task, thought, and correlation history."""
-    user_ids_to_enrich = set()
+    user_ids_to_enrich: Set[str] = set()
 
     # Extract from all sources using helper functions
     _extract_user_from_task_context(task, user_ids_to_enrich)
@@ -946,7 +952,7 @@ def _extract_user_ids_from_context(task: Optional[Task], thought: Any) -> Set[st
     return user_ids_to_enrich
 
 
-def _json_serial_for_users(obj):
+def _json_serial_for_users(obj: Any) -> Any:
     """JSON serializer for user profile data."""
     if hasattr(obj, "isoformat"):
         return obj.isoformat()
@@ -995,7 +1001,9 @@ async def _process_user_node_for_profile(
     if channel_id:
         recent_messages = await _collect_cross_channel_messages(user_id, channel_id)
         if recent_messages:
-            user_profile.notes += (
+            # Ensure notes is not None before concatenating
+            current_notes = user_profile.notes or ""
+            user_profile.notes = current_notes + (
                 f"\nRecent messages from other channels: {json.dumps(recent_messages, default=_json_serial_for_users)}"
             )
 
@@ -1055,7 +1063,7 @@ async def _enrich_user_profiles(
 # =============================================================================
 
 
-def _get_localized_times(time_service) -> LocalizedTimeData:
+def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData:
     """Get current time localized to LONDON, CHICAGO, and TOKYO timezones.
 
     FAILS FAST AND LOUD if time_service is None.

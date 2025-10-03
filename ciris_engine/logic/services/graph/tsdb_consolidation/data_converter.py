@@ -92,8 +92,12 @@ class RawCorrelationData(BaseModel):
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
     timestamp: datetime
-    request_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(default_factory=dict)
-    response_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(default_factory=dict)
+    request_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(
+        default_factory=dict
+    )
+    response_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(
+        default_factory=dict
+    )
     tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=dict)
     context: Optional[Dict[str, str | int | float | bool | List[Any]]] = Field(default=None)
 
@@ -155,7 +159,9 @@ def safe_str_dict(data: Dict[str, Any] | str | int | float | List[Any] | None) -
     return {}
 
 
-def build_request_data_from_raw(raw_request: Dict[str, Any] | str | int | float | List[Any] | None) -> Optional[RequestData]:
+def build_request_data_from_raw(
+    raw_request: Dict[str, Any] | str | int | float | List[Any] | None,
+) -> Optional[RequestData]:
     """Extract and build RequestData from raw request data with type safety."""
     if raw_request is None or not isinstance(raw_request, dict):
         return None
@@ -173,7 +179,9 @@ def build_request_data_from_raw(raw_request: Dict[str, Any] | str | int | float 
     )
 
 
-def build_response_data_from_raw(raw_response: Dict[str, Any] | str | int | float | List[Any] | None) -> Optional[ResponseData]:
+def build_response_data_from_raw(
+    raw_response: Dict[str, Any] | str | int | float | List[Any] | None,
+) -> Optional[ResponseData]:
     """Extract and build ResponseData from raw response data with type safety."""
     if raw_response is None or not isinstance(raw_response, dict):
         return None
@@ -321,12 +329,20 @@ class TSDBDataConverter:
                 task_id_raw: Any = raw_tags.get("task_id")
                 if not task_id_raw and isinstance(raw_request, dict):
                     task_id_raw = raw_request.get("task_id")
-                task_id = str(task_id_raw) if (task_id_raw is not None and not isinstance(task_id_raw, (dict, list))) else None
+                task_id = (
+                    str(task_id_raw)
+                    if (task_id_raw is not None and not isinstance(task_id_raw, (dict, list)))
+                    else None
+                )
 
                 thought_id_raw: Any = raw_tags.get("thought_id")
                 if not thought_id_raw and isinstance(raw_request, dict):
                     thought_id_raw = raw_request.get("thought_id")
-                thought_id = str(thought_id_raw) if (thought_id_raw is not None and not isinstance(thought_id_raw, (dict, list))) else None
+                thought_id = (
+                    str(thought_id_raw)
+                    if (thought_id_raw is not None and not isinstance(thought_id_raw, (dict, list)))
+                    else None
+                )
                 tags = SpanTags(
                     task_id=task_id,
                     thought_id=thought_id,
@@ -371,7 +387,9 @@ class TSDBDataConverter:
                 error_message=raw_response.get("error") if isinstance(raw_response, dict) else None,
                 error_type=raw_response.get("error_type") if isinstance(raw_response, dict) else None,
                 latency_ms=raw_response.get("execution_time_ms") if isinstance(raw_response, dict) else None,
-                resource_usage=ensure_dict(raw_response.get("resource_usage", {})) if isinstance(raw_response, dict) else {},
+                resource_usage=(
+                    ensure_dict(raw_response.get("resource_usage", {})) if isinstance(raw_response, dict) else {}
+                ),
             )
         except Exception as e:
             error_msg = f"Failed to convert trace span data: {str(e)[:200]}"

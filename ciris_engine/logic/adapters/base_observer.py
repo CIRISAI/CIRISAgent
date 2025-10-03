@@ -394,7 +394,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         # Add current message author
         if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-            user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            user_lookup[str(msg.author_id)] = msg.author_name
 
         return user_lookup
 
@@ -504,7 +504,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             # Format mentions for task description
             passive_task_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                passive_task_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+                passive_task_lookup[str(msg.author_id)] = msg.author_name
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
             # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel
@@ -564,7 +564,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             # Build user lookup for the current message
             initial_user_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                initial_user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+                initial_user_lookup[str(msg.author_id)] = msg.author_name
             formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
             # Build thought content based on priority vs passive
             if filter_result and priority > 0:
@@ -596,7 +596,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             )
 
             # Handle consent-aware content formatting
-            await self._append_consent_aware_content(task_lines, msg, user_lookup)  # type: ignore[attr-defined]
+            await self._append_consent_aware_content(task_lines, msg, user_lookup)
 
             task_content = "\n".join(task_lines)
 

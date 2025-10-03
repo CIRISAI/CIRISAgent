@@ -359,7 +359,15 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             # Create trace correlation for this event
             from ciris_engine.schemas.runtime.enums import HandlerActionType
 
-            action_type = HandlerActionType.OBSERVE  # Default for general audit events
+            # Extract action type from event data - try to map to HandlerActionType
+            # For non-handler events like WA operations, system events, etc., default to OBSERVE
+            action_name = event_data.action if hasattr(event_data, "action") else event_type
+            try:
+                action_type = HandlerActionType(action_name)
+            except ValueError:
+                # Not a handler action - use OBSERVE as default for system/auth events
+                action_type = HandlerActionType.OBSERVE
+
             await self._create_trace_correlation(entry, action_type)
 
             # Return full audit entry result with hash chain data

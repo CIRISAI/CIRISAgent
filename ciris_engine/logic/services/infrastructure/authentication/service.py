@@ -1066,6 +1066,25 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Store private key (in production, this would be in a secure key store)
         # For now, we're not storing it as it's managed externally
 
+        # Add audit log entry for WA creation (mint)
+        if hasattr(self, "_audit_service") and self._audit_service:
+            from ciris_engine.schemas.audit.core import EventPayload
+
+            event_data = EventPayload(
+                action="wa_mint",
+                service_name="authentication",
+                user_id="system",
+                result="success",
+                details={
+                    "wa_id": wa_id,
+                    "name": name,
+                    "role": role.value,
+                    "scopes": scopes,
+                    "timestamp": timestamp.isoformat(),
+                },
+            )
+            await self._audit_service.log_event(event_type="wa_mint", event_data=event_data)
+
         return wa_cert
 
     async def list_was(self, active_only: bool = True) -> List[WACertificate]:

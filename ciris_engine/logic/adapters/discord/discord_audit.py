@@ -100,105 +100,45 @@ class DiscordAuditLogger:
     async def log_message_sent(
         self, channel_id: str, author_id: str, message_content: str, correlation_id: Optional[str] = None
     ) -> None:
-        """Log a message send operation.
+        """DEPRECATED: Message sends are already audited via speak handler action.
 
-        Args:
-            channel_id: Discord channel ID
-            author_id: Message author ID
-            message_content: Content of the message (truncated)
-            correlation_id: Optional correlation ID
+        This method is kept for backwards compatibility but does nothing.
         """
-        # Truncate message for audit log
-        truncated = message_content[:100] + "..." if len(message_content) > 100 else message_content
-
-        await self.log_operation(
-            operation="send_message",
-            actor=author_id,
-            context={
-                "channel_id": channel_id,
-                "message_preview": truncated,
-                "message_length": len(message_content),
-                "correlation_id": correlation_id,
-            },
-        )
+        pass
 
     async def log_message_received(self, channel_id: str, author_id: str, author_name: str, message_id: str) -> None:
-        """Log a message receive operation.
+        """DEPRECATED: Message receives don't need auditing - too verbose.
 
-        Args:
-            channel_id: Discord channel ID
-            author_id: Message author ID
-            author_name: Message author name
-            message_id: Discord message ID
+        This method is kept for backwards compatibility but does nothing.
         """
-        await self.log_operation(
-            operation="receive_message",
-            actor=author_id,
-            context={"channel_id": channel_id, "author_name": author_name, "message_id": message_id},
-        )
+        pass
 
     async def log_guidance_request(
         self, channel_id: str, requester_id: str, context: Dict[str, Any], guidance_received: Optional[str] = None
     ) -> None:
-        """Log a guidance request operation.
+        """DEPRECATED: Guidance requests are already audited via defer handler action.
 
-        Args:
-            channel_id: Discord channel ID
-            requester_id: Who requested guidance
-            context: Guidance context
-            guidance_received: The guidance that was received
+        This method is kept for backwards compatibility but does nothing.
         """
-        await self.log_operation(
-            operation="request_guidance",
-            actor=requester_id,
-            context={
-                "channel_id": channel_id,
-                "task_id": context.get("task_id"),
-                "thought_id": context.get("thought_id"),
-                "guidance_received": guidance_received is not None,
-            },
-        )
+        pass
 
     async def log_approval_request(
         self, channel_id: str, requester_id: str, action: str, approval_status: str, approver_id: Optional[str] = None
     ) -> None:
-        """Log an approval request operation.
+        """DEPRECATED: Approval requests are already audited via handler actions.
 
-        Args:
-            channel_id: Discord channel ID
-            requester_id: Who requested approval
-            action: Action requiring approval
-            approval_status: Status of the approval (pending, approved, denied, timeout)
-            approver_id: Who approved/denied (if applicable)
+        This method is kept for backwards compatibility but does nothing.
         """
-        await self.log_operation(
-            operation="request_approval",
-            actor=requester_id,
-            context={
-                "channel_id": channel_id,
-                "action": action,
-                "approval_status": approval_status,
-                "approver_id": approver_id,
-            },
-        )
+        pass
 
     async def log_permission_change(
         self, admin_id: str, target_id: str, permission: str, action: str, guild_id: str
     ) -> None:
-        """Log a permission change operation.
+        """DEPRECATED: Permission changes are already audited via grant/revoke handler actions.
 
-        Args:
-            admin_id: Who made the change
-            target_id: User whose permissions changed
-            permission: Permission name (AUTHORITY, OBSERVER)
-            action: grant or revoke
-            guild_id: Discord guild ID
+        This method is kept for backwards compatibility but does nothing.
         """
-        await self.log_operation(
-            operation=f"{action}_permission",
-            actor=admin_id,
-            context={"target_user_id": target_id, "permission": permission, "guild_id": guild_id},
-        )
+        pass
 
     async def log_tool_execution(
         self,
@@ -234,18 +174,9 @@ class DiscordAuditLogger:
     async def log_connection_event(
         self, event_type: str, guild_count: int, user_count: int, error: Optional[str] = None
     ) -> None:
-        """Log a Discord connection event.
+        """DEPRECATED: Connection events are too verbose for audit trail.
 
-        Args:
-            event_type: Type of event (connected, disconnected, reconnect)
-            guild_count: Number of guilds
-            user_count: Number of users
-            error: Error message if applicable
+        This method is kept for backwards compatibility but does nothing.
+        Connection issues are already logged to standard logs.
         """
-        await self.log_operation(
-            operation=f"connection_{event_type}",
-            actor="discord_adapter",
-            context={"guild_count": guild_count, "user_count": user_count},
-            success=error is None,
-            error_message=error,
-        )
+        pass

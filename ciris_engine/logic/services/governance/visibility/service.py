@@ -167,6 +167,14 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 remaining = limit - len(tasks)
                 tasks.extend(active_tasks[:remaining])
 
+        # If still need more, add failed tasks
+        if len(tasks) < limit:
+            failed_tasks = get_tasks_by_status(TaskStatus.FAILED, db_path=self._db_path)
+            if failed_tasks:
+                failed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
+                remaining = limit - len(tasks)
+                tasks.extend(failed_tasks[:remaining])
+
         # If still need more, add pending
         if len(tasks) < limit:
             pending_tasks = get_tasks_by_status(TaskStatus.PENDING, db_path=self._db_path)

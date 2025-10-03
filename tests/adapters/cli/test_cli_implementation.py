@@ -249,18 +249,20 @@ class TestCLIAdapterChannelManagement:
 
     def test_get_channel_list(self, cli_adapter):
         """Test getting CLI channel information."""
+        from ciris_engine.schemas.persistence.correlations import ChannelInfo
+
         # Mock get_active_channels_by_adapter to return test data
         with patch(
             "ciris_engine.logic.persistence.models.correlations.get_active_channels_by_adapter"
         ) as mock_get_channels:
             mock_get_channels.return_value = [
-                {
-                    "channel_id": "cli_test",
-                    "channel_name": "CLI Test Channel",
-                    "channel_type": "cli",
-                    "is_active": True,
-                    "last_activity": datetime.now(timezone.utc),
-                }
+                ChannelInfo(
+                    channel_id="cli_test",
+                    channel_type="cli",
+                    is_active=True,
+                    last_activity=datetime.now(timezone.utc),
+                    message_count=0,
+                )
             ]
 
             channels = cli_adapter.get_channel_list()
@@ -277,6 +279,8 @@ class TestCLIAdapterChannelManagement:
     @pytest.mark.asyncio
     async def test_channel_activity_update(self, cli_adapter):
         """Test channel activity updates."""
+        from ciris_engine.schemas.persistence.correlations import ChannelInfo
+
         # Mock get_active_channels_by_adapter to return test data
         initial_time = datetime.now(timezone.utc)
         with patch(
@@ -284,13 +288,13 @@ class TestCLIAdapterChannelManagement:
         ) as mock_get_channels:
             # First call returns initial activity
             mock_get_channels.return_value = [
-                {
-                    "channel_id": "cli_test",
-                    "channel_name": "CLI Test Channel",
-                    "channel_type": "cli",
-                    "is_active": True,
-                    "last_activity": initial_time,
-                }
+                ChannelInfo(
+                    channel_id="cli_test",
+                    channel_type="cli",
+                    is_active=True,
+                    last_activity=initial_time,
+                    message_count=0,
+                )
             ]
 
             # Get initial activity
@@ -302,7 +306,15 @@ class TestCLIAdapterChannelManagement:
 
             # Update mock to return updated activity
             updated_time = datetime.now(timezone.utc)
-            mock_get_channels.return_value[0]["last_activity"] = updated_time
+            mock_get_channels.return_value = [
+                ChannelInfo(
+                    channel_id="cli_test",
+                    channel_type="cli",
+                    is_active=True,
+                    last_activity=updated_time,
+                    message_count=0,
+                )
+            ]
 
             # Send a message to update activity
             await cli_adapter.send_message(channel_id="cli", content="Test")

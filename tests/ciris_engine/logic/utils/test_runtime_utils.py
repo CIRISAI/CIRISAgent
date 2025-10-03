@@ -40,7 +40,7 @@ class TestRuntimeUtils:
 
         await runtime_utils.run_with_shutdown_handler(mock_runtime)
 
-        mock_runtime.run.assert_awaited_once_with(num_rounds=None)
+        mock_runtime.run.assert_awaited_once_with(None)  # Positional argument, not keyword
         assert mock_loop.add_signal_handler.call_count == 2
         assert mock_loop.remove_signal_handler.call_count == 2
 

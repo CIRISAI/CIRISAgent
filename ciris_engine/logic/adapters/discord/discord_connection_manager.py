@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional
 
 import discord
 
@@ -57,7 +57,7 @@ class DiscordConnectionManager:
         self.reconnect_attempts = 0
         self.last_connected: Optional[datetime] = None
         self.last_disconnected: Optional[datetime] = None
-        self.connection_task: Optional[asyncio.Task] = None
+        self.connection_task: Optional[asyncio.Task[Any]] = None
 
         # Callbacks
         self.on_connected: Optional[Callable[[], Awaitable[None]]] = None
@@ -231,7 +231,7 @@ class DiscordConnectionManager:
         logger.debug("DiscordConnectionManager.is_connected: client is None, returning False")
         return False
 
-    def get_connection_info(self) -> dict:
+    def get_connection_info(self) -> Dict[str, Any]:
         """Get current connection information.
 
         Returns:

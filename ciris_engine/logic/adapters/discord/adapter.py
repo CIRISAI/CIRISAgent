@@ -664,6 +664,11 @@ class DiscordPlatform(Service):
             if not recreation_success:
                 return (True, False)  # Continue without breaking
 
+        # Type guard: After _check_task_health and potential recreation, task should exist
+        if not self._discord_client_task:
+            logger.error("Discord task is None after health check - this should not happen")
+            return (True, False)  # Continue
+
         # Wait for either task to complete
         done, pending = await asyncio.wait(
             [current_agent_task, self._discord_client_task], return_when=asyncio.FIRST_COMPLETED, timeout=30.0

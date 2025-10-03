@@ -11,7 +11,7 @@ from ciris_engine.logic.formatters import (
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.results import DSDMAResult
@@ -22,7 +22,7 @@ from .prompt_loader import get_prompt_loader
 logger = logging.getLogger(__name__)
 
 
-class BaseDSDMA(BaseDMA, DSDMAProtocol):
+class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
     """
     Abstract Base Class for Domain-Specific Decision-Making Algorithms.
     Handles instructor client patching based on global config.
@@ -72,18 +72,12 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
         except FileNotFoundError:
             logger.warning(f"DSDMA base prompt template not found for domain '{domain_name}', using fallback")
             # Create a PromptCollection with fallback data
-            from ciris_engine.schemas.dma.prompts import PromptCollection, PromptTemplate
+            from ciris_engine.schemas.dma.prompts import PromptCollection
 
             self.prompt_template_data = PromptCollection(
-                name="dsdma_base_fallback",
+                component_name="dsdma_base_fallback",
                 description="Fallback DSDMA prompt collection",
-                prompts={
-                    "system_guidance_header": PromptTemplate(
-                        name="system_guidance_header",
-                        template=self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else "",
-                        description="Fallback system guidance",
-                    )
-                },
+                system_guidance_header=self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else "",
             )
             self.prompt_template = (
                 prompt_template
@@ -195,15 +189,17 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
                 )
 
             # Extract system_snapshot - MUST exist
-            system_snapshot = thought_item.initial_context.get("system_snapshot")
-            if not system_snapshot:
+            system_snapshot_raw = thought_item.initial_context.get("system_snapshot")
+            if not system_snapshot_raw:
                 raise ValueError(
                     f"CRITICAL: No system_snapshot in initial_context for DSDMA domain '{self.domain_name}'! "
                     "This is a fatal error. Identity is required for ALL DMA evaluations."
                 )
 
             # Extract agent_identity - MUST exist and be complete
-            agent_identity = system_snapshot.get("agent_identity") if isinstance(system_snapshot, dict) else None
+            agent_identity = (
+                system_snapshot_raw.get("agent_identity") if isinstance(system_snapshot_raw, dict) else None
+            )
             if not agent_identity:
                 raise ValueError(
                     f"CRITICAL: No agent_identity found in system_snapshot for DSDMA domain '{self.domain_name}'! "
@@ -236,9 +232,9 @@ class BaseDSDMA(BaseDMA, DSDMAProtocol):
             identity_block += "============================================"
 
             # Format optional blocks
-            user_profiles_data = system_snapshot.get("user_profiles")
+            user_profiles_data = system_snapshot_raw.get("user_profiles")
             user_profiles_block = format_user_profiles(user_profiles_data) if user_profiles_data else ""
-            system_snapshot_block = format_system_snapshot(system_snapshot)
+            system_snapshot_block = format_system_snapshot(system_snapshot_raw)
 
         escalation_guidance_block = get_escalation_guidance(0)
 

@@ -1171,29 +1171,26 @@ def _create_dma_results_event(
     """
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
-    # Extract the 3 DMA results from InitialDMAResults object
-    csdma_result = None
-    dsdma_result = None
-    pdma_result = None
+    # Extract the 3 DMA results from InitialDMAResults object - pass concrete typed objects
+    if not dma_results or not hasattr(dma_results, "csdma"):
+        raise ValueError("DMA results missing required fields")
 
-    if dma_results and hasattr(dma_results, "csdma"):
-        # Extract CSDMA result
-        csdma_result = dma_results.csdma.model_dump() if dma_results.csdma else None
-
-        # Extract DSDMA result
-        dsdma_result = dma_results.dsdma.model_dump() if dma_results.dsdma else None
-
-        # Extract PDMA result (stored as ethical_pdma)
-        pdma_result = dma_results.ethical_pdma.model_dump() if dma_results.ethical_pdma else None
+    # All 3 DMA results are required (non-optional)
+    if not dma_results.csdma:
+        raise ValueError("CSDMA result is required")
+    if not dma_results.dsdma:
+        raise ValueError("DSDMA result is required")
+    if not dma_results.ethical_pdma:
+        raise ValueError("Ethical PDMA result is required")
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
         thought_id=step_data.thought_id,
         task_id=step_data.task_id,
         timestamp=timestamp,
-        csdma=csdma_result,
-        dsdma=dsdma_result,
-        pdma=pdma_result,  # Correct name is PDMA (from ethical_pdma)
+        csdma=dma_results.csdma,  # Pass CSDMAResult object directly
+        dsdma=dma_results.dsdma,  # Pass DSDMAResult object directly
+        pdma=dma_results.ethical_pdma,  # Pass EthicalDMAResult object directly
     )
 
 

@@ -898,10 +898,10 @@ class DMAResultsEvent(BaseModel):
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
-    # All 3 DMA results
-    csdma: Optional[str] = Field(None, description="Cognitive State DMA result")
-    dsdma: Optional[str] = Field(None, description="Decision Space DMA result")
-    aspdma_options: Optional[str] = Field(None, description="ASPDMA available action options")
+    # All 3 DMA results - strongly typed, non-optional
+    csdma: CSDMAResult = Field(..., description="Common Sense DMA result")
+    dsdma: DSDMAResult = Field(..., description="Domain Specific DMA result")
+    pdma: EthicalDMAResult = Field(..., description="Ethical Perspective DMA result (PDMA)")
 
 
 class ASPDMAResultEvent(BaseModel):

@@ -182,11 +182,22 @@ class TestDiscordAdapterInitialization:
         config.bot_token = "test_token"
         config.monitored_channel_ids = ["1382010877171073108", "1387961206190637076"]
 
+        # Mock the observer instance to have async start/stop methods
+        mock_observer_instance = MagicMock()
+        mock_observer_instance.start = AsyncMock()
+        mock_observer_instance.stop = AsyncMock()
+        mock_observer_class.return_value = mock_observer_instance
+
         # Create adapter with the config
         adapter = DiscordPlatform(
             runtime=mock_runtime,
             adapter_config=config,
         )
+
+        # Mock the tool_service to have async start/stop methods
+        adapter.tool_service = MagicMock()
+        adapter.tool_service.start = AsyncMock()
+        adapter.tool_service.stop = AsyncMock()
 
         # Start the adapter (this is where observer is created)
         await adapter.start()

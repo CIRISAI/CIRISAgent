@@ -10,7 +10,7 @@ import urllib.parse
 import webbrowser
 from pathlib import Path
 from threading import Thread
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from rich.console import Console
 
@@ -50,7 +50,7 @@ class WACLIOAuthService:
         self._oauth_server_running = False
 
     async def oauth_setup(
-        self, provider: str, client_id: str, client_secret: str, custom_metadata: Optional[dict] = None
+        self, provider: str, client_id: str, client_secret: str, custom_metadata: Optional[Dict[str, Any]] = None
     ) -> OAuthOperationResult:
         """Configure OAuth provider."""
         try:
@@ -151,7 +151,7 @@ class WACLIOAuthService:
             return OAuthLoginResult(status="error", provider=provider, error=str(e))
 
     async def _exchange_oauth_code(
-        self, provider: str, callback_data: OAuthCallbackData, provider_config: dict
+        self, provider: str, callback_data: OAuthCallbackData, provider_config: Dict[str, Any]
     ) -> OAuthLoginResult:
         """Exchange OAuth code for token and create WA."""
 
@@ -191,7 +191,7 @@ class WACLIOAuthService:
             logger.error(f"OAuth exchange error: {e}")
             raise
 
-    async def _exchange_code_for_token(self, provider: str, code: str, provider_config: dict) -> OAuthTokenResponse:
+    async def _exchange_code_for_token(self, provider: str, code: str, provider_config: Dict[str, Any]) -> OAuthTokenResponse:
         """Exchange authorization code for access token."""
         import aiohttp
 

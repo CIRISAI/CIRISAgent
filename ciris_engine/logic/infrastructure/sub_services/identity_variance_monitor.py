@@ -779,7 +779,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return trust_params
 
-    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> dict:
+    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> Dict[str, Any]:
         """Extract current trust parameters from config nodes."""
         trust_params = {}
 
@@ -809,7 +809,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return capabilities
 
-    def _compare_patterns(self, baseline_patterns: dict, current_patterns: dict) -> List[IdentityDiff]:
+    def _compare_patterns(self, baseline_patterns: Dict[str, Any], current_patterns: Dict[str, Any]) -> List[IdentityDiff]:
         """Compare behavioral patterns between baseline and current."""
         differences = []
 

@@ -879,8 +879,8 @@ async def _process_metric_data(telemetry_service: Any, metric_name: str, now: da
         return None
 
     # Calculate averages and trends
-    hourly_values = [dp.get("value", 0.0) for dp in hourly_data] if hourly_data else [0.0]
-    daily_values = [dp.get("value", 0.0) for dp in daily_data] if daily_data else [0.0]
+    hourly_values = [float(dp.value) for dp in hourly_data] if hourly_data else [0.0]
+    daily_values = [float(dp.value) for dp in daily_data] if daily_data else [0.0]
 
     hourly_avg = sum(hourly_values) / len(hourly_values) if hourly_values else 0.0
     daily_avg = sum(daily_values) / len(daily_values) if daily_values else 0.0
@@ -900,22 +900,22 @@ async def _process_metric_data(telemetry_service: Any, metric_name: str, now: da
         by_service=[],  # Could aggregate by service if tags available
         recent_data=[
             MetricData(
-                timestamp=dp.get("timestamp", now),
-                value=dp.get("value", 0.0),
-                tags=MetricTags(**dp.get("tags", {})),
+                timestamp=dp.timestamp,
+                value=float(dp.value),
+                tags=MetricTags(**dp.tags) if dp.tags else MetricTags(),
             )
             for dp in (hourly_data[-10:] if hourly_data else [])
         ],
     )
 
 
-def _get_legacy_metrics(telemetry_service: Any) -> List[DetailedMetric]:
+async def _get_legacy_metrics(telemetry_service: Any) -> List[DetailedMetric]:
     """Get metrics from legacy get_metrics method."""
     metrics: List[DetailedMetric] = []
     if not (hasattr(telemetry_service, "get_metrics") and not hasattr(telemetry_service, "query_metrics")):
         return metrics
 
-    legacy_metrics = telemetry_service.get_metrics()
+    legacy_metrics = await telemetry_service.get_metrics()
     if not legacy_metrics:
         return metrics
 
@@ -999,7 +999,7 @@ async def get_detailed_metrics(
 
         # Fallback to legacy get_metrics if needed
         if not metrics:
-            metrics = _get_legacy_metrics(telemetry_service)
+            metrics = await _get_legacy_metrics(telemetry_service)
 
         # Calculate summary statistics
         summary = _calculate_metrics_summary(metrics)
@@ -1017,6 +1017,8 @@ async def get_detailed_metrics(
         # Re-raise HTTPException as-is to preserve status code
         raise
     except Exception as e:
+        import traceback
+        logger.error(f"Error in get_detailed_metrics: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

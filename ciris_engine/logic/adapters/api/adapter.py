@@ -246,6 +246,7 @@ class ApiPlatform(Service):
                         logger.warning(f"Message {msg.message_id} passed to observer but no result returned")
                         # Return a default result for backward compatibility with tests
                         from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus
+
                         return MessageHandlingResult(
                             status=MessageHandlingStatus.TASK_CREATED,
                             message_id=msg.message_id,

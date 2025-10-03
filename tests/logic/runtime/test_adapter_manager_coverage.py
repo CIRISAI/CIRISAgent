@@ -595,9 +595,7 @@ class TestRuntimeAdapterManager:
             await adapter_manager._on_adapter_config_change("adapter.test.config", None, config_dict)
 
             # Verify - now expects AdapterConfig object, not dict
-            expected_config = AdapterConfig(
-                adapter_type="cli", enabled=True, settings={}
-            )
+            expected_config = AdapterConfig(adapter_type="cli", enabled=True, settings={})
             mock_reload.assert_called_once()
             call_args = mock_reload.call_args[0]
             assert call_args[0] == "test"

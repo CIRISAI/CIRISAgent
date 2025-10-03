@@ -661,7 +661,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
             logger.error("Error creating observation task: %s", e, exc_info=True)
             return None
 
-    async def _create_priority_observation_result(self, msg: MessageT, filter_result: Any) -> Optional["PassiveObservationResult"]:
+    async def _create_priority_observation_result(
+        self, msg: MessageT, filter_result: Any
+    ) -> Optional["PassiveObservationResult"]:
         """
         Create priority observation by delegating to passive observation with higher priority.
 
@@ -673,7 +675,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
             task_priority = 10 if getattr(filter_result.priority, "value", "") == "critical" else 5
 
             # Delegate to passive observation with priority and filter information
-            result = await self._create_passive_observation_result(msg, priority=task_priority, filter_result=filter_result)
+            result = await self._create_passive_observation_result(
+                msg, priority=task_priority, filter_result=filter_result
+            )
 
             if result:
                 logger.info(
@@ -750,7 +754,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
         setattr(processed_msg, "_filter_reasoning", filter_result.reasoning)
 
         # Determine task priority
-        task_priority = 10 if filter_result.priority.value == "critical" else (5 if filter_result.priority.value == "high" else 0)
+        task_priority = (
+            10 if filter_result.priority.value == "critical" else (5 if filter_result.priority.value == "high" else 0)
+        )
 
         # Process based on priority and capture result
         obs_result: Optional["PassiveObservationResult"] = None
@@ -788,7 +794,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
         """Hook for subclasses to enhance messages (e.g., vision processing)."""
         return msg
 
-    async def _handle_priority_observation(self, msg: MessageT, filter_result: Any) -> Optional["PassiveObservationResult"]:
+    async def _handle_priority_observation(
+        self, msg: MessageT, filter_result: Any
+    ) -> Optional["PassiveObservationResult"]:
         """
         Handle high-priority messages.
 

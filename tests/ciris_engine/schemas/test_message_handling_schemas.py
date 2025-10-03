@@ -8,11 +8,7 @@ schemas to ensure they work correctly and serve as documentation.
 import pytest
 from pydantic import ValidationError
 
-from ciris_engine.schemas.runtime.messages import (
-    MessageHandlingResult,
-    MessageHandlingStatus,
-    PassiveObservationResult,
-)
+from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 
 
 class TestMessageHandlingStatus:

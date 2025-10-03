@@ -15,18 +15,14 @@ from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.routes import agent
 from ciris_engine.logic.adapters.api.routes.agent import (
-    MessageRequest,
     MessageRejectionReason,
+    MessageRequest,
     MessageSubmissionResponse,
     router,
 )
 from ciris_engine.logic.adapters.base_observer import CreditCheckFailed, CreditDenied
 from ciris_engine.schemas.api.auth import AuthContext, Permission, UserRole
-from ciris_engine.schemas.runtime.messages import (
-    MessageHandlingResult,
-    MessageHandlingStatus,
-    PassiveObservationResult,
-)
+from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 
 
 def create_auth_dependency(auth_context):
@@ -214,9 +210,7 @@ class TestMessageEndpointRejections:
     @pytest.mark.asyncio
     async def test_message_rejected_no_permission(self, app, auth_context_observer_no_permission):
         """Test message rejected due to missing SEND_MESSAGES permission."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(
-            auth_context_observer_no_permission
-        )
+        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_observer_no_permission)
 
         client = TestClient(app)
         response = client.post(
@@ -230,9 +224,7 @@ class TestMessageEndpointRejections:
         assert detail["error"] == "insufficient_permissions"
 
     @pytest.mark.asyncio
-    async def test_message_rejected_filtered_out(
-        self, app, auth_context_admin, mock_message_handling_result_filtered
-    ):
+    async def test_message_rejected_filtered_out(self, app, auth_context_admin, mock_message_handling_result_filtered):
         """Test message rejected by adaptive filter."""
         app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_filtered
@@ -363,9 +355,7 @@ class TestMessageEndpointValidation:
         assert response.status_code == 422  # Validation error
 
     @pytest.mark.asyncio
-    async def test_message_with_context(
-        self, app, auth_context_admin, mock_message_handling_result_success
-    ):
+    async def test_message_with_context(self, app, auth_context_admin, mock_message_handling_result_success):
         """Test message submission with optional context."""
         app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
@@ -391,9 +381,7 @@ class TestMessageEndpointConsentHandling:
     """Tests for consent handling during message submission."""
 
     @pytest.mark.asyncio
-    async def test_consent_checked_for_new_user(
-        self, app, auth_context_admin, mock_message_handling_result_success
-    ):
+    async def test_consent_checked_for_new_user(self, app, auth_context_admin, mock_message_handling_result_success):
         """Test that consent is checked when user submits a message."""
         app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
@@ -448,9 +436,7 @@ class TestMessageEndpointResponseSchema:
             assert field in data, f"Missing required field: {field}"
 
     @pytest.mark.asyncio
-    async def test_response_schema_types_correct(
-        self, app, auth_context_admin, mock_message_handling_result_success
-    ):
+    async def test_response_schema_types_correct(self, app, auth_context_admin, mock_message_handling_result_success):
         """Test that response field types are correct."""
         app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success

@@ -11,11 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver
-from ciris_engine.schemas.runtime.messages import (
-    IncomingMessage,
-    MessageHandlingResult,
-    MessageHandlingStatus,
-)
+from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult, MessageHandlingStatus
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 
 
@@ -118,9 +114,7 @@ class TestAdaptiveFilterIntegration:
     """Tests for adaptive filter integration in message handling."""
 
     @pytest.mark.asyncio
-    async def test_message_allowed_by_filter_creates_task(
-        self, observer, sample_message, filter_result_allow
-    ):
+    async def test_message_allowed_by_filter_creates_task(self, observer, sample_message, filter_result_allow):
         """Test that messages allowed by filter result in task creation."""
         # Mock filter service
         observer.filter_service = AsyncMock()
@@ -146,9 +140,7 @@ class TestAdaptiveFilterIntegration:
             mock_create.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_message_filtered_out_no_task_created(
-        self, observer, sample_message, filter_result_filtered
-    ):
+    async def test_message_filtered_out_no_task_created(self, observer, sample_message, filter_result_filtered):
         """Test that filtered messages do not create tasks."""
         # Mock filter service
         observer.filter_service = AsyncMock()
@@ -223,9 +215,7 @@ class TestAdaptiveFilterIntegration:
             mock_create_priority.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_filter_reasoning_included_in_result(
-        self, observer, sample_message, filter_result_filtered
-    ):
+    async def test_filter_reasoning_included_in_result(self, observer, sample_message, filter_result_filtered):
         """Test that filter reasoning is included in the result."""
         observer.filter_service = AsyncMock()
         observer.filter_service.filter_message = AsyncMock(return_value=filter_result_filtered)
@@ -237,9 +227,7 @@ class TestAdaptiveFilterIntegration:
         assert result.filtered is True
 
     @pytest.mark.asyncio
-    async def test_triggered_filters_tracked(
-        self, observer, sample_message, filter_result_filtered
-    ):
+    async def test_triggered_filters_tracked(self, observer, sample_message, filter_result_filtered):
         """Test that triggered filters are tracked in filter result."""
         observer.filter_service = AsyncMock()
         observer.filter_service.filter_message = AsyncMock(return_value=filter_result_filtered)
@@ -253,9 +241,7 @@ class TestAdaptiveFilterIntegration:
         assert "spam" in result.filter_reasoning.lower() or "rate" in result.filter_reasoning.lower()
 
     @pytest.mark.asyncio
-    async def test_no_filter_service_allows_all_messages(
-        self, observer, sample_message
-    ):
+    async def test_no_filter_service_allows_all_messages(self, observer, sample_message):
         """Test that messages are allowed when no filter service is configured."""
         # No filter service configured
         observer.filter_service = None
@@ -282,9 +268,7 @@ class TestFilterPriorityMapping:
     """Tests for mapping filter priorities to task priorities."""
 
     @pytest.mark.asyncio
-    async def test_low_priority_maps_to_passive(
-        self, observer, sample_message
-    ):
+    async def test_low_priority_maps_to_passive(self, observer, sample_message):
         """Test that LOW filter priority creates passive (0) priority task."""
         filter_result = FilterResult(
             message_id="msg-123",
@@ -311,9 +295,7 @@ class TestFilterPriorityMapping:
             assert result.task_priority == 0  # Passive
 
     @pytest.mark.asyncio
-    async def test_medium_priority_maps_to_passive(
-        self, observer, sample_message
-    ):
+    async def test_medium_priority_maps_to_passive(self, observer, sample_message):
         """Test that MEDIUM filter priority creates passive (0) priority task."""
         filter_result = FilterResult(
             message_id="msg-123",
@@ -340,9 +322,7 @@ class TestFilterPriorityMapping:
             assert result.task_priority == 0  # Still passive
 
     @pytest.mark.asyncio
-    async def test_ignore_priority_blocks_message(
-        self, observer, sample_message
-    ):
+    async def test_ignore_priority_blocks_message(self, observer, sample_message):
         """Test that IGNORE filter priority blocks message processing."""
         filter_result = FilterResult(
             message_id="msg-123",
@@ -366,15 +346,11 @@ class TestFilterIntegrationEdgeCases:
     """Tests for edge cases in filter integration."""
 
     @pytest.mark.asyncio
-    async def test_filter_service_exception_allows_message(
-        self, observer, sample_message
-    ):
+    async def test_filter_service_exception_allows_message(self, observer, sample_message):
         """Test that filter service exceptions don't block messages."""
         # Mock filter service that raises exception
         observer.filter_service = AsyncMock()
-        observer.filter_service.filter_message = AsyncMock(
-            side_effect=Exception("Filter service error")
-        )
+        observer.filter_service.filter_message = AsyncMock(side_effect=Exception("Filter service error"))
 
         with patch.object(observer, "_create_passive_observation_result") as mock_create:
             from ciris_engine.schemas.runtime.messages import PassiveObservationResult

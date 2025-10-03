@@ -413,13 +413,10 @@ class ApiPlatform(Service):
 
     def is_healthy(self) -> bool:
         """Check if the API server is healthy and running."""
-        has_server = self._server is not None and self._server_task is not None
-        if not has_server:
+        if self._server is None or self._server_task is None:
             return False
 
         # Check if the server task is still running
-        if self._server_task is None:
-            return False
         return not self._server_task.done()
 
     def get_metrics(self) -> dict[str, float]:

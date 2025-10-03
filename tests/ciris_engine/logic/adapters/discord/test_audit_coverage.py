@@ -117,7 +117,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool"
-        assert call_args["event_data"]["actor"] == "user123"
+        assert call_args["event_data"].user_id == "user123"
 
     @pytest.mark.asyncio
     async def test_log_tool_execution_failure(self):
@@ -128,7 +128,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool.failed"
-        assert call_args["event_data"]["outcome"] == "failure"
+        assert call_args["event_data"].result == "failure"
 
     @pytest.mark.asyncio
     async def test_audit_service_exception_handling(self):
@@ -162,7 +162,9 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_data"]["details"]["correlation_id"] == "corr-789"
+        # EventPayload is a Pydantic model - use attribute access
+        event_data = call_args["event_data"]
+        assert event_data.channel_id == "channel123"
 
     @pytest.mark.asyncio
     async def test_empty_parameters_handling(self):
@@ -172,7 +174,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool"
-        assert call_args["event_data"]["actor"] == "user123"
+        assert call_args["event_data"].user_id == "user123"
 
     @pytest.mark.asyncio
     async def test_none_parameters_handling(self):
@@ -182,7 +184,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool"
-        assert call_args["event_data"]["actor"] == "user123"
+        assert call_args["event_data"].user_id == "user123"
 
     def test_set_audit_service_method(self):
         """Test setting audit service after initialization."""

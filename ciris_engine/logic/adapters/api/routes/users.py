@@ -596,7 +596,7 @@ async def mint_wise_authority(
         raise HTTPException(status_code=403, detail=ERROR_ONLY_ADMIN_MINT_WA)
 
     # Validate that request.wa_role is not ROOT
-    if request.wa_role == WARole.ROOT:  # type: ignore[unreachable]
+    if request.wa_role == WARole.ROOT:
         raise HTTPException(status_code=400, detail=ERROR_CANNOT_MINT_ROOT)
 
     # If no signature provided but private key path is given, try to auto-sign

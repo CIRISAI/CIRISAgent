@@ -145,9 +145,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 stream=ConsentStream(attrs["stream"]),
                 categories=[ConsentCategory(c) for c in attrs["categories"]],
                 granted_at=datetime.fromisoformat(attrs["granted_at"]),
-                expires_at=(
-                    datetime.fromisoformat(attrs["expires_at"]) if attrs.get("expires_at") else None
-                ),
+                expires_at=(datetime.fromisoformat(attrs["expires_at"]) if attrs.get("expires_at") else None),
                 last_modified=datetime.fromisoformat(attrs["last_modified"]),
                 impact_score=attrs.get("impact_score", 0.0),
                 attribution_count=attrs.get("attribution_count", 0),
@@ -607,7 +605,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         patterns_contributed = 0
         for task_summary in task_summaries:
             if task_summary.attributes:
-                attrs = task_summary.attributes if isinstance(task_summary.attributes, dict) else task_summary.attributes.model_dump()
+                attrs = (
+                    task_summary.attributes
+                    if isinstance(task_summary.attributes, dict)
+                    else task_summary.attributes.model_dump()
+                )
                 if attrs.get("author_id") == user_id:
                     patterns_contributed += 1
 

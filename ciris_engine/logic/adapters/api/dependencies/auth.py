@@ -13,6 +13,14 @@ from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, UserRol
 
 from ..services.auth_service import APIAuthService
 
+__all__ = [
+    "AuthContext",
+    "get_auth_service",
+    "require_admin",
+    "require_observer",
+    "require_authenticated",
+]
+
 
 def get_auth_service(request: Request) -> APIAuthService:
     """Get auth service from app state."""

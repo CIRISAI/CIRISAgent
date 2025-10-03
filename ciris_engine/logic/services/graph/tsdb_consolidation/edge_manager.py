@@ -7,7 +7,7 @@ Handles proper creation of edges in the graph_edges table instead of storing as 
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
@@ -449,7 +449,7 @@ class EdgeManager:
                 row = cursor.fetchone()
                 if row:
                     logger.debug(f"Found previous summary: {row['node_id']}")
-                    return row["node_id"]
+                    return str(row["node_id"])
                 else:
                     logger.debug(f"No previous summary found for pattern: {node_id_pattern}")
                     return None
@@ -645,7 +645,9 @@ class EdgeManager:
             logger.error(f"Failed to cleanup orphaned edges: {e}")
             return 0
 
-    def create_edges(self, edges: Union[List[EdgeSpecification], List[Tuple[GraphNode, GraphNode, str, dict]]]) -> int:
+    def create_edges(
+        self, edges: Union[List[EdgeSpecification], List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]]
+    ) -> int:
         """
         Create multiple edges from a list of edge specifications.
 
@@ -667,16 +669,18 @@ class EdgeManager:
                 edge_data = []
 
                 # First, ensure all nodes exist
-                node_ids_to_check = set()
-                nodes_to_create = []
+                node_ids_to_check: set[str] = set()
+                nodes_to_create: List[GraphNode] = []
 
                 # Convert to normalized format
-                normalized_edges: List[Tuple[str, str, str, dict, Optional[str]]] = []
+                normalized_edges: List[Tuple[str, str, str, Dict[str, Any], Optional[str]]] = []
 
                 # Check if we have EdgeSpecifications or tuples
                 if edges and isinstance(edges[0], EdgeSpecification):
                     # EdgeSpecification format
-                    for edge_spec in edges:
+                    edge_specs = cast(List[EdgeSpecification], edges)
+                    for edge_spec in edge_specs:
+                        assert isinstance(edge_spec, EdgeSpecification)
                         node_ids_to_check.add(edge_spec.source_node_id)
                         node_ids_to_check.add(edge_spec.target_node_id)
                         normalized_edges.append(
@@ -690,7 +694,8 @@ class EdgeManager:
                         )
                 else:
                     # Tuple format (GraphNode, GraphNode, str, dict)
-                    for source_node, target_node, relationship, attrs in edges:
+                    edge_tuples = cast(List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]], edges)
+                    for source_node, target_node, relationship, attrs in edge_tuples:
                         node_ids_to_check.add(source_node.id)
                         node_ids_to_check.add(target_node.id)
                         scope = (
@@ -755,7 +760,8 @@ class EdgeManager:
                         else:
                             logger.warning(f"Cannot auto-create node of unknown type: {node_id}")
 
-                for source_id, target_id, relationship, attrs, scope in normalized_edges:
+                for source_id, target_id, relationship, attrs, scope_opt in normalized_edges:
+                    scope = scope_opt or "unknown"
                     # Skip edges if nodes don't exist
                     if source_id not in existing_nodes or target_id not in existing_nodes:
                         continue

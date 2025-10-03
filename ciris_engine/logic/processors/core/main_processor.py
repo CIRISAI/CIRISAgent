@@ -6,7 +6,7 @@ Uses v1 schemas and integrates state management.
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -22,7 +22,8 @@ from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.processors.state import StateTransitionRecord
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
-from ciris_engine.schemas.runtime.models import Thought, ThoughtStatus
+from ciris_engine.schemas.runtime.enums import ThoughtStatus
+from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -58,7 +59,7 @@ class AgentProcessor:
         agent_identity: AgentIdentityRoot,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: dict,
+        services: Dict[str, Any],
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
@@ -152,7 +153,7 @@ class AgentProcessor:
         # Processing control
         self.current_round_number = 0
         self._stop_event: Optional[asyncio.Event] = None
-        self._processing_task: Optional[asyncio.Task] = None
+        self._processing_task: Optional[asyncio.Task[Any]] = None
 
         # Pause/resume control for single-stepping
         self._is_paused = False
@@ -821,7 +822,7 @@ class AgentProcessor:
         """Set callback for thought processing time tracking."""
         self._thought_processing_callback = callback
 
-    async def single_step(self) -> dict:
+    async def single_step(self) -> Dict[str, Any]:
         """
         Execute one step point in the PDMA pipeline when paused.
 
@@ -983,7 +984,7 @@ class AgentProcessor:
         return True
 
     async def _process_regular_state(
-        self, processor, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int
+        self, processor: Any, current_state: AgentState, consecutive_errors: int, max_consecutive_errors: int
     ) -> tuple[int, int, bool]:
         """
         Process regular (non-shutdown) states.
@@ -1048,7 +1049,7 @@ class AgentProcessor:
             await asyncio.sleep(5)  # Check periodically
         return True
 
-    async def _process_shutdown_state(self, processor, consecutive_errors: int) -> tuple[int, int, bool]:
+    async def _process_shutdown_state(self, processor: Any, consecutive_errors: int) -> tuple[int, int, bool]:
         """
         Process shutdown state with negotiation.
 
@@ -1216,7 +1217,7 @@ class AgentProcessor:
 
     async def _handle_regular_state_processing(
         self,
-        processor,
+        processor: Any,
         current_state: AgentState,
         consecutive_errors: int,
         max_consecutive_errors: int,
@@ -1336,7 +1337,7 @@ class AgentProcessor:
             processor = self.state_processors[target_state]
             processor.initialize()
 
-    async def process(self, round_number: int) -> dict:
+    async def process(self, round_number: int) -> Dict[str, Any]:
         """Execute one round of processing based on current state."""
         current_state = self.state_manager.get_state()
         processor = self.state_processors.get(current_state)
@@ -1364,9 +1365,9 @@ class AgentProcessor:
         """
         return self.state_manager.get_state().value
 
-    def get_status(self) -> dict:
+    def get_status(self) -> Dict[str, Any]:
         """Get current processor status."""
-        status: dict = {
+        status: Dict[str, Any] = {
             "state": self.state_manager.get_state().value,
             "state_duration": self.state_manager.get_state_duration(),
             "round_number": self.current_round_number,
@@ -1509,12 +1510,12 @@ class AgentProcessor:
             logger.error(f"Error checking scheduled dreams: {e}")
             return False
 
-    def _get_detailed_queue_status(self) -> dict:
+    def _get_detailed_queue_status(self) -> Dict[str, Any]:
         """Get detailed processing queue status information."""
         try:
             # Get thought counts by status
             from ciris_engine.logic import persistence
-            from ciris_engine.schemas.runtime.models import ThoughtStatus
+            from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
             pending_count = persistence.count_thoughts_by_status(ThoughtStatus.PENDING)
             processing_count = persistence.count_thoughts_by_status(ThoughtStatus.PROCESSING)
@@ -1544,7 +1545,7 @@ class AgentProcessor:
                 recent_thoughts = []
 
             # Get task information
-            task_info: dict = {}
+            task_info: Dict[str, Any] = {}
             try:
                 if hasattr(self, "work_processor") and self.work_processor:
                     task_info = {
@@ -1610,7 +1611,7 @@ class AgentProcessor:
         # Use the centralized persistence function
         return persistence.get_queue_status()
 
-    def _collect_metrics(self) -> dict:
+    def _collect_metrics(self) -> Dict[str, Any]:
         """Collect base metrics for the agent processor."""
         # Calculate uptime - MUST have start time
         if not hasattr(self, "_start_time") or not self._start_time:
@@ -1638,7 +1639,7 @@ class AgentProcessor:
 
         return metrics
 
-    def get_metrics(self) -> dict:
+    def get_metrics(self) -> Dict[str, Any]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()

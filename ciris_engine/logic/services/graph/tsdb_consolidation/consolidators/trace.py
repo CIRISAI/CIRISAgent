@@ -7,12 +7,13 @@ Consolidates TRACE_SPAN correlations into TraceSummaryNode.
 import logging
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict, Union
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.schemas.services.graph.consolidation import TraceSpanData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,16 @@ class ThoughtInfo(TypedDict):
 
 
 class TaskSummaryData(TypedDict, total=False):
-    """Summary data for a task (using total=False for optional fields)."""
+    """Summary data for a task (using total=False for optional fields).
+
+    Note: This TypedDict is used for documentation purposes.
+    Actual runtime uses Dict[str, Any] to allow datetime/Set objects
+    that are later serialized to JSON-compatible types.
+    """
 
     task_id: str
     status: str
-    thoughts: List[dict]  # List of thought info dicts
+    thoughts: List[Dict[str, Any]]  # List of thought info dicts
     start_time: datetime
     end_time: datetime
     handlers_selected: List[str]
@@ -71,7 +77,9 @@ class TraceConsolidator:
         logger.info(f"Consolidating {len(trace_spans)} trace spans")
 
         # Initialize tracking structures
-        task_summaries: Dict[str, dict] = {}  # task_id -> summary data
+        # Note: Using Dict[str, Any] because task_summaries contains datetime and Set objects
+        # that are later serialized to JSON-compatible types before storage
+        task_summaries: Dict[str, Any] = {}  # task_id -> summary data
         unique_tasks: Set[str] = set()
         unique_thoughts: Set[str] = set()
         tasks_by_status: Dict[str, int] = defaultdict(int)
@@ -123,14 +131,16 @@ class TraceConsolidator:
                 # Track thought type
                 thought_type = "unknown"
                 if tags and hasattr(tags, "additional_tags"):
-                    thought_type = tags.additional_tags.get("thought_type", "unknown")
+                    thought_type_val = tags.additional_tags.get("thought_type", "unknown")
+                    thought_type = str(thought_type_val) if thought_type_val else "unknown"
                 thoughts_by_type[thought_type] += 1
 
                 # Track handler selection
                 if component_type == "handler" and task_id:
                     action_type = "unknown"
                     if tags and hasattr(tags, "additional_tags"):
-                        action_type = tags.additional_tags.get("action_type", "unknown")
+                        action_type_val = tags.additional_tags.get("action_type", "unknown")
+                        action_type = str(action_type_val) if action_type_val else "unknown"
                     handler_actions[action_type] += 1
 
                     if task_id in task_summaries:
@@ -145,7 +155,8 @@ class TraceConsolidator:
 
             # Track task completion
             if task_id and tags and hasattr(tags, "additional_tags") and tags.additional_tags.get("task_status"):
-                status = tags.additional_tags["task_status"]
+                status_val = tags.additional_tags["task_status"]
+                status = str(status_val) if isinstance(status_val, (str, int, float)) else "unknown"
                 tasks_by_status[status] += 1
                 if task_id in task_summaries:
                     task_summaries[task_id]["status"] = status
@@ -170,7 +181,8 @@ class TraceConsolidator:
                 guardrail_type = "unknown"
                 violation = False
                 if tags and hasattr(tags, "additional_tags"):
-                    guardrail_type = tags.additional_tags.get("guardrail_type", "unknown")
+                    guardrail_type_val = tags.additional_tags.get("guardrail_type", "unknown")
+                    guardrail_type = str(guardrail_type_val) if guardrail_type_val else "unknown"
                     violation = tags.additional_tags.get("violation") == "true"
                 if violation:
                     guardrail_violations[guardrail_type] += 1
@@ -179,7 +191,8 @@ class TraceConsolidator:
             if component_type == "dma":
                 dma_type = "unknown"
                 if tags and hasattr(tags, "additional_tags"):
-                    dma_type = tags.additional_tags.get("dma_type", "unknown")
+                    dma_type_val = tags.additional_tags.get("dma_type", "unknown")
+                    dma_type = str(dma_type_val) if dma_type_val else "unknown"
                 dma_decisions[dma_type] += 1
 
         # Calculate latency statistics
@@ -287,7 +300,7 @@ class TraceConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, trace_spans: List[TraceSpanData]
-    ) -> List[Tuple[GraphNode, GraphNode, str, dict]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
         """
         Get edges to create for trace summary.
 

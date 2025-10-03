@@ -285,7 +285,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Register config service immediately so it's available for persistence operations
         registry = get_global_registry()
         # Store essential config on the service so db_paths can find it
-        self.config_service.essential_config = self.essential_config
+        # Dynamic attribute assignment for runtime access to essential_config
+        self.config_service.essential_config = self.essential_config  # type: ignore[attr-defined]
         registry.register_service(
             service_type=ServiceType.CONFIG,
             provider=self.config_service,
@@ -533,13 +534,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
         assert self.bus_manager is not None
         assert self.time_service is not None
         try:
-            self.telemetry_service = GraphTelemetryService(
+            # Create the concrete GraphTelemetryService instance
+            telemetry_service_impl = GraphTelemetryService(
                 memory_bus=self.bus_manager.memory, time_service=self.time_service  # Now we have the memory bus
             )
-            # Set service registry so it can initialize the aggregator
+            # Set service registry so it can initialize the aggregator (private method on concrete type)
             if self.service_registry:
-                self.telemetry_service._set_service_registry(self.service_registry)
-            await self.telemetry_service.start()
+                telemetry_service_impl._set_service_registry(self.service_registry)
+            await telemetry_service_impl.start()
+            # Assign to protocol-typed field after all setup is complete
+            # Note: GraphTelemetryService structurally implements TelemetryService protocol
+            self.telemetry_service = telemetry_service_impl  # type: ignore[assignment]
             self._services_started_count += 1
             logger.info("GraphTelemetryService initialized")
         except Exception as e:

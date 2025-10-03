@@ -40,7 +40,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
 
         # NTP drift monitoring
         self._ntp_offset_ms = 0.0  # Current offset in milliseconds
-        self._ntp_last_check = None  # Last time we checked NTP
+        self._ntp_last_check: Optional[datetime] = None  # Last time we checked NTP
         self._ntp_check_interval = 3600  # Check every hour
         self._ntp_check_count = 0
         self._ntp_failures = 0

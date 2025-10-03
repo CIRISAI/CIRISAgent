@@ -4,11 +4,14 @@ Faculty-related schemas for DMA system.
 Provides typed schemas with properly typed structures for faculty integration.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
 
 
 class ThoughtMetadata(BaseModel):
@@ -170,6 +173,11 @@ class EnhancedDMAInputs(BaseModel):
     current_thought_depth: int = Field(0, description="Ponder depth")
     max_rounds: int = Field(5, description="Maximum rounds")
     processing_context: Any = Field(..., description="Processing context")
+
+    # Action selection fields
+    agent_identity: Optional[Dict[str, Any]] = Field(None, description="Agent identity information")
+    permitted_actions: Optional[List["HandlerActionType"]] = Field(None, description="List of permitted actions")
+    conscience_feedback: Optional[Any] = Field(None, description="Conscience evaluation feedback")
 
     # Faculty enhancements
     faculty_evaluations: Optional[FacultyEvaluationSet] = Field(None, description="Faculty evaluation results")

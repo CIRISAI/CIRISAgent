@@ -1,6 +1,6 @@
 import collections
 import logging
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ class ThoughtContent(BaseModel):
     """Typed content for a thought."""
 
     text: str
-    metadata: dict = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ProcessingQueueItem(BaseModel):
@@ -33,7 +33,7 @@ class ProcessingQueueItem(BaseModel):
     raw_input_string: Optional[str] = Field(
         default=None, description="The original input string that generated this thought, if applicable."
     )
-    initial_context: Optional[Union[dict, ProcessingThoughtContext, ThoughtContext]] = Field(
+    initial_context: Optional[Union[Dict[str, Any], ProcessingThoughtContext, ThoughtContext]] = Field(
         default=None, description="Initial context when the thought was first received/generated for processing."
     )
     ponder_notes: Optional[List[str]] = Field(
@@ -53,8 +53,8 @@ class ProcessingQueueItem(BaseModel):
         cls,
         thought_instance: Thought,
         raw_input: Optional[str] = None,
-        initial_ctx: Optional[dict] = None,
-        queue_item_content: Optional[Union[ThoughtContent, str, dict]] = None,
+        initial_ctx: Optional[Dict[str, Any]] = None,
+        queue_item_content: Optional[Union[ThoughtContent, str, Dict[str, Any]]] = None,
     ) -> "ProcessingQueueItem":
         """
         Creates a ProcessingQueueItem from a Thought instance.

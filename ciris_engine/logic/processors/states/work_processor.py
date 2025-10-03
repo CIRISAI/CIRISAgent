@@ -4,7 +4,7 @@ Enhanced with proper context building and service passing.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
@@ -32,7 +32,7 @@ class WorkProcessor(BaseProcessor):
         config_accessor: Any,  # ConfigAccessor
         thought_processor: "ThoughtProcessor",
         action_dispatcher: "ActionDispatcher",
-        services: dict,
+        services: Any,  # Dict[str, Any] - using Any to avoid circular import issues
         startup_channel_id: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
@@ -65,7 +65,7 @@ class WorkProcessor(BaseProcessor):
         """Work processor handles WORK and PLAY states."""
         return [AgentState.WORK, AgentState.PLAY]
 
-    def can_process(self, state: AgentState) -> bool:
+    async def can_process(self, state: AgentState) -> bool:
         """Check if we can process the given state."""
         return state in self.get_supported_states()
 
@@ -74,7 +74,7 @@ class WorkProcessor(BaseProcessor):
         logger.debug(f"WorkProcessor.process called for round {round_number}")
         start_time = self.time_service.now()
 
-        round_metrics: dict = {
+        round_metrics: Dict[str, Any] = {
             "round_number": round_number,
             "tasks_activated": 0,
             "thoughts_generated": 0,
@@ -275,7 +275,7 @@ class WorkProcessor(BaseProcessor):
         self._running = False
         logger.info("Work processor stopped")
 
-    def get_status(self) -> dict:
+    def get_status(self) -> Dict[str, Any]:
         """Get current work processor status and metrics."""
         work_stats = {
             "last_activity": self.last_activity_time.isoformat(),

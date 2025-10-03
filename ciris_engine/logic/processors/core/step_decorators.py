@@ -18,6 +18,7 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
+from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.services.runtime_control import (
     ActionCompleteStepData,
     AllStepsExecutionResult,
@@ -1092,16 +1093,14 @@ def _extract_follow_up_thought_id(result: Any) -> Optional[str]:
     return None
 
 
-def _extract_lightweight_system_snapshot() -> "SystemSnapshot":
+def _extract_lightweight_system_snapshot() -> SystemSnapshot:
     """
     Extract lightweight system snapshot for reasoning event context.
 
     Returns a proper SystemSnapshot object with minimal fields populated.
     This is used for SSE streaming and must be a concrete typed object.
     """
-    from datetime import datetime, timezone
-
-    from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+    from datetime import timezone
 
     # Create a minimal SystemSnapshot with current time
     snapshot = SystemSnapshot(

@@ -7,7 +7,7 @@ a standard task that the agent processes through normal cognitive flow.
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -39,7 +39,7 @@ class ShutdownProcessor(BaseProcessor):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: dict,
+        services: Any,  # Dict[str, Any]
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
         auth_service: Optional[Any] = None,
@@ -50,7 +50,7 @@ class ShutdownProcessor(BaseProcessor):
         self.auth_service = auth_service
         self.shutdown_task: Optional[Task] = None
         self.shutdown_complete = False
-        self.shutdown_result: Optional[dict] = None
+        self.shutdown_result: Optional[Dict[str, Any]] = None
 
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
@@ -61,7 +61,7 @@ class ShutdownProcessor(BaseProcessor):
         """We only handle SHUTDOWN state."""
         return [AgentState.SHUTDOWN]
 
-    def can_process(self, state: AgentState) -> bool:
+    async def can_process(self, state: AgentState) -> bool:
         """We can always process shutdown state."""
         return state == AgentState.SHUTDOWN
 
@@ -95,7 +95,7 @@ class ShutdownProcessor(BaseProcessor):
 
         return shutdown_result
 
-    async def _process_shutdown(self, round_number: int) -> dict:
+    async def _process_shutdown(self, round_number: int) -> Dict[str, Any]:
         """Internal method that returns dict for backward compatibility."""
         logger.info(f"Shutdown processor: round {round_number}")
 
@@ -159,7 +159,7 @@ class ShutdownProcessor(BaseProcessor):
             elif current_task.status == TaskStatus.FAILED:
                 # Task failed - could be REJECT or error
                 self.shutdown_complete = True
-                self.shutdown_result = await self._check_failure_reason(current_task)
+                self.shutdown_result = self._check_failure_reason(current_task)
                 return self.shutdown_result
 
             # Still processing
@@ -272,7 +272,7 @@ class ShutdownProcessor(BaseProcessor):
         await add_system_task(self.shutdown_task, auth_service=self.auth_service)
         logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
 
-    def _check_failure_reason(self, task: Task) -> dict:
+    def _check_failure_reason(self, task: Task) -> Dict[str, Any]:
         """Check why the task failed - could be REJECT or actual error."""
         # Look at the final thought to determine reason
         thoughts = persistence.get_thoughts_by_task_id(task.task_id)

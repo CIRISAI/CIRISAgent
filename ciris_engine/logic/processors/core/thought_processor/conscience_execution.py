@@ -6,7 +6,7 @@ conscience registry to ensure alignment with ethical principles.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -15,6 +15,9 @@ from ciris_engine.schemas.actions.parameters import PonderParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.runtime_control import StepPoint
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +30,32 @@ class ConscienceExecutionPhase:
     - Validates selected action against ethical principles
     - Can override actions that fail safety checks
     - Provides guidance for retry attempts
+
+    Attributes (provided by ThoughtProcessor):
+        conscience_registry: Registry of conscience validation functions
     """
+
+    if TYPE_CHECKING:
+        conscience_registry: Any
+
+        def _describe_action(self, action: ActionSelectionDMAResult) -> str: ...
 
     @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
     @step_point(StepPoint.CONSCIENCE_EXECUTION)
     async def _conscience_execution_step(
-        self, thought_item: ProcessingQueueItem, action_result, thought=None, dma_results=None, processing_context=None
-    ):
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: Any,
+        thought: Any = None,
+        dma_results: Any = None,
+        processing_context: Any = None,
+    ) -> "ConscienceApplicationResult":
         """Step 4: Ethical safety validation matching _apply_conscience_simple expectations."""
         # Import ConscienceApplicationResult here to avoid circular imports
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
         if not action_result:
-            return action_result
+            return action_result  # type: ignore[no-any-return]
 
         # Check if this is a conscience retry
         is_conscience_retry = (

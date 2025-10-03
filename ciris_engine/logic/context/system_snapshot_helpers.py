@@ -76,11 +76,13 @@ def _extract_thought_summary(thought: Any) -> Optional[ThoughtSummary]:
 
 def extract_node_attributes(
     node: Any,
-) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes dictionary from any GraphNode - standardized and reusable.
 
     This function handles all the different ways GraphNode attributes can be stored
     and provides a consistent interface for accessing them.
+
+    Always returns a dict (never None), returning empty dict for invalid nodes.
     """
     if not node or not hasattr(node, "attributes"):
         return {}
@@ -1192,8 +1194,7 @@ def _extract_node_attributes(
     node: GraphNode,
 ) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
     """Extract attributes from a graph node, handling both dict and Pydantic models."""
-    attrs = extract_node_attributes(node)
-    return attrs if attrs is not None else {}
+    return extract_node_attributes(node)
 
 
 def _parse_datetime_safely(raw_value: Any, field_name: str, user_id: str) -> Optional[datetime]:

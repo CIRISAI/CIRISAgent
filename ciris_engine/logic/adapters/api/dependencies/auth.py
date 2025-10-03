@@ -205,6 +205,7 @@ def require_role(minimum_role: UserRole) -> Callable:
 
 
 # Convenience dependencies for common roles
+require_authenticated = get_auth_context  # Alias for basic authentication
 require_observer = require_role(UserRole.OBSERVER)
 require_admin = require_role(UserRole.ADMIN)
 require_authority = require_role(UserRole.AUTHORITY)

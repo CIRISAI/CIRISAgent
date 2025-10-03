@@ -23,6 +23,7 @@ from ciris_engine.schemas.adapters.tools import (
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.core.secrets import SecretContext
+from ciris_engine.schemas.types import ToolParameters
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class SecretsToolService(BaseService, ToolService):
         # v1.4.3 metrics tracking
         self._secrets_retrieved = 0
         self._secrets_stored = 0
-        self._metrics_tracking = {}  # For custom metric tracking
+        self._metrics_tracking: Dict[str, float] = {}  # For custom metric tracking
         self._tool_executions = 0
         self._tool_failures = 0
 
@@ -71,7 +72,7 @@ class SecretsToolService(BaseService, ToolService):
         """
         return True
 
-    async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: ToolParameters) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         self._track_request()  # Track the tool execution
         self._tool_executions += 1
@@ -99,7 +100,7 @@ class SecretsToolService(BaseService, ToolService):
             correlation_id=f"secrets_{tool_name}_{self._now().timestamp()}",
         )
 
-    async def _recall_secret(self, params: dict) -> ToolResult:
+    async def _recall_secret(self, params: ToolParameters) -> ToolResult:
         """Recall a secret by UUID."""
         try:
             secret_uuid = params.get("secret_uuid")
@@ -138,7 +139,7 @@ class SecretsToolService(BaseService, ToolService):
             logger.error(f"Error recalling secret: {e}")
             return ToolResult(success=False, error=str(e))
 
-    async def _update_secrets_filter(self, params: dict) -> ToolResult:
+    async def _update_secrets_filter(self, params: ToolParameters) -> ToolResult:
         """Update secrets filter configuration."""
         try:
             operation = params.get("operation")
@@ -183,7 +184,7 @@ class SecretsToolService(BaseService, ToolService):
             logger.error(f"Error updating secrets filter: {e}")
             return ToolResult(success=False, error=str(e))
 
-    async def _self_help(self, parameters: dict) -> ToolResult:
+    async def _self_help(self, parameters: ToolParameters) -> ToolResult:
         """Access the agent experience document."""
         try:
             experience_path = Path("docs/agent_experience.md")
@@ -269,7 +270,7 @@ class SecretsToolService(BaseService, ToolService):
                 tools.append(tool_info)
         return tools
 
-    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: ToolParameters) -> bool:
         """Validate parameters for a tool."""
         if tool_name == "recall_secret":
             return "secret_uuid" in parameters and "purpose" in parameters

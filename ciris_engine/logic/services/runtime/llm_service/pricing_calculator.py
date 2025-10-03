@@ -6,9 +6,9 @@ for LLM usage based on external pricing configuration.
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from ciris_engine.config.pricing_models import PricingConfig, get_pricing_config
+from ciris_engine.config.pricing_models import ModelConfig, PricingConfig, get_pricing_config
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ class LLMPricingCalculator:
             model_used=model_name,
         )
 
-    def _get_model_config(self, model_name: str, provider_name: Optional[str]):
+    def _get_model_config(self, model_name: str, provider_name: Optional[str]) -> ModelConfig:
         """
         Get model configuration, with fallback to unknown model pricing.
 
@@ -115,15 +115,15 @@ class LLMPricingCalculator:
             return model_config
 
         # Try pattern matching with hardcoded model patterns
-        model_config = self._try_pattern_matching(model_name)
-        if model_config:
-            return model_config
+        pattern_config = self._try_pattern_matching(model_name)
+        if pattern_config:
+            return pattern_config
 
         # Fall back to unknown model pricing
         logger.warning(f"No pricing found for model {model_name}, using fallback pricing")
         return self.pricing_config.get_fallback_pricing()
 
-    def _try_pattern_matching(self, model_name: str):
+    def _try_pattern_matching(self, model_name: str) -> Optional[ModelConfig]:
         """
         Try to match model name against known patterns for compatibility.
 
@@ -195,7 +195,7 @@ class LLMPricingCalculator:
         carbon_intensity = self.pricing_config.get_carbon_intensity(region)
         return energy_kwh * carbon_intensity
 
-    def get_model_info(self, model_name: str, provider_name: Optional[str] = None) -> dict:
+    def get_model_info(self, model_name: str, provider_name: Optional[str] = None) -> Dict[str, object]:
         """
         Get detailed information about a model.
 
@@ -228,7 +228,7 @@ class LLMPricingCalculator:
             "carbon_intensity_global": self.pricing_config.get_carbon_intensity(),
         }
 
-    def list_available_models(self, provider_name: Optional[str] = None, active_only: bool = True) -> list:
+    def list_available_models(self, provider_name: Optional[str] = None, active_only: bool = True) -> List[Dict[str, object]]:
         """
         List available models with their pricing information.
 

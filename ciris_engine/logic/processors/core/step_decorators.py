@@ -889,7 +889,7 @@ async def _broadcast_reasoning_event(
 
         elif step == StepPoint.ACTION_COMPLETE:
             # Event 5: ACTION_RESULT
-            event = _create_action_result_event(step_data, timestamp, result, create_reasoning_event)
+            event = _create_action_result_event(step_data, timestamp, create_reasoning_event)
 
         # Broadcast the event if we created one
         if event:
@@ -1161,7 +1161,7 @@ def _create_snapshot_and_context_event(
 
     # Fallback to minimal snapshot if we couldn't extract the full one
     if not system_snapshot:
-        logger.warning(f"Could not extract full SystemSnapshot from thought_item, using minimal snapshot")
+        logger.warning("Could not extract full SystemSnapshot from thought_item, using minimal snapshot")
         system_snapshot = _extract_lightweight_system_snapshot()
 
     return create_reasoning_event(
@@ -1248,9 +1248,7 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
     )
 
 
-def _create_action_result_event(
-    step_data: StepDataUnion, timestamp: str, result: Any, create_reasoning_event: Any
-) -> Any:
+def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
     """Create ACTION_RESULT reasoning event with audit trail and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 

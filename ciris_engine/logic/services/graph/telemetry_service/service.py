@@ -153,7 +153,9 @@ class TelemetryAggregator:
             task.cancel()
 
         # Organize results by category
-        telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]] = {cat: {} for cat in self.CATEGORIES.keys()}
+        telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]] = {
+            cat: {} for cat in self.CATEGORIES.keys()
+        }
         # Add registry category for dynamic services
         telemetry["registry"] = {}
 
@@ -811,7 +813,11 @@ class TelemetryAggregator:
         return None
 
     def _create_telemetry_data(
-        self, metrics: Dict[str, Any], adapter_info: Optional[Any] = None, adapter_id: Optional[str] = None, healthy: bool = True
+        self,
+        metrics: Dict[str, Any],
+        adapter_info: Optional[Any] = None,
+        adapter_id: Optional[str] = None,
+        healthy: bool = True,
     ) -> ServiceTelemetryData:
         """Create ServiceTelemetryData from metrics."""
         if not metrics:
@@ -926,8 +932,12 @@ class TelemetryAggregator:
                             )
                         else:
                             adapter_metrics[adapter_id] = ServiceTelemetryData(
-                                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0,
-                                custom_metrics={"adapter_id": adapter_id}
+                                healthy=False,
+                                uptime_seconds=0.0,
+                                error_count=0,
+                                requests_handled=0,
+                                error_rate=0.0,
+                                custom_metrics={"adapter_id": adapter_id},
                             )
                     except Exception as e:
                         logger.error(f"Error getting metrics from {adapter_id}: {e}")
@@ -959,7 +969,9 @@ class TelemetryAggregator:
         else:
             return {"status": str(status)}
 
-    def _process_service_metrics(self, service_data: ServiceTelemetryData | Dict[str, Any]) -> Tuple[bool, int, int, float, float]:
+    def _process_service_metrics(
+        self, service_data: ServiceTelemetryData | Dict[str, Any]
+    ) -> Tuple[bool, int, int, float, float]:
         """Process metrics for a single service."""
         # Handle both ServiceTelemetryData objects and legacy dicts
         if isinstance(service_data, ServiceTelemetryData):
@@ -978,7 +990,9 @@ class TelemetryAggregator:
 
         return is_healthy, errors, requests, error_rate, uptime
 
-    def _aggregate_service_metrics(self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]]) -> Tuple[int, int, int, int, float, List[float]]:
+    def _aggregate_service_metrics(
+        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]]
+    ) -> Tuple[int, int, int, int, float, List[float]]:
         """Aggregate metrics from all services."""
         total_services = 0
         healthy_services = 0

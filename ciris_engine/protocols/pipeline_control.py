@@ -142,6 +142,7 @@ class PipelineController:
         # Create or update thought in pipeline
         if thought_id not in self._paused_thoughts:
             from datetime import datetime
+
             step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
             timestamp = step_data_dict.get("timestamp")
             thought = ThoughtInPipeline(
@@ -157,6 +158,7 @@ class PipelineController:
             step_data_dict = step_data.model_dump() if hasattr(step_data, "model_dump") else {}
             thought.current_step = step_point
             from datetime import datetime
+
             timestamp = step_data_dict.get("timestamp")
             thought.entered_step_at = timestamp if isinstance(timestamp, datetime) else datetime.now()
 

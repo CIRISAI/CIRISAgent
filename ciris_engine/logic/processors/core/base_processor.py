@@ -132,6 +132,56 @@ class BaseProcessor(ABC):
             # Value is float from custom_gauges
             additional.custom_gauges[key] = float(value)
 
+    def _get_time_service(self) -> Any:
+        """Get time service from either _time_service or time_service attribute."""
+        return getattr(self, "_time_service", None) or getattr(self, "time_service", None)
+
+    async def _stream_perform_action_step(self, result: Any, thought: Any, dispatch_ctx: Any) -> None:
+        """Stream PERFORM_ACTION step point if streaming is enabled."""
+        if not hasattr(self, "_stream_step_point"):
+            return
+
+        from ciris_engine.schemas.services.runtime_control import StepPoint
+
+        time_svc = self._get_time_service()
+        timestamp_str = time_svc.now().isoformat() if time_svc else None
+
+        await self._stream_step_point(
+            StepPoint.PERFORM_ACTION,
+            thought.thought_id,
+            {
+                "timestamp": timestamp_str,
+                "thought_id": thought.thought_id,
+                "selected_action": str(getattr(result, "selected_action", "UNKNOWN")),
+                "action_parameters": str(getattr(result, "action_parameters", None)),
+                "dispatch_context": str(dispatch_ctx),
+            },
+        )
+
+    def _extract_action_name(self, dispatch_result: Any, result: Any) -> str:
+        """Extract action name from dispatch result or action selection result."""
+        if isinstance(dispatch_result, dict):
+            return str(dispatch_result.get("action_type", "UNKNOWN"))
+
+        # Check if result has final_action (ConscienceApplicationResult)
+        try:
+            final_action = result.final_action
+            return str(final_action.selected_action)
+        except AttributeError:
+            pass
+
+        # Must be ActionSelectionDMAResult directly
+        try:
+            return str(result.selected_action)
+        except AttributeError:
+            return "UNKNOWN"
+
+    def _calculate_dispatch_time(self, dispatch_start: Any, dispatch_end: Any) -> float:
+        """Calculate dispatch time in milliseconds."""
+        if dispatch_start and dispatch_end:
+            return float((dispatch_end - dispatch_start).total_seconds() * 1000)
+        return 0.0
+
     async def dispatch_action(self, result: Any, thought: Any, context: Dict[str, Any]) -> bool:
         """
         Common action dispatch logic.
@@ -139,104 +189,38 @@ class BaseProcessor(ABC):
         """
         logger.info(f"[DISPATCH DEBUG] dispatch_action called for thought {thought.thought_id}")
         try:
-            # Convert dict to DispatchContext
             from ciris_engine.schemas.runtime.contexts import DispatchContext
 
             dispatch_ctx = DispatchContext(**context)
 
             # STEP POINT: PERFORM_ACTION (before action dispatch)
-            if hasattr(self, "_stream_step_point"):
-                from ciris_engine.schemas.services.runtime_control import StepPoint
-
-                # Get time service for timestamp
-                time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
-                timestamp_str = time_svc.now().isoformat() if time_svc else None
-
-                await self._stream_step_point(
-                    StepPoint.PERFORM_ACTION,
-                    thought.thought_id,
-                    {
-                        "timestamp": timestamp_str,
-                        "thought_id": thought.thought_id,
-                        "selected_action": str(getattr(result, "selected_action", "UNKNOWN")),
-                        "action_parameters": str(getattr(result, "action_parameters", None)),
-                        "dispatch_context": str(dispatch_ctx),
-                    },
-                )
+            await self._stream_perform_action_step(result, thought, dispatch_ctx)
 
             # Get time service for dispatch timing
-            time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
+            time_svc = self._get_time_service()
             dispatch_start = time_svc.now() if time_svc else None
 
             # Dispatch can return None or a result dict
             dispatch_result: Any = await self.action_dispatcher.dispatch(  # type: ignore[func-returns-value]
                 action_selection_result=result, thought=thought, dispatch_context=dispatch_ctx
             )
-            # If None, treat as success (dispatch completed but no result)
             if dispatch_result is None:
                 dispatch_result = {"success": True}
 
-            # Get time service - check both _time_service and time_service
-            time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
+            # Calculate dispatch timing
+            time_svc = self._get_time_service()
             if not time_svc:
                 raise RuntimeError("CRITICAL: No time service available in processor - system integrity compromised")
             dispatch_end = time_svc.now()
-            dispatch_time_ms = (
-                (dispatch_end - dispatch_start).total_seconds() * 1000 if dispatch_start and dispatch_end else 0.0
-            )
+            dispatch_time_ms = self._calculate_dispatch_time(dispatch_start, dispatch_end)
 
-            # STEP POINT: ACTION_COMPLETE (after action dispatch)
-            # Broadcast reasoning event directly
+            # NOTE: ACTION_COMPLETE event is broadcast by the decorated _action_complete_step method
+            # in ActionExecutionPhase. Do NOT broadcast it here to avoid duplicates.
+            # Action name extraction is kept for potential future use.
             try:
-                from ciris_engine.logic.processors.core.step_decorators import _broadcast_reasoning_event
-                from ciris_engine.schemas.services.runtime_control import ActionCompleteStepData, StepPoint
-
-                # Create ACTION_COMPLETE step data with audit trail
-                # Extract action name - handle both ConscienceApplicationResult and ActionSelectionDMAResult
-                action_name = "UNKNOWN"
-                if isinstance(dispatch_result, dict):
-                    action_name = str(dispatch_result.get("action_type", "UNKNOWN"))
-                else:
-                    # Check if result has final_action (ConscienceApplicationResult)
-                    try:
-                        final_action = result.final_action  # ConscienceApplicationResult
-                        action_name = str(final_action.selected_action)
-                    except AttributeError:
-                        # Must be ActionSelectionDMAResult directly
-                        try:
-                            action_name = str(result.selected_action)
-                        except AttributeError:
-                            action_name = "UNKNOWN"
-
-                step_data = ActionCompleteStepData(
-                    timestamp=dispatch_end.isoformat(),
-                    thought_id=thought.thought_id,
-                    task_id=getattr(thought, "source_task_id", None),
-                    processing_time_ms=dispatch_time_ms,
-                    success=True,
-                    action_executed=action_name,
-                    dispatch_success=(
-                        dispatch_result.get("success", True) if isinstance(dispatch_result, dict) else True
-                    ),
-                    handler_completed=True,
-                    follow_up_processing_pending=True,
-                    execution_time_ms=dispatch_time_ms,
-                    audit_entry_id=dispatch_result.get("audit_entry_id") if isinstance(dispatch_result, dict) else None,
-                    audit_sequence_number=(
-                        dispatch_result.get("audit_sequence_number") if isinstance(dispatch_result, dict) else None
-                    ),
-                    audit_entry_hash=(
-                        dispatch_result.get("audit_entry_hash") if isinstance(dispatch_result, dict) else None
-                    ),
-                    audit_signature=(
-                        dispatch_result.get("audit_signature") if isinstance(dispatch_result, dict) else None
-                    ),
-                )
-
-                # NOTE: ACTION_COMPLETE event is broadcast by the decorated _action_complete_step method
-                # in ActionExecutionPhase. Do NOT broadcast it here to avoid duplicates.
+                action_name = self._extract_action_name(dispatch_result, result)
             except Exception as broadcast_error:
-                logger.warning(f"Error broadcasting ACTION_COMPLETE event: {broadcast_error}")
+                logger.warning(f"Error extracting action name: {broadcast_error}")
 
             return True
         except Exception as e:

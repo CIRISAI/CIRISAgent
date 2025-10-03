@@ -126,7 +126,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         self._embed_formatter = DiscordEmbedFormatter()
         self._tool_handler = DiscordToolHandler(None, bot, self._time_service)
         self._start_time: Optional[datetime] = None
-        self._approval_timeout_task: Optional[asyncio.Task] = None
+        self._approval_timeout_task: Optional[asyncio.Task[None]] = None
 
         # Metrics tracking for v1.4.3 - Discord adapter metrics
         self._messages_processed = 0
@@ -186,7 +186,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     kwargs.get("channel_id", "unknown"), e, operation_name
                 )
                 # Re-raise if not retryable
-                if not error_info.get("can_retry", False):
+                if not error_info.can_retry:
                     raise
             raise
 
@@ -322,7 +322,8 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                 )
                 # Messages from handler are already FetchedMessage objects
                 if messages_result:
-                    return messages_result
+                    # Type narrow: we know this should be List[FetchedMessage]
+                    return list(messages_result) if isinstance(messages_result, list) else []
             except Exception as e:
                 logger.warning(f"Failed to fetch messages from Discord API for channel {channel_id}: {e}")
 
@@ -463,7 +464,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             logger.exception(f"Failed to fetch guidance from Discord: {e}")
             raise
 
-    def check_authorization(self, wa_id: str, action: str, resource: Optional[str] = None) -> bool:
+    async def check_authorization(self, wa_id: str, action: str, resource: Optional[str] = None) -> bool:
         """Check if a Discord user is authorized for an action."""
         # In Discord, authorization is based on roles:
         # - AUTHORITY role can do anything
@@ -532,7 +533,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             # Create approval result container
             approval_result = None
 
-            def handle_approval(approval: ApprovalRequest) -> None:
+            async def handle_approval(approval: ApprovalRequest) -> None:
                 nonlocal approval_result
                 approval_result = approval
 
@@ -872,9 +873,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
     async def execute_tool(
         self,
         tool_name: str,
-        tool_args: Optional[dict[str, Union[str, int, float, bool, list, dict]]] = None,
+        tool_args: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = None,
         *,
-        parameters: Optional[dict[str, Union[str, int, float, bool, list, dict]]] = None,
+        parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = None,
     ) -> ToolExecutionResult:
         """Execute a tool through the tool handler."""
 
@@ -899,11 +900,11 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
         return result
 
-    def list_tools(self) -> List[str]:
+    async def list_tools(self) -> List[str]:
         """List available tools through the tool handler."""
         return self._tool_handler.get_available_tools()
 
-    def list_permissions(self, wa_id: str) -> List[WAPermission]:
+    async def list_permissions(self, wa_id: str) -> List[WAPermission]:
         """List all permissions for a Discord user."""
         permissions: List[WAPermission] = []
 

@@ -121,7 +121,7 @@ class DiscordGuidanceHandler:
             logger.error(f"Failed to check Discord roles for {discord_id}: {e}")
             return False
 
-    async def fetch_guidance_from_channel(self, deferral_channel_id: str, context: dict) -> dict:
+    async def fetch_guidance_from_channel(self, deferral_channel_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Send a guidance request to a Discord channel and check for responses.
 
         Args:
@@ -189,7 +189,7 @@ class DiscordGuidanceHandler:
         return {"guidance": None}
 
     async def send_deferral_to_channel(
-        self, deferral_channel_id: str, thought_id: str, reason: str, context: Optional[dict] = None
+        self, deferral_channel_id: str, thought_id: str, reason: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
         """Send a deferral report to a Discord channel with helper buttons.
 
@@ -246,7 +246,7 @@ class DiscordGuidanceHandler:
         # Send embed with view
         await channel.send(embed=embed, view=view)
 
-    def _build_deferral_report(self, thought_id: str, reason: str, context: Optional[dict] = None) -> str:
+    def _build_deferral_report(self, thought_id: str, reason: str, context: Optional[Dict[str, Any]] = None) -> str:
         """Build a formatted deferral report.
 
         Args:
@@ -368,27 +368,27 @@ class DiscordGuidanceHandler:
 class DeferralHelperView(ui.View):
     """Simple Discord UI View with helper buttons for deferral responses."""
 
-    def __init__(self, thought_id: str, context: Optional[dict] = None):
+    def __init__(self, thought_id: str, context: Optional[Dict[str, Any]] = None):
         super().__init__(timeout=3600)  # 1 hour timeout
         self.thought_id = thought_id
         self.context = context or {}
 
     @ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
-    async def approve_button(self, interaction: discord.Interaction, button: ui.Button) -> None:
+    async def approve_button(self, interaction: discord.Interaction, button: ui.Button[Any]) -> None:
         """Provide template response for approval."""
         await interaction.response.send_message(
             f"To approve this deferral, reply with:\n```\nAPPROVE {self.thought_id}\n```", ephemeral=True
         )
 
     @ui.button(label="Reject", style=discord.ButtonStyle.danger, emoji="❌")
-    async def reject_button(self, interaction: discord.Interaction, button: ui.Button) -> None:
+    async def reject_button(self, interaction: discord.Interaction, button: ui.Button[Any]) -> None:
         """Provide template response for rejection."""
         await interaction.response.send_message(
             f"To reject this deferral, reply with:\n```\nREJECT {self.thought_id}\n```", ephemeral=True
         )
 
     @ui.button(label="Request Info", style=discord.ButtonStyle.secondary, emoji="❓")
-    async def info_button(self, interaction: discord.Interaction, button: ui.Button) -> None:
+    async def info_button(self, interaction: discord.Interaction, button: ui.Button[Any]) -> None:
         """Provide detailed context about the deferred task/thought."""
         # Build detailed info message
         info_lines = ["**Detailed Task/Thought Information**\n"]

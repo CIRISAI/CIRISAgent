@@ -63,7 +63,8 @@ class DiscordToolService(ToolService):
         """Execute a Discord tool and return the result."""
         logger.info(f"[DISCORD_TOOLS] execute_tool called with tool_name={tool_name}, parameters={parameters}")
 
-        correlation_id = parameters.get("correlation_id", str(uuid.uuid4()))
+        correlation_id_raw = parameters.get("correlation_id", str(uuid.uuid4()))
+        correlation_id = str(correlation_id_raw) if correlation_id_raw else str(uuid.uuid4())
         self._tool_executions += 1
 
         if not self._client:
@@ -125,11 +126,14 @@ class DiscordToolService(ToolService):
     # Tool implementations
     async def _send_message(self, params: JSONDict) -> JSONDict:
         """Send a message to a Discord channel."""
-        channel_id = params.get("channel_id")
-        content = params.get("content")
+        channel_id_raw = params.get("channel_id")
+        content_raw = params.get("content")
 
-        if not channel_id or not content:
+        if not channel_id_raw or not content_raw:
             return {"success": False, "error": "channel_id and content are required"}
+
+        channel_id = str(channel_id_raw)
+        content = str(content_raw)
 
         try:
             if not self._client:
@@ -155,14 +159,20 @@ class DiscordToolService(ToolService):
 
     async def _send_embed(self, params: JSONDict) -> JSONDict:
         """Send an embed message to a Discord channel."""
-        channel_id = params.get("channel_id")
-        title = params.get("title", "")
-        description = params.get("description", "")
-        color = params.get("color", 0x3498DB)
-        fields = params.get("fields", [])
+        channel_id_raw = params.get("channel_id")
+        title_raw = params.get("title", "")
+        description_raw = params.get("description", "")
+        color_raw = params.get("color", 0x3498DB)
+        fields_raw = params.get("fields", [])
 
-        if not channel_id:
+        if not channel_id_raw:
             return {"success": False, "error": "Channel ID is required"}
+
+        channel_id = str(channel_id_raw)
+        title = str(title_raw)
+        description = str(description_raw)
+        color = int(color_raw) if isinstance(color_raw, (int, float, str)) else 0x3498DB
+        fields = fields_raw if isinstance(fields_raw, list) else []
 
         try:
             if not self._client:
@@ -173,9 +183,12 @@ class DiscordToolService(ToolService):
 
             embed = discord.Embed(title=title, description=description, color=color)
             for field in fields:
-                embed.add_field(
-                    name=field.get("name", ""), value=field.get("value", ""), inline=field.get("inline", False)
-                )
+                if isinstance(field, dict):
+                    embed.add_field(
+                        name=str(field.get("name", "")),
+                        value=str(field.get("value", "")),
+                        inline=bool(field.get("inline", False)),
+                    )
 
             # Type narrowing for channels that support sending
             if isinstance(
@@ -194,11 +207,14 @@ class DiscordToolService(ToolService):
 
     async def _delete_message(self, params: JSONDict) -> JSONDict:
         """Delete a message from a Discord channel."""
-        channel_id = params.get("channel_id")
-        message_id = params.get("message_id")
+        channel_id_raw = params.get("channel_id")
+        message_id_raw = params.get("message_id")
 
-        if not channel_id or not message_id:
+        if not channel_id_raw or not message_id_raw:
             return {"success": False, "error": "channel_id and message_id are required"}
+
+        channel_id = str(channel_id_raw)
+        message_id = str(message_id_raw)
 
         try:
             if not self._client:
@@ -226,13 +242,18 @@ class DiscordToolService(ToolService):
 
     async def _timeout_user(self, params: JSONDict) -> JSONDict:
         """Timeout a user in a guild."""
-        guild_id = params.get("guild_id")
-        user_id = params.get("user_id")
-        duration_seconds = params.get("duration_seconds", 300)  # Default 5 minutes
-        reason = params.get("reason")
+        guild_id_raw = params.get("guild_id")
+        user_id_raw = params.get("user_id")
+        duration_seconds_raw = params.get("duration_seconds", 300)  # Default 5 minutes
+        reason_raw = params.get("reason")
 
-        if not guild_id or not user_id:
+        if not guild_id_raw or not user_id_raw:
             return {"success": False, "error": "guild_id and user_id are required"}
+
+        guild_id = str(guild_id_raw)
+        user_id = str(user_id_raw)
+        duration_seconds = int(duration_seconds_raw) if isinstance(duration_seconds_raw, (int, float, str)) else 300
+        reason = str(reason_raw) if reason_raw else None
 
         try:
             if not self._client:
@@ -262,13 +283,20 @@ class DiscordToolService(ToolService):
 
     async def _ban_user(self, params: JSONDict) -> JSONDict:
         """Ban a user from a guild."""
-        guild_id = params.get("guild_id")
-        user_id = params.get("user_id")
-        reason = params.get("reason")
-        delete_message_days = params.get("delete_message_days", 0)
+        guild_id_raw = params.get("guild_id")
+        user_id_raw = params.get("user_id")
+        reason_raw = params.get("reason")
+        delete_message_days_raw = params.get("delete_message_days", 0)
 
-        if not guild_id or not user_id:
+        if not guild_id_raw or not user_id_raw:
             return {"success": False, "error": "guild_id and user_id are required"}
+
+        guild_id = str(guild_id_raw)
+        user_id = str(user_id_raw)
+        reason = str(reason_raw) if reason_raw else None
+        delete_message_days = (
+            int(delete_message_days_raw) if isinstance(delete_message_days_raw, (int, float, str)) else 0
+        )
 
         try:
             if not self._client:
@@ -288,12 +316,16 @@ class DiscordToolService(ToolService):
 
     async def _kick_user(self, params: JSONDict) -> JSONDict:
         """Kick a user from a guild."""
-        guild_id = params.get("guild_id")
-        user_id = params.get("user_id")
-        reason = params.get("reason")
+        guild_id_raw = params.get("guild_id")
+        user_id_raw = params.get("user_id")
+        reason_raw = params.get("reason")
 
-        if not guild_id or not user_id:
+        if not guild_id_raw or not user_id_raw:
             return {"success": False, "error": "guild_id and user_id are required"}
+
+        guild_id = str(guild_id_raw)
+        user_id = str(user_id_raw)
+        reason = str(reason_raw) if reason_raw else None
 
         try:
             if not self._client:
@@ -314,12 +346,16 @@ class DiscordToolService(ToolService):
 
     async def _add_role(self, params: JSONDict) -> JSONDict:
         """Add a role to a user."""
-        guild_id = params.get("guild_id")
-        user_id = params.get("user_id")
-        role_name = params.get("role_name")
+        guild_id_raw = params.get("guild_id")
+        user_id_raw = params.get("user_id")
+        role_name_raw = params.get("role_name")
 
-        if not guild_id or not user_id or not role_name:
+        if not guild_id_raw or not user_id_raw or not role_name_raw:
             return {"success": False, "error": "guild_id, user_id, and role_name are required"}
+
+        guild_id = str(guild_id_raw)
+        user_id = str(user_id_raw)
+        role_name = str(role_name_raw)
 
         try:
             if not self._client:
@@ -352,12 +388,16 @@ class DiscordToolService(ToolService):
 
     async def _remove_role(self, params: JSONDict) -> JSONDict:
         """Remove a role from a user."""
-        guild_id = params.get("guild_id")
-        user_id = params.get("user_id")
-        role_name = params.get("role_name")
+        guild_id_raw = params.get("guild_id")
+        user_id_raw = params.get("user_id")
+        role_name_raw = params.get("role_name")
 
-        if not guild_id or not user_id or not role_name:
+        if not guild_id_raw or not user_id_raw or not role_name_raw:
             return {"success": False, "error": "guild_id, user_id, and role_name are required"}
+
+        guild_id = str(guild_id_raw)
+        user_id = str(user_id_raw)
+        role_name = str(role_name_raw)
 
         try:
             if not self._client:
@@ -390,11 +430,14 @@ class DiscordToolService(ToolService):
 
     async def _get_user_info(self, params: JSONDict) -> JSONDict:
         """Get information about a Discord user."""
-        user_id = params.get("user_id")
-        guild_id = params.get("guild_id")  # Optional, for guild-specific info
+        user_id_raw = params.get("user_id")
+        guild_id_raw = params.get("guild_id")  # Optional, for guild-specific info
 
-        if not user_id:
+        if not user_id_raw:
             return {"success": False, "error": "user_id is required"}
+
+        user_id = str(user_id_raw)
+        guild_id = str(guild_id_raw) if guild_id_raw else None
 
         try:
             if not self._client:
@@ -428,10 +471,12 @@ class DiscordToolService(ToolService):
 
     async def _get_channel_info(self, params: JSONDict) -> JSONDict:
         """Get information about a Discord channel."""
-        channel_id = params.get("channel_id")
+        channel_id_raw = params.get("channel_id")
 
-        if not channel_id:
+        if not channel_id_raw:
             return {"success": False, "error": "Channel ID is required"}
+
+        channel_id = str(channel_id_raw)
 
         try:
             if not self._client:
@@ -464,10 +509,12 @@ class DiscordToolService(ToolService):
 
     async def _get_guild_moderators(self, params: JSONDict) -> JSONDict:
         """Get list of guild members with moderator permissions, excluding ECHO users."""
-        guild_id = params.get("guild_id")
+        guild_id_raw = params.get("guild_id")
 
-        if not guild_id:
+        if not guild_id_raw:
             return {"success": False, "error": "guild_id is required"}
+
+        guild_id = str(guild_id_raw)
 
         try:
             if not self._client:
@@ -516,7 +563,7 @@ class DiscordToolService(ToolService):
         # All Discord tools are synchronous, so results are available immediately
         return self._results.get(correlation_id)
 
-    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         """Validate parameters for a Discord tool."""
         required_params = {
             "discord_send_message": ["channel_id", "content"],
@@ -685,7 +732,7 @@ class DiscordToolService(ToolService):
                 infos.append(info)
         return infos
 
-    def is_healthy(self) -> bool:
+    async def is_healthy(self) -> bool:
         """Check if the Discord tool service is healthy."""
         return self._client is not None and not self._client.is_closed()
 

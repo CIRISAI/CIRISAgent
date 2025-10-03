@@ -132,7 +132,7 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                             "user_id": node.id,
                             "stream": ConsentStream.TEMPORARY.value,
                             "granted_at": consent_status.granted_at.isoformat(),
-                            "expires_at": consent_status.expires_at.isoformat(),
+                            "expires_at": consent_status.expires_at.isoformat() if consent_status.expires_at else None,
                             "reason": "Default TEMPORARY consent on user creation",
                         },
                         updated_by="system_user_creation",

@@ -61,6 +61,9 @@ class BasicTelemetryCollector(BaseService):
         path_type: Optional[str] = None,  # hot, cold, critical
         source_module: Optional[str] = None,
     ) -> None:
+        # FAIL FAST: TimeService must be initialized
+        assert self._time_service is not None, "TimeService not initialized in BasicTelemetryCollector"
+
         sanitized = self._filter.sanitize(metric_name, value)
         if sanitized is None:
             logger.debug("Metric discarded by security filter: %s", metric_name)
@@ -136,6 +139,9 @@ class BasicTelemetryCollector(BaseService):
 
     async def update_system_snapshot(self, snapshot: SystemSnapshot) -> None:
         """Update SystemSnapshot.telemetry with recent metrics."""
+        # FAIL FAST: TimeService must be initialized
+        assert self._time_service is not None, "TimeService not initialized in BasicTelemetryCollector"
+
         now = self._time_service.now()
         cutoff_24h = now - timedelta(hours=24)
         cutoff_1h = now - timedelta(hours=1)

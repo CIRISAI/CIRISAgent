@@ -79,13 +79,18 @@ class CLIToolService(BaseService, ToolService):
         assert self._time_service is not None
         start_time = self._time_service.timestamp()
 
+        # Declare result type explicitly to allow mixed types (str error, float execution_time_ms)
+        result: Dict[str, Any]
+        success: bool
+        error_msg: Optional[str]
+
         if tool_name not in self._tools:
             # Unknown tool - track as failure
             # Note: _tool_executions already incremented above
             self._tool_failures += 1
             result = {"error": f"Unknown tool: {tool_name}"}
             success = False
-            error_msg: Optional[str] = f"Unknown tool: {tool_name}"
+            error_msg = f"Unknown tool: {tool_name}"
         else:
             try:
                 result = await self._tools[tool_name](parameters)

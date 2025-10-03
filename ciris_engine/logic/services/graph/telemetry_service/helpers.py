@@ -6,7 +6,7 @@ testable components. All functions fail fast and loud - no fallback data.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union
 
 from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
     InvalidTimestampError,
@@ -21,6 +21,11 @@ from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
 )
 from ciris_engine.schemas.runtime.system_context import TelemetrySummary
 from ciris_engine.schemas.services.graph.telemetry import MetricAggregates, MetricRecord
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.buses.memory_bus import MemoryBus
+    from ciris_engine.logic.buses.runtime_control_bus import RuntimeControlBus
+    from ciris_engine.logic.services.graph.telemetry_service.service import GraphTelemetryService
 
 # Metric types to query - moved from inline definition
 METRIC_TYPES = [
@@ -46,7 +51,7 @@ METRIC_TYPES = [
 
 
 async def collect_metric_aggregates(
-    telemetry_service,
+    telemetry_service: "GraphTelemetryService",
     metric_types: List[Tuple[str, str]],
     window_start_24h: datetime,
     window_start_1h: datetime,
@@ -90,7 +95,12 @@ async def collect_metric_aggregates(
 
 
 def _update_windowed_metric(
-    aggregates: MetricAggregates, field_24h: str, field_1h: str, value: float, in_1h_window: bool, converter=float
+    aggregates: MetricAggregates,
+    field_24h: str,
+    field_1h: str,
+    value: float,
+    in_1h_window: bool,
+    converter: Callable[[float], Union[int, float]] = float,
 ) -> None:
     """Update a metric with both 24h and 1h windows.
 
@@ -158,8 +168,11 @@ def _handle_latency_metric(aggregates: MetricAggregates, value: float, tags: Dic
     aggregates.service_latency[service].append(float(value))
 
 
+# Handler type definition
+MetricHandlerFunc = Callable[[MetricAggregates, float, bool, Dict[str, str]], None]
+
 # Metric type dispatch table
-_METRIC_HANDLERS = {
+_METRIC_HANDLERS: Dict[str, MetricHandlerFunc] = {
     "tokens": lambda agg, val, win, tags: _handle_tokens_metric(agg, val, win),
     "cost": lambda agg, val, win, tags: _handle_cost_metric(agg, val, win),
     "carbon": lambda agg, val, win, tags: _handle_carbon_metric(agg, val, win),
@@ -215,7 +228,7 @@ def aggregate_metric_by_type(
 
 
 async def get_average_thought_depth(
-    memory_bus,
+    memory_bus: Optional["MemoryBus"],
     window_start: datetime,
 ) -> float:
     """Get average thought depth from the last 24 hours.
@@ -271,7 +284,7 @@ async def get_average_thought_depth(
 
 
 async def get_queue_saturation(
-    runtime_control_bus,
+    runtime_control_bus: Optional["RuntimeControlBus"],
 ) -> float:
     """Get current processor queue saturation (0.0-1.0).
 
@@ -302,7 +315,7 @@ async def get_queue_saturation(
 
         queue_saturation = processor_queue_status.queue_size / processor_queue_status.max_size
         # Clamp to 0-1 range
-        return min(1.0, max(0.0, queue_saturation))
+        return float(min(1.0, max(0.0, queue_saturation)))
 
     except (RuntimeControlBusUnavailableError, QueueStatusUnavailableError):
         raise  # Re-raise as-is

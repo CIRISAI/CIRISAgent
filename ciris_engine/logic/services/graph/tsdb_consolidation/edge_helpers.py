@@ -4,7 +4,7 @@ Helper functions for creating typed edge attributes.
 Centralizes edge attribute creation to ensure type safety.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.schemas.services.graph.edges import (
     CrossSummaryAttributes,
@@ -77,7 +77,9 @@ def create_cross_summary_attributes(
     )
 
 
-def create_generic_edge_attributes(data: Optional[Dict] = None, context: Optional[str] = None) -> EdgeAttributes:
+def create_generic_edge_attributes(
+    data: Optional[Dict[str, Any]] = None, context: Optional[str] = None
+) -> EdgeAttributes:
     """Create generic edge attributes for flexible use cases."""
     return GenericEdgeAttributes(context=context or "Generic edge", created_by="tsdb_consolidation", data=data or {})
 

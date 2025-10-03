@@ -101,7 +101,10 @@ class TestPerformAspdmaWithGuidanceRetryLogic:
         assert "conscience_guidance" in processing_context
         assert processing_context["conscience_guidance"]["retry_attempt"] == 1
         assert processing_context["conscience_guidance"]["max_retries"] == 3
-        assert processing_context["conscience_guidance"]["original_action_failed_because"] == "Action failed epistemic coherence check"
+        assert (
+            processing_context["conscience_guidance"]["original_action_failed_because"]
+            == "Action failed epistemic coherence check"
+        )
 
     @pytest.mark.asyncio
     async def test_success_on_second_attempt(self, processor, mock_thought, mock_conscience_result):

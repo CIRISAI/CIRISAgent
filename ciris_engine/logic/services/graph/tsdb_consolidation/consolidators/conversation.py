@@ -7,7 +7,7 @@ Consolidates SERVICE_INTERACTION correlations into ConversationSummaryNode.
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
@@ -167,7 +167,7 @@ class ConversationConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, service_interactions: List[ServiceInteractionData]
-    ) -> List[Tuple[GraphNode, GraphNode, str, dict]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
         """
         Get edges to create for conversation summary.
 
@@ -257,7 +257,7 @@ class ConversationConsolidator:
         """
         # Track participant data with proper typing
         participant_counts: Dict[str, int] = defaultdict(int)
-        participant_channels: Dict[str, set] = defaultdict(set)
+        participant_channels: Dict[str, set[str]] = defaultdict(set)
         participant_names: Dict[str, str] = {}
 
         for interaction in service_interactions:

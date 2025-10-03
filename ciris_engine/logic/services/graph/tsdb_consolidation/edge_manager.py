@@ -660,13 +660,14 @@ class EdgeManager:
             assert isinstance(edge_spec, EdgeSpecification)
             node_ids_to_check.add(edge_spec.source_node_id)
             node_ids_to_check.add(edge_spec.target_node_id)
+            scope_value: Optional[str] = None  # No scope info in EdgeSpecification
             normalized_edges.append(
                 (
                     edge_spec.source_node_id,
                     edge_spec.target_node_id,
                     edge_spec.edge_type,
                     edge_spec.attributes.model_dump(exclude_none=True),
-                    None,  # No scope info in EdgeSpecification
+                    scope_value,
                 )
             )
 
@@ -686,8 +687,10 @@ class EdgeManager:
         for source_node, target_node, relationship, attrs in edges:
             node_ids_to_check.add(source_node.id)
             node_ids_to_check.add(target_node.id)
-            scope = source_node.scope.value if hasattr(source_node.scope, "value") else str(source_node.scope)
-            normalized_edges.append((source_node.id, target_node.id, relationship, attrs or {}, scope))
+            scope_str: Optional[str] = (
+                source_node.scope.value if hasattr(source_node.scope, "value") else str(source_node.scope)
+            )
+            normalized_edges.append((source_node.id, target_node.id, relationship, attrs or {}, scope_str))
 
         return normalized_edges, node_ids_to_check
 

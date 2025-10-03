@@ -52,6 +52,11 @@ class IncidentManagementService(BaseGraphService):
         self.service_name = "IncidentManagementService"
         self._started = False
         self._start_time: Optional[datetime] = None
+        self._metrics_tracking: Dict[str, float] = {
+            "created": 0.0,
+            "resolved": 0.0,
+            "active": 0.0,
+        }
 
     def _get_time_service(self) -> "TimeServiceProtocol":
         """Get time service for consistent timestamps."""
@@ -605,7 +610,7 @@ class IncidentManagementService(BaseGraphService):
             last_health_check=current_time,
         )
 
-    def is_healthy(self) -> bool:
+    async def is_healthy(self) -> bool:
         """Check if service is healthy."""
         return self._started and self._memory_bus is not None
 
@@ -618,9 +623,9 @@ class IncidentManagementService(BaseGraphService):
         # Initialize tracking if not present
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
-                "created": 0,
-                "resolved": 0,
-                "active": 0,
+                "created": 0.0,
+                "resolved": 0.0,
+                "active": 0.0,
             }
 
         # Calculate uptime
@@ -630,17 +635,17 @@ class IncidentManagementService(BaseGraphService):
             uptime_seconds = (current_time - self._start_time).total_seconds()
 
         # Get active incident count safely
-        active_count = 0
+        active_count = 0.0
         try:
             # Get recent unresolved incidents as active count
             incidents_24h = await self.get_incident_count(hours=24)
             # For simplicity, treat last 24h incidents as active if not resolved
-            active_count = incidents_24h - self._track_metric("resolved", 0)
+            active_count = float(incidents_24h) - self._track_metric("resolved", 0.0)
             if active_count < 0:
-                active_count = 0
+                active_count = 0.0
         except Exception as e:
             logger.warning(f"Failed to get active incident count: {e}")
-            active_count = 0
+            active_count = 0.0
 
         # Return exactly the 4 required v1.4.3 metrics
         return {
@@ -654,9 +659,9 @@ class IncidentManagementService(BaseGraphService):
         """Track a metric with real values from service state."""
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
-                "created": 0,
-                "resolved": 0,
-                "active": 0,
+                "created": 0.0,
+                "resolved": 0.0,
+                "active": 0.0,
             }
         return float(self._metrics_tracking.get(metric_name, default))
 
@@ -664,10 +669,10 @@ class IncidentManagementService(BaseGraphService):
         """Increment a tracked metric."""
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
-                "created": 0,
-                "resolved": 0,
-                "active": 0,
+                "created": 0.0,
+                "resolved": 0.0,
+                "active": 0.0,
             }
-        self._metrics_tracking[metric_name] = self._metrics_tracking.get(metric_name, 0) + amount
+        self._metrics_tracking[metric_name] = self._metrics_tracking.get(metric_name, 0.0) + amount
 
     # get_telemetry() removed - use get_metrics() from BaseService instead

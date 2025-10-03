@@ -129,9 +129,7 @@ class ResourceDataPointBuilder:
     """Builds typed ResourceDataPoint objects following type safety principle."""
 
     @staticmethod
-    def build_data_points(
-        metric_data: Optional[List[MetricRecord]], default_timestamp: str
-    ) -> List[ResourceDataPoint]:
+    def build_data_points(metric_data: Optional[List[MetricRecord]], default_timestamp: str) -> List[ResourceDataPoint]:
         """Convert raw metric data to typed ResourceDataPoint objects."""
         if not metric_data:
             return []

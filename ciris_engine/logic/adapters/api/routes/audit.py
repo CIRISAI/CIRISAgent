@@ -155,7 +155,7 @@ def _sync_query_sqlite_audit(
                 params.append(end_time.isoformat())
 
             query += " ORDER BY event_timestamp DESC LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
+            params.extend([str(limit), str(offset)])
 
             cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
@@ -251,7 +251,7 @@ async def _query_jsonl_audit(
     return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
 
 
-def _process_graph_entries(merged: Dict[str, Dict], graph_entries: List[AuditEntry]) -> None:
+def _process_graph_entries(merged: Dict[str, Dict[str, Any]], graph_entries: List[AuditEntry]) -> None:
     """Process graph entries and add them to merged results."""
     for entry in graph_entries:
         entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
@@ -262,7 +262,7 @@ def _process_graph_entries(merged: Dict[str, Dict], graph_entries: List[AuditEnt
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, Dict], sqlite_entries: List[Dict[str, Any]]
+    merged: Dict[str, Dict[str, Any]], sqlite_entries: List[Dict[str, Any]]
 ) -> None:  # NOQA - SQLite query results are Dict[str, Any] by design
     """Process SQLite entries and add them to merged results."""
     for sqlite_entry in sqlite_entries:
@@ -295,7 +295,7 @@ def _process_sqlite_entries(
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, Dict], jsonl_entries: List[Dict[str, Any]]
+    merged: Dict[str, Dict[str, Any]], jsonl_entries: List[Dict[str, Any]]
 ) -> None:  # NOQA - JSONL entries are Dict[str, Any] by design
     """Process JSONL entries and add them to merged results."""
     for jsonl_entry in jsonl_entries:
@@ -335,7 +335,7 @@ async def _merge_audit_sources(
     jsonl_entries: List[Dict[str, Any]],  # NOQA - Raw database results are Dict[str, Any] by design
 ) -> List[AuditEntryResponse]:
     """Merge audit entries from all sources and track storage locations."""
-    merged = {}  # Dict[str, Dict] to track entries by ID
+    merged: Dict[str, Dict[str, Any]] = {}  # Track entries by ID with their sources
 
     # Process entries from all sources
     _process_graph_entries(merged, graph_entries)
@@ -445,7 +445,7 @@ async def query_audit_entries(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _find_audit_entry(entries: List, entry_id: str) -> Tuple[Optional[Any], int]:
+def _find_audit_entry(entries: List[Any], entry_id: str) -> Tuple[Optional[Any], int]:
     """Find audit entry by ID with fallback to generated ID pattern."""
     for i, entry in enumerate(entries):
         if hasattr(entry, "id") and entry.id == entry_id:
@@ -470,7 +470,7 @@ def _build_verification_info(target_entry: Any) -> EntryVerification:
     )
 
 
-def _add_chain_navigation(response: AuditEntryDetailResponse, entries: List, entry_index: int) -> None:
+def _add_chain_navigation(response: AuditEntryDetailResponse, entries: List[Any], entry_index: int) -> None:
     """Add chain position and navigation links to response."""
     response.chain_position = entry_index
 

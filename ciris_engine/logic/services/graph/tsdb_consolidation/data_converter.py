@@ -243,8 +243,10 @@ class TSDBDataConverter:
                 author_name=request_data.author_name if request_data else None,
                 content=request_data.content if request_data else None,
                 response_data=response_data,
-                execution_time_ms=response_data.execution_time_ms if response_data else 0.0,
-                success=response_data.success if response_data else True,
+                execution_time_ms=(
+                    response_data.execution_time_ms if response_data and response_data.execution_time_ms is not None else 0.0
+                ),
+                success=response_data.success if response_data and response_data.success is not None else True,
                 error_message=response_data.error if response_data else None,
                 context=context,
             )

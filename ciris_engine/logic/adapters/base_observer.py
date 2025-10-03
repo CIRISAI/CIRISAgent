@@ -15,6 +15,7 @@ from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
+from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
@@ -138,7 +139,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         self._credit_log_cache: Dict[str, float] = {}
 
         # Initialize document parser for all adapters
-        self._document_parser = DocumentParser()
+        self._document_parser = DocumentParser()  # type: ignore[no-untyped-call]
         if self._document_parser.is_available():
             logger.info(f"Document parser initialized for {origin_service} adapter - PDF/DOCX processing enabled")
         else:
@@ -481,15 +482,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _create_passive_observation_result(
         self, msg: MessageT, priority: int = 0, filter_result: Optional[Any] = None
-    ) -> Optional["PassiveObservationResult"]:
+    ) -> Optional[PassiveObservationResult]:
         """
         Create passive observation result (task + thought).
 
         Returns:
             Optional[PassiveObservationResult]: Result with task_id and metadata, None on error
         """
-        from ciris_engine.schemas.runtime.messages import PassiveObservationResult
-
         try:
             import uuid
             from datetime import datetime, timezone
@@ -663,7 +662,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _create_priority_observation_result(
         self, msg: MessageT, filter_result: Any
-    ) -> Optional["PassiveObservationResult"]:
+    ) -> Optional[PassiveObservationResult]:
         """
         Create priority observation by delegating to passive observation with higher priority.
 
@@ -692,15 +691,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
             logger.error("Error creating priority observation task: %s", e, exc_info=True)
             return None
 
-    async def handle_incoming_message(self, msg: MessageT) -> "MessageHandlingResult":
+    async def handle_incoming_message(self, msg: MessageT) -> MessageHandlingResult:
         """
         Standard message handling flow for all observers.
 
         Returns:
             MessageHandlingResult: Complete result of message handling including status and task_id
         """
-        from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus
-
         msg_id = getattr(msg, "message_id", "unknown")
         channel_id = getattr(msg, "channel_id", "unknown")
         author = f"{getattr(msg, 'author_name', 'unknown')} (ID: {getattr(msg, 'author_id', 'unknown')})"
@@ -759,7 +756,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         )
 
         # Process based on priority and capture result
-        obs_result: Optional["PassiveObservationResult"] = None
+        obs_result: Optional[PassiveObservationResult] = None
         if filter_result.priority.value in ["critical", "high"]:
             logger.info(f"Processing {filter_result.priority.value} priority message: {filter_result.reasoning}")
             obs_result = await self._handle_priority_observation(processed_msg, filter_result)
@@ -796,7 +793,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _handle_priority_observation(
         self, msg: MessageT, filter_result: Any
-    ) -> Optional["PassiveObservationResult"]:
+    ) -> Optional[PassiveObservationResult]:
         """
         Handle high-priority messages.
 
@@ -810,7 +807,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             logger.debug(f"Ignoring priority message from channel {getattr(msg, 'channel_id', 'unknown')}")
             return None
 
-    async def _handle_passive_observation(self, msg: MessageT) -> Optional["PassiveObservationResult"]:
+    async def _handle_passive_observation(self, msg: MessageT) -> Optional[PassiveObservationResult]:
         """
         Handle passive observation routing.
 

@@ -1,7 +1,9 @@
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, cast
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from pydantic import BaseModel
 
@@ -17,6 +19,7 @@ from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -89,15 +92,13 @@ def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] 
     Returns:
         Content with mentions formatted as <@123456789> (username: UserName)
     """
-    import re
-
     if not user_lookup:
         return content
 
     # Pattern to match Discord mentions: <@USER_ID> or <@!USER_ID>
     mention_pattern = r"<@!?(\d+)>"
 
-    def replace_mention(match):
+    def replace_mention(match: re.Match[str]) -> str:
         user_id = match.group(1)
         username = user_lookup.get(user_id, "Unknown")
         return f"{match.group(0)} (username: {username})"
@@ -110,7 +111,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     def __init__(
         self,
-        on_observe: Callable[[dict], Awaitable[None]],
+        on_observe: Callable[[JSONDict], Awaitable[None]],
         bus_manager: Optional[BusManager] = None,
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
@@ -237,7 +238,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
         )
 
-    def _create_history_entry(self, msg, protected_content: str, is_agent_message: bool) -> Dict[str, Any]:
+    def _create_history_entry(self, msg: MessageT, protected_content: str, is_agent_message: bool) -> JSONDict:
         """Create a history entry from a message."""
         return {
             "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
@@ -247,7 +248,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             "is_agent": is_agent_message,
         }
 
-    async def _fetch_messages_from_bus(self, channel_id: str, limit: int):
+    async def _fetch_messages_from_bus(self, channel_id: str, limit: int) -> List[Any]:
         """Fetch messages from communication bus."""
         if not self.bus_manager or not hasattr(self.bus_manager, "communication"):
             logger.warning("No communication bus available for channel history")
@@ -255,7 +256,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         return await self.bus_manager.communication.fetch_messages(channel_id, limit, "DiscordAdapter")
 
-    async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[Dict[str, Any]]:
+    async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[JSONDict]:
         """Get message history from channel using communication bus."""
         if not self.bus_manager:
             logger.warning("No bus manager available for channel history")
@@ -381,15 +382,15 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         persistence.add_task(task)
 
-    def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[Dict]) -> Dict[str, str]:
+    def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[JSONDict]) -> Dict[str, str]:
         """Build a user lookup dictionary for mention resolution."""
-        user_lookup = {}
+        user_lookup: Dict[str, str] = {}
 
         # Add users from history
         for hist_msg in history_context:
             aid = hist_msg.get("author_id")
             aname = hist_msg.get("author")
-            if aid and aname:
+            if aid and aname and isinstance(aname, str):
                 user_lookup[str(aid)] = aname
 
         # Add current message author
@@ -398,13 +399,14 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         return user_lookup
 
-    def _format_history_lines(self, history_context: List[Dict], user_lookup: Dict[str, str]) -> List[str]:
+    def _format_history_lines(self, history_context: List[JSONDict], user_lookup: Dict[str, str]) -> List[str]:
         """Format conversation history lines with mentions."""
         lines = []
         for i, hist_msg in enumerate(history_context, 1):
             author = hist_msg.get("author", "Unknown")
             author_id = hist_msg.get("author_id", "unknown")
-            content = hist_msg.get("content", "")
+            content_raw = hist_msg.get("content", "")
+            content = str(content_raw) if content_raw is not None else ""
 
             # Format mentions in content to include usernames
             content = format_discord_mentions(content, user_lookup)
@@ -413,7 +415,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         return lines
 
     async def _add_custom_context_sections(
-        self, task_lines: List[str], msg: MessageT, history_context: List[Dict]
+        self, task_lines: List[str], msg: MessageT, history_context: List[JSONDict]
     ) -> None:
         """Extension point for subclasses to add custom context sections.
 
@@ -828,7 +830,8 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 if hasattr(self.filter_service, "_config") and self.filter_service._config:
                     if user_id in self.filter_service._config.user_profiles:
                         profile = self.filter_service._config.user_profiles[user_id]
-                        return profile.consent_stream
+                        consent_stream_value: str = profile.consent_stream
+                        return consent_stream_value
 
             return None
         except Exception as e:

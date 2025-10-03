@@ -35,6 +35,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceRequestData,
     ServiceResponseData,
 )
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class CLIAdapter(Service, CommunicationService, ToolService):
         self._time_service: Optional[TimeServiceProtocol] = None
         self._start_time: Optional[datetime] = None
 
-        self._available_tools: Dict[str, Callable[[dict], Awaitable[dict]]] = {
+        self._available_tools: Dict[str, Callable[[JSONDict], Awaitable[JSONDict]]] = {
             "list_files": self._tool_list_files,
             "read_file": self._tool_read_file,
             "system_info": self._tool_system_info,
@@ -293,7 +294,7 @@ class CLIAdapter(Service, CommunicationService, ToolService):
             logger.error(f"Failed to fetch messages from correlations for CLI channel {channel_id}: {e}")
             return []
 
-    async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
         """
         Execute a CLI tool.
 
@@ -413,7 +414,7 @@ class CLIAdapter(Service, CommunicationService, ToolService):
         """CLI tools execute synchronously, so results are immediate."""
         return None
 
-    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         """
         Validate parameters for a CLI tool.
 
@@ -576,7 +577,7 @@ Tools available:
             print(f"  - {tool}")
         print("\nSimply type your message to interact with CIRIS.\n")
 
-    async def _tool_list_files(self, params: dict) -> dict:
+    async def _tool_list_files(self, params: JSONDict) -> JSONDict:
         """List files in a directory."""
         import os
 
@@ -593,7 +594,7 @@ Tools available:
             result = ListFilesToolResult(success=False, error=str(e), files=[], count=0)
             return result.model_dump()
 
-    async def _tool_read_file(self, params: dict) -> dict:
+    async def _tool_read_file(self, params: JSONDict) -> JSONDict:
         """Read a file's contents."""
         try:
             # Validate parameters using schema
@@ -609,7 +610,7 @@ Tools available:
             result = ReadFileToolResult(success=False, error=str(e), content=None, size=None)
             return result.model_dump()
 
-    async def _tool_system_info(self, params: dict) -> dict:
+    async def _tool_system_info(self, params: JSONDict) -> JSONDict:
         """Get system information."""
         import platform
 
@@ -834,31 +835,38 @@ Tools available:
         from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter
 
         # Get active channels from last 30 days
-        channels_data = get_active_channels_by_adapter("cli", since_days=30)
+        channels_data: List[JSONDict] = get_active_channels_by_adapter("cli", since_days=30)
 
         # Convert to ChannelContext objects
-        channels = []
+        channels: List[ChannelContext] = []
         for data in channels_data:
             # Determine channel name
-            channel_name = data["channel_id"]
-            if "_" in data["channel_id"]:
-                parts = data["channel_id"].split("_", 2)
+            channel_id_val = str(data["channel_id"]) if data.get("channel_id") else "cli_unknown"
+            channel_name = channel_id_val
+            if "_" in channel_id_val:
+                parts = channel_id_val.split("_", 2)
                 if len(parts) >= 3:
                     channel_name = f"CLI Session {parts[1]}"
 
             # CLI channels support all actions
             allowed_actions = ["speak", "observe", "memorize", "recall", "tool", "wa_defer", "runtime_control"]
 
+            # Extract values with proper type handling
+            last_act = data.get("last_activity")
+            last_activity = last_act if isinstance(last_act, datetime) else None
+            is_active = bool(data.get("is_active", True))
+            msg_count = int(data.get("message_count", 0)) if isinstance(data.get("message_count"), (int, float)) else 0
+
             channel = ChannelContext(
-                channel_id=data["channel_id"],
+                channel_id=channel_id_val,
                 channel_type="cli",
-                created_at=data.get("last_activity", datetime.now()),
+                created_at=last_activity or datetime.now(),
                 channel_name=channel_name,
                 is_private=True,  # CLI sessions are private
                 participants=["user", "ciris"],  # CLI is 1-on-1
-                is_active=data.get("is_active", True),
-                last_activity=data.get("last_activity"),
-                message_count=data.get("message_count", 0),
+                is_active=is_active,
+                last_activity=last_activity,
+                message_count=msg_count,
                 allowed_actions=allowed_actions,
                 moderation_level="minimal",  # CLI has minimal moderation
             )

@@ -14,6 +14,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +51,15 @@ class DiscordToolService(ToolService):
         """Update the Discord client instance."""
         self._client = client
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the Discord tool service."""
         logger.info("Discord tool service started")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the Discord tool service."""
         logger.info("Discord tool service stopped")
 
-    async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
         """Execute a Discord tool and return the result."""
         logger.info(f"[DISCORD_TOOLS] execute_tool called with tool_name={tool_name}, parameters={parameters}")
 
@@ -122,7 +123,7 @@ class DiscordToolService(ToolService):
             )
 
     # Tool implementations
-    async def _send_message(self, params: dict) -> dict:
+    async def _send_message(self, params: JSONDict) -> JSONDict:
         """Send a message to a Discord channel."""
         channel_id = params.get("channel_id")
         content = params.get("content")
@@ -152,7 +153,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _send_embed(self, params: dict) -> dict:
+    async def _send_embed(self, params: JSONDict) -> JSONDict:
         """Send an embed message to a Discord channel."""
         channel_id = params.get("channel_id")
         title = params.get("title", "")
@@ -191,7 +192,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _delete_message(self, params: dict) -> dict:
+    async def _delete_message(self, params: JSONDict) -> JSONDict:
         """Delete a message from a Discord channel."""
         channel_id = params.get("channel_id")
         message_id = params.get("message_id")
@@ -223,7 +224,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _timeout_user(self, params: dict) -> dict:
+    async def _timeout_user(self, params: JSONDict) -> JSONDict:
         """Timeout a user in a guild."""
         guild_id = params.get("guild_id")
         user_id = params.get("user_id")
@@ -259,7 +260,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _ban_user(self, params: dict) -> dict:
+    async def _ban_user(self, params: JSONDict) -> JSONDict:
         """Ban a user from a guild."""
         guild_id = params.get("guild_id")
         user_id = params.get("user_id")
@@ -285,7 +286,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _kick_user(self, params: dict) -> dict:
+    async def _kick_user(self, params: JSONDict) -> JSONDict:
         """Kick a user from a guild."""
         guild_id = params.get("guild_id")
         user_id = params.get("user_id")
@@ -311,7 +312,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _add_role(self, params: dict) -> dict:
+    async def _add_role(self, params: JSONDict) -> JSONDict:
         """Add a role to a user."""
         guild_id = params.get("guild_id")
         user_id = params.get("user_id")
@@ -349,7 +350,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _remove_role(self, params: dict) -> dict:
+    async def _remove_role(self, params: JSONDict) -> JSONDict:
         """Remove a role from a user."""
         guild_id = params.get("guild_id")
         user_id = params.get("user_id")
@@ -387,7 +388,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _get_user_info(self, params: dict) -> dict:
+    async def _get_user_info(self, params: JSONDict) -> JSONDict:
         """Get information about a Discord user."""
         user_id = params.get("user_id")
         guild_id = params.get("guild_id")  # Optional, for guild-specific info
@@ -425,7 +426,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _get_channel_info(self, params: dict) -> dict:
+    async def _get_channel_info(self, params: JSONDict) -> JSONDict:
         """Get information about a Discord channel."""
         channel_id = params.get("channel_id")
 
@@ -461,7 +462,7 @@ class DiscordToolService(ToolService):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _get_guild_moderators(self, params: dict) -> dict:
+    async def _get_guild_moderators(self, params: JSONDict) -> JSONDict:
         """Get list of guild members with moderator permissions, excluding ECHO users."""
         guild_id = params.get("guild_id")
 

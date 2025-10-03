@@ -252,7 +252,12 @@ def _log_step_debug_info(step: StepPoint, base_data: BaseStepData, thought_item:
 
 
 def _create_typed_step_data(
-    step: StepPoint, base_data: BaseStepData, thought_item: Any, result: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    step: StepPoint,
+    base_data: BaseStepData,
+    thought_item: Any,
+    result: Any,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
 ) -> StepDataUnion:
     """Create typed step data based on step type using dispatch pattern."""
     # Prepare base data with task_id
@@ -412,8 +417,7 @@ def _extract_conscience_execution_values(result: Any) -> tuple[str, bool, str, s
 
 
 def _build_conscience_result_from_check(
-    conscience_check_result: Any,  # ConscienceCheckResult
-    override_reason: Optional[str]
+    conscience_check_result: Any, override_reason: Optional[str]  # ConscienceCheckResult
 ) -> Any:  # ConscienceResult
     """Build ConscienceResult from ConscienceCheckResult."""
     from ciris_engine.schemas.conscience.results import ConscienceResult
@@ -575,7 +579,9 @@ def _create_comprehensive_conscience_result(result: Any) -> Any:  # ConscienceCh
     return conscience_result
 
 
-def _create_recursive_aspdma_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> RecursiveASPDMAStepData:
+def _create_recursive_aspdma_data(
+    base_data: BaseStepData, result: Any, args: Tuple[Any, ...]
+) -> RecursiveASPDMAStepData:
     """Create RECURSIVE_ASPDMA specific typed data."""
     if not args:
         raise ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")

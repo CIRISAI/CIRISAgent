@@ -1,6 +1,6 @@
 """Configuration schema for Discord adapter."""
 
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -129,13 +129,13 @@ class DiscordAdapterConfig(BaseModel):
         self._load_channel_configuration(get_env_var)
         self._load_user_permissions(get_env_var)
 
-    def _load_bot_token(self, get_env_var):
+    def _load_bot_token(self, get_env_var: Callable[[str], Optional[str]]) -> None:
         """Load bot token from environment variables."""
         env_token = get_env_var("DISCORD_BOT_TOKEN")
         if env_token:
             self.bot_token = env_token
 
-    def _load_channel_configuration(self, get_env_var):
+    def _load_channel_configuration(self, get_env_var: Callable[[str], Optional[str]]) -> None:
         """Load channel configuration from environment variables."""
         # Home channel ID
         env_home_channel = get_env_var("DISCORD_HOME_CHANNEL_ID")
@@ -161,7 +161,7 @@ class DiscordAdapterConfig(BaseModel):
         if env_deferral:
             self.deferral_channel_id = env_deferral
 
-    def _load_user_permissions(self, get_env_var):
+    def _load_user_permissions(self, get_env_var: Callable[[str], Optional[str]]) -> None:
         """Load user permissions from environment variables."""
         env_admin = get_env_var("WA_USER_IDS")
         if env_admin:
@@ -171,7 +171,7 @@ class DiscordAdapterConfig(BaseModel):
                 if user_id not in self.admin_user_ids:
                     self.admin_user_ids.append(user_id)
 
-    def _add_channel_to_monitored(self, channel_id: str):
+    def _add_channel_to_monitored(self, channel_id: str) -> None:
         """Add channel to monitored list if not already present."""
         if channel_id not in self.monitored_channel_ids:
             self.monitored_channel_ids.append(channel_id)

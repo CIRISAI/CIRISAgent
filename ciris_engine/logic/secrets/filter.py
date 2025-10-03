@@ -209,8 +209,9 @@ class SecretsFilter:
         # The builtin patterns are controlled by builtin_patterns_enabled flag
 
         # Add custom patterns
-        for pattern_dict in config.custom_patterns:
-            patterns.append(ConfigSecretPattern(**pattern_dict))
+        for pattern_obj in config.custom_patterns:
+            # pattern_obj is already a SecretPattern (alias for ConfigSecretPattern)
+            patterns.append(pattern_obj)
 
         # Create new config
         # Note: SecretsDetectionConfig only has 'enabled' and 'patterns' attributes

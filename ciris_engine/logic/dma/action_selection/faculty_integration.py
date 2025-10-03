@@ -9,6 +9,7 @@ from ciris_engine.schemas.dma.faculty import (
     EnhancedDMAInputs,
     FacultyContext,
     FacultyEvaluationSet,
+    ThoughtMetadata,
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.models import Thought
@@ -45,13 +46,13 @@ class FacultyIntegration:
         # Call content faculties with minimal context (just the content)
         minimal_context = FacultyContext(
             evaluation_context=context.evaluation_context if context else "content_analysis",
-            thought_metadata=context.thought_metadata if context else {},
+            thought_metadata=context.thought_metadata if context else ThoughtMetadata(),
         )
 
         for name, faculty in content_faculties.items():
             try:
-                # Faculty analyze expects Dict for backward compatibility
-                result = await faculty.analyze(content, minimal_context.model_dump())
+                # Faculty analyze expects FacultyContext | None
+                result = await faculty.analyze(content, minimal_context)
                 results.add_result(name, result)
             except Exception as e:
                 logger.warning(f"Content faculty {name} evaluation failed: {e}")
@@ -60,8 +61,8 @@ class FacultyIntegration:
         for name, faculty in decision_faculties.items():
             try:
                 # These faculties need the full context including identity
-                # Faculty analyze expects Dict for backward compatibility
-                result = await faculty.analyze(content, context.model_dump() if context else None)
+                # Faculty analyze expects FacultyContext | None
+                result = await faculty.analyze(content, context)
                 results.add_result(name, result)
             except Exception as e:
                 logger.warning(f"Decision faculty {name} evaluation failed: {e}")

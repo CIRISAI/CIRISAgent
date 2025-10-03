@@ -137,8 +137,8 @@ def _handle_thoughts_metric(aggregates: MetricAggregates, value: float, in_1h_wi
     _update_windowed_metric(aggregates, "thoughts_24h", "thoughts_1h", value, in_1h_window, int)
 
 
-def _handle_tasks_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
-    """Handle tasks metric aggregation."""
+def _handle_tasks_metric(aggregates: MetricAggregates, value: float) -> None:
+    """Handle tasks metric aggregation (24h only, no 1h tracking)."""
     aggregates.tasks_24h += int(value)
 
 
@@ -150,10 +150,8 @@ def _handle_errors_metric(aggregates: MetricAggregates, value: float, in_1h_wind
     aggregates.service_errors[service] = aggregates.service_errors.get(service, 0) + 1
 
 
-def _handle_latency_metric(
-    aggregates: MetricAggregates, value: float, in_1h_window: bool, tags: Dict[str, str]
-) -> None:
-    """Handle latency metric aggregation."""
+def _handle_latency_metric(aggregates: MetricAggregates, value: float, tags: Dict[str, str]) -> None:
+    """Handle latency metric aggregation (service-level, no time windowing)."""
     service = tags.get("service", "unknown")
     if service not in aggregates.service_latency:
         aggregates.service_latency[service] = []
@@ -168,9 +166,9 @@ _METRIC_HANDLERS = {
     "energy": lambda agg, val, win, tags: _handle_energy_metric(agg, val, win),
     "messages": lambda agg, val, win, tags: _handle_messages_metric(agg, val, win),
     "thoughts": lambda agg, val, win, tags: _handle_thoughts_metric(agg, val, win),
-    "tasks": lambda agg, val, win, tags: _handle_tasks_metric(agg, val, win),
+    "tasks": lambda agg, val, win, tags: _handle_tasks_metric(agg, val),
     "errors": lambda agg, val, win, tags: _handle_errors_metric(agg, val, win, tags),
-    "latency": lambda agg, val, win, tags: _handle_latency_metric(agg, val, win, tags),
+    "latency": lambda agg, val, win, tags: _handle_latency_metric(agg, val, tags),
 }
 
 

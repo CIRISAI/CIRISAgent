@@ -109,7 +109,7 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                 step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)
 
                 # Broadcast simplified reasoning event for key steps only
-                await _broadcast_reasoning_event(step, step_data, result, thought_item=thought_item)
+                await _broadcast_reasoning_event(step, step_data, thought_item=thought_item)
 
                 return result
 
@@ -834,7 +834,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
 
 
 async def _broadcast_reasoning_event(
-    step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False, thought_item: Any = None
+    step: StepPoint, step_data: StepDataUnion, is_recursive: bool = False, thought_item: Any = None
 ) -> None:
     """
     Broadcast simplified reasoning event for one of the 6 key steps.

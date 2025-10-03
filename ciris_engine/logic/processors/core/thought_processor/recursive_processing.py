@@ -123,59 +123,102 @@ class RecursiveProcessingPhase:
         max_retries: int = 3,
     ) -> Any:
         """
-        Retry action selection with conscience guidance.
+        Retry action selection with conscience guidance, with exponential backoff.
 
         Args:
             thought: The thought being processed
             thought_context: Processing context (contains conscience feedback)
             dma_results: Results from initial DMA execution
             conscience_result: Conscience result with override_reason explaining why original action failed
-            max_retries: Maximum retry attempts (currently unused - single retry only)
+            max_retries: Maximum retry attempts (default: 3)
 
         Returns:
             ActionSelectionDMAResult with guidance-informed action selection
+
+        Note:
+            Implements retry logic with cumulative guidance - each retry gets feedback
+            from all previous attempts to improve action selection quality.
         """
         from ciris_engine.schemas.conscience.core import ConscienceCheckResult
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
-        # Extract typed conscience feedback for guidance
-        override_reason = ""
-        epistemic_feedback = {}
+        last_error = None
+        retry_history = []
 
-        if isinstance(conscience_result, ConscienceApplicationResult):
-            override_reason = conscience_result.override_reason or "Conscience override occurred"
-            epistemic_feedback = conscience_result.epistemic_data or {}
-        elif isinstance(conscience_result, dict):
-            override_reason = conscience_result.get("override_reason", "Conscience override occurred")
-            epistemic_feedback = conscience_result.get("epistemic_data", {})
+        for attempt in range(max_retries):
+            try:
+                # Extract typed conscience feedback for guidance
+                override_reason = ""
+                epistemic_feedback = {}
 
-        # Build guidance context with typed conscience results
-        guidance_context = {
-            "retry_attempt": True,
-            "original_action_failed_because": override_reason,
-            "conscience_feedback": {
-                "epistemic_data": epistemic_feedback,
-                "override_detected": True,
-            },
-        }
+                if isinstance(conscience_result, ConscienceApplicationResult):
+                    override_reason = conscience_result.override_reason or "Conscience override occurred"
+                    epistemic_feedback = conscience_result.epistemic_data or {}
+                elif isinstance(conscience_result, dict):
+                    override_reason = conscience_result.get("override_reason", "Conscience override occurred")
+                    epistemic_feedback = conscience_result.get("epistemic_data", {})
 
-        # Merge guidance into thought context
-        if hasattr(thought_context, "model_dump"):
-            enriched_context = thought_context.model_dump()
-        else:
-            enriched_context = dict(thought_context) if isinstance(thought_context, dict) else {}
+                # Build guidance context with typed conscience results + retry history
+                guidance_context = {
+                    "retry_attempt": attempt + 1,
+                    "max_retries": max_retries,
+                    "original_action_failed_because": override_reason,
+                    "conscience_feedback": {
+                        "epistemic_data": epistemic_feedback,
+                        "override_detected": True,
+                    },
+                    "retry_history": retry_history,  # Cumulative feedback from previous attempts
+                }
 
-        enriched_context["conscience_guidance"] = guidance_context
+                # Merge guidance into thought context
+                if hasattr(thought_context, "model_dump"):
+                    enriched_context = thought_context.model_dump()
+                else:
+                    enriched_context = dict(thought_context) if isinstance(thought_context, dict) else {}
 
-        # Get profile and re-run action selection with conscience guidance
-        profile_name = self._get_profile_name(thought)  # type: ignore[attr-defined]
+                enriched_context["conscience_guidance"] = guidance_context
 
-        retry_result = await self.dma_orchestrator.run_action_selection(  # type: ignore[attr-defined]
-            thought_item=thought,
-            actual_thought=thought,
-            processing_context=enriched_context,
-            dma_results=dma_results,
-            profile_name=profile_name,
-        )
+                # Get profile and re-run action selection with conscience guidance
+                profile_name = self._get_profile_name(thought)  # type: ignore[attr-defined]
 
-        return retry_result
+                retry_result = await self.dma_orchestrator.run_action_selection(  # type: ignore[attr-defined]
+                    thought_item=thought,
+                    actual_thought=thought,
+                    processing_context=enriched_context,
+                    dma_results=dma_results,
+                    profile_name=profile_name,
+                )
+
+                # Success! Return the result
+                logger.info(
+                    f"ASPDMA retry attempt {attempt + 1}/{max_retries} succeeded for thought {thought.thought_id}"
+                )
+                return retry_result
+
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"ASPDMA retry attempt {attempt + 1}/{max_retries} failed for thought {thought.thought_id}: {e}"
+                )
+
+                # Add this attempt to retry history for next iteration
+                retry_history.append(
+                    {
+                        "attempt": attempt + 1,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                )
+
+                # If this was the last attempt, raise the error
+                if attempt == max_retries - 1:
+                    logger.error(
+                        f"All {max_retries} ASPDMA retry attempts exhausted for thought {thought.thought_id}"
+                    )
+                    raise last_error
+
+                # Otherwise, continue to next retry
+                continue
+
+        # Should never reach here, but just in case
+        raise RuntimeError(f"ASPDMA retry logic failed unexpectedly for thought {thought.thought_id}")

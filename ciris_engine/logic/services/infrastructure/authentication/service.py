@@ -12,7 +12,7 @@ import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union, cast
 
 import aiofiles
 import jwt
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Type variable for decorators
-F = TypeVar("F", bound=Callable)
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
@@ -451,13 +451,17 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             for link in links:
                 link.is_primary = link.provider == provider and link.external_id == external_id
 
-        payload = {
-            "oauth_provider": existing.oauth_provider,
-            "oauth_external_id": existing.oauth_external_id,
-            "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in links]) if links else None,
-        }
+        # Build update kwargs, filtering out None values
+        update_kwargs = {}
+        if existing.oauth_provider:
+            update_kwargs["oauth_provider"] = existing.oauth_provider
+        if existing.oauth_external_id:
+            update_kwargs["oauth_external_id"] = existing.oauth_external_id
+        oauth_links_json = json.dumps([link.model_dump(mode="json") for link in links]) if links else None
+        if oauth_links_json:
+            update_kwargs["oauth_links_json"] = oauth_links_json
 
-        await self.update_wa(wa_id, **payload)
+        await self.update_wa(wa_id, **update_kwargs)  # type: ignore[arg-type]
         return await self.get_wa(wa_id)
 
     async def unlink_oauth_identity(self, wa_id: str, provider: str, external_id: str) -> Optional[WACertificate]:
@@ -1073,15 +1077,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             event_data = EventPayload(
                 action="wa_mint",
                 service_name="authentication",
-                user_id="system",
+                user_id=wa_id,  # Use wa_id as user_id to track which WA was created
                 result="success",
-                details={
-                    "wa_id": wa_id,
-                    "name": name,
-                    "role": role.value,
-                    "scopes": scopes,
-                    "timestamp": timestamp.isoformat(),
-                },
             )
             await self._audit_service.log_event(event_type="wa_mint", event_data=event_data)
 
@@ -1466,7 +1463,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             else:
                 logger.warning("No root WA certificate found - cannot create system WA")
 
-    async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: dict) -> str:
+    async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: Dict[str, Any]) -> str:
         """Create a channel token for an adapter."""
         # Ensure adapter_info has proper structure
         if not adapter_info:
@@ -1497,7 +1494,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return token
 
-    def verify_token_sync(self, token: str) -> Optional[dict]:
+    def verify_token_sync(self, token: str) -> Optional[Dict[str, Any]]:
         """Synchronously verify a token (for non-async contexts)."""
         try:
             # For sync verification, we can only verify gateway-signed tokens

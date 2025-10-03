@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.1] - 2025-10-03
 
 ### Added
+- **🔍 Guidance Observation Auditing**: Added audit logging for WA guidance observations
+  - Tracks both solicited (with recommendation) and unsolicited guidance requests
+  - Logs guidance_provided vs no_guidance outcomes
+  - Recorded as observations via `log_event` with action="observe"
 - **📬 Async Message API Endpoint**: New `/agent/message` endpoint for immediate task_id return
   - Returns immediately with `task_id` for tracking (no blocking wait)
   - Comprehensive status tracking via `MessageHandlingStatus` enum (9 status types)
@@ -33,6 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables future calculation of session duration and availability metrics
 
 ### Changed
+- **🔒 Audit System Cleanup**: Reduced audit verbosity to only important events
+  - Fixed `log_event` trace correlation to extract action type from event data
+  - Deprecated verbose Discord audit methods (messages, connections) - already covered by handler actions
+  - Hash chain now always enabled (fails fast if initialization fails)
+  - Audit events now logged: handler actions, WA operations, guidance observations, system shutdown, Discord mod actions only
+- **⚡ QA Test Optimization - 3x Performance Improvement**: Updated handlers and filters tests to use SSE streaming
+  - Handlers tests: 48.38s (down from 151.93s) - 3.1x speedup
+  - Filters tests: 169.40s (down from 600+s) - 3.5x+ speedup
+  - Changed from blocking `/agent/interact` to async `/agent/message` endpoint
+  - Implemented SSE-based completion detection for ANY action (speak, memorize, recall, etc.)
+  - Reduced timeouts from 120s to 30s
+  - 100% pass rate maintained (5/5 handlers, 36/36 filters)
+- **📊 Event Streaming Log Cleanup**: Reduced INFO-level logging noise
+  - Changed broadcast and audit debug logs from INFO to DEBUG level
+  - Cleaner production logs during SSE streaming
 - **🧠 Conscience Schema Refactoring**: Separated epistemic metrics from conscience override fields
   - `EpistemicData` now contains only pure epistemic metrics (entropy, coherence, uncertainty, reasoning transparency)
   - Moved `replacement_action` and `CIRIS_OBSERVATION_UPDATED_STATUS` to `ConscienceCheckResult` top-level fields

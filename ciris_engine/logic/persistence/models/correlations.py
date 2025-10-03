@@ -11,7 +11,7 @@ from ciris_engine.schemas.persistence.correlations import ChannelInfo
 from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation, ServiceCorrelationStatus
 
 if TYPE_CHECKING:
-    from ciris_engine.logic.services.graph.telemetry_service import TelemetryService
+    from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 
 logger = logging.getLogger(__name__)
 
@@ -793,7 +793,7 @@ def get_recent_correlations(limit: int = 100, db_path: Optional[str] = None) -> 
 async def add_correlation_with_telemetry(
     corr: ServiceCorrelation,
     time_service: Optional[TimeServiceProtocol] = None,
-    telemetry_service: Optional["TelemetryService"] = None,
+    telemetry_service: Optional["GraphTelemetryService"] = None,
     db_path: Optional[str] = None,
 ) -> str:
     """

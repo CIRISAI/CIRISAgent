@@ -43,6 +43,7 @@ from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.services import AuditService as AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.runtime.audit import AuditActionContext, AuditRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
@@ -139,7 +140,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         # Export buffer
         self._export_buffer: List[AuditRequest] = []
-        self._export_task: Optional[asyncio.Task] = None
+        self._export_task: Optional[asyncio.Task[None]] = None
 
         # Memory tracking
         self._process = psutil.Process() if PSUTIL_AVAILABLE else None
@@ -209,20 +210,16 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 raise
 
         # Log final shutdown event BEFORE closing database
-        from ciris_engine.schemas.services.graph.audit import AuditEventData
+        from ciris_engine.schemas.audit.core import EventPayload
 
-        shutdown_event = AuditEventData(
-            entity_id="audit_service",
-            actor="system",
-            outcome="success",
-            severity="info",
+        shutdown_event = EventPayload(
             action="shutdown",
-            resource="audit_service",
-            reason="service_shutdown",
-            metadata={"cached_entries": len(self._recent_entries), "pending_exports": len(self._export_buffer)},
+            service_name="audit_service",
+            user_id="system",
+            result="success",
         )
         try:
-            await self.log_event("audit_service_shutdown", shutdown_event.model_dump())
+            await self.log_event("audit_service_shutdown", shutdown_event)
         except Exception as e:
             logger.warning(f"Failed to log shutdown event: {e}")
 
@@ -274,7 +271,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to log action {action_type}: {e}")
 
-    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> "AuditEntryResult":
+    async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> AuditEntryResult:
         """Log a general event.
 
         Args:
@@ -284,7 +281,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         Returns:
             AuditEntryResult with entry_id and hash chain data (if enabled)
         """
-        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 
         # Convert EventPayload to AuditEventData
         audit_data = AuditEventData(
@@ -382,24 +378,25 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             return AuditEntryResult(entry_id=entry.entry_id if "entry" in locals() else "error")
 
     async def log_conscience_event(
-        self, thought_id: str, decision: str, reasoning: str, metadata: Optional[dict] = None
+        self, thought_id: str, decision: str, reasoning: str, metadata: Optional["EventPayload"] = None
     ) -> None:
         """Log conscience check events."""
-        # Create proper AuditEventData object
-        from ciris_engine.schemas.services.graph.audit import AuditEventData
+        # Create EventPayload for log_event
+        from ciris_engine.schemas.audit.core import EventPayload
 
-        event_data = AuditEventData(
-            entity_id=thought_id,
-            actor="conscience_system",
-            outcome="allowed" if decision == "ALLOW" else "denied",
-            severity="high" if decision != "ALLOW" else "info",
-            action="conscience_check",
-            resource="conscience",
-            reason=reasoning,
-            metadata=metadata or {},
-        )
+        # Use metadata if provided, otherwise create basic payload
+        if metadata:
+            event_payload = metadata
+        else:
+            event_payload = EventPayload(
+                action="conscience_check",
+                service_name="conscience_system",
+                user_id=thought_id,
+                result="allowed" if decision == "ALLOW" else "denied",
+                error=reasoning if decision != "ALLOW" else None,
+            )
 
-        await self.log_event("conscience_check", event_data.model_dump())
+        await self.log_event("conscience_check", event_payload)
 
     async def get_audit_trail(
         self, entity_id: Optional[str] = None, hours: int = 24, action_types: Optional[List[str]] = None
@@ -848,12 +845,11 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
             if not telemetry_service:
                 # Try to get from service registry
-                from ciris_engine.logic.registries.service_registry import ServiceRegistry
+                if self._service_registry:
+                    from ciris_engine.schemas.runtime.enums import ServiceType
 
-                registry = ServiceRegistry()
-                from ciris_engine.schemas.runtime.enums import ServiceType
-
-                telemetry_service = registry.get_service(ServiceType.TELEMETRY)
+                    services = self._service_registry.get_services_by_type(ServiceType.TELEMETRY)
+                    telemetry_service = services[0] if services else None
 
             if not telemetry_service:
                 logger.debug("Telemetry service not available for trace correlation")
@@ -1276,25 +1272,28 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         return True
 
-    def _extract_thought_id_from_audit_node(self, audit_node) -> str:
+    def _extract_thought_id_from_audit_node(self, audit_node: AuditEntryNode) -> str:
         """Extract thought_id from audit node context."""
         if not audit_node.context.additional_data:
             return ""
-        return audit_node.context.additional_data.get("thought_id", "")
+        value = audit_node.context.additional_data.get("thought_id", "")
+        return str(value) if value else ""
 
-    def _extract_task_id_from_audit_node(self, audit_node) -> str:
+    def _extract_task_id_from_audit_node(self, audit_node: AuditEntryNode) -> str:
         """Extract task_id from audit node context."""
         if not audit_node.context.additional_data:
             return ""
-        return audit_node.context.additional_data.get("task_id", "")
+        value = audit_node.context.additional_data.get("task_id", "")
+        return str(value) if value else ""
 
-    def _extract_outcome_from_audit_node(self, audit_node) -> Optional[str]:
+    def _extract_outcome_from_audit_node(self, audit_node: AuditEntryNode) -> Optional[str]:
         """Extract outcome from audit node context."""
         if not audit_node.context.additional_data:
             return None
-        return audit_node.context.additional_data.get("outcome")
+        value = audit_node.context.additional_data.get("outcome")
+        return str(value) if value is not None else None
 
-    def _convert_audit_entry_node(self, audit_node) -> AuditRequest:
+    def _convert_audit_entry_node(self, audit_node: AuditEntryNode) -> AuditRequest:
         """Convert AuditEntryNode to AuditRequest."""
         return AuditRequest(
             entry_id=audit_node.id.replace("audit_", ""),
@@ -1319,14 +1318,16 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             timestamp = self._time_service.now() if self._time_service else datetime.now()
         return timestamp
 
-    def _extract_action_type_from_attrs(self, attrs: dict) -> Optional[str]:
+    def _extract_action_type_from_attrs(self, attrs: Dict[str, Any]) -> Optional[str]:
         """Extract action_type from attributes with fallback."""
         action_type = attrs.get("action_type")
         if not action_type and "action_type" in attrs:
             action_type = attrs["action_type"]
         return action_type
 
-    def _create_audit_request_from_attrs(self, attrs: dict, timestamp: datetime, action_type: str) -> AuditRequest:
+    def _create_audit_request_from_attrs(
+        self, attrs: Dict[str, Any], timestamp: datetime, action_type: str
+    ) -> AuditRequest:
         """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
             entry_id=attrs.get("event_id", str(uuid4())),
@@ -1415,21 +1416,22 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             )
 
             # Create AuditLogEntry
+            entity_id = entry.context.correlation_id or ""
             log_entry = AuditLogEntry(
                 event_id=entry.id,
                 event_timestamp=entry.timestamp,
                 event_type=entry.action,
                 originator_id=entry.actor,
-                target_id=entry.entity_id,
+                target_id=entity_id,
                 event_summary=f"{entry.action} by {entry.actor}",
                 event_payload=event_payload,
-                thought_id=entry.entity_id if entry.entity_id.startswith("thought") else None,
+                thought_id=entity_id if entity_id.startswith("thought") else None,
                 entry_hash=entry.signature,
             )
             result.append(log_entry)
         return result
 
-    def _convert_entry_to_audit_log_dict(self, entry) -> Dict[str, Any]:
+    def _convert_entry_to_audit_log_dict(self, entry: AuditRequest) -> Dict[str, Any]:
         """Convert audit entry to audit log dictionary format."""
         return {
             "event_id": entry.entry_id,
@@ -1468,13 +1470,31 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
     async def get_event_by_id(self, event_id: str) -> Optional["AuditLogEntry"]:
         """Get specific audit event by ID."""
-        # Try memory bus first
-        result = await self._search_event_in_memory_bus(event_id)
-        if result:
-            return result
+        from ciris_engine.schemas.audit.core import AuditLogEntry, EventPayload
 
-        # Fall back to recent cache
-        return self._search_event_in_recent_cache(event_id)
+        # Try memory bus first
+        result_dict = await self._search_event_in_memory_bus(event_id)
+        if not result_dict:
+            # Fall back to recent cache
+            result_dict = self._search_event_in_recent_cache(event_id)
+
+        if not result_dict:
+            return None
+
+        # Convert dict to AuditLogEntry
+        return AuditLogEntry(
+            event_id=result_dict.get("event_id", event_id),
+            event_timestamp=result_dict.get("timestamp"),
+            event_type=result_dict.get("event_type", ""),
+            originator_id=result_dict.get("user_id", ""),
+            target_id=result_dict.get("user_id", ""),
+            event_summary=f"{result_dict.get('event_type', '')} event",
+            event_payload=EventPayload(
+                action=result_dict.get("event_type", ""),
+                service_name="audit_service",
+                user_id=result_dict.get("user_id", ""),
+            ),
+        )
 
     def _audit_request_to_entry(self, req: AuditRequest) -> AuditEntry:
         """Convert AuditRequest to AuditEntry."""

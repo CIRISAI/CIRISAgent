@@ -216,7 +216,8 @@ class TestOAuthWAMintingFix:
 
         # Check WA ID pattern instead of exact value (date changes daily)
         import re
-        assert re.match(r'^wa-\d{4}-\d{2}-\d{2}-[A-Z0-9]{6}$', wa_cert.wa_id), f"Invalid WA ID format: {wa_cert.wa_id}"
+
+        assert re.match(r"^wa-\d{4}-\d{2}-\d{2}-[A-Z0-9]{6}$", wa_cert.wa_id), f"Invalid WA ID format: {wa_cert.wa_id}"
         assert wa_cert.oauth_provider is None
         assert wa_cert.oauth_external_id is None
         assert wa_cert.pubkey == "password-user-123"  # Falls back to wa_id

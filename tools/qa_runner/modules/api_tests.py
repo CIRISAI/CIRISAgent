@@ -132,6 +132,47 @@ class APITestModule:
                 requires_auth=True,
                 description="Test getting interaction history",
             ),
+            # New async message submission endpoint tests
+            QATestCase(
+                name="Message submission - immediate return",
+                module=QAModule.AGENT,
+                endpoint="/v1/agent/message",
+                method="POST",
+                payload={"message": "Hello async world!"},
+                expected_status=200,
+                requires_auth=True,
+                description="Test async message submission with immediate task_id return",
+            ),
+            QATestCase(
+                name="Message submission - task tracking",
+                module=QAModule.AGENT,
+                endpoint="/v1/agent/message",
+                method="POST",
+                payload={"message": "Can you track this task?"},
+                expected_status=200,
+                requires_auth=True,
+                description="Test message submission returns trackable task_id",
+            ),
+            QATestCase(
+                name="Message submission - with context",
+                module=QAModule.AGENT,
+                endpoint="/v1/agent/message",
+                method="POST",
+                payload={"message": "Message with context", "context": {"source": "qa_test", "priority": "high"}},
+                expected_status=200,
+                requires_auth=True,
+                description="Test message submission with additional context",
+            ),
+            QATestCase(
+                name="Message submission - status check",
+                module=QAModule.AGENT,
+                endpoint="/v1/agent/message",
+                method="POST",
+                payload={"message": "What is your status?"},
+                expected_status=200,
+                requires_auth=True,
+                description="Test message submission returns complete status",
+            ),
             # Clear history endpoint doesn't exist - removed
         ]
 

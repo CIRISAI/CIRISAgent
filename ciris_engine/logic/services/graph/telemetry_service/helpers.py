@@ -89,6 +89,91 @@ async def collect_metric_aggregates(
         raise MetricCollectionError(f"Failed to collect metric aggregates: {e}") from e
 
 
+def _update_windowed_metric(
+    aggregates: MetricAggregates, field_24h: str, field_1h: str, value: float, in_1h_window: bool, converter=float
+) -> None:
+    """Update a metric with both 24h and 1h windows.
+
+    Args:
+        aggregates: MetricAggregates object to update
+        field_24h: Name of 24h field to update
+        field_1h: Name of 1h field to update
+        value: Value to add
+        in_1h_window: Whether metric is in 1h window
+        converter: Function to convert value (int or float)
+    """
+    setattr(aggregates, field_24h, getattr(aggregates, field_24h) + converter(value))
+    if in_1h_window:
+        setattr(aggregates, field_1h, getattr(aggregates, field_1h) + converter(value))
+
+
+def _handle_tokens_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle tokens metric aggregation."""
+    _update_windowed_metric(aggregates, "tokens_24h", "tokens_1h", value, in_1h_window, int)
+
+
+def _handle_cost_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle cost metric aggregation."""
+    _update_windowed_metric(aggregates, "cost_24h_cents", "cost_1h_cents", value, in_1h_window, float)
+
+
+def _handle_carbon_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle carbon metric aggregation."""
+    _update_windowed_metric(aggregates, "carbon_24h_grams", "carbon_1h_grams", value, in_1h_window, float)
+
+
+def _handle_energy_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle energy metric aggregation."""
+    _update_windowed_metric(aggregates, "energy_24h_kwh", "energy_1h_kwh", value, in_1h_window, float)
+
+
+def _handle_messages_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle messages metric aggregation."""
+    _update_windowed_metric(aggregates, "messages_24h", "messages_1h", value, in_1h_window, int)
+
+
+def _handle_thoughts_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle thoughts metric aggregation."""
+    _update_windowed_metric(aggregates, "thoughts_24h", "thoughts_1h", value, in_1h_window, int)
+
+
+def _handle_tasks_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool) -> None:
+    """Handle tasks metric aggregation."""
+    aggregates.tasks_24h += int(value)
+
+
+def _handle_errors_metric(aggregates: MetricAggregates, value: float, in_1h_window: bool, tags: Dict[str, str]) -> None:
+    """Handle errors metric aggregation."""
+    _update_windowed_metric(aggregates, "errors_24h", "errors_1h", value, in_1h_window, int)
+    # Track errors by service
+    service = tags.get("service", "unknown")
+    aggregates.service_errors[service] = aggregates.service_errors.get(service, 0) + 1
+
+
+def _handle_latency_metric(
+    aggregates: MetricAggregates, value: float, in_1h_window: bool, tags: Dict[str, str]
+) -> None:
+    """Handle latency metric aggregation."""
+    service = tags.get("service", "unknown")
+    if service not in aggregates.service_latency:
+        aggregates.service_latency[service] = []
+    aggregates.service_latency[service].append(float(value))
+
+
+# Metric type dispatch table
+_METRIC_HANDLERS = {
+    "tokens": lambda agg, val, win, tags: _handle_tokens_metric(agg, val, win),
+    "cost": lambda agg, val, win, tags: _handle_cost_metric(agg, val, win),
+    "carbon": lambda agg, val, win, tags: _handle_carbon_metric(agg, val, win),
+    "energy": lambda agg, val, win, tags: _handle_energy_metric(agg, val, win),
+    "messages": lambda agg, val, win, tags: _handle_messages_metric(agg, val, win),
+    "thoughts": lambda agg, val, win, tags: _handle_thoughts_metric(agg, val, win),
+    "tasks": lambda agg, val, win, tags: _handle_tasks_metric(agg, val, win),
+    "errors": lambda agg, val, win, tags: _handle_errors_metric(agg, val, win, tags),
+    "latency": lambda agg, val, win, tags: _handle_latency_metric(agg, val, win, tags),
+}
+
+
 def aggregate_metric_by_type(
     metric_type: str,
     value: float,
@@ -113,55 +198,12 @@ def aggregate_metric_by_type(
     # Check if timestamp is in 1h window
     in_1h_window = timestamp >= window_start_1h
 
-    if metric_type == "tokens":
-        aggregates.tokens_24h += int(value)
-        if in_1h_window:
-            aggregates.tokens_1h += int(value)
-
-    elif metric_type == "cost":
-        aggregates.cost_24h_cents += float(value)
-        if in_1h_window:
-            aggregates.cost_1h_cents += float(value)
-
-    elif metric_type == "carbon":
-        aggregates.carbon_24h_grams += float(value)
-        if in_1h_window:
-            aggregates.carbon_1h_grams += float(value)
-
-    elif metric_type == "energy":
-        aggregates.energy_24h_kwh += float(value)
-        if in_1h_window:
-            aggregates.energy_1h_kwh += float(value)
-
-    elif metric_type == "messages":
-        aggregates.messages_24h += int(value)
-        if in_1h_window:
-            aggregates.messages_1h += int(value)
-
-    elif metric_type == "thoughts":
-        aggregates.thoughts_24h += int(value)
-        if in_1h_window:
-            aggregates.thoughts_1h += int(value)
-
-    elif metric_type == "tasks":
-        aggregates.tasks_24h += int(value)
-
-    elif metric_type == "errors":
-        aggregates.errors_24h += int(value)
-        if in_1h_window:
-            aggregates.errors_1h += int(value)
-        # Track errors by service
-        service = tags.get("service", "unknown")
-        aggregates.service_errors[service] = aggregates.service_errors.get(service, 0) + 1
-
-    elif metric_type == "latency":
-        service = tags.get("service", "unknown")
-        if service not in aggregates.service_latency:
-            aggregates.service_latency[service] = []
-        aggregates.service_latency[service].append(float(value))
-
-    else:
+    # Dispatch to appropriate handler
+    handler = _METRIC_HANDLERS.get(metric_type)
+    if not handler:
         raise UnknownMetricTypeError(f"Unknown metric type: {metric_type}")
+
+    handler(aggregates, value, in_1h_window, tags)
 
     # Track service calls
     if "service" in tags:
@@ -209,12 +251,14 @@ async def get_average_thought_depth(
 
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
+            # Use window_start parameter for consistent timing with other telemetry calculations
             cursor.execute(
                 """
                 SELECT AVG(thought_depth) as avg_depth
                 FROM thoughts
-                WHERE created_at >= datetime('now', '-24 hours')
-            """
+                WHERE created_at >= ?
+            """,
+                (window_start.isoformat(),),
             )
             result = cursor.fetchone()
             if result and result[0] is not None:

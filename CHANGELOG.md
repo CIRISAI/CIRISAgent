@@ -56,6 +56,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Now properly uses typed conscience results (ConscienceApplicationResult) to guide retry attempts
   - Enriches thought context with conscience_guidance containing override_reason and epistemic_data
   - Fixed unused action_result parameter in _handle_conscience_retry_without_override (main.py:703)
+- **📉 Reduced Cognitive Complexity**: Refactored telemetry helpers aggregate_metric_by_type
+  - Cognitive complexity reduced from 27 → ~8 (below 15 threshold)
+  - Extracted 9 metric-specific handler functions with dispatch table pattern
+  - Created _update_windowed_metric helper to reduce duplication
+  - All 384 telemetry tests pass
+- **🐛 Timing Bug Fix**: Fixed window_start parameter in get_average_thought_depth
+  - Parameter was accepted but ignored - SQL used hardcoded datetime('now', '-24 hours')
+  - Now properly uses window_start parameter for timing consistency with other telemetry
+  - Prevents timing drift between telemetry calculation start and SQL execution
 - **⚡ QA Test Optimization - 3x Performance Improvement**: Updated handlers and filters tests to use SSE streaming
   - Handlers tests: 48.38s (down from 151.93s) - 3.1x speedup
   - Filters tests: 169.40s (down from 600+s) - 3.5x+ speedup

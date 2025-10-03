@@ -562,7 +562,7 @@ class ThoughtProcessor(
         conscience_result = await self._run_conscience_checks(action_result, context)
 
         if is_conscience_retry and not conscience_result["overridden"]:
-            conscience_result = self._handle_conscience_retry_without_override(conscience_result, action_result)
+            conscience_result = self._handle_conscience_retry_without_override(conscience_result)
 
         return self._create_conscience_application_result(action_result, conscience_result)
 
@@ -699,9 +699,7 @@ class ThoughtProcessor(
             resource_usage=None,
         )
 
-    def _handle_conscience_retry_without_override(
-        self, conscience_result: Dict[str, Any], action_result: ActionSelectionDMAResult
-    ) -> Dict[str, Any]:
+    def _handle_conscience_retry_without_override(self, conscience_result: Dict[str, Any]) -> Dict[str, Any]:
         """Handle conscience retry when no override occurred."""
         has_depth_guardrail = any(
             "ThoughtDepthGuardrail" in entry.conscience.__class__.__name__

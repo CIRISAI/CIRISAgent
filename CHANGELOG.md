@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🧹 Code Quality Improvements**: Fixed SonarCloud issues in step_decorators.py
   - Removed unnecessary f-string (L1164) - replaced with normal string
   - Removed unused `result` parameter from _create_action_result_event() (L1252)
+- **🐛 Critical Bug Fix**: Implemented missing _perform_aspdma_with_guidance method
+  - Renamed _perform_aspdma_with_retry → _perform_aspdma_with_guidance (recursive_processing.py:117)
+  - Method was called but never defined (suppressed by type: ignore[attr-defined])
+  - Now properly uses typed conscience results (ConscienceApplicationResult) to guide retry attempts
+  - Enriches thought context with conscience_guidance containing override_reason and epistemic_data
+  - Fixed unused action_result parameter in _handle_conscience_retry_without_override (main.py:703)
 - **⚡ QA Test Optimization - 3x Performance Improvement**: Updated handlers and filters tests to use SSE streaming
   - Handlers tests: 48.38s (down from 151.93s) - 3.1x speedup
   - Filters tests: 169.40s (down from 600+s) - 3.5x+ speedup

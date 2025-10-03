@@ -114,10 +114,68 @@ class RecursiveProcessingPhase:
             logger.error(f"Recursive conscience execution failed for thought {thought_item.thought_id}: {e}")
             return retry_result, []
 
-    async def _perform_aspdma_with_retry(
-        self, thought_item: Any, thought_context: Any, dma_results: Any, max_retries: int = 3
+    async def _perform_aspdma_with_guidance(
+        self,
+        thought: Any,
+        thought_context: Any,
+        dma_results: Any,
+        conscience_result: Any,
+        max_retries: int = 3,
     ) -> Any:
-        """Helper method for ASPDMA execution with retry logic."""
-        # This would contain the retry logic implementation
-        # For now, delegate to the main ASPDMA step
-        return await self._perform_aspdma_step(thought_item, thought_context, dma_results)  # type: ignore[attr-defined]
+        """
+        Retry action selection with conscience guidance.
+
+        Args:
+            thought: The thought being processed
+            thought_context: Processing context (contains conscience feedback)
+            dma_results: Results from initial DMA execution
+            conscience_result: Conscience result with override_reason explaining why original action failed
+            max_retries: Maximum retry attempts (currently unused - single retry only)
+
+        Returns:
+            ActionSelectionDMAResult with guidance-informed action selection
+        """
+        from ciris_engine.schemas.conscience.core import ConscienceCheckResult
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+        # Extract typed conscience feedback for guidance
+        override_reason = ""
+        epistemic_feedback = {}
+
+        if isinstance(conscience_result, ConscienceApplicationResult):
+            override_reason = conscience_result.override_reason or "Conscience override occurred"
+            epistemic_feedback = conscience_result.epistemic_data or {}
+        elif isinstance(conscience_result, dict):
+            override_reason = conscience_result.get("override_reason", "Conscience override occurred")
+            epistemic_feedback = conscience_result.get("epistemic_data", {})
+
+        # Build guidance context with typed conscience results
+        guidance_context = {
+            "retry_attempt": True,
+            "original_action_failed_because": override_reason,
+            "conscience_feedback": {
+                "epistemic_data": epistemic_feedback,
+                "override_detected": True,
+            },
+        }
+
+        # Merge guidance into thought context
+        if hasattr(thought_context, "model_dump"):
+            enriched_context = thought_context.model_dump()
+        else:
+            enriched_context = dict(thought_context) if isinstance(thought_context, dict) else {}
+
+        enriched_context["conscience_guidance"] = guidance_context
+
+        # Get profile and re-run action selection with conscience guidance
+        profile_name = self._get_profile_name(thought)  # type: ignore[attr-defined]
+
+        retry_result = await self.dma_orchestrator.run_action_selection(  # type: ignore[attr-defined]
+            thought_item=thought,
+            actual_thought=thought,
+            processing_context=enriched_context,
+            dma_results=dma_results,
+            profile_name=profile_name,
+        )
+
+        return retry_result

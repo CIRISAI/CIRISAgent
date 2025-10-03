@@ -4,7 +4,7 @@ Base processor abstract class defining the interface for all processor types.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import ValidationError
 
@@ -30,7 +30,7 @@ class BaseProcessor(ABC):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: dict,
+        services: Dict[str, Any],
     ) -> None:
         """Initialize base processor with common dependencies."""
         self.config = config_accessor
@@ -125,11 +125,14 @@ class BaseProcessor(ABC):
 
         # Update custom metrics
         for key, value in updates.custom_counters.items():
-            additional.custom_counters[key] = additional.custom_counters.get(key, 0) + value
-        for key, value in updates.custom_gauges.items():
-            additional.custom_gauges[key] = value
+            # Both operands are ints - value is int from custom_counters
+            current_val: int = additional.custom_counters.get(key, 0)
+            additional.custom_counters[key] = current_val + int(value)
+        for key, value in updates.custom_gauges.items():  # type: ignore[assignment]
+            # Value is float from custom_gauges
+            additional.custom_gauges[key] = float(value)
 
-    async def dispatch_action(self, result: Any, thought: Any, context: dict) -> bool:
+    async def dispatch_action(self, result: Any, thought: Any, context: Dict[str, Any]) -> bool:
         """
         Common action dispatch logic.
         Returns True if dispatch succeeded.
@@ -145,15 +148,15 @@ class BaseProcessor(ABC):
             if hasattr(self, "_stream_step_point"):
                 from ciris_engine.schemas.services.runtime_control import StepPoint
 
+                # Get time service for timestamp
+                time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
+                timestamp_str = time_svc.now().isoformat() if time_svc else None
+
                 await self._stream_step_point(
                     StepPoint.PERFORM_ACTION,
                     thought.thought_id,
                     {
-                        "timestamp": (
-                            getattr(self, "_time_service", None).now().isoformat()
-                            if hasattr(self, "_time_service") and self._time_service
-                            else None
-                        ),
+                        "timestamp": timestamp_str,
                         "thought_id": thought.thought_id,
                         "selected_action": str(getattr(result, "selected_action", "UNKNOWN")),
                         "action_parameters": str(getattr(result, "action_parameters", None)),
@@ -161,15 +164,17 @@ class BaseProcessor(ABC):
                     },
                 )
 
-            dispatch_start = (
-                getattr(self, "_time_service", None).now()
-                if hasattr(self, "_time_service") and self._time_service
-                else None
-            )
+            # Get time service for dispatch timing
+            time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
+            dispatch_start = time_svc.now() if time_svc else None
 
-            dispatch_result = await self.action_dispatcher.dispatch(
+            # Dispatch can return None or a result dict
+            dispatch_result: Any = await self.action_dispatcher.dispatch(  # type: ignore[func-returns-value]
                 action_selection_result=result, thought=thought, dispatch_context=dispatch_ctx
             )
+            # If None, treat as success (dispatch completed but no result)
+            if dispatch_result is None:
+                dispatch_result = {"success": True}
 
             # Get time service - check both _time_service and time_service
             time_svc = getattr(self, "_time_service", None) or getattr(self, "time_service", None)
@@ -238,7 +243,7 @@ class BaseProcessor(ABC):
             self.metrics.errors += 1
             return False
 
-    async def process_thought_item(self, item: ProcessingQueueItem, context: Optional[dict] = None) -> Any:
+    async def process_thought_item(self, item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None) -> Any:
         """
         Process a single thought item through the thought processor.
         Returns the processing result.
@@ -265,12 +270,12 @@ class BaseProcessor(ABC):
                     return self.force_defer(item, context)
             raise
 
-    def force_ponder(self, item: ProcessingQueueItem, context: Optional[dict] = None) -> None:
+    def force_ponder(self, item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None) -> None:
         """Force a PONDER action for the given thought item. Override in subclass for custom logic."""
         logger.info(f"Forcing PONDER for thought {item.thought_id}")
         # Implement actual logic in subclass
 
-    def force_defer(self, item: ProcessingQueueItem, context: Optional[dict] = None) -> None:
+    def force_defer(self, item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None) -> None:
         """Force a DEFER action for the given thought item. Override in subclass for custom logic."""
         logger.info(f"Forcing DEFER for thought {item.thought_id}")
 

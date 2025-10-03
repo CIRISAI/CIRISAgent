@@ -27,6 +27,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
@@ -86,7 +87,7 @@ class DreamProcessor(BaseProcessor):
         config_accessor: ConfigAccessor,
         thought_processor: "ThoughtProcessor",
         action_dispatcher: "ActionDispatcher",
-        services: dict,
+        services: Dict[str, Any],
         service_registry: Optional["ServiceRegistry"] = None,
         identity_manager: Optional["IdentityManager"] = None,
         startup_channel_id: Optional[str] = None,
@@ -131,7 +132,7 @@ class DreamProcessor(BaseProcessor):
         # Dream state
         self.current_session: Optional[DreamSession] = None
         self._stop_event: Optional[asyncio.Event] = None
-        self._dream_task: Optional[asyncio.Task] = None
+        self._dream_task: Optional[asyncio.Task[Any]] = None
 
         # Task management
         self.task_manager: Optional[Any] = None  # Will be TaskManager
@@ -139,7 +140,7 @@ class DreamProcessor(BaseProcessor):
         self._dream_tasks: List[Any] = []  # Track our created tasks
 
         # Metrics from original processor
-        self.dream_metrics: dict = {
+        self.dream_metrics: Dict[str, Any] = {
             "total_dreams": 0,
             "total_introspections": 0,
             "total_consolidations": 0,
@@ -463,11 +464,11 @@ class DreamProcessor(BaseProcessor):
         except Exception as e:
             logger.error(f"Failed to announce dream entry: {e}")
 
-    async def process_round(self, round_number: int) -> dict:
+    async def process_round(self, round_number: int) -> JSONDict:
         """Process one round of dream state with maximum parallelism."""
         from ciris_engine.logic import persistence
 
-        round_metrics = {
+        round_metrics: JSONDict = {
             "round_number": round_number,
             "thoughts_processed": 0,
             "tasks_activated": 0,
@@ -503,20 +504,23 @@ class DreamProcessor(BaseProcessor):
                 batch = self.thought_manager.mark_thoughts_processing(batch, round_number)
 
                 # Process all thoughts concurrently for maximum throughput
-                results = await asyncio.gather(
-                    *[self._process_dream_thought(item) for item in batch], return_exceptions=True
-                )
+                thought_coroutines = [self._process_dream_thought(item) for item in batch]
+                results = await asyncio.gather(*thought_coroutines, return_exceptions=True)
 
                 # Handle results
                 for item, result in zip(batch, results):
                     if isinstance(result, Exception):
                         logger.error(f"Error processing thought {item.thought_id}: {result}")
-                        round_metrics["errors"] += 1
+                        errors = round_metrics["errors"]
+                        round_metrics["errors"] = int(errors) + 1 if isinstance(errors, (int, float)) else 1
                         persistence.update_thought_status(
                             item.thought_id, ThoughtStatus.FAILED, final_action={"error": str(result)}
                         )
                     elif result:
-                        round_metrics["thoughts_processed"] += 1
+                        processed = round_metrics["thoughts_processed"]
+                        round_metrics["thoughts_processed"] = (
+                            int(processed) + 1 if isinstance(processed, (int, float)) else 1
+                        )
                         # Result will be handled by thought processor's dispatch
 
             # Check if all tasks are complete
@@ -531,11 +535,12 @@ class DreamProcessor(BaseProcessor):
 
         except Exception as e:
             logger.error(f"Error in dream round {round_number}: {e}", exc_info=True)
-            round_metrics["errors"] += 1
+            errors = round_metrics["errors"]
+            round_metrics["errors"] = int(errors) + 1 if isinstance(errors, (int, float)) else 1
 
         return round_metrics
 
-    def _process_dream_thought(self, item: ProcessingQueueItem) -> Optional[Any]:
+    async def _process_dream_thought(self, item: ProcessingQueueItem) -> Optional[Any]:
         """Process a single dream thought through the thought processor."""
         # The thought processor handles everything - context building, DMAs, actions
         # We just need to ensure dream-specific context is available
@@ -574,9 +579,16 @@ class DreamProcessor(BaseProcessor):
 
                 # Update session metrics
                 if self.current_session:
-                    self.current_session.memories_consolidated += metrics.get("memories_consolidated", 0)
-                    self.current_session.patterns_analyzed += metrics.get("patterns_analyzed", 0)
-                    self.current_session.adaptations_made += metrics.get("adaptations_made", 0)
+                    memories = metrics.get("memories_consolidated", 0)
+                    patterns = metrics.get("patterns_analyzed", 0)
+                    adaptations = metrics.get("adaptations_made", 0)
+                    self.current_session.memories_consolidated += (
+                        int(memories) if isinstance(memories, (int, float)) else 0
+                    )
+                    self.current_session.patterns_analyzed += int(patterns) if isinstance(patterns, (int, float)) else 0
+                    self.current_session.adaptations_made += (
+                        int(adaptations) if isinstance(adaptations, (int, float)) else 0
+                    )
 
                 # Log round completion
                 if self._time_service:
@@ -1185,9 +1197,9 @@ class DreamProcessor(BaseProcessor):
         except Exception as e:
             logger.error(f"Failed to announce dream exit: {e}")
 
-    def get_dream_summary(self) -> dict:
+    def get_dream_summary(self) -> JSONDict:
         """Get a summary of the current or last dream session."""
-        summary = {
+        summary: JSONDict = {
             "state": "dreaming" if self._dream_task and not self._dream_task.done() else "awake",
             "metrics": self.dream_metrics.copy(),
             "current_session": None,
@@ -1228,7 +1240,7 @@ class DreamProcessor(BaseProcessor):
         """Return list of states this processor can handle."""
         return [AgentState.DREAM]
 
-    def can_process(self, state: AgentState) -> bool:
+    async def can_process(self, state: AgentState) -> bool:
         """Check if this processor can handle the current state."""
         return state == AgentState.DREAM
 
@@ -1248,7 +1260,8 @@ class DreamProcessor(BaseProcessor):
         )
 
         # Return dream result
-        duration = metrics.get("duration_seconds", 0.0)
+        duration_value = metrics.get("duration_seconds", 0.0)
+        duration = float(duration_value) if isinstance(duration_value, (int, float)) else 0.0
         # Use small epsilon for floating point comparison
         if abs(duration) < 1e-9:
             # Calculate if not in metrics

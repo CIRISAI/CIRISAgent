@@ -7,7 +7,7 @@ hash chains, digital signatures, and root anchoring.
 
 import logging
 import sqlite3
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.protocols.services.lifecycle import TimeServiceProtocol
 from ciris_engine.schemas.audit.verification import (
@@ -185,7 +185,7 @@ class AuditVerifier:
         logger.info("Performing fast tampering detection")
         return self.hash_chain.find_tampering()
 
-    def _verify_single_entry(self, entry: dict) -> EntryVerificationResult:
+    def _verify_single_entry(self, entry: Dict[str, Any]) -> EntryVerificationResult:
         """Verify a single entry's hash and signature"""
         errors: List[str] = []
 

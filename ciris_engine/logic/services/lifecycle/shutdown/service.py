@@ -8,7 +8,7 @@ This replaces the shutdown_manager.py utility with a proper service.
 import asyncio
 import logging
 from threading import Lock
-from typing import Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.protocols.services import ShutdownServiceProtocol
@@ -35,7 +35,7 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         self._lock = Lock()
         self._shutdown_event: Optional[asyncio.Event] = None
         self._emergency_mode = False
-        self._force_kill_task: Optional[asyncio.Task] = None
+        self._force_kill_task: Optional[asyncio.Task[Any]] = None
 
         # v1.4.3 metric tracking
         self._shutdown_requests_total = 0

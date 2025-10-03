@@ -424,6 +424,7 @@ class TestRuntimeControlServiceCoverage:
         mock_adapter_manager.loaded_adapters = {"test_id": mock_instance}
         # Control service expects adapter_manager.get_adapter_info to return AdapterInfo from adapter_management
         from ciris_engine.schemas.runtime.adapter_management import AdapterInfo as AMAdapterInfo
+
         mock_info = AMAdapterInfo(
             adapter_id="test_id",
             adapter_type="cli",

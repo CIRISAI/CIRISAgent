@@ -342,7 +342,9 @@ async def _execute_pause_action(runtime_control: Any, body: RuntimeAction) -> bo
     return success
 
 
-def _extract_pipeline_state_info(request: Request) -> tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+def _extract_pipeline_state_info(
+    request: Request,
+) -> tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Extract pipeline state information for UI display.
 
@@ -393,7 +395,10 @@ def _extract_pipeline_state_info(request: Request) -> tuple[Optional[str], Optio
 
 
 def _create_pause_response(
-    success: bool, current_step: Optional[str], current_step_schema: Optional[Dict[str, Any]], pipeline_state: Optional[Dict[str, Any]]
+    success: bool,
+    current_step: Optional[str],
+    current_step_schema: Optional[Dict[str, Any]],
+    pipeline_state: Optional[Dict[str, Any]],
 ) -> RuntimeControlResponse:
     """Create pause action response."""
     # Create clear message based on success state
@@ -590,7 +595,9 @@ def _get_cognitive_state(request: Request) -> Optional[str]:
     return cognitive_state
 
 
-def _create_final_response(base_result: RuntimeControlResponse, cognitive_state: Optional[str]) -> RuntimeControlResponse:
+def _create_final_response(
+    base_result: RuntimeControlResponse, cognitive_state: Optional[str]
+) -> RuntimeControlResponse:
     """Create final response with cognitive state and any enhanced fields."""
     response = RuntimeControlResponse(
         success=base_result.success,

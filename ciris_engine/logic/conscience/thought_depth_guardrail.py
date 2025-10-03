@@ -12,7 +12,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.conscience.interface import ConscienceInterface
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions import DeferParams
-from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus, EpistemicData
+from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -114,10 +114,9 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 status=ConscienceStatus.PASSED,
                 passed=True,
                 check_timestamp=timestamp,
-                epistemic_data=EpistemicData(
-                    entropy_level=0.5, coherence_level=0.5, uncertainty_acknowledged=True, reasoning_transparency=0.0
-                ),
                 reason="No thought provided to check",
+                original_action=action.model_dump(),
+                thought_depth_triggered=False,
             )
 
         current_depth = getattr(thought, "thought_depth", 0)
@@ -147,13 +146,9 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 status=ConscienceStatus.PASSED,
                 passed=True,
                 check_timestamp=timestamp,
-                epistemic_data=EpistemicData(
-                    entropy_level=0.5,
-                    coherence_level=0.9,  # Terminal actions are coherent
-                    uncertainty_acknowledged=True,
-                    reasoning_transparency=0.8,
-                ),
                 reason=f"Terminal action {action.selected_action} at depth {current_depth}",
+                original_action=action.model_dump(),
+                thought_depth_triggered=False,
             )
 
         # Check if we're at or beyond max depth
@@ -195,21 +190,14 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 status=ServiceCorrelationStatus.FAILED,
             )
             persistence.update_correlation(update_req, self._time_service)
-            # Create epistemic data with pure metrics
-            epistemic_data_dict = {
-                "entropy_level": 0.8,  # High uncertainty at max depth
-                "coherence_level": 0.3,  # Low coherence when forced to stop
-                "uncertainty_acknowledged": True,
-                "reasoning_transparency": 0.9,  # Very transparent about why
-            }
-
             return ConscienceCheckResult(
                 status=ConscienceStatus.FAILED,
                 passed=False,
                 reason=f"Maximum thought depth ({self.max_depth}) reached - deferring to human",
                 check_timestamp=timestamp,
-                epistemic_data=epistemic_data_dict,
                 replacement_action=defer_action.model_dump(),  # Top-level field in ConscienceCheckResult
+                original_action=action.model_dump(),
+                thought_depth_triggered=True,
             )
 
         # Depth is within limits
@@ -230,11 +218,7 @@ class ThoughtDepthGuardrail(ConscienceInterface):
             status=ConscienceStatus.PASSED,
             passed=True,
             check_timestamp=timestamp,
-            epistemic_data=EpistemicData(
-                entropy_level=0.5,
-                coherence_level=0.8,  # Good coherence within limits
-                uncertainty_acknowledged=True,
-                reasoning_transparency=0.7,
-            ),
             reason=f"Thought depth {current_depth} within limit of {self.max_depth}",
+            original_action=action.model_dump(),
+            thought_depth_triggered=False,
         )

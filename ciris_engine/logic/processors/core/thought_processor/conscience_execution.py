@@ -70,6 +70,8 @@ class ConscienceExecutionPhase:
         overridden = False
         override_reason = None
         epistemic_data: Dict[str, str] = {}
+        thought_depth_triggered: Optional[bool] = None
+        updated_status_detected: Optional[bool] = None
 
         # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
@@ -93,7 +95,13 @@ class ConscienceExecutionPhase:
 
             # Store epistemic data if available
             if result.epistemic_data:
-                epistemic_data[entry.name] = result.epistemic_data.model_dump()
+                epistemic_data[entry.name] = result.epistemic_data.model_dump_json()
+
+            if result.thought_depth_triggered is not None:
+                thought_depth_triggered = result.thought_depth_triggered
+
+            if result.updated_status_detected is not None:
+                updated_status_detected = result.updated_status_detected
 
             if not result.passed:
                 overridden = True
@@ -157,4 +165,8 @@ class ConscienceExecutionPhase:
         )
         if epistemic_data:
             result.epistemic_data = epistemic_data
+        if thought_depth_triggered is not None:
+            result.thought_depth_triggered = thought_depth_triggered
+        if updated_status_detected is not None:
+            result.updated_status_detected = updated_status_detected
         return result

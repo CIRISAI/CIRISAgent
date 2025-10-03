@@ -535,6 +535,12 @@ class TestIntegrationRefactoredFunctions:
         result = Mock()
         result.overridden = False
         result.override_reason = None
+        result.original_action = Mock()
+        result.original_action.model_dump = Mock(return_value={"selected_action": "SPEAK"})
+        result.final_action = Mock()
+        result.final_action.model_dump = Mock(return_value={"selected_action": "SPEAK"})
+        result.thought_depth_triggered = None
+        result.updated_status_detected = None
 
         conscience_result = _create_comprehensive_conscience_result(result)
 
@@ -544,12 +550,22 @@ class TestIntegrationRefactoredFunctions:
         assert conscience_result.coherence_check.passed is True
         assert conscience_result.optimization_veto_check.decision == "proceed"
         assert conscience_result.epistemic_humility_check.recommended_action == "proceed"
+        assert conscience_result.original_action == {"selected_action": "SPEAK"}
+        assert conscience_result.replacement_action is None
+        assert conscience_result.thought_depth_triggered is None
+        assert conscience_result.updated_status_detected is None
 
     def test_create_comprehensive_conscience_result_integration_failed(self):
         """Test _create_comprehensive_conscience_result when conscience fails."""
         result = Mock()
         result.overridden = True
         result.override_reason = "Safety violation detected"
+        result.original_action = Mock()
+        result.original_action.model_dump = Mock(return_value={"selected_action": "SPEAK"})
+        result.final_action = Mock()
+        result.final_action.model_dump = Mock(return_value={"selected_action": "DEFER"})
+        result.thought_depth_triggered = True
+        result.updated_status_detected = False
 
         conscience_result = _create_comprehensive_conscience_result(result)
 
@@ -559,6 +575,10 @@ class TestIntegrationRefactoredFunctions:
         assert conscience_result.coherence_check.passed is False
         assert conscience_result.optimization_veto_check.decision == "abort"
         assert conscience_result.epistemic_humility_check.recommended_action == "ponder"
+        assert conscience_result.original_action == {"selected_action": "SPEAK"}
+        assert conscience_result.replacement_action == {"selected_action": "DEFER"}
+        assert conscience_result.thought_depth_triggered is True
+        assert conscience_result.updated_status_detected is False
 
     def test_create_recursive_aspdma_data_integration(self, base_step_data, mock_aspdma_result):
         """Test _create_recursive_aspdma_data with retry reason."""

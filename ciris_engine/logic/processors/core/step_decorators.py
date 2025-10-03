@@ -574,6 +574,10 @@ def _create_comprehensive_conscience_result(result: Any) -> Any:  # ConscienceCh
         coherence_score=coherence_check.coherence_score,
         check_timestamp=datetime.now(timezone.utc),
         processing_time_ms=None,  # Could be calculated if timing info available
+        original_action=result.original_action.model_dump(),
+        replacement_action=result.final_action.model_dump() if result.overridden else None,
+        thought_depth_triggered=getattr(result, "thought_depth_triggered", None),
+        updated_status_detected=getattr(result, "updated_status_detected", None),
     )
 
     return conscience_result

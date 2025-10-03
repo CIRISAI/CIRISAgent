@@ -44,6 +44,12 @@ class ConscienceApplicationResult(BaseModel):
     overridden: bool = Field(False, description="Whether action was overridden")
     override_reason: Optional[str] = Field(None, description="Reason for override")
     epistemic_data: Dict[str, str] = Field(default_factory=dict, description="Epistemic faculty data")
+    thought_depth_triggered: Optional[bool] = Field(
+        None, description="Whether the thought depth guardrail forced an override"
+    )
+    updated_status_detected: Optional[bool] = Field(
+        None, description="Whether the updated status conscience detected new information"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

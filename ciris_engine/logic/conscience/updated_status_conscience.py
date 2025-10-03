@@ -60,6 +60,8 @@ class UpdatedStatusConscience(ConscienceInterface):
                 status=ConscienceStatus.PASSED,
                 passed=True,
                 check_timestamp=ts_datetime,
+                original_action=action.model_dump(),
+                updated_status_detected=False,
             )
 
         # Get task from thought
@@ -72,6 +74,8 @@ class UpdatedStatusConscience(ConscienceInterface):
                 status=ConscienceStatus.PASSED,
                 passed=True,
                 check_timestamp=ts_datetime,
+                original_action=action.model_dump(),
+                updated_status_detected=False,
             )
 
         # Fetch the task
@@ -82,6 +86,8 @@ class UpdatedStatusConscience(ConscienceInterface):
                 status=ConscienceStatus.PASSED,
                 passed=True,
                 check_timestamp=ts_datetime,
+                original_action=action.model_dump(),
+                updated_status_detected=False,
             )
 
         # Check if updated_info_available flag is set
@@ -91,6 +97,8 @@ class UpdatedStatusConscience(ConscienceInterface):
                 status=ConscienceStatus.PASSED,
                 passed=True,
                 check_timestamp=ts_datetime,
+                original_action=action.model_dump(),
+                updated_status_detected=False,
             )
 
         # Update detected! Clear the flag and force PONDER
@@ -137,22 +145,15 @@ class UpdatedStatusConscience(ConscienceInterface):
             raw_llm_response=None,
         )
 
-        # Create EpistemicData with pure epistemic metrics
-        epistemic_data_dict = {
-            "entropy_level": 0.7,  # Higher uncertainty due to new information
-            "coherence_level": 0.6,  # Moderate coherence - action is being overridden
-            "uncertainty_acknowledged": True,  # Explicitly acknowledging new uncertainty
-            "reasoning_transparency": 0.9,  # Very transparent about why we're overriding
-        }
-
         # Return FAILED status with the update reason
         # replacement_action and CIRIS_OBSERVATION_UPDATED_STATUS are now top-level fields
         return ConscienceCheckResult(
             status=ConscienceStatus.FAILED,
             passed=False,
             reason=f"New observation arrived during processing: {updated_content[:100]}...",
-            epistemic_data=epistemic_data_dict,
             replacement_action=ponder_action.model_dump(),  # Top-level field in ConscienceCheckResult
             CIRIS_OBSERVATION_UPDATED_STATUS=updated_content,  # Top-level field in ConscienceCheckResult
             check_timestamp=ts_datetime,
+            original_action=action.model_dump(),
+            updated_status_detected=True,
         )

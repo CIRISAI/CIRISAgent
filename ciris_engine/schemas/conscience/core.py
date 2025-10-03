@@ -114,6 +114,15 @@ class ConscienceCheckResult(BaseModel):
     CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(
         default=None, description="New observation that arrived during processing"
     )
+    original_action: Optional[JSONDict] = Field(
+        default=None, description="Original action payload evaluated by conscience"
+    )
+    thought_depth_triggered: Optional[bool] = Field(
+        default=None, description="Whether the thought depth guardrail triggered"
+    )
+    updated_status_detected: Optional[bool] = Field(
+        default=None, description="Whether the updated status conscience detected changes"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

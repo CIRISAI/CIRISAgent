@@ -136,6 +136,7 @@ class TestUpdatedStatusConscience:
 
         assert result.passed is True
         assert result.status == ConscienceStatus.PASSED
+        assert result.updated_status_detected is False
 
     @pytest.mark.asyncio
     async def test_fails_when_update_flag_set(
@@ -153,7 +154,8 @@ class TestUpdatedStatusConscience:
         assert result.passed is False
         assert result.status == ConscienceStatus.FAILED
         assert "New observation arrived" in result.reason
-        assert result.epistemic_data is not None
+        assert result.updated_status_detected is True
+        assert result.original_action is not None
         assert result.replacement_action is not None  # Now top-level field
 
     @pytest.mark.asyncio
@@ -169,6 +171,7 @@ class TestUpdatedStatusConscience:
         # First check should detect and clear flag
         result = await conscience.check(speak_action, context)
         assert result.passed is False
+        assert result.updated_status_detected is True
 
         # Verify flag is cleared in database
         updated_task = get_task_by_id(sample_task.task_id, db_path=patch_db_path)
@@ -177,6 +180,7 @@ class TestUpdatedStatusConscience:
         # Second check should pass
         result2 = await conscience.check(speak_action, context)
         assert result2.passed is True
+        assert result2.updated_status_detected is False
 
     @pytest.mark.asyncio
     async def test_replacement_action_is_ponder(
@@ -191,7 +195,7 @@ class TestUpdatedStatusConscience:
         result = await conscience.check(speak_action, context)
 
         assert result.passed is False
-        assert result.epistemic_data is not None
+        assert result.updated_status_detected is True
 
         # Verify replacement action (now top-level field on ConscienceCheckResult)
         assert result.replacement_action is not None
@@ -214,6 +218,7 @@ class TestUpdatedStatusConscience:
 
         assert result.passed is True
         assert result.status == ConscienceStatus.PASSED
+        assert result.updated_status_detected is False
 
     @pytest.mark.asyncio
     async def test_passes_when_task_not_found(self, conscience, speak_action, patch_db_path):
@@ -254,6 +259,7 @@ class TestUpdatedStatusConscience:
 
         # Verify the formatted update message (replacement_action is now top-level)
         assert result.replacement_action is not None
+        assert result.updated_status_detected is True
         replacement_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
         questions = replacement_action.action_parameters.questions
 

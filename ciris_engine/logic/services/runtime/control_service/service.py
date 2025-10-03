@@ -1275,9 +1275,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         return None  # Valid
 
-    def _parse_priority_and_strategy(
-        self, new_priority: str, new_strategy: Optional[str]
-    ) -> tuple[Any, Optional[Any]]:
+    def _parse_priority_and_strategy(self, new_priority: str, new_strategy: Optional[str]) -> tuple[Any, Optional[Any]]:
         """Parse and return priority and strategy enums."""
         from ciris_engine.logic.registries.base import Priority, SelectionStrategy
 

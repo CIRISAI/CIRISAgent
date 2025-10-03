@@ -596,6 +596,8 @@ class ThoughtProcessor(
         overridden = False
         override_reason = None
         epistemic_data: Dict[str, str] = {}
+        thought_depth_triggered: Optional[bool] = None
+        updated_status_detected: Optional[bool] = None
 
         for entry in self.conscience_registry.get_consciences():
             conscience_result = await self._check_single_conscience(entry, final_action, context)
@@ -605,6 +607,12 @@ class ThoughtProcessor(
 
             if conscience_result["epistemic_data"]:
                 epistemic_data[entry.name] = conscience_result["epistemic_data"]
+
+            if conscience_result.get("thought_depth_triggered") is not None:
+                thought_depth_triggered = conscience_result["thought_depth_triggered"]
+
+            if conscience_result.get("updated_status_detected") is not None:
+                updated_status_detected = conscience_result["updated_status_detected"]
 
             if not conscience_result["passed"]:
                 overridden = True
@@ -617,6 +625,8 @@ class ThoughtProcessor(
             "overridden": overridden,
             "override_reason": override_reason,
             "epistemic_data": epistemic_data,
+            "thought_depth_triggered": thought_depth_triggered,
+            "updated_status_detected": updated_status_detected,
         }
 
     async def _check_single_conscience(
@@ -641,7 +651,7 @@ class ThoughtProcessor(
                 cb.record_failure()
             return {"skip": True}
 
-        epistemic_data = result.epistemic_data.model_dump() if result.epistemic_data else None
+        epistemic_data = result.epistemic_data.model_dump_json() if result.epistemic_data else None
         replacement_action = self._create_replacement_action(result, action_result, entry.name)
 
         return {
@@ -650,6 +660,8 @@ class ThoughtProcessor(
             "reason": result.reason,
             "epistemic_data": epistemic_data,
             "replacement_action": replacement_action,
+            "thought_depth_triggered": result.thought_depth_triggered,
+            "updated_status_detected": result.updated_status_detected,
         }
 
     def _create_replacement_action(
@@ -729,6 +741,10 @@ class ThoughtProcessor(
         )
         if conscience_result["epistemic_data"]:
             result.epistemic_data = conscience_result["epistemic_data"]
+        if conscience_result.get("thought_depth_triggered") is not None:
+            result.thought_depth_triggered = conscience_result["thought_depth_triggered"]
+        if conscience_result.get("updated_status_detected") is not None:
+            result.updated_status_detected = conscience_result["updated_status_detected"]
         return result
 
     def _format_speak_description(self, params: Any) -> str:

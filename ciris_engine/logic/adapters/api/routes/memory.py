@@ -140,7 +140,11 @@ def _is_edge_valid(edge: "GraphEdge", node_ids: set[str], seen_edges: set[tuple[
 
 
 def _collect_edges_for_node(
-    node: "GraphNode", node_ids: set[str], seen_edges: set[tuple[str, str]], max_edges: int, current_edges: List["GraphEdge"]
+    node: "GraphNode",
+    node_ids: set[str],
+    seen_edges: set[tuple[str, str]],
+    max_edges: int,
+    current_edges: List["GraphEdge"],
 ) -> bool:
     """
     Collect edges for a single node.

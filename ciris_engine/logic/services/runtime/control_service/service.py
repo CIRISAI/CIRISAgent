@@ -600,7 +600,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             )
 
         # Convert config dict to AdapterConfig if needed
-        adapter_config = AdapterConfig(**config) if config else None
+        if config:
+            adapter_config = AdapterConfig(**config) if isinstance(config, dict) else config
+        else:
+            adapter_config = None
         result = await self.adapter_manager.load_adapter(adapter_type, adapter_id or "", adapter_config)
 
         return AdapterOperationResponse(

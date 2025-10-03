@@ -422,18 +422,19 @@ class TestRuntimeControlServiceCoverage:
         )
         # Use a real dict for loaded_adapters so 'in' operator works
         mock_adapter_manager.loaded_adapters = {"test_id": mock_instance}
-        # Control service expects adapter_manager.get_adapter_info to return a dict
-        # that gets converted to AdapterInfo
-        mock_info = {
-            "adapter_id": "test_id",
-            "adapter_type": "cli",
-            "status": "running",
-            "loaded_at": datetime.now(timezone.utc).isoformat(),
-            "services_registered": [],
-            "lifecycle_tasks": [],
-            "metrics": {},
-        }
-        mock_adapter_manager.get_adapter_info = AsyncMock(return_value=mock_info)
+        # Control service expects adapter_manager.get_adapter_info to return AdapterInfo from adapter_management
+        from ciris_engine.schemas.runtime.adapter_management import AdapterInfo as AMAdapterInfo
+        mock_info = AMAdapterInfo(
+            adapter_id="test_id",
+            adapter_type="cli",
+            is_running=True,
+            load_time=datetime.now(timezone.utc).isoformat(),
+            config=AdapterConfig(adapter_type="cli", settings={}),
+            services_registered=[],
+            lifecycle_tasks=[],
+            metrics={},
+        )
+        mock_adapter_manager.get_adapter_info = Mock(return_value=mock_info)
 
         info = await control_service.get_adapter_info("test_id")
 
@@ -447,7 +448,7 @@ class TestRuntimeControlServiceCoverage:
         """Test get_adapter_info when adapter not found."""
         # Use a real dict for loaded_adapters so 'in' operator works
         mock_adapter_manager.loaded_adapters = {}
-        mock_adapter_manager.get_adapter_info = AsyncMock(return_value=None)
+        mock_adapter_manager.get_adapter_info = Mock(return_value=None)
 
         info = await control_service.get_adapter_info("nonexistent")
 

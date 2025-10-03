@@ -530,18 +530,18 @@ def get_active_channels_by_adapter(
                             if channel_id.startswith(f"{adapter_type}_"):
                                 # Update channel info if not already present or if this is more recent
                                 if channel_id not in channels:
-                                    channels[channel_id] = {
-                                        "channel_id": channel_id,
-                                        "channel_type": adapter_type,
-                                        "last_activity": datetime.fromisoformat(
+                                    channels[channel_id] = ChannelInfo(
+                                        channel_id=channel_id,
+                                        channel_type=adapter_type,
+                                        last_activity=datetime.fromisoformat(
                                             node_data.get("period_end", cutoff_time.isoformat())
                                         ),
-                                        "message_count": len(conversations),
-                                        "is_active": True,
-                                    }
+                                        message_count=len(conversations),
+                                        is_active=True,
+                                    )
                                 else:
                                     # Update message count
-                                    channels[channel_id]["message_count"] += len(conversations)
+                                    channels[channel_id].message_count += len(conversations)
                     except Exception as e:
                         logger.debug("Failed to parse conversation summary: %s", e)
     except Exception as e:

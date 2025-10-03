@@ -146,24 +146,36 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         return result
 
-    async def apply_faculties(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, BaseModel]:
+    async def apply_faculties(
+        self, content: str, context: Optional[Union[Dict[str, Any], "FacultyContext"]] = None
+    ) -> Dict[str, BaseModel]:
         """Apply available epistemic faculties to content.
 
         Args:
             content: The content to analyze
-            context: Optional context for analysis
+            context: Optional context for analysis (FacultyContext or dict to convert)
 
         Returns:
             Dictionary mapping faculty name to evaluation result
         """
+        from ciris_engine.schemas.dma.faculty import FacultyContext
+
         results: Dict[str, Any] = {}
 
         if not self.faculties:
             return results
 
+        # Convert dict to FacultyContext if needed
+        faculty_context: Optional[FacultyContext] = None
+        if context is not None:
+            if isinstance(context, dict):
+                faculty_context = FacultyContext(**context)
+            else:
+                faculty_context = context
+
         for name, faculty in self.faculties.items():
             try:
-                result = await faculty.analyze(content, context)
+                result = await faculty.analyze(content, faculty_context)
                 results[name] = result
             except Exception as e:
                 # Log error but don't fail the entire evaluation

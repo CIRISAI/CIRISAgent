@@ -833,15 +833,16 @@ Tools available:
             List of ChannelContext objects for CLI channels.
         """
         from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter
+        from ciris_engine.schemas.persistence.correlations import ChannelInfo
 
         # Get active channels from last 30 days
-        channels_data: List[JSONDict] = get_active_channels_by_adapter("cli", since_days=30)
+        channels_data: List[ChannelInfo] = get_active_channels_by_adapter("cli", since_days=30)
 
         # Convert to ChannelContext objects
         channels: List[ChannelContext] = []
         for data in channels_data:
             # Determine channel name
-            channel_id_val = str(data["channel_id"]) if data.get("channel_id") else "cli_unknown"
+            channel_id_val = str(data.channel_id)
             channel_name = channel_id_val
             if "_" in channel_id_val:
                 parts = channel_id_val.split("_", 2)
@@ -851,22 +852,16 @@ Tools available:
             # CLI channels support all actions
             allowed_actions = ["speak", "observe", "memorize", "recall", "tool", "wa_defer", "runtime_control"]
 
-            # Extract values with proper type handling
-            last_act = data.get("last_activity")
-            last_activity = last_act if isinstance(last_act, datetime) else None
-            is_active = bool(data.get("is_active", True))
-            msg_count = int(data.get("message_count", 0)) if isinstance(data.get("message_count"), (int, float)) else 0
-
             channel = ChannelContext(
                 channel_id=channel_id_val,
                 channel_type="cli",
-                created_at=last_activity or datetime.now(),
+                created_at=data.last_activity or datetime.now(),
                 channel_name=channel_name,
                 is_private=True,  # CLI sessions are private
                 participants=["user", "ciris"],  # CLI is 1-on-1
-                is_active=is_active,
-                last_activity=last_activity,
-                message_count=msg_count,
+                is_active=data.is_active,
+                last_activity=data.last_activity,
+                message_count=data.message_count,
                 allowed_actions=allowed_actions,
                 moderation_level="minimal",  # CLI has minimal moderation
             )

@@ -576,12 +576,6 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     service_name="wise_authority",
                     user_id="system",
                     result="guidance_provided",
-                    details={
-                        "context": request.context,
-                        "urgency": request.urgency,
-                        "guidance_length": len(guidance) if guidance else 0,
-                        "solicited": request.recommendation is not None,
-                    },
                 )
                 await self._audit_service.log_event(event_type="guidance_observation", event_data=event_data)
 
@@ -603,11 +597,6 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     service_name="wise_authority",
                     user_id="system",
                     result="no_guidance",
-                    details={
-                        "context": request.context,
-                        "urgency": request.urgency,
-                        "solicited": request.recommendation is not None,
-                    },
                 )
                 await self._audit_service.log_event(event_type="guidance_observation", event_data=event_data)
 

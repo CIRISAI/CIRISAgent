@@ -138,7 +138,8 @@ class TestASPDMAHelpers:
 
         result = _extract_dma_results_from_args(args)
 
-        assert result == "csdma: common sense: proceed; dsdma: domain: safe"
+        # Now returns the concrete object, not a string
+        assert result == dma_results_obj
 
     def test_extract_dma_results_from_args_with_csdma_only(self):
         """Test extracting when only CSDMA is present."""
@@ -150,7 +151,8 @@ class TestASPDMAHelpers:
 
         result = _extract_dma_results_from_args(args)
 
-        assert result == "csdma: common sense: proceed"
+        # Now returns the concrete object, not a string
+        assert result == dma_results_obj
 
     def test_extract_dma_results_from_args_string_format(self):
         """Test extracting DMA results from string object."""
@@ -281,27 +283,28 @@ class TestSystemSnapshotHelpers:
     """Test system snapshot extraction helpers (already tested in previous session)."""
 
     def test_extract_lightweight_system_snapshot_structure(self):
-        """Test snapshot has required structure."""
+        """Test snapshot returns SystemSnapshot object with current_time_utc."""
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
         snapshot = _extract_lightweight_system_snapshot()
 
-        assert "timestamp" in snapshot
-        assert "snapshot_type" in snapshot
-        assert snapshot["snapshot_type"] == "lightweight_reasoning_context"
+        # Should return a SystemSnapshot object
+        assert isinstance(snapshot, SystemSnapshot)
+        # Should have current_time_utc set
+        assert snapshot.current_time_utc is not None
 
     def test_extract_lightweight_system_snapshot_optional_metrics(self):
-        """Test snapshot may include optional metrics."""
+        """Test snapshot is a proper SystemSnapshot object."""
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
         snapshot = _extract_lightweight_system_snapshot()
 
-        # These are optional depending on psutil availability
-        # Just verify they're either all present or all absent
-        has_cpu = "cpu_percent" in snapshot
-        has_memory = "memory_mb" in snapshot
-        has_threads = "threads" in snapshot
-
-        # If one is present, all should be present
-        if has_cpu:
-            assert has_memory
-            assert has_threads
+        # Should be a SystemSnapshot with proper structure
+        assert isinstance(snapshot, SystemSnapshot)
+        # Should have the expected fields (even if None/empty)
+        assert hasattr(snapshot, "channel_id")
+        assert hasattr(snapshot, "channel_context")
+        assert hasattr(snapshot, "system_counts")
 
 
 class TestBroadcastEventHelpers:
@@ -342,12 +345,13 @@ class TestBroadcastEventHelpers:
 
         # Mock InitialDMAResults with the 3 DMA results
         dma_results = Mock()
-        dma_results.csdma = Mock()
-        dma_results.csdma.model_dump = Mock(return_value="common_sense_result")
-        dma_results.dsdma = Mock()
-        dma_results.dsdma.model_dump = Mock(return_value="domain_specific_result")
-        dma_results.ethical_pdma = Mock()
-        dma_results.ethical_pdma.model_dump = Mock(return_value="ethical_pdma_result")
+        csdma_obj = Mock()
+        dsdma_obj = Mock()
+        pdma_obj = Mock()
+
+        dma_results.csdma = csdma_obj
+        dma_results.dsdma = dsdma_obj
+        dma_results.ethical_pdma = pdma_obj
 
         mock_create = Mock(return_value="dma_event")
 
@@ -355,9 +359,10 @@ class TestBroadcastEventHelpers:
 
         assert result == "dma_event"
         call_kwargs = mock_create.call_args[1]
-        assert call_kwargs["csdma"] == "common_sense_result"
-        assert call_kwargs["dsdma"] == "domain_specific_result"
-        assert call_kwargs["pdma"] == "ethical_pdma_result"
+        # Now passes the objects directly, not model_dump() results
+        assert call_kwargs["csdma"] == csdma_obj
+        assert call_kwargs["dsdma"] == dsdma_obj
+        assert call_kwargs["pdma"] == pdma_obj
 
     def test_create_aspdma_result_event_non_recursive(self):
         """Test creating ASPDMA_RESULT event (non-recursive)."""

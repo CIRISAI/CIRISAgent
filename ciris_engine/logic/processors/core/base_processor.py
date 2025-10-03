@@ -233,7 +233,8 @@ class BaseProcessor(ABC):
                     ),
                 )
 
-                await _broadcast_reasoning_event(StepPoint.ACTION_COMPLETE, step_data, dispatch_result)
+                # NOTE: ACTION_COMPLETE event is broadcast by the decorated _action_complete_step method
+                # in ActionExecutionPhase. Do NOT broadcast it here to avoid duplicates.
             except Exception as broadcast_error:
                 logger.warning(f"Error broadcasting ACTION_COMPLETE event: {broadcast_error}")
 

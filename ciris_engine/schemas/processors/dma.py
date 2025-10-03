@@ -23,11 +23,11 @@ class DMAMetadata(BaseModel):
 
 
 class InitialDMAResults(BaseModel):
-    """Results from initial DMA runs."""
+    """Results from initial DMA runs - all 3 DMA results are required."""
 
-    ethical_pdma: Optional[EthicalDMAResult] = Field(None, description="Ethical PDMA result")
-    csdma: Optional[CSDMAResult] = Field(None, description="CSDMA result")
-    dsdma: Optional[DSDMAResult] = Field(None, description="DSDMA result if available")
+    ethical_pdma: EthicalDMAResult = Field(..., description="Ethical PDMA result (required)")
+    csdma: CSDMAResult = Field(..., description="CSDMA result (required)")
+    dsdma: DSDMAResult = Field(..., description="DSDMA result (required)")
 
 
 class DMAError(BaseModel):

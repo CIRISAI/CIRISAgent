@@ -169,6 +169,34 @@ class StreamingVerificationModule:
                                         elif field_type == str and not event[field]:
                                             event_detail["issues"].append(f"Empty string for required field: {field}")
 
+                                    # Validate SystemSnapshot schema deeply
+                                    if "system_snapshot" in event and isinstance(event["system_snapshot"], dict):
+                                        snapshot = event["system_snapshot"]
+
+                                        # SystemSnapshot optional fields that should be proper types when present
+                                        snapshot_field_types = {
+                                            "channel_id": (str, type(None)),
+                                            "channel_context": (dict, type(None)),
+                                            "current_task_details": (dict, type(None)),
+                                            "current_thought_summary": (dict, type(None)),
+                                            "system_counts": (dict,),  # dict is required, but can be empty
+                                            "top_pending_tasks_summary": (list,),  # list is required, but can be empty
+                                            "recently_completed_tasks_summary": (
+                                                list,
+                                            ),  # list is required, but can be empty
+                                            "agent_identity": (str, type(None)),
+                                            "user_profiles": (list, type(None)),
+                                            "current_time_utc": (str, type(None)),
+                                        }
+
+                                        for field, allowed_types in snapshot_field_types.items():
+                                            if field in snapshot:
+                                                if not isinstance(snapshot[field], allowed_types):
+                                                    event_detail["issues"].append(
+                                                        f"system_snapshot.{field} has wrong type: {type(snapshot[field]).__name__} "
+                                                        f"(expected one of {[t.__name__ for t in allowed_types]})"
+                                                    )
+
                                 elif event_type == "dma_results":
                                     # Required base fields
                                     required_fields = {
@@ -369,13 +397,19 @@ class StreamingVerificationModule:
                                     },
                                 }
 
-                                expected_fields = expected_common_fields | event_type_specific_fields.get(event_type, set())
+                                expected_fields = expected_common_fields | event_type_specific_fields.get(
+                                    event_type, set()
+                                )
                                 actual_fields = set(event.keys())
                                 extra_fields = actual_fields - expected_fields
 
                                 if extra_fields:
-                                    event_detail["issues"].append(f"Unexpected extra fields: {', '.join(sorted(extra_fields))}")
-                                    errors.append(f"{event_type} has unexpected fields: {', '.join(sorted(extra_fields))}")
+                                    event_detail["issues"].append(
+                                        f"Unexpected extra fields: {', '.join(sorted(extra_fields))}"
+                                    )
+                                    errors.append(
+                                        f"{event_type} has unexpected fields: {', '.join(sorted(extra_fields))}"
+                                    )
 
                                 event_details.append(event_detail)
 
@@ -440,7 +474,10 @@ class StreamingVerificationModule:
         # Build result
         result = {
             "success": (
-                len(missing_events) == 0 and len(unexpected_events) == 0 and len(duplicates_found) == 0 and len(errors) == 0
+                len(missing_events) == 0
+                and len(unexpected_events) == 0
+                and len(duplicates_found) == 0
+                and len(errors) == 0
             ),  # Require all 6 events, no extras, no duplicates, no errors
             "received_events": sorted(list(received_events)),
             "missing_events": sorted(list(missing_events)),
@@ -474,8 +511,16 @@ class StreamingVerificationModule:
                 error_parts.append(f"Unexpected events: {', '.join(unexpected_events)}")
             if duplicates_found:
                 error_parts.append(f"Duplicates: {len(duplicates_found)} found")
+                # Add detailed duplicate information (duplicates_found contains strings)
+                for dup in duplicates_found:
+                    error_parts.append(f"  → {dup}")
             if errors:
                 error_parts.append(f"Schema errors: {len(errors)} found")
+                # Add first 3 errors for debugging
+                for i, error in enumerate(errors[:3]):
+                    error_parts.append(f"  → Error {i+1}: {error}")
+                if len(errors) > 3:
+                    error_parts.append(f"  → ... and {len(errors) - 3} more errors")
             result["message"] = "❌ " + "; ".join(error_parts)
 
         return result

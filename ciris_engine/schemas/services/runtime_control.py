@@ -730,7 +730,8 @@ class PerformASPDMAStepData(BaseStepData):
 
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for action selection")
-    dma_results: Optional[str] = Field(None, description="DMA results from previous PERFORM_DMAS step")
+    dma_results: Optional[str] = Field(None, description="DMA results string summary from previous PERFORM_DMAS step")
+    dma_results_obj: Optional[Any] = Field(None, description="Concrete InitialDMAResults object from PERFORM_DMAS step")
 
 
 class ConscienceExecutionStepData(BaseStepData):

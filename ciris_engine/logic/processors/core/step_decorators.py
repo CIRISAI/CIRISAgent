@@ -109,7 +109,7 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                 step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)
 
                 # Broadcast simplified reasoning event for key steps only
-                await _broadcast_reasoning_event(step, step_data, result)
+                await _broadcast_reasoning_event(step, step_data, result, thought_item=thought_item)
 
                 return result
 
@@ -343,8 +343,12 @@ def _validate_aspdma_result(result: Any) -> None:
         )
 
 
-def _extract_dma_results_from_args(args: Tuple[Any, ...]) -> Optional[str]:
-    """Extract and format DMA results from ASPDMA args."""
+def _extract_dma_results_from_args(args: Tuple[Any, ...]) -> Any:
+    """
+    Extract DMA results object from ASPDMA args.
+
+    Returns the concrete InitialDMAResults object (NOT a string or dict).
+    """
     # Extract dma_results from args - it's the second positional arg after thought_context
     # Function signature: _perform_aspdma_step(self, thought_item, thought_context, dma_results)
     # args = (thought_context, dma_results)
@@ -352,32 +356,33 @@ def _extract_dma_results_from_args(args: Tuple[Any, ...]) -> Optional[str]:
         return None
 
     dma_results_obj = args[1]
-    if not dma_results_obj:
-        return None
-
-    # Convert dma_results object to string representation
-    if hasattr(dma_results_obj, "dsdma") and hasattr(dma_results_obj, "csdma"):
-        # InitialDMAResults object - format like PERFORM_DMAS does
-        dma_parts = []
-        if dma_results_obj.csdma:
-            dma_parts.append(f"csdma: {dma_results_obj.csdma}")
-        if dma_results_obj.dsdma:
-            dma_parts.append(f"dsdma: {dma_results_obj.dsdma}")
-        return "; ".join(dma_parts) if dma_parts else None
-    else:
-        return str(dma_results_obj)
+    # Return the concrete InitialDMAResults object directly
+    return dma_results_obj
 
 
 def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> PerformASPDMAStepData:
     """Create PERFORM_ASPDMA specific typed data."""
     _validate_aspdma_result(result)
-    dma_results = _extract_dma_results_from_args(args)
+    dma_results_obj = _extract_dma_results_from_args(args)
+
+    # Create string summary for display
+    dma_results_str = None
+    if dma_results_obj and hasattr(dma_results_obj, "csdma"):
+        dma_parts = []
+        if dma_results_obj.csdma:
+            dma_parts.append(f"csdma: {dma_results_obj.csdma}")
+        if dma_results_obj.dsdma:
+            dma_parts.append(f"dsdma: {dma_results_obj.dsdma}")
+        if dma_results_obj.ethical_pdma:
+            dma_parts.append(f"ethical_pdma: {dma_results_obj.ethical_pdma}")
+        dma_results_str = "; ".join(dma_parts) if dma_parts else None
 
     return PerformASPDMAStepData(
         **_base_data_dict(base_data),
         selected_action=str(result.selected_action),
         action_rationale=str(result.rationale),
-        dma_results=dma_results,
+        dma_results=dma_results_str,  # String summary for display
+        dma_results_obj=dma_results_obj,  # Concrete InitialDMAResults object for event creation
     )
 
 
@@ -829,7 +834,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
 
 
 async def _broadcast_reasoning_event(
-    step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False
+    step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False, thought_item: Any = None
 ) -> None:
     """
     Broadcast simplified reasoning event for one of the 6 key steps.
@@ -862,11 +867,16 @@ async def _broadcast_reasoning_event(
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
             if step == StepPoint.PERFORM_DMAS:
                 logger.info("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
-                event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event)
+                event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
 
         elif step == StepPoint.PERFORM_ASPDMA:
-            # Event 2: DMA_RESULTS - result parameter contains InitialDMAResults from PERFORM_DMAS
-            event = _create_dma_results_event(step_data, timestamp, result, create_reasoning_event)
+            # Event 2: DMA_RESULTS - get InitialDMAResults from step_data.dma_results (extracted from args)
+            # step_data for PERFORM_ASPDMA contains dma_results from the previous PERFORM_DMAS step
+            dma_results_for_event = getattr(step_data, "dma_results_obj", None)
+            if dma_results_for_event:
+                event = _create_dma_results_event(step_data, timestamp, dma_results_for_event, create_reasoning_event)
+            else:
+                logger.warning(f"No dma_results_obj found in step_data for PERFORM_ASPDMA step {step_data.thought_id}")
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
             # Event 3: ASPDMA_RESULT
@@ -1082,33 +1092,21 @@ def _extract_follow_up_thought_id(result: Any) -> Optional[str]:
     return None
 
 
-def _extract_lightweight_system_snapshot() -> Dict[str, Any]:
+def _extract_lightweight_system_snapshot() -> "SystemSnapshot":
     """
     Extract lightweight system snapshot for reasoning event context.
 
-    This provides basic system state without heavy data collection:
-    - Current timestamp
-    - Process health indicators (if available)
-    - Basic resource metrics (if available)
+    Returns a proper SystemSnapshot object with minimal fields populated.
+    This is used for SSE streaming and must be a concrete typed object.
     """
     from datetime import datetime, timezone
 
-    snapshot: Dict[str, Any] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "snapshot_type": "lightweight_reasoning_context",
-    }
+    from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 
-    # Try to get basic resource info if available (non-blocking)
-    try:
-        import psutil
-
-        process = psutil.Process()
-        snapshot["cpu_percent"] = float(process.cpu_percent(interval=0.01))
-        snapshot["memory_mb"] = float(process.memory_info().rss / (1024 * 1024))
-        snapshot["threads"] = int(process.num_threads())
-    except Exception:
-        # Resource monitoring not available - continue without it
-        pass
+    # Create a minimal SystemSnapshot with current time
+    snapshot = SystemSnapshot(
+        current_time_utc=datetime.now(timezone.utc).isoformat(),
+    )
 
     return snapshot
 
@@ -1142,12 +1140,29 @@ def _create_thought_start_event(step_data: StepDataUnion, timestamp: str, create
     )
 
 
-def _create_snapshot_and_context_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create SNAPSHOT_AND_CONTEXT reasoning event."""
+def _create_snapshot_and_context_event(
+    step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any, thought_item: Any = None
+) -> Any:
+    """Create SNAPSHOT_AND_CONTEXT reasoning event with full system snapshot from thought context."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     context = getattr(step_data, "context", "")
-    system_snapshot = _extract_lightweight_system_snapshot()
+
+    # Extract full SystemSnapshot from thought_item.initial_context
+    system_snapshot = None
+    if thought_item and hasattr(thought_item, "initial_context"):
+        initial_context = thought_item.initial_context
+        if isinstance(initial_context, dict):
+            # Extract system_snapshot from ProcessingThoughtContext dict
+            system_snapshot = initial_context.get("system_snapshot")
+        elif hasattr(initial_context, "system_snapshot"):
+            # Extract from ProcessingThoughtContext object
+            system_snapshot = initial_context.system_snapshot
+
+    # Fallback to minimal snapshot if we couldn't extract the full one
+    if not system_snapshot:
+        logger.warning(f"Could not extract full SystemSnapshot from thought_item, using minimal snapshot")
+        system_snapshot = _extract_lightweight_system_snapshot()
 
     return create_reasoning_event(
         event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
@@ -1172,16 +1187,20 @@ def _create_dma_results_event(
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     # Extract the 3 DMA results from InitialDMAResults object - pass concrete typed objects
-    if not dma_results or not hasattr(dma_results, "csdma"):
-        raise ValueError("DMA results missing required fields")
+    if not dma_results:
+        raise ValueError(f"DMA results is None or empty: {dma_results}")
+    if not hasattr(dma_results, "csdma"):
+        raise ValueError(
+            f"DMA results missing 'csdma' attribute. Type: {type(dma_results)}, attributes: {dir(dma_results)}"
+        )
 
     # All 3 DMA results are required (non-optional)
     if not dma_results.csdma:
-        raise ValueError("CSDMA result is required")
+        raise ValueError(f"CSDMA result is None: {dma_results.csdma}")
     if not dma_results.dsdma:
-        raise ValueError("DSDMA result is required")
+        raise ValueError(f"DSDMA result is None: {dma_results.dsdma}")
     if not dma_results.ethical_pdma:
-        raise ValueError("Ethical PDMA result is required")
+        raise ValueError(f"Ethical PDMA result is None: {dma_results.ethical_pdma}")
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,

@@ -467,7 +467,7 @@ class TestBroadcastEventHelpers:
 
         mock_create = Mock(return_value="action_event")
 
-        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", result, mock_create)
+        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", mock_create)
 
         assert event == "action_event"
         call_kwargs = mock_create.call_args[1]
@@ -497,7 +497,7 @@ class TestBroadcastEventHelpers:
 
         mock_create = Mock(return_value="terminal_event")
 
-        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", result, mock_create)
+        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", mock_create)
 
         assert event == "terminal_event"
         call_kwargs = mock_create.call_args[1]

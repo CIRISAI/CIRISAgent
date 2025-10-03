@@ -641,7 +641,7 @@ class DiscordPlatform(Service):
         self._reconnect_attempts = 0
         return True
 
-    async def _handle_agent_task_completion(self, current_agent_task: asyncio.Task[Any]) -> None:
+    async def _handle_agent_task_completion(self) -> None:
         """Handle normal shutdown when agent task completes."""
         if self._discord_client_task and not self._discord_client_task.done():
             self._discord_client_task.cancel()
@@ -671,7 +671,7 @@ class DiscordPlatform(Service):
 
         # Agent task completed - normal shutdown
         if current_agent_task in done:
-            await self._handle_agent_task_completion(current_agent_task)
+            await self._handle_agent_task_completion()
             return (False, True)  # Break from loop
 
         # Handle timeout

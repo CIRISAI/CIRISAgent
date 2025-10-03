@@ -44,10 +44,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Only external interfaces (OTLP, GraphQL, OAuth) retain `Dict[str, Any]` with NOQA markers
 
 ### Fixed
-- **📊 DMA Results Streaming**: Fixed DMA_RESULTS SSE event showing null values
-  - Corrected field names: `csdma`, `dsdma`, `pdma` (was incorrectly using `aspdma_options`)
-  - Now properly extracts DMA result objects from `InitialDMAResults` at PERFORM_ASPDMA step
-  - Event broadcasts with actual CSDMA, DSDMA, and PDMA (ethical) decision results
+- **🎯 H3ERE SSE Streaming - 100% Schema Validation**: Complete concrete type enforcement for all 6 reasoning events
+  - **Duplicate Events**: Removed duplicate ACTION_COMPLETE broadcast (base_processor manual broadcast conflicted with decorator)
+  - **DMA Results**: All 3 DMAs (ethical_pdma, csdma, dsdma) now required and strongly-typed throughout pipeline
+    - DMA orchestrator fails fast if DSDMA not configured
+    - DMA factory raises RuntimeError instead of returning None
+    - InitialDMAResults schema requires all 3 fields (non-optional)
+  - **SystemSnapshot**: snapshot_and_context event now includes full SystemSnapshot from thought context
+    - Extracts complete system state: channel_context, user_profiles, agent_identity, task details
+    - Step decorators pass thought_item to event creation for context extraction
+  - **Schema Validation**: QA runner now validates SystemSnapshot field types deeply
+  - Test results: 100% SSE validation (6/6 events, 0 duplicates, 0 schema errors)
+- **📚 SSE Documentation**: Added comprehensive docs/SSE_EVENT_DETAILS.md
+  - Complete schemas for all 6 H3ERE reasoning events
+  - Usage patterns for /agent/message endpoint and SSE streaming
+  - Client examples (JavaScript, Python, cURL)
+  - Error handling and best practices
 - **📡 ACTION_RESULT Event Data**: Fixed missing follow_up_thought_id and audit trail data
   - Added `follow_up_thought_id` field to `ActionCompleteStepData` schema
   - Updated `_create_action_complete_data` to extract audit fields from dispatch_result dict

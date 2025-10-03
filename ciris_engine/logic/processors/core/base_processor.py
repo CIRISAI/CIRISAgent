@@ -214,13 +214,19 @@ class BaseProcessor(ABC):
             dispatch_end = time_svc.now()
             dispatch_time_ms = self._calculate_dispatch_time(dispatch_start, dispatch_end)
 
-            # NOTE: ACTION_COMPLETE event is broadcast by the decorated _action_complete_step method
-            # in ActionExecutionPhase. Do NOT broadcast it here to avoid duplicates.
-            # Action name extraction is kept for potential future use.
+            # Extract action name for ACTION_COMPLETE event (broadcast by decorator)
             try:
                 action_name = self._extract_action_name(dispatch_result, result)
-            except Exception as broadcast_error:
-                logger.warning(f"Error extracting action name: {broadcast_error}")
+            except Exception as e:
+                logger.warning(f"Error extracting action name: {e}")
+                action_name = "UNKNOWN"
+
+            # Enrich dispatch_result with timing and action info for ACTION_COMPLETE event
+            # The decorated _action_complete_step method expects these fields
+            if isinstance(dispatch_result, dict):
+                dispatch_result["execution_time_ms"] = dispatch_time_ms
+                dispatch_result["action_type"] = action_name
+                dispatch_result["dispatch_end_time"] = dispatch_end.isoformat()
 
             return True
         except Exception as e:

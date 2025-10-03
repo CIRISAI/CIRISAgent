@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracted 4 helper methods: _get_time_service(), _stream_perform_action_step(), _extract_action_name(), _calculate_dispatch_time()
   - Improved maintainability and readability while preserving functionality
   - Added 20 comprehensive unit tests covering all helper methods and integration scenarios
+- **🐛 Data Loss Bug Fix**: Fixed missing execution metrics in ACTION_COMPLETE events
+  - dispatch_time_ms and action_name were calculated but not passed to decorator
+  - Now enriches dispatch_result with execution_time_ms, action_type, dispatch_end_time
+  - The _action_complete_step decorator now receives timing data for SSE streaming
 - **🧹 Code Quality Improvements**: Fixed SonarCloud issues in step_decorators.py
   - Removed unnecessary f-string (L1164) - replaced with normal string
   - Removed unused `result` parameter from _create_action_result_event() (L1252)

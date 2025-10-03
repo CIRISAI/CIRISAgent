@@ -46,9 +46,9 @@ async def test_memory_operations():
         assert results[0].id == "test_key"
         assert results[0].attributes["value"] == "test_data"
 
-        # Test forget - forget takes a GraphNode
+        # Test forget - forget takes a GraphNode (now async)
         forget_node = GraphNode(id="test_key", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={})
-        result = memory.forget(forget_node)
+        result = await memory.forget(forget_node)
         assert result.status.value == "ok"
 
         await memory.stop()

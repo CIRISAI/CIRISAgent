@@ -228,7 +228,7 @@ class TestDiscordAdapter:
         ]
 
         with patch.object(adapter._tool_handler, "get_available_tools", return_value=["test_tool"]) as mock_list:
-            tools = adapter.list_tools()
+            tools = await adapter.list_tools()
 
             assert len(tools) == 1
             assert tools[0] == "test_tool"

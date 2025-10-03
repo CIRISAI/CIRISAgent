@@ -259,7 +259,7 @@ class TestDiscordWiseAuthority:
         discord_adapter._channel_manager.client.guilds = [mock_guild]
 
         # Check authorization
-        result = discord_adapter.check_authorization("123456", "any_action")
+        result = await discord_adapter.check_authorization("123456", "any_action")
 
         assert result is True
 
@@ -279,11 +279,11 @@ class TestDiscordWiseAuthority:
         discord_adapter._channel_manager.client.guilds = [mock_guild]
 
         # Check read action - should pass
-        result = discord_adapter.check_authorization("123456", "read")
+        result = await discord_adapter.check_authorization("123456", "read")
         assert result is True
 
         # Check write action - should fail
-        result = discord_adapter.check_authorization("123456", "write")
+        result = await discord_adapter.check_authorization("123456", "write")
         assert result is False
 
     @pytest.mark.asyncio
@@ -405,7 +405,7 @@ class TestDiscordToolExecution:
         # Mock tool list
         discord_adapter._tool_handler.get_available_tools = Mock(return_value=["tool1", "tool2", "tool3"])
 
-        tools = discord_adapter.list_tools()
+        tools = await discord_adapter.list_tools()
 
         assert len(tools) == 3
         assert "tool1" in tools
@@ -453,19 +453,19 @@ class TestDiscordErrorHandling:
 
     @pytest.mark.asyncio
     async def test_channel_not_found_error(self, discord_adapter):
-        """Test handling of channel not found errors."""
+        """Test handling of channel not found errors - should fail fast."""
         # Mock channel not found
         discord_adapter._message_handler.send_message_to_channel = AsyncMock(
             side_effect=discord.NotFound(Mock(), "Channel not found")
         )
 
-        result = await discord_adapter.send_message("999999999", "Test")
-
-        assert result is False
+        # Should raise the exception (fail fast and loud)
+        with pytest.raises(discord.NotFound):
+            await discord_adapter.send_message("999999999", "Test")
 
     @pytest.mark.asyncio
     async def test_rate_limit_handling(self, discord_adapter):
-        """Test rate limit error handling."""
+        """Test rate limit error handling - should fail fast."""
         # Mock rate limit error
         error_resp = Mock()
         error_resp.status = 429
@@ -475,11 +475,9 @@ class TestDiscordErrorHandling:
             side_effect=discord.HTTPException(error_resp, "Rate limited")
         )
 
-        # This should handle the rate limit gracefully
-        result = await discord_adapter.send_message("123456789", "Test")
-
-        # Should fail but not raise
-        assert result is False
+        # Should raise the exception (fail fast and loud)
+        with pytest.raises(discord.HTTPException):
+            await discord_adapter.send_message("123456789", "Test")
 
 
 class TestDiscordAuditLogging:

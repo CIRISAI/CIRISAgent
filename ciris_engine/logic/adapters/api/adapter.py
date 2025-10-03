@@ -418,9 +418,7 @@ class ApiPlatform(Service):
         if not has_server:
             return False
 
-        # Check if the server task is still running
-        if self._server_task is None:
-            return False
+        # Check if the server task is still running (already confirmed non-None above)
         return not self._server_task.done()
 
     def get_metrics(self) -> dict[str, float]:

@@ -119,7 +119,7 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
         return metrics
 
-    def get_metrics(self) -> Dict[str, float]:
+    async def get_metrics(self) -> Dict[str, float]:
         """
         Get all shutdown service metrics including base, custom, and v1.4.3 specific.
         """

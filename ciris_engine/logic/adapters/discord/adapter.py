@@ -125,12 +125,6 @@ class DiscordPlatform(Service):
                 logger.info("Fetching threads in monitored channels...")
                 threads_added = 0
 
-                # Load existing thread correlations from persistence
-                # Note: Thread correlation persistence requires ServiceCorrelation schema, not CorrelationRequestData
-                # This would require implementing a proper correlation builder for Discord threads
-                # For now, we track threads in-memory only (sufficient for current requirements)
-                existing_thread_ids: set[str] = set()
-
                 for channel_id in self.platform.config.monitored_channel_ids:
                     try:
                         channel = self.get_channel(int(channel_id))
@@ -138,23 +132,12 @@ class DiscordPlatform(Service):
                             # Get active threads in this channel
                             for thread in channel.threads:
                                 thread_id = str(thread.id)
-                                if thread_id not in existing_thread_ids:
-                                    # Add to observer if it exists
-                                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                                        if thread_id not in self.platform.discord_observer.monitored_channel_ids:
-                                            self.platform.discord_observer.monitored_channel_ids.append(thread_id)
-                                            threads_added += 1
-
-                                            # Thread correlation persistence would require ServiceCorrelation,
-                                            # not CorrelationRequestData. This needs proper implementation
-                                            # with correlation_id, service_type, handler_name, etc.
-                                            # For now, in-memory tracking is sufficient for Discord threads.
-                                else:
-                                    # Thread already known, just add to observer
-                                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                                        if thread_id not in self.platform.discord_observer.monitored_channel_ids:
-                                            self.platform.discord_observer.monitored_channel_ids.append(thread_id)
-                                            threads_added += 1
+                                # Add to observer if it exists and not already monitored
+                                if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
+                                    if thread_id not in self.platform.discord_observer.monitored_channel_ids:
+                                        self.platform.discord_observer.monitored_channel_ids.append(thread_id)
+                                        threads_added += 1
+                                        logger.debug(f"Added thread {thread_id} to monitoring")
                     except Exception as e:
                         logger.warning(f"Could not fetch threads for channel {channel_id}: {e}")
 
@@ -667,9 +650,7 @@ class DiscordPlatform(Service):
             except asyncio.CancelledError:
                 raise
 
-    async def _process_monitoring_iteration(
-        self, current_agent_task: asyncio.Task[Any]
-    ) -> tuple[bool, bool]:
+    async def _process_monitoring_iteration(self, current_agent_task: asyncio.Task[Any]) -> tuple[bool, bool]:
         """
         Process one iteration of the monitoring loop.
 

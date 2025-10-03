@@ -780,9 +780,9 @@ async def get_resource_telemetry(
             for i in range(min(len(cpu_history), len(memory_history))):
                 history_points.append(
                     ResourceHistoryPoint(
-                        timestamp=cpu_history[i].get("timestamp", now),
-                        cpu_percent=cpu_history[i].get("value", 0.0),
-                        memory_mb=memory_history[i].get("value", 0.0),
+                        timestamp=cpu_history[i].timestamp,
+                        cpu_percent=float(cpu_history[i].value),
+                        memory_mb=float(memory_history[i].value),
                     )
                 )
 
@@ -1018,6 +1018,7 @@ async def get_detailed_metrics(
         raise
     except Exception as e:
         import traceback
+
         logger.error(f"Error in get_detailed_metrics: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1766,7 +1767,7 @@ async def get_detailed_metric(
             raise HTTPException(status_code=404, detail=f"Metric '{metric_name}' not found")
 
         # Calculate statistics
-        values = [dp.get("value", 0.0) for dp in data_points]
+        values = [float(dp.value) for dp in data_points]
         current_value = values[-1] if values else 0.0
         hourly_avg = sum(values[-60:]) / len(values[-60:]) if len(values) > 60 else sum(values) / len(values)
         daily_avg = sum(values) / len(values)
@@ -1804,9 +1805,9 @@ async def get_detailed_metric(
             by_service=[],  # Could be populated if service tags are available
             recent_data=[
                 MetricData(
-                    timestamp=dp.get("timestamp", now),
-                    value=dp.get("value", 0.0),
-                    tags=MetricTags(**dp.get("tags", {})),
+                    timestamp=dp.timestamp,
+                    value=float(dp.value),
+                    tags=MetricTags(**dp.tags) if dp.tags else MetricTags(),
                 )
                 for dp in data_points[-100:]  # Last 100 data points
             ],

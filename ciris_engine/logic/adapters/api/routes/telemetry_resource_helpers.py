@@ -15,6 +15,7 @@ from ciris_engine.logic.adapters.api.routes.telemetry_models import (
     ResourceMetricData,
     ResourceMetricStats,
 )
+from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
 class ResourceMetricsCollector:
@@ -23,7 +24,7 @@ class ResourceMetricsCollector:
     @staticmethod
     async def fetch_metric_data(
         telemetry_service, metric_name: str, start_time: datetime, end_time: datetime
-    ) -> List[Dict]:
+    ) -> List[MetricRecord]:
         """Fetch a single metric's data from telemetry service."""
         if not hasattr(telemetry_service, "query_metrics"):
             return []
@@ -38,7 +39,7 @@ class ResourceMetricsCollector:
     @staticmethod
     async def fetch_all_resource_metrics(
         telemetry_service, start_time: datetime, end_time: datetime
-    ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    ) -> Tuple[List[MetricRecord], List[MetricRecord], List[MetricRecord]]:
         """Fetch all resource metrics concurrently."""
         cpu_data = await ResourceMetricsCollector.fetch_metric_data(
             telemetry_service, "cpu_percent", start_time, end_time
@@ -56,17 +57,17 @@ class MetricValueExtractor:
     """Extracts values from metric data following single responsibility."""
 
     @staticmethod
-    def extract_values(metric_data: Optional[List[Dict]]) -> List[float]:
+    def extract_values(metric_data: Optional[List[MetricRecord]]) -> List[float]:
         """Extract numeric values from metric data."""
         if not metric_data:
             return [0]
 
-        values = [d.get("value", 0) for d in metric_data]
+        values = [float(d.value) for d in metric_data]
         return values if values else [0]
 
     @staticmethod
     def extract_all_values(
-        cpu_data: List[Dict], memory_data: List[Dict], disk_data: List[Dict]
+        cpu_data: List[MetricRecord], memory_data: List[MetricRecord], disk_data: List[MetricRecord]
     ) -> Tuple[List[float], List[float], List[float]]:
         """Extract values from all metric types."""
         return (
@@ -128,19 +129,27 @@ class ResourceDataPointBuilder:
     """Builds typed ResourceDataPoint objects following type safety principle."""
 
     @staticmethod
-    def build_data_points(metric_data: Optional[List[Dict]], default_timestamp: str) -> List[ResourceDataPoint]:
+    def build_data_points(
+        metric_data: Optional[List[MetricRecord]], default_timestamp: str
+    ) -> List[ResourceDataPoint]:
         """Convert raw metric data to typed ResourceDataPoint objects."""
         if not metric_data:
             return []
 
         return [
-            ResourceDataPoint(timestamp=d.get("timestamp", default_timestamp), value=d.get("value", 0))
+            ResourceDataPoint(
+                timestamp=d.timestamp.isoformat() if hasattr(d.timestamp, "isoformat") else str(d.timestamp),
+                value=float(d.value),
+            )
             for d in metric_data
         ]
 
     @staticmethod
     def build_all_data_points(
-        cpu_data: List[Dict], memory_data: List[Dict], disk_data: List[Dict], default_timestamp: str
+        cpu_data: List[MetricRecord],
+        memory_data: List[MetricRecord],
+        disk_data: List[MetricRecord],
+        default_timestamp: str,
     ) -> Tuple[List[ResourceDataPoint], List[ResourceDataPoint], List[ResourceDataPoint]]:
         """Build data points for all resource types."""
         return (

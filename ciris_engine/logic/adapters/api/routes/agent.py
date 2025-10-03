@@ -9,7 +9,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -212,7 +212,7 @@ def _check_send_messages_permission(auth: AuthContext, request: Request) -> None
     raise HTTPException(status_code=403, detail=error_detail)
 
 
-def _create_interaction_message(auth: AuthContext, body: InteractRequest) -> Tuple[str, str, IncomingMessage]:
+def _create_interaction_message(auth: AuthContext, body: Union[InteractRequest, MessageRequest]) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
     channel_id = f"api_{auth.user_id}"  # User-specific channel

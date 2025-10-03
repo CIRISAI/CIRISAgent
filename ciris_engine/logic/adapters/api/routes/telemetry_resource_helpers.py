@@ -8,7 +8,7 @@ Following CIRIS principles:
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.adapters.api.routes.telemetry_models import (
     ResourceDataPoint,
@@ -23,22 +23,23 @@ class ResourceMetricsCollector:
 
     @staticmethod
     async def fetch_metric_data(
-        telemetry_service, metric_name: str, start_time: datetime, end_time: datetime
+        telemetry_service: Any, metric_name: str, start_time: datetime, end_time: datetime
     ) -> List[MetricRecord]:
         """Fetch a single metric's data from telemetry service."""
         if not hasattr(telemetry_service, "query_metrics"):
             return []
 
         try:
-            return await telemetry_service.query_metrics(
+            result: List[MetricRecord] = await telemetry_service.query_metrics(
                 metric_name=metric_name, start_time=start_time, end_time=end_time
             )
+            return result
         except Exception:
             return []
 
     @staticmethod
     async def fetch_all_resource_metrics(
-        telemetry_service, start_time: datetime, end_time: datetime
+        telemetry_service: Any, start_time: datetime, end_time: datetime
     ) -> Tuple[List[MetricRecord], List[MetricRecord], List[MetricRecord]]:
         """Fetch all resource metrics concurrently."""
         cpu_data = await ResourceMetricsCollector.fetch_metric_data(

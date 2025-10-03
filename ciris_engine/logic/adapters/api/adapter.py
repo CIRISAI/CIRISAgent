@@ -20,7 +20,7 @@ from ciris_engine.logic.persistence.models.correlations import get_active_channe
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.runtime.messages import IncomingMessage
+from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
 from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelation,
@@ -222,10 +222,8 @@ class ApiPlatform(Service):
         self.app.state.on_message = self._create_message_handler()
         logger.info("Set up message handler via observer pattern with correlation tracking")
 
-    def _create_message_handler(self) -> Callable[[IncomingMessage], Awaitable["MessageHandlingResult"]]:
+    def _create_message_handler(self) -> Callable[[IncomingMessage], Awaitable[MessageHandlingResult]]:
         """Create the message handler function."""
-        from ciris_engine.schemas.runtime.messages import MessageHandlingResult
-
         async def handle_message_via_observer(msg: IncomingMessage) -> MessageHandlingResult:
             """Handle incoming messages by creating passive observations."""
             try:
@@ -418,7 +416,9 @@ class ApiPlatform(Service):
         if not has_server:
             return False
 
-        # Check if the server task is still running (already confirmed non-None above)
+        # Check if the server task is still running
+        if self._server_task is None:
+            return False
         return not self._server_task.done()
 
     def get_metrics(self) -> dict[str, float]:

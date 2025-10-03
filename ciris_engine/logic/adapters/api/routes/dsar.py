@@ -99,7 +99,7 @@ async def submit_dsar(
     if request.request_type == "delete" and request.user_identifier:
         try:
             # Get consent manager
-            from ciris_engine.logic.services.infrastructure.time_service import TimeService
+            from ciris_engine.logic.services.lifecycle.time.service import TimeService
 
             if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
                 consent_manager = req.app.state.consent_manager

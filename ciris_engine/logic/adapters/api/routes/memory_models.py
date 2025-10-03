@@ -5,7 +5,7 @@ Extracted from memory.py to improve modularity and testability.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer, model_validator
 
@@ -59,7 +59,7 @@ class QueryRequest(BaseModel):
     depth: int = Field(1, ge=1, le=3, description="Graph traversal depth for relationships")
 
     @model_validator(mode="after")
-    def validate_query_params(self):
+    def validate_query_params(self: "QueryRequest") -> "QueryRequest":
         """Ensure at least one query parameter is specified."""
         if not any(
             [
@@ -78,7 +78,7 @@ class QueryRequest(BaseModel):
         return self
 
     @field_serializer("since", "until")
-    def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -86,13 +86,13 @@ class TimelineResponse(BaseModel):
     """Response containing timeline of memories."""
 
     memories: List[GraphNode] = Field(..., description="List of memory nodes")
-    buckets: dict = Field(default_factory=dict, description="Time buckets with counts")
+    buckets: Dict[str, Any] = Field(default_factory=dict, description="Time buckets with counts")
     start_time: datetime = Field(..., description="Start of time range")
     end_time: datetime = Field(..., description="End of time range")
     total: int = Field(..., description="Total number of memories")
 
     @field_serializer("start_time", "end_time")
-    def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -100,12 +100,12 @@ class MemoryStats(BaseModel):
     """Statistics about memory service."""
 
     total_nodes: int = Field(..., description="Total number of nodes")
-    nodes_by_type: dict = Field(..., description="Node count by type")
-    nodes_by_scope: dict = Field(..., description="Node count by scope")
+    nodes_by_type: Dict[str, int] = Field(..., description="Node count by type")
+    nodes_by_scope: Dict[str, int] = Field(..., description="Node count by scope")
     recent_nodes_24h: int = Field(..., description="Nodes created in last 24h")
     oldest_node_date: Optional[datetime] = Field(None, description="Oldest node date")
     newest_node_date: Optional[datetime] = Field(None, description="Newest node date")
 
     @field_serializer("oldest_node_date", "newest_node_date")
-    def serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None

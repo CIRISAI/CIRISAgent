@@ -28,7 +28,7 @@ class TimelineLayoutCalculator:
         return None
 
     @staticmethod
-    def calculate_time_range(nodes: List[GraphNode]) -> Tuple[datetime, datetime, float]:
+    def calculate_time_range(nodes: List[GraphNode]) -> Tuple[Optional[datetime], Optional[datetime], float]:
         """Calculate min, max times and range in seconds."""
         timestamps = []
         for node in nodes:
@@ -82,7 +82,7 @@ class TimelineLayoutCalculator:
         nodes: List[GraphNode], width: int, height: int, padding: int
     ) -> Dict[str, Tuple[float, float]]:
         """Build all node positions for timeline layout."""
-        positions = {}
+        positions: Dict[str, Tuple[float, float]] = {}
 
         # Calculate time range
         min_time, _, time_range = TimelineLayoutCalculator.calculate_time_range(nodes)

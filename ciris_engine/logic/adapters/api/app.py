@@ -67,7 +67,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         description="Autonomous AI Agent Interaction and Observability API (Pre-Beta)",
         version="1.0.0",
         lifespan=lifespan,
-        root_path=root_path if root_path else None,  # This tells FastAPI it's behind a proxy at this path
+        root_path=root_path or "",  # This tells FastAPI it's behind a proxy at this path
     )
 
     # Add CORS middleware
@@ -88,7 +88,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
 
         # Add middleware using a wrapper function
         @app.middleware("http")
-        async def rate_limit_wrapper(request: Request, call_next: Callable) -> Response:
+        async def rate_limit_wrapper(request: Request, call_next: Callable[..., Any]) -> Response:
             return await rate_limit_middleware(request, call_next)
 
         print(f"Rate limiting enabled: {rate_limit} requests per minute")

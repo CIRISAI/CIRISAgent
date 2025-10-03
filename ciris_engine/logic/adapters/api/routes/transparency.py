@@ -79,7 +79,9 @@ def _validate_hours(hours: int) -> None:
         )
 
 
-def _process_handler_action(event: Any, action_counts: Dict, deferrals: Dict, response_times: List) -> int:
+def _process_handler_action(
+    event: Any, action_counts: Dict[str, int], deferrals: Dict[str, int], response_times: List[float]
+) -> int:
     """Process a handler_action event and return harmful_blocked count."""
     harmful_blocked = 0
     action = event.data.get("action", "UNKNOWN")
@@ -102,7 +104,7 @@ def _process_handler_action(event: Any, action_counts: Dict, deferrals: Dict, re
     return harmful_blocked
 
 
-def _calculate_action_percentages(action_counts: Dict, total_interactions: int) -> List[ActionCount]:
+def _calculate_action_percentages(action_counts: Dict[str, int], total_interactions: int) -> List[ActionCount]:
     """Calculate percentages for each action."""
     actions = []
     for action, count in action_counts.items():
@@ -127,7 +129,8 @@ async def _get_uptime_percentage(request: Request) -> float:
     telemetry_service = getattr(request.app.state, "telemetry_service", None)
     if telemetry_service and hasattr(telemetry_service, "get_uptime_percentage"):
         try:
-            return await telemetry_service.get_uptime_percentage()
+            result = await telemetry_service.get_uptime_percentage()
+            return float(result)
         except Exception:
             pass
     return 99.9  # Default fallback
@@ -181,12 +184,12 @@ async def get_transparency_feed(
 
         # Initialize counters
         total_interactions = len(events)
-        action_counts = {}
-        deferrals = {"human": 0, "uncertainty": 0, "ethical": 0}
+        action_counts: Dict[str, int] = {}
+        deferrals: Dict[str, int] = {"human": 0, "uncertainty": 0, "ethical": 0}
         harmful_blocked = 0
         rate_limits = 0
         shutdowns = 0
-        response_times = []
+        response_times: List[float] = []
 
         # Process events
         for event in events:

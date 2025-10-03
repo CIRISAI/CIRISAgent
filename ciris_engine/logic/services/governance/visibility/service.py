@@ -32,6 +32,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, Thought
 from ciris_engine.schemas.services.visibility import ReasoningTrace, TaskDecisionHistory, VisibilitySnapshot
+from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
 
 class VisibilityService(BaseService, VisibilityServiceProtocol):

@@ -169,7 +169,6 @@ class MemorizeHandler(BaseActionHandler):
                             HandlerActionType.MEMORIZE,
                             dispatch_context,
                             outcome="blocked_managed_attribute",
-                            additional_info={"attribute": attr_name, "node_id": node.id},
                         )
 
                         return self.complete_thought_and_create_followup(

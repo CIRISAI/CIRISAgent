@@ -39,7 +39,9 @@ class OpenAIConfig(BaseModel):
 logger = logging.getLogger(__name__)
 
 # Type for structured call functions that can be retried
-StructuredCallFunc = Callable[[List[MessageDict], Type[BaseModel], int, float], Awaitable[Tuple[BaseModel, ResourceUsage]]]
+StructuredCallFunc = Callable[
+    [List[MessageDict], Type[BaseModel], int, float], Awaitable[Tuple[BaseModel, ResourceUsage]]
+]
 
 
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):

@@ -100,16 +100,6 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                     # Create consent service instance
                     consent_service = ConsentService(time_service=time_service)
 
-                    # Check if consent already exists (synchronously)
-                    try:
-                        # Try to get existing consent
-                        existing_consent = consent_service._get_consent(node.id)
-                        if existing_consent:
-                            logger.debug(f"User {node.id} already has consent: {existing_consent.stream}")
-                            return node.id
-                    except:
-                        pass  # No existing consent, create new one
-
                     # Create default TEMPORARY consent synchronously
                     # The consent service stores consent in the database directly
                     consent_status = ConsentStatus(
@@ -132,7 +122,7 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                             "user_id": node.id,
                             "stream": ConsentStream.TEMPORARY.value,
                             "granted_at": consent_status.granted_at.isoformat(),
-                            "expires_at": consent_status.expires_at.isoformat(),
+                            "expires_at": consent_status.expires_at.isoformat() if consent_status.expires_at else None,
                             "reason": "Default TEMPORARY consent on user creation",
                         },
                         updated_by="system_user_creation",

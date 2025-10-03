@@ -27,7 +27,13 @@ class RecursiveProcessingPhase:
     """
 
     async def _handle_recursive_processing(
-        self, thought_item, thought, thought_context, dma_results, conscience_result, action_result
+        self,
+        thought_item: Any,
+        thought: Any,
+        thought_context: Any,
+        dma_results: Any,
+        conscience_result: Any,
+        action_result: Any,
     ) -> Tuple[Optional[Any], Optional[Any]]:
         """
         Coordinate recursive processing if conscience validation failed.
@@ -72,14 +78,14 @@ class RecursiveProcessingPhase:
     @streaming_step(StepPoint.RECURSIVE_ASPDMA)
     @step_point(StepPoint.RECURSIVE_ASPDMA)
     async def _recursive_aspdma_step(
-        self, thought_item: ProcessingQueueItem, thought_context, dma_results, override_reason: str
-    ):
+        self, thought_item: ProcessingQueueItem, thought_context: Any, dma_results: Any, override_reason: str
+    ) -> Optional[Any]:
         """Step 3B: Optional retry action selection after conscience failure."""
-        thought = await self._fetch_thought(thought_item.thought_id)
+        thought = await self._fetch_thought(thought_item.thought_id)  # type: ignore[attr-defined]
 
         try:
             # Re-run action selection with guidance about why previous action failed
-            retry_result = await self._perform_aspdma_with_guidance(
+            retry_result = await self._perform_aspdma_with_guidance(  # type: ignore[attr-defined]
                 thought, thought_context, dma_results, override_reason, max_retries=3
             )
             return retry_result
@@ -89,13 +95,13 @@ class RecursiveProcessingPhase:
 
     @streaming_step(StepPoint.RECURSIVE_CONSCIENCE)
     @step_point(StepPoint.RECURSIVE_CONSCIENCE)
-    async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result):
+    async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result: Any) -> Tuple[Any, Any]:
         """Step 4B: Optional re-validation if recursive action failed."""
         if not retry_result:
             return retry_result, []
 
         try:
-            recursive_conscience_results = await self.conscience_registry.apply_all_consciences(
+            recursive_conscience_results = await self.conscience_registry.apply_all_consciences(  # type: ignore[attr-defined]
                 retry_result, thought_item
             )
 
@@ -108,8 +114,10 @@ class RecursiveProcessingPhase:
             logger.error(f"Recursive conscience execution failed for thought {thought_item.thought_id}: {e}")
             return retry_result, []
 
-    async def _perform_aspdma_with_retry(self, thought_item, thought_context, dma_results, max_retries=3):
+    async def _perform_aspdma_with_retry(
+        self, thought_item: Any, thought_context: Any, dma_results: Any, max_retries: int = 3
+    ) -> Any:
         """Helper method for ASPDMA execution with retry logic."""
         # This would contain the retry logic implementation
         # For now, delegate to the main ASPDMA step
-        return await self._perform_aspdma_step(thought_item, thought_context, dma_results)
+        return await self._perform_aspdma_step(thought_item, thought_context, dma_results)  # type: ignore[attr-defined]

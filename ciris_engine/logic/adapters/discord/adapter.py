@@ -395,9 +395,9 @@ class DiscordPlatform(Service):
 
         if hasattr(self.discord_observer, "start"):
             if self.discord_observer:
-                self.discord_observer.start()
+                await self.discord_observer.start()
         if self.tool_service and hasattr(self.tool_service, "start"):
-            self.tool_service.start()
+            await self.tool_service.start()
         if hasattr(self.discord_adapter, "start"):
             await self.discord_adapter.start()
         logger.info(
@@ -748,9 +748,9 @@ class DiscordPlatform(Service):
         # Stop observer, tool service and adapter first
         if hasattr(self.discord_observer, "stop"):
             if self.discord_observer:
-                self.discord_observer.stop()
+                await self.discord_observer.stop()
         if hasattr(self.tool_service, "stop"):
-            self.tool_service.stop()
+            await self.tool_service.stop()
         if hasattr(self.discord_adapter, "stop"):
             await self.discord_adapter.stop()
 

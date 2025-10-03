@@ -140,7 +140,9 @@ class FilterTestHelper:
                                     # (speak, memorize, recall, task_complete, etc. all complete the thought)
                                     if execution_success:
                                         if self.verbose:
-                                            print(f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8]}")
+                                            print(
+                                                f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8]}"
+                                            )
                                         # Use thought_id as the completion marker (not task_id which may be None)
                                         if thought_id and thought_id != "unknown":
                                             self.completed_tasks.add(thought_id)

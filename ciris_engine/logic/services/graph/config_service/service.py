@@ -18,6 +18,8 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.nodes import ConfigNode, ConfigValue
 from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.types import ConfigValue as ConfigValueType
+from ciris_engine.schemas.types import JSONDict, JSONList, JSONValue
 
 # No psutil needed - only resource_monitor uses it
 
@@ -38,7 +40,7 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         self._start_time: Optional[datetime] = None
         # No process tracking here - resource_monitor handles that
         self._config_cache: Dict[str, ConfigNode] = {}  # Cache for config nodes
-        self._config_listeners: Dict[str, List[Callable]] = {}  # key_pattern -> [callbacks]
+        self._config_listeners: Dict[str, List[Callable[..., Any]]] = {}  # key_pattern -> [callbacks]
 
         # Track cache metrics for v1.4.3
         self._cache_hits = 0
@@ -180,7 +182,7 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         return latest_config
 
     async def set_config(
-        self, key: str, value: Union[str, int, float, bool, List, Dict, Path], updated_by: str
+        self, key: str, value: Union[str, int, float, bool, JSONList, JSONDict, Path], updated_by: str
     ) -> None:
         """Set configuration value with history."""
         import uuid
@@ -205,8 +207,10 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         elif isinstance(value, str):
             config_value.string_value = value
         elif isinstance(value, list):
-            config_value.list_value = value
+            # Cast to the expected list type for ConfigValue
+            config_value.list_value = cast(List[Union[str, int, float, bool]], value)
         else:  # isinstance(value, dict)
+            # dict_value already matches JSONDict type
             config_value.dict_value = value
 
         # Check if value has changed
@@ -252,7 +256,9 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         # Notify listeners of the change
         await self._notify_listeners(key, current.value if current else None, config_value)
 
-    async def list_configs(self, prefix: Optional[str] = None) -> Dict[str, Union[str, int, float, bool, List, Dict]]:
+    async def list_configs(
+        self, prefix: Optional[str] = None
+    ) -> Dict[str, Union[str, int, float, bool, JSONList, JSONDict]]:
         """List all configurations with optional prefix filter."""
         # Get all config nodes
         all_nodes = await self.graph.search("type:config")
@@ -271,15 +277,15 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
                 continue
 
         # Return key->value mapping (extract actual value from ConfigValue)
-        result: Dict[str, Union[str, int, float, bool, List, Dict]] = {}
+        result: Dict[str, Union[str, int, float, bool, JSONList, JSONDict]] = {}
         for key, node in config_map.items():
             val = node.value.value
             if val is not None:  # Skip None values to match return type
                 # Cast to the expected type since we know it's not None
-                result[key] = cast(Union[str, int, float, bool, List, Dict], val)
+                result[key] = cast(Union[str, int, float, bool, JSONList, JSONDict], val)
         return result
 
-    def register_config_listener(self, key_pattern: str, callback: Callable) -> None:
+    def register_config_listener(self, key_pattern: str, callback: Callable[..., Any]) -> None:
         """Register a callback for config changes matching the key pattern.
 
         Args:
@@ -295,7 +301,7 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         safe_pattern = sanitize_for_log(key_pattern, max_length=100)
         logger.info(f"Registered config listener for pattern: {safe_pattern}")
 
-    def unregister_config_listener(self, key_pattern: str, callback: Callable) -> None:
+    def unregister_config_listener(self, key_pattern: str, callback: Callable[..., Any]) -> None:
         """Unregister a config change callback."""
         if key_pattern in self._config_listeners:
             self._config_listeners[key_pattern].remove(callback)

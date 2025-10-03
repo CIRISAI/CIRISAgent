@@ -939,8 +939,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             logger.info("Hash chain audit system initialized")
 
         except Exception as e:
-            logger.error(f"Failed to initialize hash chain: {e}", exc_info=True)
-            self.enable_hash_chain = False
+            logger.error(f"CRITICAL: Failed to initialize hash chain: {e}", exc_info=True)
+            # Hash chain is REQUIRED for audit integrity - do not allow fallback
+            raise RuntimeError(f"Audit hash chain initialization failed: {e}") from e
 
     def _init_components_sync(self) -> None:
         """Synchronous initialization of audit components."""

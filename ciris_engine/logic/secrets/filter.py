@@ -8,7 +8,7 @@ the agent's ability to reason about and use secrets safely.
 import logging
 import re
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.schemas.secrets.core import ConfigExport, DetectedSecret, PatternStats
 from ciris_engine.schemas.secrets.core import SecretPattern as ConfigSecretPattern
@@ -27,7 +27,7 @@ class SecretsFilter:
 
     def __init__(self, detection_config: Optional[SecretsDetectionConfig] = None) -> None:
         self.detection_config = detection_config or SecretsDetectionConfig()
-        self._compiled_patterns: Dict[str, re.Pattern] = {}
+        self._compiled_patterns: Dict[str, re.Pattern[str]] = {}
         self._compile_patterns()
 
     def _compile_patterns(self) -> None:
@@ -281,7 +281,7 @@ class SecretsFilter:
             auto_decrypt_for_actions=["speak", "tool"],  # Default
         )
 
-    def update_filter_config(self, updates: dict) -> bool:  # pragma: no cover - rarely used
+    def update_filter_config(self, updates: Dict[str, Any]) -> bool:  # pragma: no cover - rarely used
         """Update filter configuration settings."""
         try:
             for key, value in updates.items():

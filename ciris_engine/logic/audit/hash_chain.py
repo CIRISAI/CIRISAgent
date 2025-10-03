@@ -10,7 +10,7 @@ import json
 import logging
 import sqlite3
 import threading
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.schemas.audit.hash_chain import ChainSummary, HashChainVerificationResult
 
@@ -43,7 +43,7 @@ class AuditHashChain:
         self._initialized = True
         logger.info(f"Hash chain initialized at sequence {self._sequence_number}")
 
-    def compute_entry_hash(self, entry: dict) -> str:
+    def compute_entry_hash(self, entry: Dict[str, Any]) -> str:
         """Compute deterministic hash of entry content"""
         # Create canonical representation for hashing
         canonical = {
@@ -62,7 +62,7 @@ class AuditHashChain:
         # Compute SHA-256 hash
         return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
-    def prepare_entry(self, entry: dict) -> dict:
+    def prepare_entry(self, entry: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare an entry for the hash chain by adding chain fields"""
         if not self._initialized:
             self.initialize()
@@ -84,7 +84,7 @@ class AuditHashChain:
 
         return entry
 
-    def get_last_entry(self) -> Optional[dict]:
+    def get_last_entry(self) -> Optional[Dict[str, Any]]:
         """Retrieve the last entry from the chain"""
         try:
             conn = sqlite3.connect(self.db_path)

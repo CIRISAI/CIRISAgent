@@ -20,7 +20,7 @@ The SSE API broadcasts reasoning events as the agent processes thoughts through 
 
 **Endpoint:** `POST /v1/agent/message`
 
-Submit a message for processing and receive an immediate acknowledgment with a `thought_id` to track the reasoning process.
+Submit a message for processing and receive an immediate acknowledgment with a `task_id`. The task will generate thoughts during processing which emit reasoning events.
 
 **Request:**
 ```json
@@ -29,27 +29,63 @@ Submit a message for processing and receive an immediate acknowledgment with a `
 }
 ```
 
-**Response (200 OK):**
+**Response (200 OK - Accepted):**
 ```json
 {
-  "status": "processing",
-  "thought_id": "th_std_abc123...",
-  "message": "Message received and processing started"
+  "status": "success",
+  "data": {
+    "message_id": "msg_abc123",
+    "task_id": "task_xyz789",
+    "channel_id": "api_default",
+    "submitted_at": "2025-10-03T18:00:00.000Z",
+    "accepted": true,
+    "rejection_reason": null,
+    "rejection_detail": null
+  }
+}
+```
+
+**Response (200 OK - Rejected):**
+```json
+{
+  "status": "success",
+  "data": {
+    "message_id": "msg_abc123",
+    "task_id": null,
+    "channel_id": "api_default",
+    "submitted_at": "2025-10-03T18:00:00.000Z",
+    "accepted": false,
+    "rejection_reason": "FILTERED_OUT",
+    "rejection_detail": "Message filtered by adaptive filter"
+  }
 }
 ```
 
 **Schema:**
 ```typescript
-interface MessageSubmissionRequest {
+interface MessageRequest {
   message: string;  // The message content to process
+  context?: MessageContext;  // Optional context
 }
 
 interface MessageSubmissionResponse {
-  status: "processing";
-  thought_id: string;  // Use this to track reasoning events
-  message: string;
+  message_id: string;           // Unique message ID for tracking
+  task_id: string | null;       // Task ID if accepted (null if rejected)
+  channel_id: string;           // Channel where message was sent
+  submitted_at: string;         // ISO timestamp of submission
+  accepted: boolean;            // Whether message was accepted
+  rejection_reason?: string;    // Reason if rejected
+  rejection_detail?: string;    // Additional rejection details
+}
+
+// Wrapper for all API responses
+interface SuccessResponse<T> {
+  status: "success";
+  data: T;
 }
 ```
+
+**Note:** The `task_id` can be used to filter SSE reasoning events. Each task generates one or more thoughts during processing, and each thought emits the 6 reasoning events.
 
 ### 2. Stream Reasoning Events (Real-time)
 
@@ -86,27 +122,54 @@ data: {"event_type": "action_result", "thought_id": "th_std_abc123...", ...}
 
 ### 3. Poll for Response (Fallback)
 
-**Endpoint:** `GET /v1/agent/message/{thought_id}`
+**Endpoint:** `GET /v1/agent/history?channel_id={channel_id}&limit=10`
 
-If SSE streaming is not available, poll this endpoint to check thought processing status.
+If SSE streaming is not available, poll this endpoint to retrieve recent messages and agent responses.
 
 **Response:**
 ```json
 {
-  "thought_id": "th_std_abc123...",
-  "status": "completed",
-  "action_type": "speak",
-  "action_result": {
-    "content": "The weather is sunny today!"
+  "status": "success",
+  "data": {
+    "messages": [
+      {
+        "id": "msg_abc123",
+        "author": "user_123",
+        "content": "What's the weather like today?",
+        "timestamp": "2025-10-03T18:00:00.000Z",
+        "is_agent": false
+      },
+      {
+        "id": "msg_xyz789",
+        "author": "CIRIS",
+        "content": "The weather is sunny today!",
+        "timestamp": "2025-10-03T18:00:05.000Z",
+        "is_agent": true
+      }
+    ],
+    "channel_id": "api_default",
+    "total": 2
   }
 }
 ```
 
-**Status Values:**
-- `processing` - Still thinking
-- `completed` - Action executed
-- `failed` - Processing failed
-- `cancelled` - Thought cancelled
+**Alternative: Task Status Endpoint**
+
+`GET /v1/system/tasks/{task_id}` - Check specific task status
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "task_id": "task_xyz789",
+    "status": "completed",
+    "priority": 5,
+    "created_at": "2025-10-03T18:00:00.000Z",
+    "completed_at": "2025-10-03T18:00:05.000Z"
+  }
+}
+```
 
 ---
 
@@ -469,7 +532,8 @@ const response = await fetch('/v1/agent/message', {
   body: JSON.stringify({ message: "What's the weather?" })
 });
 
-const { thought_id } = await response.json();
+const result = await response.json();
+const { task_id } = result.data;
 
 // 2. Stream reasoning events
 const eventSource = new EventSource(`/v1/agent/stream?token=${token}`);
@@ -477,8 +541,8 @@ const eventSource = new EventSource(`/v1/agent/stream?token=${token}`);
 eventSource.addEventListener('reasoning', (event) => {
   const reasoningEvent = JSON.parse(event.data);
 
-  // Filter for this thought
-  if (reasoningEvent.thought_id === thought_id) {
+  // Filter for this task's thoughts
+  if (reasoningEvent.task_id === task_id) {
     console.log(`Event: ${reasoningEvent.event_type}`, reasoningEvent);
 
     // Final result
@@ -503,7 +567,8 @@ response = requests.post(
     headers={'Authorization': f'Bearer {token}'},
     json={'message': "What's the weather?"}
 )
-thought_id = response.json()['thought_id']
+result = response.json()
+task_id = result['data']['task_id']
 
 # 2. Stream reasoning events
 headers = {'Authorization': f'Bearer {token}'}
@@ -514,8 +579,8 @@ for event in client.events():
     if event.event == 'reasoning':
         data = json.loads(event.data)
 
-        # Filter for this thought
-        if data['thought_id'] == thought_id:
+        # Filter for this task's thoughts
+        if data['task_id'] == task_id:
             print(f"Event: {data['event_type']}")
 
             # Final result
@@ -528,17 +593,17 @@ for event in client.events():
 
 ```bash
 # 1. Submit message
-THOUGHT_ID=$(curl -X POST https://agents.ciris.ai/api/datum/v1/agent/message \
+TASK_ID=$(curl -X POST https://agents.ciris.ai/api/datum/v1/agent/message \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"message":"What is the weather?"}' | jq -r '.thought_id')
+  -d '{"message":"What is the weather?"}' | jq -r '.data.task_id')
 
-echo "Thought ID: $THOUGHT_ID"
+echo "Task ID: $TASK_ID"
 
 # 2. Stream reasoning events (keep connection open)
 curl -N -H "Authorization: Bearer $TOKEN" \
   https://agents.ciris.ai/api/datum/v1/agent/stream | \
-  grep --line-buffered "thought_id.*$THOUGHT_ID"
+  grep --line-buffered "task_id.*$TASK_ID"
 ```
 
 ---
@@ -563,12 +628,13 @@ curl -N -H "Authorization: Bearer $TOKEN" \
 ## Best Practices
 
 1. **Keep SSE connection alive**: Don't reconnect for every message - reuse the stream
-2. **Filter by thought_id**: The stream includes all reasoning events - filter client-side
+2. **Filter by task_id**: The stream includes all reasoning events - filter client-side by task_id from message submission
 3. **Handle reconnection**: Implement exponential backoff for reconnection attempts
 4. **Validate schemas**: Use the provided schemas to validate incoming events
 5. **Track processing state**: Use event sequence to build a state machine
-6. **Graceful degradation**: Fall back to polling if SSE is not available
+6. **Graceful degradation**: Fall back to polling `/v1/agent/history` if SSE is not available
 7. **Timeout handling**: Set reasonable timeouts (30-60s for most thoughts)
+8. **Check message acceptance**: Verify `accepted: true` in submission response before filtering SSE stream
 
 ---
 

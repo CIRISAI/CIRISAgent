@@ -396,8 +396,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         except Exception as e:
             logger.error(f"Failed to log event {event_type}: {e}")
-            # Return entry with just entry_id on error
-            return AuditEntryResult(entry_id=entry.entry_id if "entry" in locals() else "error")
+            # Fail fast - audit failures are critical
+            raise RuntimeError(f"Failed to create audit entry for event {event_type}: {e}") from e
 
     async def log_conscience_event(
         self, thought_id: str, decision: str, reasoning: str, metadata: Optional["EventPayload"] = None

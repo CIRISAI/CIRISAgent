@@ -178,6 +178,7 @@ class ThoughtProcessor(
                 final_action=dma_results,
                 overridden=False,
                 override_reason=None,
+                epistemic_data={"status": "BYPASS", "reason": "Exempt action - skipped conscience"},
             )
 
         # Check for critical failures
@@ -190,6 +191,7 @@ class ThoughtProcessor(
                 final_action=deferral_result,
                 overridden=False,
                 override_reason=None,
+                epistemic_data={"status": "CRITICAL_FAILURE", "reason": "Critical DMA failure - auto defer"},
             )
 
         # Phase 3: Action selection
@@ -555,7 +557,11 @@ class ThoughtProcessor(
 
         if self._is_exempt_from_conscience_checks(action_result):
             return ConscienceApplicationResult(
-                original_action=action_result, final_action=action_result, overridden=False, override_reason=None
+                original_action=action_result,
+                final_action=action_result,
+                overridden=False,
+                override_reason=None,
+                epistemic_data={"status": "EXEMPT", "action": action_result.selected_action.value},
             )
 
         context: Dict[str, Any] = {"thought": thought, "dma_results": dma_results_dict}
@@ -731,14 +737,16 @@ class ThoughtProcessor(
         self, action_result: ActionSelectionDMAResult, conscience_result: Dict[str, Any]
     ) -> ConscienceApplicationResult:
         """Create the final ConscienceApplicationResult."""
+        # epistemic_data is REQUIRED - use EMPTY marker if not provided
+        epistemic_data = conscience_result.get("epistemic_data") or {"status": "NONE", "reason": "No epistemic data from conscience checks"}
+
         result = ConscienceApplicationResult(
             original_action=action_result,
             final_action=conscience_result["final_action"],
             overridden=conscience_result["overridden"],
             override_reason=conscience_result["override_reason"],
+            epistemic_data=epistemic_data,
         )
-        if conscience_result["epistemic_data"]:
-            result.epistemic_data = conscience_result["epistemic_data"]
         if conscience_result.get("thought_depth_triggered") is not None:
             result.thought_depth_triggered = conscience_result["thought_depth_triggered"]
         if conscience_result.get("updated_status_detected") is not None:

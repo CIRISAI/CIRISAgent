@@ -85,7 +85,7 @@ class ActionDispatcher:
         dispatch_context: DispatchContext,  # Context from the caller (e.g., channel_id, author_name, services)
         # Services are now expected to be part of ActionHandlerDependencies,
         # but dispatch_context can still carry event-specific data.
-    ) -> "ActionResponse":
+    ) -> "ActionResponse":  # type: ignore[name-defined]
         """
         Dispatches the selected action to its registered handler.
         The handler is responsible for executing the action, updating thought status,
@@ -196,7 +196,7 @@ class ActionDispatcher:
                 thought_id=thought.thought_id,
                 task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
                 handler_name=handler_instance.__class__.__name__,
-                metadata={"follow_up_thought_id": follow_up_thought_id} if follow_up_thought_id else {},
+                parameters={"follow_up_thought_id": follow_up_thought_id} if follow_up_thought_id else {},
             )
             audit_result = await self.audit_service.log_action(
                 action_type=action_type, context=audit_context, outcome="success"
@@ -246,7 +246,7 @@ class ActionDispatcher:
                 thought_id=thought.thought_id,
                 task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
                 handler_name=handler_instance.__class__.__name__,
-                metadata={"error": str(e), "error_type": type(e).__name__},
+                parameters={"error": str(e), "error_type": type(e).__name__},
             )
             audit_result = await self.audit_service.log_action(
                 action_type=action_type, context=audit_context, outcome=f"error:{type(e).__name__}"

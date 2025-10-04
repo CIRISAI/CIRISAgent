@@ -19,6 +19,25 @@ from ..transport import Transport
 # Request/Response models matching the API
 
 
+class MessageRequest(BaseModel):
+    """Request to submit a message to the agent (async pattern)."""
+
+    message: str = Field(..., description="Message to send to the agent")
+    context: Optional[InteractionContext] = Field(None, description="Optional context")
+
+
+class MessageSubmissionResponse(BaseModel):
+    """Response from message submission (returns immediately with task ID or rejection)."""
+
+    message_id: str = Field(..., description="Unique message ID for tracking")
+    task_id: Optional[str] = Field(None, description="Task ID if accepted (null if rejected)")
+    channel_id: str = Field(..., description="Channel where message was sent")
+    submitted_at: str = Field(..., description="ISO timestamp of submission")
+    accepted: bool = Field(..., description="Whether message was accepted for processing")
+    rejection_reason: Optional[str] = Field(None, description="Reason if rejected")
+    rejection_detail: Optional[str] = Field(None, description="Additional rejection details")
+
+
 class InteractRequest(BaseModel):
     """Request to interact with the agent."""
 
@@ -145,13 +164,44 @@ class AgentResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
+    async def submit_message(
+        self, message: str, context: Optional[Union[InteractionContext, Dict[str, Any]]] = None
+    ) -> MessageSubmissionResponse:
+        """Submit a message to the agent (async pattern - returns immediately).
+
+        This endpoint returns immediately with a task_id for tracking or rejection reason.
+        Use get_history() to poll for the agent's response later, or use the SSE stream
+        to monitor reasoning events in real-time.
+
+        This is recommended for fire-and-forget interactions or when using SSE streaming.
+
+        Args:
+            message: The message to send to the agent
+            context: Optional context for the interaction
+
+        Returns:
+            MessageSubmissionResponse with message_id, task_id, and acceptance status
+        """
+        # Convert dict context to InteractionContext if needed
+        if context and isinstance(context, dict):
+            context = InteractionContext(**context)
+        request = MessageRequest(message=message, context=context)
+
+        request_data = request.model_dump()
+
+        result = await self._transport.request("POST", "/v1/agent/message", json=request_data)
+
+        return MessageSubmissionResponse(**result)
+
     async def interact(
         self, message: str, context: Optional[Union[InteractionContext, Dict[str, Any]]] = None
     ) -> InteractResponse:
-        """Send message and get response.
+        """Send message and get response (blocking - waits for response).
 
         This method combines sending a message and waiting for the agent's response.
-        It's the primary way to interact with the agent.
+        It's the primary way to interact with the agent when you need a synchronous response.
+
+        For async fire-and-forget interactions, use submit_message() instead.
 
         Args:
             message: The message to send to the agent

@@ -1,0 +1,755 @@
+ciris_sdk/setup.py:3:1: error: Library stubs not installed for "setuptools" 
+[import-untyped]
+    from setuptools import find_packages, setup
+    ^
+ciris_sdk/setup.py:3:1: note: Hint: "python3 -m pip install types-setuptools"
+ciris_sdk/setup.py:3:1: note: (or run "mypy --install-types" to install all missing stub packages)
+ciris_sdk/setup.py:3:1: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+ciris_sdk/rate_limiter.py:93:29: error: Argument 1 to "int" has incompatible
+type "str | None"; expected
+"str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+                limit_val = int(limit)
+                                ^~~~~
+ciris_sdk/rate_limiter.py:94:33: error: Argument 1 to "int" has incompatible
+type "str | None"; expected
+"str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+                remaining_val = int(remaining)
+                                    ^~~~~~~~~
+ciris_sdk/rate_limiter.py:102:33: error: Incompatible types in assignment
+(expression has type "float", variable has type "int")  [assignment]
+                        self.rate = server_rate
+                                    ^~~~~~~~~~~
+ciris_sdk/rate_limiter.py:160:25: error: Incompatible types in assignment
+(expression has type "datetime", variable has type "None")  [assignment]
+            self.last_429 = datetime.now(timezone.utc)
+                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/rate_limiter.py:169:21: error: Incompatible types in assignment
+(expression has type "float", variable has type "int")  [assignment]
+            self.rate = min(self.max_rate, self.rate * self.increase_facto...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/rate_limiter.py:178:21: error: Incompatible types in assignment
+(expression has type "float", variable has type "int")  [assignment]
+            self.rate = max(self.min_rate, self.rate * self.decrease_facto...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/telemetry_models.py:66:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:66:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:82:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:82:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:141:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:141:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:158:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:158:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:177:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:177:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:207:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:207:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:256:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_models.py:256:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/pagination.py:50:36: error: Missing type parameters for generic type
+"Callable"  [type-arg]
+        def __init__(self, fetch_func: Callable, initial_params: Dict[str,...
+                                       ^
+ciris_sdk/pagination.py:96:56: error: Name "self.item_class" is not defined 
+[name-defined]
+    ...          self._current_page = PaginatedResponse[self.item_class](**re...
+                                                        ^
+ciris_sdk/pagination.py:181:17: error: Missing type parameters for generic type
+"Callable"  [type-arg]
+        fetch_func: Callable, params: Dict[str, Any], item_class: type[T],...
+                    ^
+ciris_sdk/model_types.py:26:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:26:5: error: Function is missing a type annotation for
+one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:42:41: error: Missing type parameters for generic type
+"list"  [type-arg]
+        value: Union[str, int, float, bool, list, dict] = Field(..., descr...
+                                            ^
+ciris_sdk/model_types.py:42:47: error: Missing type parameters for generic type
+"dict"  [type-arg]
+        value: Union[str, int, float, bool, list, dict] = Field(..., descr...
+                                                  ^
+ciris_sdk/model_types.py:74:41: error: Missing type parameters for generic type
+"list"  [type-arg]
+        value: Union[str, int, float, bool, list] = Field(..., description...
+                                            ^
+ciris_sdk/model_types.py:104:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:104:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:119:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:119:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:160:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:160:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:175:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:175:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:203:24: error: Missing type parameters for generic
+type "dict"  [type-arg]
+        metadata: Optional[dict] = Field(None, description="Additional met...
+                           ^
+ciris_sdk/model_types.py:237:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Union[str, datetime, None], _info...
+        ^
+ciris_sdk/model_types.py:237:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Union[str, datetime, None], _info...
+        ^
+ciris_sdk/model_types.py:257:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/model_types.py:257:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/auth_store.py:85:13: error: Returning Any from function declared to
+return "dict[str, Any]"  [no-any-return]
+                return data
+                ^~~~~~~~~~~
+ciris_sdk/auth_store.py:146:13: error: Returning Any from function declared to
+return "str | None"  [no-any-return]
+                return api_keys[base_url].get("key")
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/resources/websocket.py:138:30: error: Missing type parameters for
+generic type "Queue"  [type-arg]
+            self._message_queue: asyncio.Queue = asyncio.Queue(maxsize=mes...
+                                 ^
+ciris_sdk/resources/websocket.py:142:27: error: Missing type parameters for
+generic type "Task"  [type-arg]
+            self._tasks: List[asyncio.Task] = []
+                              ^
+ciris_sdk/resources/websocket.py:225: error: Unused "type: ignore" comment 
+[unused-ignore]
+            request = SubscribeRequest(channels=channel_filters)  # type: ...
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/websocket.py:128:46: error: Missing type parameters for generic type
+"Callable"  [type-arg]
+            self._event_handlers: Dict[str, List[Callable]] = {}
+                                                 ^
+ciris_sdk/websocket.py:130:26: error: Missing type parameters for generic type
+"Task"  [type-arg]
+            self._tasks: Set[asyncio.Task] = set()
+                             ^
+ciris_sdk/websocket.py:147:39: error: Missing type parameters for generic type
+"Callable"  [type-arg]
+        def on(self, event: str, handler: Callable) -> None:
+                                          ^
+ciris_sdk/websocket.py:159:40: error: Missing type parameters for generic type
+"Callable"  [type-arg]
+        def off(self, event: str, handler: Callable) -> None:
+                                           ^
+ciris_sdk/websocket.py:170:5: error: Function is missing a type annotation for
+one or more arguments  [no-untyped-def]
+        async def _emit(self, event: str, *args, **kwargs) -> None:
+        ^
+ciris_sdk/websocket.py:209:27: error: Incompatible types in assignment
+(expression has type "ClientConnection", variable has type "None")  [assignment]
+            self._websocket = await websockets.connect(self.ws_url, extra_...
+                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/websocket.py:212:30: error: Incompatible types in assignment
+(expression has type "datetime", variable has type "None")  [assignment]
+            self._connected_at = datetime.now(timezone.utc)
+                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/websocket.py:233:34: error: "None" has no attribute "__aiter__" (not
+async iterable)  [attr-defined]
+                async for message in self._websocket:
+                                     ^~~~~~~~~~~~~~~
+ciris_sdk/websocket.py:288:40: error: Incompatible types in assignment
+(expression has type "datetime", variable has type "None")  [assignment]
+                    self._last_heartbeat = datetime.now(timezone.utc)
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/websocket.py:336:15: error: "None" has no attribute "send" 
+[attr-defined]
+            await self._websocket.send(message)
+                  ^~~~~~~~~~~~~~~~~~~~
+ciris_sdk/transport.py:43:26: error: Item "None" of "AuthStore | None" has no
+attribute "get_api_key"  [union-attr]
+                stored_key = self.auth_store.get_api_key(self.base_url)
+                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/transport.py:67:5: error: Function is missing a type annotation 
+[no-untyped-def]
+        async def __aexit__(self, exc_type, exc, tb):
+        ^
+ciris_sdk/transport.py:72:5: error: Function is missing a type annotation for
+one or more arguments  [no-untyped-def]
+        async def request(self, method: str, path: str, **kwargs) -> Dict[...
+        ^
+ciris_sdk/transport.py:118:36: error: Argument 1 to "_log_response_headers" of
+"Transport" has incompatible type "Headers"; expected "dict[Any, Any]" 
+[arg-type]
+            self._log_response_headers(resp.headers)
+                                       ^~~~~~~~~~~~
+ciris_sdk/transport.py:122:20: error: Incompatible return value type (got
+"None", expected "dict[str, Any]")  [return-value]
+                return None
+                       ^~~~
+ciris_sdk/transport.py:134:17: error: Returning Any from function declared to
+return "dict[str, Any]"  [no-any-return]
+                    return data["data"]
+                    ^~~~~~~~~~~~~~~~~~~
+ciris_sdk/transport.py:137:13: error: Returning Any from function declared to
+return "dict[str, Any]"  [no-any-return]
+                return data
+                ^~~~~~~~~~~
+ciris_sdk/transport.py:142:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def _log_response_headers(self, headers: dict):
+        ^
+ciris_sdk/transport.py:142:46: error: Missing type parameters for generic type
+"dict"  [type-arg]
+        def _log_response_headers(self, headers: dict):
+                                                 ^
+ciris_sdk/telemetry_responses.py:89:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:89:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:114:5: error: Function is missing a return
+type annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:114:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:170:5: error: Function is missing a return
+type annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:170:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:192:5: error: Function is missing a return
+type annotation  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/telemetry_responses.py:192:5: error: Function is missing a type
+annotation for one or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/models.py:43:96: error: Missing type parameters for generic type
+"dict"  [type-arg]
+    ...emoryAttributes, ConfigAttributes, TelemetryAttributes, dict] = Field(
+                                                               ^
+ciris_sdk/models.py:53:5: error: Function is missing a return type annotation 
+[no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/models.py:53:5: error: Function is missing a type annotation for one
+or more arguments  [no-untyped-def]
+        def serialize_datetime(self, dt: Optional[datetime], _info):
+        ^
+ciris_sdk/resources/wa.py:58:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["status"] = status
+                                   ^~~~~~
+ciris_sdk/resources/wa.py:60:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["cursor"] = cursor
+                                   ^~~~~~
+ciris_sdk/resources/wa.py:103:39: error: Incompatible types in assignment
+(expression has type "str", target has type "bool")  [assignment]
+                params["resource_type"] = resource_type
+                                          ^~~~~~~~~~~~~
+ciris_sdk/resources/wa.py:105:41: error: Incompatible types in assignment
+(expression has type "str", target has type "bool")  [assignment]
+                params["permission_type"] = permission_type
+                                            ^~~~~~~~~~~~~~~
+ciris_sdk/resources/wa.py:115:9: error: Returning Any from function declared to
+return "list[dict[str, Any]]"  [no-any-return]
+            return result.get("deferrals", [])
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/resources/telemetry.py:87:38: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        def from_api_response(cls, data: dict) -> "TelemetryResourcesHisto...
+                                         ^
+ciris_sdk/resources/telemetry.py:392:45: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_service_registry(self) -> dict:
+                                                ^
+ciris_sdk/resources/telemetry.py:401:38: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_llm_usage(self) -> dict:
+                                         ^
+ciris_sdk/resources/telemetry.py:410:45: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_circuit_breakers(self) -> dict:
+                                                ^
+ciris_sdk/resources/telemetry.py:419:64: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_security_incidents(self, hours: int = 24) -> dict:
+                                                                   ^
+ciris_sdk/resources/telemetry.py:432:37: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_handlers(self) -> dict:
+                                        ^
+ciris_sdk/resources/telemetry.py:441:51: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_errors(self, hours: int = 1) -> dict:
+                                                      ^
+ciris_sdk/resources/telemetry.py:454:49: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_trace(self, trace_id: str) -> dict:
+                                                    ^
+ciris_sdk/resources/telemetry.py:466:40: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_rate_limits(self) -> dict:
+                                           ^
+ciris_sdk/resources/telemetry.py:475:40: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_tsdb_status(self) -> dict:
+                                           ^
+ciris_sdk/resources/telemetry.py:484:43: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_discord_status(self) -> dict:
+                                              ^
+ciris_sdk/resources/telemetry.py:493:63: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_aggregates_hourly(self, hours: int = 24) -> dict:
+                                                                  ^
+ciris_sdk/resources/telemetry.py:506:42: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_summary_daily(self) -> dict:
+                                             ^
+ciris_sdk/resources/telemetry.py:517:16: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        ) -> Union[dict, str]:
+                   ^
+ciris_sdk/resources/telemetry.py:537:91: error: Missing type parameters for
+generic type "dict"  [type-arg]
+    ...ry_history(self, days: int = 7, metric: str = "llm_requests") -> dict:
+                                                                        ^
+ciris_sdk/resources/telemetry.py:551:36: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_backups(self) -> dict:
+                                       ^
+ciris_sdk/resources/telemetry.py:567:16: error: Incompatible return value type
+(got "dict[str, Any]", expected "str")  [return-value]
+            return data
+                   ^~~~
+ciris_sdk/resources/telemetry.py:573:16: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        ) -> Union[dict, str]:
+                   ^
+ciris_sdk/resources/telemetry.py:648:40: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def get_all_metrics(self) -> dict:
+                                           ^
+ciris_sdk/resources/telemetry.py:669:16: error: Incompatible return value type
+(got "dict[Any, Any] | str", expected "dict[Any, Any]")  [return-value]
+            return await self.get_unified_telemetry(view="detailed", live=...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/resources/telemetry.py:704:44: error: Missing type parameters for
+generic type "dict"  [type-arg]
+        async def check_system_health(self) -> dict:
+                                               ^
+ciris_sdk/resources/telemetry.py:720:16: error: Incompatible return value type
+(got "dict[Any, Any] | str", expected "dict[Any, Any]")  [return-value]
+            return await self.get_unified_telemetry(view="health", live=Tr...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/resources/memory.py:316:23: error: Type argument "dict[str, Any]" of
+"PageIterator" must be a subtype of "BaseModel"  [type-var]
+        ) -> PageIterator[Dict[str, Any]]:
+                          ^
+ciris_sdk/resources/memory.py:350:16: error: Value of type variable "T" of
+"PageIterator" cannot be "dict[Any, Any]"  [type-var]
+            return PageIterator(
+                   ^
+ciris_sdk/resources/memory.py:471:16: error: Item "list[GraphNode]" of
+"MemoryQueryResponse | list[GraphNode]" has no attribute "nodes"  [union-attr]
+            return response.nodes
+                   ^~~~~~~~~~~~~~
+ciris_sdk/resources/memory.py:487:16: error: Item "list[GraphNode]" of
+"MemoryQueryResponse | list[GraphNode]" has no attribute "nodes"  [union-attr]
+            return response.nodes
+                   ^~~~~~~~~~~~~~
+ciris_sdk/resources/memory.py:504:16: error: Item "list[GraphNode]" of
+"MemoryQueryResponse | list[GraphNode]" has no attribute "nodes"  [union-attr]
+            return response.nodes
+                   ^~~~~~~~~~~~~~
+ciris_sdk/resources/memory.py:518:16: error: Item "list[GraphNode]" of
+"MemoryQueryResponse | list[GraphNode]" has no attribute "nodes"  [union-attr]
+            return response.nodes
+                   ^~~~~~~~~~~~~~
+ciris_sdk/resources/memory.py:577:16: error: Incompatible return value type
+(got "dict[str, Any]", expected "str")  [return-value]
+            return result
+                   ^~~~~~
+ciris_sdk/resources/jobs.py:156:48: error: Missing type parameters for generic
+type "JobResult"  [type-arg]
+        async def get_result(self, job_id: str) -> JobResult:
+                                                   ^
+ciris_sdk/resources/jobs.py:209:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["status"] = status.value
+                                   ^~~~~~~~~~~~
+ciris_sdk/resources/jobs.py:211:34: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["job_type"] = job_type.value
+                                     ^~~~~~~~~~~~~~
+ciris_sdk/resources/jobs.py:213:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["cursor"] = cursor
+                                   ^~~~~~
+ciris_sdk/resources/jobs.py:221:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        async def create_memory_query(self, **query_params) -> JobCreateRe...
+        ^
+ciris_sdk/resources/jobs.py:249:5: error: Function is missing a type annotation
+for one or more arguments  [no-untyped-def]
+        async def create_audit_export(
+        ^
+ciris_sdk/resources/emergency.py:29:5: error: Cannot assign to a type  [misc]
+        Ed25519PrivateKey = None  # Define for type annotations
+        ^~~~~~~~~~~~~~~~~
+ciris_sdk/resources/emergency.py:29:25: error: Incompatible types in assignment
+(expression has type "None", variable has type "type[Ed25519PrivateKey]") 
+[assignment]
+        Ed25519PrivateKey = None  # Define for type annotations
+                            ^~~~
+ciris_sdk/resources/config.py:220:23: error: Incompatible types in assignment
+(expression has type "dict[str, Any]", variable has type "list[dict[str, Any]]")
+ [assignment]
+                payload = patches[0] if len(patches) == 1 else {"patches":...
+                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/resources/config.py:244:32: error: Missing named argument "operation"
+for "ConfigOperationResponse"  [call-arg]
+                    results[key] = ConfigOperationResponse(success=False, ...
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/resources/config.py:244:32: error: Missing named argument "timestamp"
+for "ConfigOperationResponse"  [call-arg]
+                    results[key] = ConfigOperationResponse(success=False, ...
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/resources/auth.py:31:30: error: Missing type parameters for generic
+type "dict"  [type-arg]
+        def __init__(self, data: dict):
+                                 ^
+ciris_sdk/resources/auth.py:49:30: error: Missing type parameters for generic
+type "dict"  [type-arg]
+        def __init__(self, data: dict):
+                                 ^
+ciris_sdk/resources/audit.py:63:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["cursor"] = cursor
+                                   ^~~~~~
+ciris_sdk/resources/audit.py:67:36: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["start_time"] = start_time.isoformat()
+                                       ^~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/resources/audit.py:69:34: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["end_time"] = end_time.isoformat()
+                                     ^~~~~~~~~~~~~~~~~~~~
+ciris_sdk/resources/audit.py:71:31: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["actor"] = actor
+                                  ^~~~~
+ciris_sdk/resources/audit.py:73:36: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["event_type"] = event_type
+                                       ^~~~~~~~~~
+ciris_sdk/resources/audit.py:75:35: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["entity_id"] = entity_id
+                                      ^~~~~~~~~
+ciris_sdk/resources/audit.py:77:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["search"] = search
+                                   ^~~~~~
+ciris_sdk/resources/audit.py:79:34: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["severity"] = severity
+                                     ^~~~~~~~
+ciris_sdk/resources/audit.py:81:33: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["outcome"] = outcome
+                                    ^~~~~~~
+ciris_sdk/resources/audit.py:98:23: error: Type argument "dict[str, Any]" of
+"PageIterator" must be a subtype of "BaseModel"  [type-var]
+        ) -> PageIterator[Dict[str, Any]]:
+                          ^
+ciris_sdk/resources/audit.py:127:16: error: Value of type variable "T" of
+"PageIterator" cannot be "dict[Any, Any]"  [type-var]
+            return PageIterator(fetch_func=self.query, initial_params=para...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+ciris_sdk/resources/audit.py:127:40: error: "AuditResource" has no attribute
+"query"  [attr-defined]
+            return PageIterator(fetch_func=self.query, initial_params=para...
+                                           ^~~~~~~~~~
+ciris_sdk/resources/agent.py:236:32: error: Incompatible types in assignment
+(expression has type "str", target has type "int")  [assignment]
+                params["before"] = before.isoformat()
+                                   ^~~~~~~~~~~~~~~~~~
+ciris_sdk/resources/agent.py:277:5: error: Function is missing a return type
+annotation  [no-untyped-def]
+        async def stream(self, websocket_url: Optional[str] = None):
+        ^
+ciris_sdk/client.py:96:5: error: Function is missing a type annotation 
+[no-untyped-def]
+        async def __aexit__(self, exc_type, exc, tb):
+        ^
+ciris_sdk/client.py:97:15: error: Call to untyped function "__aexit__" in typed
+context  [no-untyped-call]
+            await self._transport.__aexit__(exc_type, exc, tb)
+                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/client.py:115:5: error: Function is missing a type annotation for one
+or more arguments  [no-untyped-def]
+        async def _request_with_retry(self, method: str, path: str, **kwar...
+        ^
+ciris_sdk/client.py:185:34: error: Name "List" is not defined  [name-defined]
+            self, channels: Optional[List[EventChannel]] = None, reconnect...
+                                     ^~~~~~~~~~~~~~~~~~
+ciris_sdk/client.py:185:34: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
+ciris_sdk/examples/wa_example.py:8:1: error: Function is missing a return type
+annotation  [no-untyped-def]
+    async def main():
+    ^
+ciris_sdk/examples/wa_example.py:8:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/wa_example.py:72:17: error: Call to untyped function "main"
+in typed context  [no-untyped-call]
+        asyncio.run(main())
+                    ^~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:13:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_basic_usage():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:13:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:23:38: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+            print(f"Error rate: {summary['overall_error_rate']:.2%}")
+                                         ^~~~~~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:24:25: error: Unsupported
+operand types for / ("str" and "int")  [operator]
+            print(f"Uptime: {summary['overall_uptime_seconds'] / 3600:.1f}...
+                            ^
+ciris_sdk/examples/unified_telemetry_examples.py:24:25: note: Left operand is of type "Any | str"
+ciris_sdk/examples/unified_telemetry_examples.py:24:34: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+            print(f"Uptime: {summary['overall_uptime_seconds'] / 3600:.1f}...
+                                     ^~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:31:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_specific_metrics():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:31:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:45:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_filtered_views():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:45:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:50:36: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+            print(f"Avg latency: {perf['performance']['avg_latency_ms']}ms...
+                                       ^~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:51:35: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+            print(f"Throughput: {perf['performance']['throughput_rps']} re...
+                                      ^~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:55:25: error: Unsupported
+operand types for / ("str" and "int")  [operator]
+            print(f"Uptime: {reliability['uptime_seconds'] / 86400:.1f} da...
+                            ^
+ciris_sdk/examples/unified_telemetry_examples.py:55:25: note: Left operand is of type "Any | str"
+ciris_sdk/examples/unified_telemetry_examples.py:55:38: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+            print(f"Uptime: {reliability['uptime_seconds'] / 86400:.1f} da...
+                                         ^~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:56:42: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+            print(f"Error rate: {reliability['error_rate']:.4%}")
+                                             ^~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:60:26: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+            print(f"Alerts: {ops.get('alerts', [])}")
+                             ^~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:61:28: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+            print(f"Warnings: {ops.get('warnings', [])}")
+                               ^~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:64:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_category_filtering():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:64:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:70:34: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+            for bus_name, metrics in buses.get("buses", {}).items():
+                                     ^~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:76:20: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+            resource = infra.get("infrastructure", {}).get("resource_monit...
+                       ^~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:83:33: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+            for service, metrics in graph.get("graph_services", {}).items(...
+                                    ^~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:87:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_export_formats():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:87:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:101:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_monitoring_loop():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:101:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:112:32: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+                    if not metrics["system_healthy"]:
+                                   ^~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:115:20: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+                    if metrics.get("alerts"):
+                       ^~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:116:51: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+                        print(f"🚨 ALERTS: {metrics['alerts']}")
+                                                      ^~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:118:20: error: Item "str" of
+"dict[Any, Any] | str" has no attribute "get"  [union-attr]
+                    if metrics.get("warnings"):
+                       ^~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:119:56: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+                        print(f"⚠️  Warnings: {metrics['warnings']}")
+                                                           ^~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:123:42: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+                        f"Services: {metrics['services_online']}/{metrics[...
+                                             ^~~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:124:44: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+                        f"Error rate: {metrics['overall_error_rate']:.2%} ...
+                                               ^~~~~~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:125:31: error: Unsupported
+operand types for / ("str" and "int")  [operator]
+                        f"Uptime: {metrics['overall_uptime_seconds'] / 360...
+                                  ^
+ciris_sdk/examples/unified_telemetry_examples.py:125:31: note: Left operand is of type "Any | str"
+ciris_sdk/examples/unified_telemetry_examples.py:125:40: error: Invalid index
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+[index]
+                        f"Uptime: {metrics['overall_uptime_seconds'] / 360...
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:139:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def example_comprehensive_report():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:139:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:194:1: error: Function is
+missing a return type annotation  [no-untyped-def]
+    async def main():
+    ^
+ciris_sdk/examples/unified_telemetry_examples.py:194:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/unified_telemetry_examples.py:212:19: error: Call to untyped
+function (unknown) in typed context  [no-untyped-call]
+                await func()
+                      ^~~~~~
+ciris_sdk/examples/unified_telemetry_examples.py:221:17: error: Call to untyped
+function "main" in typed context  [no-untyped-call]
+        asyncio.run(main())
+                    ^~~~~~
+ciris_sdk/examples/agent_interaction.py:16:1: error: Function is missing a
+return type annotation  [no-untyped-def]
+    async def main():
+    ^
+ciris_sdk/examples/agent_interaction.py:16:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/agent_interaction.py:73:1: error: Function is missing a
+return type annotation  [no-untyped-def]
+    async def authenticated_example():
+    ^
+ciris_sdk/examples/agent_interaction.py:73:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/agent_interaction.py:91:1: error: Function is missing a
+return type annotation  [no-untyped-def]
+    async def error_handling_example():
+    ^
+ciris_sdk/examples/agent_interaction.py:91:1: note: Use "-> None" if function does not return a value
+ciris_sdk/examples/agent_interaction.py:110:17: error: Call to untyped function
+"main" in typed context  [no-untyped-call]
+        asyncio.run(main())
+                    ^~~~~~
+Found 180 errors in 24 files (checked 28 source files)

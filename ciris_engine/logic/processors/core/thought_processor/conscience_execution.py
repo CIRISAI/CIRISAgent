@@ -76,13 +76,10 @@ class ConscienceExecutionPhase:
         }
 
         if action_result.selected_action in exempt_actions:
-            # Exempt actions bypass conscience checks - provide minimal epistemic_data
-            return ConscienceApplicationResult(
-                original_action=action_result,
-                final_action=action_result,
-                overridden=False,
-                override_reason=None,
-                epistemic_data={"status": "exempt", "action": action_result.selected_action.value},
+            # Exempt actions bypass conscience checks - epistemic_data is REQUIRED
+            raise ValueError(
+                f"Exempt actions ({action_result.selected_action.value}) should not reach conscience execution. "
+                f"This indicates a pipeline configuration error."
             )
 
         context = {"thought": thought or thought_item, "dma_results": dma_results or {}}
@@ -178,12 +175,13 @@ class ConscienceExecutionPhase:
                 overridden = True
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
 
-        # Ensure epistemic_data is always populated (REQUIRED field)
+        # epistemic_data is REQUIRED - fail fast if not populated
         if not epistemic_data:
-            epistemic_data = {
-                "status": "checked" if not is_conscience_retry else "retry",
-                "conscience_count": str(len(list(self.conscience_registry.get_consciences()))),
-            }
+            raise ValueError(
+                f"No conscience checks provided epistemic_data for action {action_result.selected_action.value}. "
+                f"All conscience checks MUST provide epistemic_data. "
+                f"Registered consciences: {[e.name for e in self.conscience_registry.get_consciences()]}"
+            )
 
         result = ConscienceApplicationResult(
             original_action=action_result,

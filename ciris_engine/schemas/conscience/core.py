@@ -87,12 +87,8 @@ class ConscienceCheckResult(BaseModel):
     # Detailed check results (REQUIRED - all 4 checks must be present)
     entropy_check: EntropyCheckResult = Field(..., description="Entropy check result (REQUIRED)")
     coherence_check: CoherenceCheckResult = Field(..., description="Coherence check result (REQUIRED)")
-    optimization_veto_check: OptimizationVetoResult = Field(
-        ..., description="Optimization veto result (REQUIRED)"
-    )
-    epistemic_humility_check: EpistemicHumilityResult = Field(
-        ..., description="Humility check result (REQUIRED)"
-    )
+    optimization_veto_check: OptimizationVetoResult = Field(..., description="Optimization veto result (REQUIRED)")
+    epistemic_humility_check: EpistemicHumilityResult = Field(..., description="Humility check result (REQUIRED)")
 
     # Metrics
     entropy_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Overall entropy score")

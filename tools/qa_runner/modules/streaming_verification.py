@@ -297,7 +297,9 @@ class StreamingVerificationModule:
                                         elif field_type == str and not event[field]:
                                             event_detail["issues"].append(f"Empty string for required field: {field}")
                                             if field == "action_rationale":
-                                                errors.append(f"🐛 BUG 1: aspdma_result.action_rationale is empty string")
+                                                errors.append(
+                                                    f"🐛 BUG 1: aspdma_result.action_rationale is empty string"
+                                                )
                                     # Optional recursive flag
                                     if "is_recursive" in event:
                                         events_with_recursive_flag += 1
@@ -331,7 +333,9 @@ class StreamingVerificationModule:
                                     # Check for updated_status_available field (from UpdatedStatusConscience check)
                                     if "updated_status_available" not in event:
                                         event_detail["issues"].append("Missing updated_status_available field")
-                                        errors.append(f"🐛 BUG 2: conscience_result missing updated_status_available flag")
+                                        errors.append(
+                                            f"🐛 BUG 2: conscience_result missing updated_status_available flag"
+                                        )
 
                                     # Optional recursive flag
                                     if "is_recursive" in event:
@@ -368,17 +372,25 @@ class StreamingVerificationModule:
                                     for field, field_type in audit_fields.items():
                                         if field not in event:
                                             event_detail["issues"].append(f"Missing REQUIRED audit field: {field}")
-                                            errors.append(f"🐛 BUG 3: action_result missing REQUIRED audit field: {field}")
+                                            errors.append(
+                                                f"🐛 BUG 3: action_result missing REQUIRED audit field: {field}"
+                                            )
                                         elif event.get(field) is None:
                                             event_detail["issues"].append(f"REQUIRED audit field is None: {field}")
-                                            errors.append(f"🐛 BUG 3: action_result REQUIRED audit field is None: {field}")
+                                            errors.append(
+                                                f"🐛 BUG 3: action_result REQUIRED audit field is None: {field}"
+                                            )
                                         elif not isinstance(event[field], field_type):
                                             event_detail["issues"].append(
                                                 f"Audit field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
                                             )
                                         elif field_type == str and not event[field]:
-                                            event_detail["issues"].append(f"REQUIRED audit field is empty string: {field}")
-                                            errors.append(f"🐛 BUG 3: action_result REQUIRED audit field is empty: {field}")
+                                            event_detail["issues"].append(
+                                                f"REQUIRED audit field is empty string: {field}"
+                                            )
+                                            errors.append(
+                                                f"🐛 BUG 3: action_result REQUIRED audit field is empty: {field}"
+                                            )
 
                                     # Track if all audit data is present
                                     if all(event.get(f) for f in audit_fields.keys()):

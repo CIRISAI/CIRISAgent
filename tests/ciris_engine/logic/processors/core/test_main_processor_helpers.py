@@ -123,18 +123,19 @@ class TestAgentProcessorHelpers:
     @pytest.mark.asyncio
     async def test_check_pause_state_paused_with_event(self, main_processor):
         """Test _check_pause_state when paused with event."""
-        main_processor._is_paused = True
-        main_processor._pause_event = AsyncMock()
+        import asyncio
 
-        # Mock the event to resolve immediately
-        main_processor._pause_event.wait = AsyncMock()
-        main_processor._pause_event.clear = Mock()
+        main_processor._is_paused = True
+        # Use a real asyncio.Event (not AsyncMock) since production code checks isinstance()
+        main_processor._pause_event = asyncio.Event()
+        # Pre-set the event so wait() returns immediately
+        main_processor._pause_event.set()
 
         result = await main_processor._check_pause_state()
 
         assert result is True
-        main_processor._pause_event.wait.assert_called_once()
-        main_processor._pause_event.clear.assert_called_once()
+        # Verify event was cleared after wait (event should not be set anymore)
+        assert not main_processor._pause_event.is_set()
 
     @pytest.mark.asyncio
     async def test_check_pause_state_paused_no_event(self, main_processor):

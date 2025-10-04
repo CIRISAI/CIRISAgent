@@ -7,25 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 1.2.2
 
-### Added
-- **📊 Enhanced Streaming Validation**: Added explicit bug detection in QA streaming tests with detailed error messages
-- **🔒 ActionResponse Schema**: Created typed ActionResponse to replace Dict[str, Any] dispatch_result with audit_data field
+### Fixed
+- **🐛 SSE Streaming Bugs**: Fixed 3 critical H3ERE pipeline SSE event bugs (100% QA test pass rate)
+  - **BUG 1**: action_rationale empty - Extract from input action at CONSCIENCE_EXECUTION step, add default in mock_llm
+  - **BUG 2**: epistemic_data/updated_status_available missing - Make REQUIRED with EXEMPT markers, add to ConscienceResultEvent schema
+  - **BUG 3**: 4 audit fields missing - Wire ActionResponse with AuditEntryResult, make all fields REQUIRED
+- **📡 Production Timing Bug**: Fixed conscience/action selection results emitted simultaneously - ASPDMA_RESULT now correctly emitted at CONSCIENCE_EXECUTION step (before conscience validation)
+- **🔒 Type Safety**: ActionDispatcher now returns typed ActionResponse (was None), fixed missing return statements in error paths
+- **⚙️ Audit Service**: log_action now returns AuditEntryResult (was None), wired through component_builder to action_dispatcher
 
 ### Changed
-- **🎯 Fail-Fast Philosophy**: Removed ALL fallback logic - system now fails loud when required data missing
-- **✅ REQUIRED Fields Everywhere**: Made critical SSE fields REQUIRED throughout schemas
-  - ActionSelectionDMAResult.rationale (was Optional)
-  - ConscienceApplicationResult.epistemic_data (REQUIRED with fallback markers)
-  - AuditEntryResult: sequence_number, entry_hash, signature (were Optional)
-  - ActionCompleteStepData: All 4 audit fields (were Optional)
+- **✅ REQUIRED Fields**: Made critical SSE/audit fields non-optional throughout schemas
+  - ActionSelectionDMAResult.rationale, ConscienceApplicationResult.epistemic_data
+  - AuditEntryResult: sequence_number, entry_hash, signature
+  - ConscienceExecutionStepData.action_rationale, ConscienceResultEvent.updated_status_available
+- **🎯 Fail-Fast**: Removed all fallback logic - system fails loud with detailed errors when required data missing
 
-### Fixed
-- **🐛 BUG 1: action_rationale**: Made ActionSelectionDMAResult.rationale REQUIRED - LLM prompt already requires it, schema now enforces
-- **🐛 BUG 2: epistemic_data**: Made ConscienceApplicationResult.epistemic_data REQUIRED with EXEMPT/BYPASS markers for non-epistemic paths
-- **🐛 BUG 3: audit_trail**: Made all 4 audit fields REQUIRED in ActionCompleteStepData, wired ActionResponse with AuditEntryResult
-- **🔍 Type Safety**: All mypy errors resolved - Mypy can now validate entire SSE streaming pipeline and audit trail at compile time
-- **📡 Audit Trail**: AuditServiceProtocol.log_action now returns AuditEntryResult (was None)
-- **🚨 Dispatcher**: ActionDispatcher returns typed ActionResponse with audit_data, fails if audit_service unavailable
+### Added
+- **📊 Enhanced QA**: Streaming tests now detect bugs with explicit "🐛 BUG N:" prefixes for clear error reporting
+- **🔒 ActionResponse Schema**: Typed replacement for Dict[str, Any] dispatch_result with REQUIRED audit_data field
 
 ## [1.2.1] - 2025-10-04
 

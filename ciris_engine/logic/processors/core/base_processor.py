@@ -160,6 +160,11 @@ class BaseProcessor(ABC):
 
     def _extract_action_name(self, dispatch_result: Any, result: Any) -> str:
         """Extract action name from dispatch result or action selection result."""
+        # Check for ActionResponse (typed response)
+        if hasattr(dispatch_result, "action_type"):
+            return str(dispatch_result.action_type)
+
+        # Backward compatibility: check for dict
         if isinstance(dispatch_result, dict):
             return str(dispatch_result.get("action_type", "UNKNOWN"))
 

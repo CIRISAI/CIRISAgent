@@ -110,6 +110,9 @@ def action_selection(
             custom_rationale = item.split(":", 1)[1]
             break
 
+    # Initialize rationale with default - should be overridden by specific logic paths
+    rationale = "[MOCK LLM] Action selection (no specific rationale provided)"
+
     # Check for help request
     show_help = False
     for item in context:

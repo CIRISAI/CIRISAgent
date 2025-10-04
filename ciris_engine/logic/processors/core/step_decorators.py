@@ -212,7 +212,7 @@ def _get_step_data_creators() -> Dict[StepPoint, Callable[..., Any]]:
             base_data, result, args
         ),
         StepPoint.CONSCIENCE_EXECUTION: lambda base_data, result, args, kwargs, thought_item: _create_conscience_execution_data(
-            base_data, result
+            base_data, result, args
         ),
         StepPoint.RECURSIVE_ASPDMA: lambda base_data, result, args, kwargs, thought_item: _create_recursive_aspdma_data(
             base_data, result, args
@@ -456,13 +456,21 @@ def _build_conscience_result_from_check(
     )
 
 
-def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> ConscienceExecutionStepData:
+def _create_conscience_execution_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> ConscienceExecutionStepData:
     """Add CONSCIENCE_EXECUTION specific data with full transparency."""
     # Validate result structure using helper
     _validate_conscience_execution_result(result)
 
     # Extract core values using helper
     selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(result)
+
+    # Extract action rationale from INPUT action_result (args[0]) - this is what goes into conscience
+    # The ASPDMA_RESULT event shows the action BEFORE conscience validation
+    if not args or len(args) == 0:
+        raise ValueError("CONSCIENCE_EXECUTION requires action_result as first argument")
+
+    input_action_result = args[0]  # This is the ActionSelectionDMAResult passed to conscience
+    action_rationale = input_action_result.rationale
 
     # Create comprehensive conscience evaluation details for full transparency
     conscience_check_result = _create_comprehensive_conscience_result(result)
@@ -473,6 +481,7 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
     return ConscienceExecutionStepData(
         **_base_data_dict(base_data),
         selected_action=selected_action,
+        action_rationale=action_rationale,
         conscience_passed=conscience_passed,
         action_result=action_result,
         override_reason=override_reason,

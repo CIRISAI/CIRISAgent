@@ -739,6 +739,7 @@ class ConscienceExecutionStepData(BaseStepData):
     """Step data for CONSCIENCE_EXECUTION step."""
 
     selected_action: str = Field(..., description="Final action after conscience check")
+    action_rationale: str = Field(..., description="Rationale for the final action (REQUIRED)")
     conscience_passed: bool = Field(..., description="Whether conscience validation passed")
     action_result: str = Field(..., description="Complete action result")
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
@@ -955,6 +956,11 @@ class ConscienceResultEvent(BaseModel):
     # Final action
     final_action: str = Field(..., description="Final action after conscience evaluation")
     action_was_overridden: bool = Field(..., description="Whether conscience changed the action")
+
+    # UpdatedStatusConscience detection
+    updated_status_available: Optional[bool] = Field(
+        None, description="Whether UpdatedStatusConscience detected new information during task processing"
+    )
 
 
 class ActionResultEvent(BaseModel):

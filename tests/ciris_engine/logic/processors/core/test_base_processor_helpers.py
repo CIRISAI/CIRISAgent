@@ -8,6 +8,8 @@ import pytest
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
+from ciris_engine.schemas.services.runtime_control import ActionResponse
+from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 
 
 class ConcreteProcessor(BaseProcessor):
@@ -151,8 +153,20 @@ class TestExtractActionName:
     """Test _extract_action_name helper method."""
 
     def test_extract_action_name_from_dict_result(self, base_processor):
-        """Test extracting action name from dict dispatch result."""
-        dispatch_result = {"action_type": "SPEAK", "success": True}
+        """Test extracting action name from ActionResponse dispatch result."""
+        # Create mock audit data
+        mock_audit = AuditEntryResult(
+            entry_id="test_123",
+            sequence_number=1,
+            entry_hash="hash_123",
+            signature="sig_123"
+        )
+        dispatch_result = ActionResponse(
+            success=True,
+            handler="TestHandler",
+            action_type="SPEAK",
+            audit_data=mock_audit
+        )
         action_selection_result = Mock()
 
         result = base_processor._extract_action_name(dispatch_result, action_selection_result)
@@ -160,7 +174,7 @@ class TestExtractActionName:
         assert result == "SPEAK"
 
     def test_extract_action_name_from_dict_with_missing_key(self, base_processor):
-        """Test extracting action name from dict without action_type key."""
+        """Test extracting action name when action_type is in dict (backward compatibility)."""
         dispatch_result = {"success": True}  # No action_type
         action_selection_result = Mock()
 
@@ -170,10 +184,8 @@ class TestExtractActionName:
 
     def test_extract_action_name_from_conscience_result(self, base_processor):
         """Test extracting action name from ConscienceApplicationResult."""
-        dispatch_result = Mock()  # Not a dict
+        dispatch_result = Mock(spec=[])  # No action_type attribute - will fall through to result checking
         action_selection_result = Mock()
-        # Configure Mock to not have __getitem__ (so isinstance(dict) is False)
-        action_selection_result.__class__ = Mock
         action_selection_result.final_action = Mock()
         action_selection_result.final_action.selected_action = "RECALL"
 
@@ -183,11 +195,8 @@ class TestExtractActionName:
 
     def test_extract_action_name_from_dma_result(self, base_processor):
         """Test extracting action name from ActionSelectionDMAResult directly."""
-        dispatch_result = Mock()  # Not a dict
-        action_selection_result = Mock()
-        action_selection_result.__class__ = Mock
-        # No final_action attribute (will raise AttributeError)
-        del action_selection_result.final_action
+        dispatch_result = Mock(spec=[])  # No action_type attribute
+        action_selection_result = Mock(spec=["selected_action"])  # Only has selected_action, no final_action
         action_selection_result.selected_action = "MEMORIZE"
 
         result = base_processor._extract_action_name(dispatch_result, action_selection_result)
@@ -196,9 +205,8 @@ class TestExtractActionName:
 
     def test_extract_action_name_fallback_to_unknown(self, base_processor):
         """Test that _extract_action_name returns UNKNOWN when all extraction fails."""
-        dispatch_result = Mock()  # Not a dict
-        action_selection_result = Mock(spec=[])  # Empty spec - no attributes
-        action_selection_result.__class__ = Mock
+        dispatch_result = Mock(spec=[])  # No action_type
+        action_selection_result = Mock(spec=[])  # No attributes at all
 
         result = base_processor._extract_action_name(dispatch_result, action_selection_result)
 
@@ -278,8 +286,20 @@ class TestDispatchActionIntegration:
     @pytest.mark.asyncio
     async def test_dispatch_action_success_flow(self, base_processor, mock_time_service, dispatch_context):
         """Test successful dispatch_action flow using all helper methods."""
-        # Set up action dispatcher
-        base_processor.action_dispatcher.dispatch = AsyncMock(return_value={"action_type": "SPEAK", "success": True})
+        # Create ActionResponse for dispatcher to return
+        mock_audit = AuditEntryResult(
+            entry_id="test_123",
+            sequence_number=1,
+            entry_hash="hash_123",
+            signature="sig_123"
+        )
+        action_response = ActionResponse(
+            success=True,
+            handler="TestHandler",
+            action_type="SPEAK",
+            audit_data=mock_audit
+        )
+        base_processor.action_dispatcher.dispatch = AsyncMock(return_value=action_response)
 
         result_mock = Mock()
         result_mock.selected_action = "SPEAK"
@@ -296,9 +316,22 @@ class TestDispatchActionIntegration:
         base_processor.action_dispatcher.dispatch.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_dispatch_action_with_none_result(self, base_processor, mock_time_service, dispatch_context):
-        """Test dispatch_action when dispatcher returns None."""
-        base_processor.action_dispatcher.dispatch = AsyncMock(return_value=None)
+    async def test_dispatch_action_with_minimal_result(self, base_processor, mock_time_service, dispatch_context):
+        """Test dispatch_action with minimal ActionResponse."""
+        # Create minimal ActionResponse
+        mock_audit = AuditEntryResult(
+            entry_id="test_123",
+            sequence_number=1,
+            entry_hash="hash_123",
+            signature="sig_123"
+        )
+        action_response = ActionResponse(
+            success=True,
+            handler="TestHandler",
+            action_type="SPEAK",
+            audit_data=mock_audit
+        )
+        base_processor.action_dispatcher.dispatch = AsyncMock(return_value=action_response)
 
         result_mock = Mock()
         thought_mock = Mock()

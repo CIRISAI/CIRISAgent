@@ -572,19 +572,26 @@ def _build_log_data_from_entry(log_entry: Any) -> Dict[str, Any]:
         "service": log_entry.service,
     }
 
-    # Add context data if available
-    if log_entry.context:
-        if log_entry.context.correlation_id:
+    # Add context data if available - handle both LogEntry formats
+    # LogEntryResponse has nested context object, telemetry_models.LogEntry has top-level fields
+    if hasattr(log_entry, "context") and log_entry.context:
+        if hasattr(log_entry.context, "correlation_id") and log_entry.context.correlation_id:
             log_data["correlation_id"] = log_entry.context.correlation_id
-        if log_entry.context.trace_id:
+        if hasattr(log_entry.context, "trace_id") and log_entry.context.trace_id:
             log_data["trace_id"] = log_entry.context.trace_id
-        if log_entry.context.user_id:
+        if hasattr(log_entry.context, "user_id") and log_entry.context.user_id:
             log_data["user_id"] = log_entry.context.user_id
         if hasattr(log_entry.context, "entity_id") and log_entry.context.entity_id:
             log_data["entity_id"] = log_entry.context.entity_id
+    else:
+        # Handle flat LogEntry format from telemetry_models
+        if hasattr(log_entry, "correlation_id") and log_entry.correlation_id:
+            log_data["correlation_id"] = log_entry.correlation_id
+        if hasattr(log_entry, "user_id") and log_entry.user_id:
+            log_data["user_id"] = log_entry.user_id
 
     # Add trace ID at top level if available
-    if log_entry.trace_id:
+    if hasattr(log_entry, "trace_id") and log_entry.trace_id:
         log_data["trace_id"] = log_entry.trace_id
 
     return log_data

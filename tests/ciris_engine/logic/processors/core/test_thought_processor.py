@@ -168,6 +168,7 @@ class TestThoughtProcessor:
             final_action=mock_action_result,  # Same as original (not overridden)
             overridden=False,
             override_reason=None,
+            epistemic_data={"entropy": "TEST", "coherence": "TEST", "optimization_veto": "TEST", "epistemic_humility": "TEST"},  # REQUIRED field
         )
 
         mock_conscience_registry = Mock()

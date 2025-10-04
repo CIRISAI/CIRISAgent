@@ -65,7 +65,7 @@ async def audit_service(memory_bus, temp_db, time_service):
             time_service=time_service,
             db_path=temp_db,
             export_path=export_path,  # Provide export path for tests
-            enable_hash_chain=False,  # Disable for faster tests
+            enable_hash_chain=True,  # REQUIRED - audit trail now requires hash chain data
         )
         await service.start()
         yield service
@@ -243,19 +243,15 @@ async def test_audit_service_export_data(audit_service):
 
 @pytest.mark.asyncio
 async def test_audit_service_error_handling(audit_service, memory_bus):
-    """Test error handling in audit service."""
+    """Test error handling in audit service - fails fast on database errors."""
     # Make memory bus raise error
     memory_bus.memorize.side_effect = Exception("Database error")
 
-    # Log event should not raise, just log error
     event_data = AuditEventData(entity_id="test", actor="test")
 
-    # Should not raise exception
-    await audit_service.log_event("test_event", event_data)
-
-    # Since the implementation has validation errors, memorize won't be called
-    # Just verify no exception was raised
-    assert True  # Log event handled error gracefully
+    # Audit service fails fast - RuntimeError is raised when database fails
+    with pytest.raises(RuntimeError, match="Failed to create audit entry"):
+        await audit_service.log_event("test_event", event_data)
 
 
 @pytest.mark.asyncio

@@ -138,10 +138,38 @@ class ActionDispatcher:
         if dependencies and hasattr(dependencies, "wait_registry_ready"):
             ready = await dependencies.wait_registry_ready(timeout=getattr(dispatch_context, "registry_timeout", 30.0))
             if not ready:
-                logger.error(
-                    f"Service registry not ready for handler {handler_instance.__class__.__name__}; action aborted"
+                # Service registry not ready - create failure audit and response
+                from ciris_engine.schemas.runtime.audit import AuditActionContext
+                from ciris_engine.schemas.services.runtime_control import ActionResponse
+
+                if not self.audit_service:
+                    raise RuntimeError(
+                        f"Audit service not available for registry timeout on action {action_type.value}. "
+                        f"All actions MUST be audited for production integrity."
+                    )
+
+                audit_context = AuditActionContext(
+                    thought_id=thought.thought_id,
+                    task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
+                    handler_name=handler_instance.__class__.__name__,
+                    parameters={"error": "Service registry not ready", "timeout": getattr(dispatch_context, "registry_timeout", 30.0)},
                 )
-                return
+                audit_result = await self.audit_service.log_action(
+                    action_type=action_type, context=audit_context, outcome="error:RegistryNotReady"
+                )
+                logger.error(
+                    f"Service registry not ready for handler {handler_instance.__class__.__name__}; action aborted. "
+                    f"Created audit entry {audit_result.entry_id}"
+                )
+
+                return ActionResponse(
+                    success=False,
+                    handler=handler_instance.__class__.__name__,
+                    action_type=action_type.value,
+                    follow_up_thought_id=None,
+                    execution_time_ms=0.0,
+                    audit_data=audit_result,
+                )
         # Logging handled by logger.info above
 
         # Create a ProcessingQueueItem for step streaming
@@ -227,6 +255,10 @@ class ActionDispatcher:
             if self.telemetry_service:
                 await self.telemetry_service.record_metric(f"handler_completed_{action_type.value}")
                 await self.telemetry_service.record_metric("handler_completed_total")
+
+            # Return the success ActionResponse
+            return dispatch_result
+
         except Exception as e:
             logger.exception(
                 f"Error executing handler {handler_instance.__class__.__name__} for action {action_type.value} on thought {thought.thought_id}: {e}"
@@ -281,3 +313,6 @@ class ActionDispatcher:
                 logger.error(
                     f"Failed to update thought {thought.thought_id} to FAILED after handler exception: {e_persist}"
                 )
+
+            # Return the failure ActionResponse
+            return dispatch_result

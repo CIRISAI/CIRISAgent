@@ -20,7 +20,6 @@ class ForgetHandler(BaseActionHandler):
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> Optional[str]:
         raw_params = result.action_parameters
-        thought_id = thought.thought_id
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
         params = raw_params
         if not isinstance(params, ForgetParams):
@@ -104,15 +103,5 @@ class ForgetHandler(BaseActionHandler):
     async def _audit_forget_operation(
         self, params: ForgetParams, dispatch_context: DispatchContext, result: Any
     ) -> None:
-        if hasattr(params, "no_audit") and params.no_audit:
-            return
-
-        audit_data = {
-            "forget_key": params.node.id,
-            "forget_scope": params.node.scope.value,
-            "operation_result": str(result.status) if hasattr(result, "status") else str(result),
-            "timestamp": getattr(dispatch_context, "event_timestamp", None),
-            "thought_id": getattr(dispatch_context, "thought_id", None),
-        }
-
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
+        pass

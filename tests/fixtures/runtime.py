@@ -62,24 +62,9 @@ async def runtime_with_mocked_agent_processor(real_runtime_with_mock):
     )
     mock_agent_processor.start_processing = AsyncMock()
 
-    # Set _processing_task to None (no active processing initially)
-    mock_agent_processor._processing_task = None
-
-    # Mock _stop_event
-    mock_agent_processor._stop_event = Mock(spec_set=["set"])
-    mock_agent_processor._stop_event.set = Mock()
-
-    # Mock shutdown processor with proper spec
-    shutdown_processor = Mock(spec_set=["process", "shutdown_complete", "shutdown_result"])
-    shutdown_processor.process = AsyncMock()
-    shutdown_processor.shutdown_complete = False
-    shutdown_processor.shutdown_result = None
-    mock_agent_processor.shutdown_processor = shutdown_processor
-
-    # Mock state_manager with a regular MagicMock
+    # Mock state_manager with proper return values (not coroutines)
     mock_state_manager = MagicMock()
-    mock_state_manager.get_state.return_value = AgentState.SHUTDOWN
-    mock_state_manager.set_state = MagicMock()
+    mock_state_manager.get_state = MagicMock(return_value=AgentState.SHUTDOWN)
     mock_agent_processor.state_manager = mock_state_manager
 
     runtime.agent_processor = mock_agent_processor
@@ -146,11 +131,19 @@ async def runtime_with_adapter_mocks(real_runtime_with_mock):
 @pytest_asyncio.fixture
 async def runtime_with_full_initialization_mocks(real_runtime_with_mock):
     """Provide a runtime with full initialization chain mocked for integration testing."""
+    from ciris_engine.schemas.processors.states import AgentState
+
     runtime = real_runtime_with_mock
 
     # Mock the agent processor
     mock_agent_processor = AsyncMock()
     mock_agent_processor.start_processing = AsyncMock()
+
+    # Mock state_manager with proper return values (not coroutines)
+    mock_state_manager = MagicMock()
+    mock_state_manager.get_state = MagicMock(return_value=AgentState.SHUTDOWN)
+    mock_agent_processor.state_manager = mock_state_manager
+
     runtime.agent_processor = mock_agent_processor
 
     # Mock adapters with lifecycle support

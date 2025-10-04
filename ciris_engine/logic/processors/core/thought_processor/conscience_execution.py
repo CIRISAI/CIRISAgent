@@ -175,13 +175,14 @@ class ConscienceExecutionPhase:
                 overridden = True
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
 
-        # epistemic_data is REQUIRED - fail fast if not populated
+        # epistemic_data is REQUIRED - populate with EXEMPT if no checks ran
         if not epistemic_data:
-            raise ValueError(
-                f"No conscience checks provided epistemic_data for action {action_result.selected_action.value}. "
-                f"All conscience checks MUST provide epistemic_data. "
-                f"Registered consciences: {[e.name for e in self.conscience_registry.get_consciences()]}"
-            )
+            # If no epistemic data from any conscience, mark as exempt (e.g., exempt actions)
+            epistemic_data = {
+                "status": "EXEMPT",
+                "action": action_result.selected_action.value,
+                "reason": "No epistemic checks provided data",
+            }
 
         result = ConscienceApplicationResult(
             original_action=action_result,

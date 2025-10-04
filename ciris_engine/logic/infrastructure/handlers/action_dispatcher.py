@@ -183,7 +183,7 @@ class ActionDispatcher:
             follow_up_thought_id = await handler_instance.handle(final_action_result, thought, dispatch_context)
 
             # Create centralized audit entry for this action completion (REQUIRED)
-            from ciris_engine.schemas.audit.core import AuditEventType
+            from ciris_engine.schemas.runtime.audit import AuditActionContext
             from ciris_engine.schemas.services.runtime_control import ActionResponse
 
             if not self.audit_service:
@@ -192,16 +192,14 @@ class ActionDispatcher:
                     f"All actions MUST be audited for production integrity."
                 )
 
-            audit_result = await self.audit_service.log_event(
-                event_type=str(AuditEventType(f"handler_action_{action_type.value}")),
-                event_data={
-                    "handler_name": handler_instance.__class__.__name__,
-                    "thought_id": thought.thought_id,
-                    "task_id": dispatch_context.task_id if hasattr(dispatch_context, "task_id") else None,
-                    "action": action_type.value,
-                    "outcome": "success",
-                    "follow_up_thought_id": follow_up_thought_id,
-                },
+            audit_context = AuditActionContext(
+                thought_id=thought.thought_id,
+                task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
+                handler_name=handler_instance.__class__.__name__,
+                metadata={"follow_up_thought_id": follow_up_thought_id} if follow_up_thought_id else {},
+            )
+            audit_result = await self.audit_service.log_action(
+                action_type=action_type, context=audit_context, outcome="success"
             )
             logger.info(f"Created audit entry {audit_result.entry_id} for action {action_type.value}")
 
@@ -235,7 +233,7 @@ class ActionDispatcher:
             )
 
             # Create centralized audit entry for failed action (REQUIRED)
-            from ciris_engine.schemas.audit.core import AuditEventType
+            from ciris_engine.schemas.runtime.audit import AuditActionContext
             from ciris_engine.schemas.services.runtime_control import ActionResponse
 
             if not self.audit_service:
@@ -244,16 +242,14 @@ class ActionDispatcher:
                     f"All actions MUST be audited, especially failures."
                 )
 
-            audit_result = await self.audit_service.log_event(
-                event_type=str(AuditEventType(f"handler_action_{action_type.value}")),
-                event_data={
-                    "handler_name": handler_instance.__class__.__name__,
-                    "thought_id": thought.thought_id,
-                    "task_id": dispatch_context.task_id if hasattr(dispatch_context, "task_id") else None,
-                    "action": action_type.value,
-                    "outcome": f"error:{type(e).__name__}",
-                    "error": str(e),
-                },
+            audit_context = AuditActionContext(
+                thought_id=thought.thought_id,
+                task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
+                handler_name=handler_instance.__class__.__name__,
+                metadata={"error": str(e), "error_type": type(e).__name__},
+            )
+            audit_result = await self.audit_service.log_action(
+                action_type=action_type, context=audit_context, outcome=f"error:{type(e).__name__}"
             )
             logger.info(f"Created audit entry {audit_result.entry_id} for failed action {action_type.value}")
 

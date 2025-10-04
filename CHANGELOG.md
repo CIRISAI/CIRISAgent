@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.1] - 2025-10-03
 
+### Fixed
+- **🧪 Test Compatibility**: Fixed `test_check_pause_state_paused_with_event` to use real `asyncio.Event` instead of `AsyncMock` for isinstance() guard compatibility
+- **📦 Dependency Upgrade**: Upgraded instructor from 1.3.3 to 1.11.3, eliminating 34 DeprecationWarning about FUNCTIONS mode
+- **⚠️ Warning Reduction**: Reduced test warnings by 68% (50 → 16 warnings, all non-critical pytest internals)
+- **🔧 Code Quality**: Removed unused `consent_service` variable in graph.py (SonarCloud code smell)
+
 ### Added
 - **🔍 Guidance Observation Auditing**: Added audit logging for WA guidance observations
   - Tracks both solicited (with recommendation) and unsolicited guidance requests

@@ -94,26 +94,12 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                 logger.info(f"New USER node created: {node.id}. Creating TEMPORARY consent.")
                 try:
                     # Import here to avoid circular dependencies
-                    from ciris_engine.logic.services.governance.consent import ConsentService
-                    from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
-
-                    # Create consent service instance
-                    consent_service = ConsentService(time_service=time_service)
-
-                    # Create default TEMPORARY consent synchronously
-                    # The consent service stores consent in the database directly
-                    consent_status = ConsentStatus(
-                        user_id=node.id,
-                        stream=ConsentStream.TEMPORARY,
-                        categories=[],
-                        granted_at=time_service.now(),
-                        expires_at=time_service.now() + timedelta(days=14),  # 14-day temporary consent
-                        last_modified=time_service.now(),
-                        impact_score=0.0,
-                        attribution_count=0,
-                    )
+                    from ciris_engine.schemas.consent.core import ConsentStream
 
                     # Store consent directly in database
+                    # NOTE: Cannot use ConsentService.grant_consent() here because:
+                    # 1. add_graph_node() is synchronous but grant_consent() is async
+                    # 2. This runs during node persistence, before services are fully initialized
                     consent_node = GraphNode(
                         id=f"consent_{node.id}",
                         type=NodeType.CONSENT,
@@ -121,9 +107,12 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                         attributes={
                             "user_id": node.id,
                             "stream": ConsentStream.TEMPORARY.value,
-                            "granted_at": consent_status.granted_at.isoformat(),
-                            "expires_at": consent_status.expires_at.isoformat() if consent_status.expires_at else None,
+                            "granted_at": time_service.now().isoformat(),
+                            "expires_at": (time_service.now() + timedelta(days=14)).isoformat(),  # 14-day temporary consent
                             "reason": "Default TEMPORARY consent on user creation",
+                            "categories": [],
+                            "impact_score": 0.0,
+                            "attribution_count": 0,
                         },
                         updated_by="system_user_creation",
                         updated_at=time_service.now(),

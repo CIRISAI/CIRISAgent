@@ -4,10 +4,11 @@ Comprehensive tests for IdentityVarianceMonitor service.
 This service is critical to the patent's 20% variance threshold requirement.
 """
 
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import List
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 from ciris_engine.logic.infrastructure.sub_services.identity_variance_monitor import IdentityVarianceMonitor
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -137,7 +138,9 @@ class TestSetServiceRegistry:
         assert monitor._memory_bus is None
 
         mock_registry = Mock()
-        with patch("ciris_engine.logic.infrastructure.sub_services.identity_variance_monitor.MemoryBus") as MockMemoryBus:
+        with patch(
+            "ciris_engine.logic.infrastructure.sub_services.identity_variance_monitor.MemoryBus"
+        ) as MockMemoryBus:
             monitor.set_service_registry(mock_registry)
             # Memory bus creation is attempted
             assert hasattr(monitor, "_service_registry")

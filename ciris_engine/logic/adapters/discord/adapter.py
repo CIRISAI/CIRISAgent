@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import discord  # Ensure discord.py is available
 
 from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.adapters.discord.ciris_discord_client import CIRISDiscordClient
 from ciris_engine.logic.adapters.discord.discord_adapter import DiscordAdapter
 from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver
 from ciris_engine.logic.adapters.discord.discord_tool_service import DiscordToolService
@@ -23,12 +24,26 @@ logger = logging.getLogger(__name__)
 
 class DiscordPlatform(Service):
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
-        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
-
+        """Initialize Discord platform adapter."""
         self.runtime = runtime
         self.context = context
         self.config: DiscordAdapterConfig  # type: ignore[assignment]
 
+        # Initialize configuration from various sources
+        self._initialize_config(runtime, kwargs)
+
+        # Create Discord client and adapter
+        self._initialize_discord_client()
+        self._initialize_discord_adapter(kwargs)
+
+        # Initialize state
+        self.discord_observer: Optional[DiscordObserver] = None
+        self._discord_client_task: Optional[asyncio.Task[Any]] = None
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 10
+
+    def _initialize_config(self, runtime: Any, kwargs: Dict[str, Any]) -> None:
+        """Initialize adapter configuration from kwargs, template, or environment."""
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             # Ensure adapter_config is a DiscordAdapterConfig instance
             adapter_config = kwargs["adapter_config"]
@@ -96,133 +111,28 @@ class DiscordPlatform(Service):
             logger.error("DiscordPlatform: 'bot_token' not found in config. This is required.")
             raise ValueError("DiscordPlatform requires 'bot_token' in configuration.")
 
+        # Validate configuration
         self.token = self.config.bot_token
+
+    def _initialize_discord_client(self) -> None:
+        """Create and configure the Discord client."""
         intents = self.config.get_intents()
-
-        # Create a custom client class to handle events properly
-        class CIRISDiscordClient(discord.Client):
-            def __init__(self, platform: "DiscordPlatform", *args: Any, **kwargs: Any) -> None:
-                super().__init__(*args, **kwargs)
-                self.platform = platform
-
-            async def on_ready(self) -> None:
-                """Called when the client is ready."""
-                logger.info("Discord client on_ready event")
-                # Let the connection manager know
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    conn_mgr = self.platform.discord_adapter._connection_manager
-                    if conn_mgr and hasattr(conn_mgr, "_handle_connected"):
-                        await conn_mgr._handle_connected()
-
-                # Fetch and monitor threads in monitored channels
-                await self._fetch_threads_in_monitored_channels()
-
-            async def _fetch_threads_in_monitored_channels(self) -> None:
-                """Fetch all threads in monitored channels and add them to monitoring."""
-                if not (hasattr(self.platform, "config") and self.platform.config):
-                    return
-
-                logger.info("Fetching threads in monitored channels...")
-                threads_added = 0
-
-                for channel_id in self.platform.config.monitored_channel_ids:
-                    try:
-                        channel = self.get_channel(int(channel_id))
-                        if channel and isinstance(channel, discord.TextChannel):
-                            # Get active threads in this channel
-                            for thread in channel.threads:
-                                thread_id = str(thread.id)
-                                # Add to observer if it exists and not already monitored
-                                if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                                    if thread_id not in self.platform.discord_observer.monitored_channel_ids:
-                                        self.platform.discord_observer.monitored_channel_ids.append(thread_id)
-                                        threads_added += 1
-                                        logger.debug(f"Added thread {thread_id} to monitoring")
-                    except Exception as e:
-                        logger.warning(f"Could not fetch threads for channel {channel_id}: {e}")
-
-                if threads_added > 0:
-                    logger.info(f"Added {threads_added} threads to monitoring")
-
-            async def on_disconnect(self) -> None:
-                """Called when the client disconnects."""
-                logger.warning("Discord client on_disconnect event")
-                # Let the connection manager know
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    conn_mgr = self.platform.discord_adapter._connection_manager
-                    if conn_mgr and hasattr(conn_mgr, "_handle_disconnected"):
-                        await conn_mgr._handle_disconnected(None)
-
-            async def on_message(self, message: discord.Message) -> None:
-                """Called when a message is received."""
-                # Let the channel manager handle it
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    channel_mgr = self.platform.discord_adapter._channel_manager
-                    if channel_mgr and hasattr(channel_mgr, "on_message"):
-                        await channel_mgr.on_message(message)
-
-            async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
-                """Called when a reaction is added."""
-                # Let the discord adapter handle it
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    await self.platform.discord_adapter.on_raw_reaction_add(payload)
-
-            async def on_thread_create(self, thread: discord.Thread) -> None:
-                """Called when a thread is created."""
-                logger.info(f"Thread created: {thread.name} (ID: {thread.id}) in parent {thread.parent_id}")
-                # Check if parent channel is monitored
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                        observer = self.platform.discord_observer
-                        if hasattr(self.platform, "config") and self.platform.config:
-                            parent_id = str(thread.parent_id)
-                            if parent_id in self.platform.config.monitored_channel_ids:
-                                # Add thread to monitored channels
-                                thread_id = str(thread.id)
-                                if thread_id not in observer.monitored_channel_ids:
-                                    observer.monitored_channel_ids.append(thread_id)
-                                    logger.info(
-                                        f"Added thread {thread_id} to monitored channels (parent {parent_id} is monitored)"
-                                    )
-
-                                    # Thread correlation persistence would require ServiceCorrelation,
-                                    # not CorrelationRequestData. This needs proper implementation
-                                    # with correlation_id, service_type, handler_name, etc.
-                                    # For now, in-memory tracking is sufficient for Discord threads.
-
-            async def on_thread_join(self, thread: discord.Thread) -> None:
-                """Called when the bot joins a thread."""
-                logger.info(f"Bot joined thread: {thread.name} (ID: {thread.id})")
-                # Use same logic as on_thread_create
-                await self.on_thread_create(thread)
-
-            async def on_thread_delete(self, thread: discord.Thread) -> None:
-                """Called when a thread is deleted."""
-                logger.info(f"Thread deleted: {thread.name} (ID: {thread.id})")
-                # Remove from monitored channels if present
-                if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                    observer = self.platform.discord_observer
-                    thread_id = str(thread.id)
-                    if thread_id in observer.monitored_channel_ids:
-                        observer.monitored_channel_ids.remove(thread_id)
-                        logger.info(f"Removed deleted thread {thread_id} from monitored channels")
-
-        # Create Discord client without explicit loop (discord.py will manage it)
         self.client = CIRISDiscordClient(platform=self, intents=intents)
 
         # Generate adapter_id - will be updated with actual guild_id when bot connects
         # The adapter_id is used by AuthenticationService for observer persistence
         self.adapter_id = "discord_pending"
 
-        # Get time_service from runtime
+    def _initialize_discord_adapter(self, kwargs: Dict[str, Any]) -> None:
+        """Create and configure the Discord adapter and tool service."""
+        # Get runtime services
         time_service = getattr(self.runtime, "time_service", None)
-
-        # Get bus_manager from runtime
         bus_manager = getattr(self.runtime, "bus_manager", None)
 
         # Create tool service for Discord tools
         self.tool_service = DiscordToolService(client=self.client, time_service=time_service)
 
+        # Create Discord adapter
         self.discord_adapter = DiscordAdapter(
             token=self.token,
             bot=self.client,
@@ -232,11 +142,17 @@ class DiscordPlatform(Service):
             config=self.config,
         )
 
+        # Attach adapter to client
         if hasattr(self.discord_adapter, "attach_to_client"):
             self.discord_adapter.attach_to_client(self.client)
         else:
             logger.warning("DiscordPlatform: DiscordAdapter may not have 'attach_to_client' method.")
 
+        # Configure monitored channels from kwargs
+        self._configure_monitored_channels(kwargs)
+
+    def _configure_monitored_channels(self, kwargs: Dict[str, Any]) -> None:
+        """Configure monitored channels from kwargs and validate configuration."""
         kwargs_channel_ids = kwargs.get("discord_monitored_channel_ids", [])
         kwargs_channel_id = kwargs.get("discord_monitored_channel_id")
 
@@ -251,25 +167,10 @@ class DiscordPlatform(Service):
             logger.warning(
                 "DiscordPlatform: No channel configuration found. Please provide channel IDs via constructor kwargs or environment variables."
             )
-
-        if self.config.monitored_channel_ids:
+        elif self.config.monitored_channel_ids:
             logger.info(
                 f"DiscordPlatform: Using {len(self.config.monitored_channel_ids)} channels: {self.config.monitored_channel_ids}"
             )
-
-        # Initialize observer as None - will be created in start() when services are ready
-        self.discord_observer: Optional[DiscordObserver] = None
-
-        # Tool registry removed - tools are handled through ToolBus
-        # self.tool_registry = ToolRegistry()
-        # register_discord_tools(self.tool_registry, self.client)
-
-        # if hasattr(self.discord_adapter, 'tool_registry'):
-        #     self.discord_adapter.tool_registry = self.tool_registry
-
-        self._discord_client_task: Optional[asyncio.Task[Any]] = None
-        self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 10
 
     def get_channel_info(self) -> Dict[str, str]:
         """Provide guild info for authentication."""

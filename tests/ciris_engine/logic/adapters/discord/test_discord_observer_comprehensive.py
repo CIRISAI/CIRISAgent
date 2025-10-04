@@ -11,14 +11,16 @@ from ciris_engine.schemas.runtime.models import TaskContext
 class TestDiscordObserverLifecycle:
     """Test Discord observer lifecycle methods."""
 
-    def test_start_observer(self, discord_observer):
+    @pytest.mark.asyncio
+    async def test_start_observer(self, discord_observer):
         """Test starting the observer."""
-        discord_observer.start()
+        await discord_observer.start()
         # Should not raise any exceptions
 
-    def test_stop_observer(self, discord_observer):
+    @pytest.mark.asyncio
+    async def test_stop_observer(self, discord_observer):
         """Test stopping the observer."""
-        discord_observer.stop()
+        await discord_observer.stop()
         # Should not raise any exceptions
 
     @pytest.mark.asyncio

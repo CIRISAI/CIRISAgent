@@ -600,6 +600,13 @@ class TestEdgeCasesAndConcurrency:
         assert len(results) == 150
         assert all(r == "done" for r in results)
 
+        # Wait for all background telemetry tasks to complete
+        # This prevents GeneratorExit warnings when test ends
+        await asyncio.sleep(0.2)  # Give time for slow_store tasks to finish
+        pending = [t for t in asyncio.all_tasks() if not t.done() and t != asyncio.current_task()]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
     @pytest.mark.asyncio
     async def test_trace_context_inheritance(self):
         """Test trace context properly inherits parent span."""

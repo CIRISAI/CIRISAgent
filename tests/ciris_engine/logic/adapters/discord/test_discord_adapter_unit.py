@@ -508,7 +508,7 @@ class TestDiscordObserver:
     async def test_start(self, discord_observer):
         """Test observer start."""
         # The start method just logs that it's ready
-        discord_observer.start()
+        await discord_observer.start()
 
         # No assertions needed - just verify it doesn't raise
 
@@ -516,7 +516,7 @@ class TestDiscordObserver:
     async def test_stop(self, discord_observer):
         """Test observer stop."""
         # The stop method just logs that it's stopped
-        discord_observer.stop()
+        await discord_observer.stop()
 
         # No assertions needed - just verify it doesn't raise
 

@@ -89,7 +89,7 @@ async def test_filter_config_bug(temp_db, time_service):
     memory_service = LocalGraphMemoryService(
         db_path=temp_db, secrets_service=secrets_service, time_service=time_service
     )
-    memory_service.start()
+    await memory_service.start()
 
     # Note: We skip creating GraphConfigService because it has a broken query_graph implementation
     # that doesn't match the abstract method signature. This test focuses on verifying
@@ -160,7 +160,7 @@ async def test_filter_config_bug(temp_db, time_service):
         print(f"Error in config service test: {e}")
 
     # Cleanup
-    memory_service.stop()
+    await memory_service.stop()
     await secrets_service.stop()
 
     secrets_db_path = secrets_db
@@ -223,7 +223,7 @@ async def test_old_node_format_compatibility(temp_db, time_service):
     memory_service = LocalGraphMemoryService(
         db_path=temp_db, secrets_service=secrets_service, time_service=time_service
     )
-    memory_service.start()
+    await memory_service.start()
 
     # Note: We skip creating GraphConfigService because it has a broken query_graph implementation
     # that doesn't match the abstract method signature. This test focuses on verifying
@@ -259,7 +259,7 @@ async def test_old_node_format_compatibility(temp_db, time_service):
         print(f"Error during malformed node handling test: {e}")
 
     # Cleanup
-    memory_service.stop()
+    await memory_service.stop()
     await secrets_service.stop()
 
     if os.path.exists(secrets_db):

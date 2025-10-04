@@ -61,7 +61,7 @@ async def memory_service(temp_db, time_service):
     await secrets_service.start()
 
     service = LocalGraphMemoryService(db_path=temp_db, secrets_service=secrets_service, time_service=time_service)
-    service.start()
+    await service.start()
     return service
 
 

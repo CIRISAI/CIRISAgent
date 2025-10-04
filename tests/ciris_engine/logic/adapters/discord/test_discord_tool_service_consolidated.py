@@ -46,13 +46,14 @@ class TestDiscordToolServiceInitialization:
 
         assert service._client is client
 
-    def test_start_stop(self):
+    @pytest.mark.asyncio
+    async def test_start_stop(self):
         """Test service lifecycle methods."""
         service = DiscordToolService()
 
         # Should not raise
-        service.start()
-        service.stop()
+        await service.start()
+        await service.stop()
 
 
 class TestToolExecution:

@@ -134,13 +134,40 @@ def test_app(stateful_runtime_control_service, mock_communication_service):
     app.state.runtime_control_service = stateful_runtime_control_service
 
     # Mock runtime with pipeline controller and agent processor
-    mock_runtime = MagicMock()
-    mock_runtime.pipeline_controller = MagicMock()
-    mock_runtime.pipeline_controller.get_current_state = MagicMock(return_value=None)
+    # Use proper mocks that return concrete types to avoid serialization issues
+    from unittest.mock import Mock
 
-    # Mock agent processor to return a proper string cognitive state
-    mock_runtime.agent_processor = MagicMock()
-    mock_runtime.agent_processor.get_current_state = MagicMock(return_value="PAUSED")
+    mock_runtime = Mock()
+
+    # Pipeline controller mock
+    mock_runtime.pipeline_controller = Mock()
+    mock_runtime.pipeline_controller.get_current_state = Mock(return_value=None)
+
+    # Agent processor with _pipeline_controller attribute
+    mock_runtime.agent_processor = Mock()
+    mock_runtime.agent_processor.get_current_state = Mock(return_value="PAUSED")
+    mock_runtime.agent_processor.get_snapshot = Mock(return_value={
+        "state": "PAUSED",
+        "uptime_seconds": 100.0,
+        "total_processed": 50
+    })
+
+    # _pipeline_controller accessed by _extract_pipeline_state_info
+    mock_pipeline_controller = Mock()
+    # Return proper object with attributes, not Mock attributes
+    mock_pipeline_state_obj = Mock()
+    mock_pipeline_state_obj.current_step = "GATHER_CONTEXT"
+    mock_pipeline_state_obj.pipeline_state = {
+        "step": "GATHER_CONTEXT",
+        "status": "paused",
+        "timestamp": "2025-01-01T00:00:00Z"
+    }
+    mock_pipeline_controller.get_current_state = Mock(return_value=mock_pipeline_state_obj)
+    mock_runtime.agent_processor._pipeline_controller = mock_pipeline_controller
+
+    # State manager for cognitive state
+    mock_runtime.state_manager = Mock()
+    mock_runtime.state_manager.current_state = "PAUSED"
 
     app.state.runtime = mock_runtime
 

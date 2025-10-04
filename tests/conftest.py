@@ -142,6 +142,12 @@ def skip_without_discord_token(request):
 # Remove the event_loop fixture - let pytest-asyncio handle it
 # The asyncio_mode = auto in pytest.ini will create event loops as needed
 
+# Import centralized fixtures to make them available to all tests
+pytest_plugins = [
+    "tests.fixtures.telemetry_api",
+    "tests.fixtures.system_snapshot_fixtures",
+]
+
 
 @pytest.fixture
 def api_required():

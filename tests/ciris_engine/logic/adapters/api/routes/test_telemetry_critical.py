@@ -29,8 +29,8 @@ def override_admin_auth():
 
 
 @pytest.fixture
-def fully_initialized_app():
-    """Create app with ALL services properly initialized."""
+def fully_initialized_app(complete_api_telemetry_setup):
+    """Create app with ALL services properly initialized using centralized fixtures."""
     app = FastAPI()
 
     # Override auth
@@ -40,93 +40,31 @@ def fully_initialized_app():
     # Include router
     app.include_router(router)
 
-    # Initialize ALL 22 core services as they would be in production
+    # Use centralized fixtures for telemetry-critical services
+    app.state.telemetry_service = complete_api_telemetry_setup["telemetry_service"]
+    app.state.visibility_service = complete_api_telemetry_setup["visibility_service"]
+    app.state.time_service = complete_api_telemetry_setup["time_service"]
+    app.state.resource_monitor = complete_api_telemetry_setup["resource_monitor"]
+    app.state.incident_management_service = complete_api_telemetry_setup["incident_management_service"]
+    app.state.wise_authority_service = complete_api_telemetry_setup["wise_authority_service"]
+    app.state.wise_authority = complete_api_telemetry_setup["wise_authority_service"]  # Alias
 
-    # Graph Services (6)
+    # Other services still use MagicMock (not accessed by overview endpoint)
     app.state.memory_service = MagicMock()
     app.state.config_service = MagicMock()
-    app.state.telemetry_service = MagicMock()
-    app.state.telemetry_service.get_metrics = Mock(
-        return_value={
-            "system_uptime": 3600.0,
-            "total_requests": 1000,
-            "error_count": 10,
-        }
-    )
-    app.state.telemetry_service.collect_all = AsyncMock(return_value={})
-    app.state.telemetry_service.query_metrics = AsyncMock(return_value=[])
-    # Add get_aggregated_telemetry for unified endpoint
-    app.state.telemetry_service.get_aggregated_telemetry = AsyncMock(
-        return_value={
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "services": {
-                "telemetry_service": {"metrics": 100, "status": "healthy"},
-                "resource_monitor": {"metrics": 50, "status": "healthy"},
-            },
-            "view": "summary",
-            "category": None,
-        }
-    )
-
     app.state.audit_service = MagicMock()
     app.state.audit_service.query_entries = AsyncMock(return_value=[])
-
-    app.state.incident_management_service = MagicMock()
-    app.state.incident_management_service.get_recent_incidents = AsyncMock(return_value=[])
-
     app.state.tsdb_consolidation_service = MagicMock()
-
-    # Infrastructure Services (7)
-    app.state.time_service = MagicMock()
-    app.state.time_service.uptime = Mock(return_value=timedelta(hours=1))
-
     app.state.shutdown_service = MagicMock()
     app.state.initialization_service = MagicMock()
     app.state.authentication_service = MagicMock()
-
-    app.state.resource_monitor = MagicMock()
-    snapshot = MagicMock()
-    snapshot.cpu_percent = 45.5
-    snapshot.memory_mb = 512.0
-    snapshot.memory_percent = 25.0
-    snapshot.disk_usage_bytes = 20500000000
-    snapshot.active_threads = 50
-    snapshot.open_files = 100
-    snapshot.timestamp = datetime.now(timezone.utc).isoformat()
-    snapshot.warnings = []
-    app.state.resource_monitor.snapshot = snapshot
-    app.state.resource_monitor.budget = MagicMock(
-        max_memory_mb=2048.0,
-        max_cpu_percent=100.0,
-        max_disk_bytes=100000000000,
-    )
-
     app.state.database_maintenance_service = MagicMock()
     app.state.secrets_service = MagicMock()
-
-    # Governance Services (4)
-    app.state.wise_authority = MagicMock()
-    app.state.wise_authority_service = app.state.wise_authority  # Some code expects _service suffix
     app.state.adaptive_filter_service = MagicMock()
-
-    app.state.visibility_service = MagicMock()
-    app.state.visibility_service.get_system_status = AsyncMock(
-        return_value={
-            "cognitive_state": "WORK",
-            "current_task": "processing",
-        }
-    )
-    app.state.visibility_service.get_task_history = AsyncMock(return_value=[])
-    app.state.visibility_service.get_current_reasoning = AsyncMock(return_value=None)
-
     app.state.self_observation_service = MagicMock()
-
-    # Runtime Services (3)
     app.state.llm_service = MagicMock()
     app.state.runtime_control_service = MagicMock()
     app.state.task_scheduler = MagicMock()
-
-    # Tool Services (1)
     app.state.secrets_tool_service = MagicMock()
 
     return app

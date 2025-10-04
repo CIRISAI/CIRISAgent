@@ -37,12 +37,23 @@ class TestReproduceWiseAuthorityBug:
 
         app.state = MagicMock()
         app.state.telemetry_service = MagicMock()
-        app.state.resource_monitor = MagicMock()
+        app.state.resource_monitor = Mock()
+        # Create snapshot with concrete types (not Mock) to avoid Pydantic warnings
+        snapshot = Mock()
+        snapshot.cpu_percent = 45.5  # float
+        snapshot.memory_mb = 512.0  # float
+        app.state.resource_monitor.snapshot = snapshot
+
         app.state.memory_service = MagicMock()
         app.state.audit_service = MagicMock()
         app.state.service_registry = MagicMock()
-        app.state.time_service = MagicMock()
-        app.state.time_service.uptime = Mock(return_value=3600)
+        app.state.time_service = Mock()
+        app.state.time_service.get_uptime = Mock(return_value=3600.0)  # float, not Mock
+
+        # Runtime with cognitive state (used by _update_cognitive_state)
+        app.state.runtime = Mock()
+        app.state.runtime.state_manager = Mock()
+        app.state.runtime.state_manager.current_state = "WORK"  # str, not Mock
 
         # Add proper auth service mock to avoid "Invalid auth service type" error
         mock_auth = create_autospec(APIAuthService, instance=True)
@@ -72,12 +83,6 @@ class TestReproduceWiseAuthorityBug:
             }
         )
         app.state.telemetry_service.collect_all = AsyncMock(return_value={})
-
-        # Mock resource monitor
-        snapshot = MagicMock()
-        snapshot.cpu_percent = 45.5
-        snapshot.memory_mb = 512.0
-        app.state.resource_monitor.snapshot = snapshot
 
         client = TestClient(app)
 

@@ -25,8 +25,8 @@ def override_admin_auth():
 
 
 @pytest.fixture
-def full_app():
-    """Create app with complete service setup."""
+def full_app(complete_api_telemetry_setup):
+    """Create app with complete service setup using centralized fixtures."""
     app = FastAPI()
 
     # Override auth
@@ -36,10 +36,17 @@ def full_app():
     # Include router
     app.include_router(router)
 
-    # Initialize ALL 22 core services
+    # Use centralized fixtures for core services
+    app.state.telemetry_service = complete_api_telemetry_setup["telemetry_service"]
+    app.state.visibility_service = complete_api_telemetry_setup["visibility_service"]
+    app.state.time_service = complete_api_telemetry_setup["time_service"]
+    app.state.resource_monitor = complete_api_telemetry_setup["resource_monitor"]
+    app.state.incident_management_service = complete_api_telemetry_setup["incident_management_service"]
+    app.state.wise_authority_service = complete_api_telemetry_setup["wise_authority_service"]
+    app.state.wise_authority = complete_api_telemetry_setup["wise_authority_service"]  # Alias
 
-    # Telemetry service with comprehensive methods
-    telemetry_service = MagicMock()
+    # Continue with custom services below
+    telemetry_service = app.state.telemetry_service  # For backward compatibility with rest of fixture
     telemetry_service.get_metrics = AsyncMock(
         return_value={
             "system_uptime": 3600.0,
@@ -180,13 +187,13 @@ def full_app():
 
     telemetry_service.query_metrics = AsyncMock(side_effect=mock_query_metrics)
 
-    app.state.telemetry_service = telemetry_service
+    # app.state.telemetry_service = telemetry_service  # Using centralized fixture instead
 
     # Time service
     time_service = MagicMock()
     time_service.uptime = Mock(return_value=timedelta(hours=2, minutes=30, seconds=45))
     time_service.get_metrics = Mock(return_value={"uptime_seconds": 9045.0})
-    app.state.time_service = time_service
+    # app.state.time_service = time_service  # Using centralized fixture instead
 
     # Resource monitor with detailed data
     resource_monitor = MagicMock()
@@ -215,7 +222,7 @@ def full_app():
             "thread_count": 50,
         }
     )
-    app.state.resource_monitor = resource_monitor
+    # app.state.resource_monitor = resource_monitor  # Using centralized fixture instead
 
     # Visibility service with comprehensive data
     visibility_service = MagicMock()
@@ -350,7 +357,7 @@ def full_app():
             "reasoning_depth": 3,
         }
     )
-    app.state.visibility_service = visibility_service
+    # app.state.visibility_service = visibility_service  # Using centralized fixture instead
 
     # Audit service with PROPER audit entries as objects
     audit_service = MagicMock()
@@ -486,7 +493,7 @@ def full_app():
 
     incident_service.get_insights = AsyncMock(side_effect=mock_get_insights)
 
-    app.state.incident_management_service = incident_service
+    # app.state.incident_management_service = incident_service  # Using centralized fixture instead
 
     # Wise authority with metrics
     wise_authority = MagicMock()
@@ -499,8 +506,8 @@ def full_app():
             "avg_response_time_ms": 50,
         }
     )
-    app.state.wise_authority = wise_authority
-    app.state.wise_authority_service = wise_authority  # Some code expects _service suffix
+    # app.state.wise_authority = wise_authority  # Using centralized fixture instead
+    # app.state.wise_authority_service = wise_authority  # Using centralized fixture instead
 
     # LLM service with detailed metrics
     llm_service = MagicMock()

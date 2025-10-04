@@ -377,7 +377,6 @@ __all__ = [
     "CycleEventData",
     "ObservationStatus",
     "ReviewOutcome",
-    "AgentIdentityRoot",
     "ConfigurationChange",
     "ChangeApprovalResult",
     "RollbackResult",

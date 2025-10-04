@@ -86,15 +86,17 @@ class SensorWisdomAdapter(WiseAuthorityService):
             actions=["get_guidance", "fetch_guidance"],
             version="1.0.0",
             dependencies=[],
-            metadata={"capabilities": [
-                "modality:sensor:environmental",
-                "modality:sensor:motion",
-                "modality:sensor:temperature",
-                "modality:sensor:humidity",
-                "modality:sensor:air_quality",
-                "modality:sensor:energy",
-                "domain:home_automation",
-            ]}
+            metadata={
+                "capabilities": [
+                    "modality:sensor:environmental",
+                    "modality:sensor:motion",
+                    "modality:sensor:temperature",
+                    "modality:sensor:humidity",
+                    "modality:sensor:air_quality",
+                    "modality:sensor:energy",
+                    "domain:home_automation",
+                ]
+            },
         )
 
     def _is_medical_sensor(self, sensor_type: str, entity_id: str, attributes: Dict[str, Any]) -> bool:

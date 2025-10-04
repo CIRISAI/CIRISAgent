@@ -62,7 +62,7 @@ class GeoWisdomAdapter(WiseAuthorityService):
             actions=["get_guidance", "fetch_guidance"],
             version="1.0.0",
             dependencies=[],
-            metadata={"capabilities": ["domain:navigation", "modality:geo:route", "modality:geo:geocode"]}
+            metadata={"capabilities": ["domain:navigation", "modality:geo:route", "modality:geo:geocode"]},
         )
 
     async def _rate_limit(self) -> None:

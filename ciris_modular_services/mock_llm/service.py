@@ -22,7 +22,7 @@ class MockInstructorClient:
         self.base_client = base_client
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
-    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any):
+    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any) -> Any:
         # This is the instructor-patched version that should always receive response_model
         if response_model is None:
             # This should NOT happen - instructor always passes response_model
@@ -41,7 +41,7 @@ class MockPatchedClient:
         self.mode = mode
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._patched_create))
 
-    async def _patched_create(self, *args: Any, **kwargs: Any):
+    async def _patched_create(self, *args: Any, **kwargs: Any) -> Any:
         """Intercept instructor-patched calls and route to our mock."""
         logger.debug(f"Patched client _create called with kwargs: {list(kwargs.keys())}")
 
@@ -70,7 +70,7 @@ class MockLLMClient:
         instructor.patch = lambda *args, **kwargs: MockLLMClient._mock_instructor_patch(*args, **kwargs)
 
     @staticmethod
-    def _mock_instructor_patch(*args: Any, **kwargs: Any):
+    def _mock_instructor_patch(*args: Any, **kwargs: Any) -> Any:
         """Override instructor.patch to return our mock patched client."""
         # Extract client from args if provided
         client = args[0] if args else kwargs.get("client")
@@ -94,7 +94,7 @@ class MockLLMClient:
             # If no client provided, call original with args and kwargs
             return instance._original_instructor_patch(*args, **kwargs)
 
-    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any):
+    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any) -> Any:
         """
         Create method that instructor.patch() will call.
         Must return responses in OpenAI API format for instructor to parse correctly.
@@ -114,7 +114,7 @@ class MockLLMClient:
         logger.debug(f"Generated response type: {type(response)}")
         return response
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         """Support dynamic attribute access for instructor compatibility."""
         if name in ["_acreate"]:
             return self._create
@@ -165,7 +165,7 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
         self._client = MockLLMClient()
         import time
 
-        self._start_time = time.time()
+        self._start_time: float = time.time()
 
     async def stop(self) -> None:
         self._client = None
@@ -226,7 +226,7 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
 
     async def call_llm_structured(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[MessageDict],
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,

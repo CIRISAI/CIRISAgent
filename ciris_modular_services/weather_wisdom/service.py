@@ -68,11 +68,7 @@ class WeatherWisdomAdapter(WiseAuthorityService):
             actions=["get_guidance", "fetch_guidance"],
             version="1.0.0",
             dependencies=[],
-            metadata={
-                "domain": "weather",
-                "modality": "sensor:atmospheric",
-                "capabilities": ["forecast", "alerts"]
-            }
+            metadata={"domain": "weather", "modality": "sensor:atmospheric", "capabilities": ["forecast", "alerts"]},
         )
 
     async def _get_grid_point(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
@@ -224,7 +220,9 @@ class WeatherWisdomAdapter(WiseAuthorityService):
         index = round(degrees / 22.5) % 16
         return directions[index]
 
-    def _assess_weather_safety(self, weather_data: Dict[str, Any], alerts: List[Dict[str, Any]]) -> tuple[str, float, str]:
+    def _assess_weather_safety(
+        self, weather_data: Dict[str, Any], alerts: List[Dict[str, Any]]
+    ) -> tuple[str, float, str]:
         """Assess safety of weather conditions."""
         risk_level = "low"
         confidence = 0.85

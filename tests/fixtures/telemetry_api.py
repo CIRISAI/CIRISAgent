@@ -46,18 +46,20 @@ def mock_api_telemetry_service():
     # Configure all async methods with proper return types
     mock.get_telemetry_summary = AsyncMock(return_value=telemetry_summary)
 
-    # Create a proper object for aggregated telemetry (not Mock)
-    class AggregatedTelemetry:
-        system_healthy = True
-        services_online = 35
-        services_total = 35
-        overall_error_rate = 0.0
-        overall_uptime_seconds = 86400.0
-        total_errors = 0
-        total_requests = 1000
-        services = {}
+    # Return dict directly (not a custom class) to support 'in' operator and dict methods
+    aggregated_telemetry_data = {
+        "system_healthy": True,
+        "services_online": 35,
+        "services_total": 35,
+        "overall_error_rate": 0.0,
+        "overall_uptime_seconds": 86400.0,
+        "total_errors": 0,
+        "total_requests": 1000,
+        "services": {},
+        "timestamp": now.isoformat(),
+    }
 
-    mock.get_aggregated_telemetry = AsyncMock(return_value=AggregatedTelemetry())
+    mock.get_aggregated_telemetry = AsyncMock(return_value=aggregated_telemetry_data)
 
     # Query metrics - returns list of metric point objects (not dicts)
     async def mock_query_metrics(metric_name, start_time=None, end_time=None, **kwargs):
@@ -112,15 +114,22 @@ def mock_api_visibility_service():
         return_value={"status": "healthy", "active_tasks": 5, "reasoning_depth": 3, "processing_queue_size": 10}
     )
 
-    # Task history
+    # Task history - return objects with attributes (not dicts)
+    class TaskHistoryItem:
+        def __init__(self, task_id, description, status, timestamp):
+            self.task_id = task_id
+            self.description = description
+            self.status = status
+            self.timestamp = timestamp
+
     mock.get_task_history = AsyncMock(
         return_value=[
-            {
-                "task_id": f"task_{i}",
-                "description": f"Task {i}",
-                "status": "completed",
-                "timestamp": datetime.now(timezone.utc) - timedelta(minutes=i),
-            }
+            TaskHistoryItem(
+                task_id=f"task_{i}",
+                description=f"Task {i}",
+                status="completed",
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=i),
+            )
             for i in range(10)
         ]
     )
@@ -141,7 +150,11 @@ def mock_api_visibility_service():
 @pytest.fixture
 def mock_api_incident_service():
     """Create a fully-configured incident management service for API tests."""
+    from ciris_engine.schemas.services.graph.incident import IncidentNode, IncidentInsightNode, IncidentSeverity, IncidentStatus
+    from ciris_engine.schemas.services.graph_core import NodeType, GraphScope
+
     mock = AsyncMock()
+    now = datetime.now(timezone.utc)
 
     # Incident counting - returns int, not MagicMock
     mock.count_active_incidents = AsyncMock(return_value=2)
@@ -152,31 +165,59 @@ def mock_api_incident_service():
 
     mock.get_incident_count = AsyncMock(side_effect=mock_get_incident_count)
 
-    # Get recent incidents
-    async def mock_get_recent_incidents(cutoff_time=None):
-        return [
-            {
-                "incident_id": f"inc_{i}",
-                "severity": "WARNING",
-                "message": f"Test incident {i}",
-                "timestamp": datetime.now(timezone.utc) - timedelta(hours=i),
-            }
-            for i in range(5)
-        ]
+    # Query incidents - returns list of IncidentNode objects
+    async def mock_query_incidents(start_time=None, end_time=None, severity=None, status=None, **kwargs):
+        # Create sample incident nodes matching the schema
+        incidents = []
+        for i in range(5):
+            incident = IncidentNode(
+                id=f"inc-00{i}",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},  # Required field for GraphNode base class
+                incident_type="ERROR" if i % 2 == 0 else "WARNING",
+                severity=IncidentSeverity.HIGH if i < 2 else IncidentSeverity.MEDIUM,
+                status=IncidentStatus.INVESTIGATING if i < 2 else IncidentStatus.OPEN,
+                description=f"Test incident {i}",
+                source_component="test_component",
+                detected_at=now - timedelta(hours=i),
+                filename="test.py",
+                line_number=100 + i,
+                updated_by="test",
+                updated_at=now,
+            )
 
-    mock.get_recent_incidents = AsyncMock(side_effect=mock_get_recent_incidents)
+            # Apply filters (case-insensitive to match production)
+            if severity and incident.severity.value.upper() != severity.upper():
+                continue
+            if status and incident.status.value.upper() != status.upper():
+                continue
 
-    # Get insights
+            incidents.append(incident)
+
+        return incidents
+
+    mock.query_incidents = AsyncMock(side_effect=mock_query_incidents)
+
+    # Get insights - returns list of IncidentInsightNode objects
     async def mock_get_insights(start_time=None, end_time=None, limit=10, **kwargs):
-        return [
-            {
-                "insight_id": f"insight_{i}",
-                "category": "performance",
-                "description": f"Insight {i}",
-                "timestamp": datetime.now(timezone.utc) - timedelta(hours=i),
-            }
-            for i in range(limit)
-        ]
+        insights = []
+        for i in range(min(limit, 5)):
+            insight = IncidentInsightNode(
+                id=f"insight-00{i}",
+                type=NodeType.CONCEPT,
+                scope=GraphScope.LOCAL,
+                attributes={},  # Required field for GraphNode base class
+                insight_type="PATTERN_DETECTED" if i % 2 == 0 else "PERIODIC_ANALYSIS",
+                summary=f"Insight {i}: Pattern detected in error logs",
+                details={"pattern_count": i + 1, "affected_components": ["test_component"]},
+                analysis_timestamp=now - timedelta(hours=i * 2),
+                updated_by="incident_service",
+                updated_at=now,
+            )
+            insights.append(insight)
+
+        return insights
 
     mock.get_insights = AsyncMock(side_effect=mock_get_insights)
 

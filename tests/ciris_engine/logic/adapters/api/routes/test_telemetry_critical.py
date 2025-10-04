@@ -53,7 +53,9 @@ def fully_initialized_app(complete_api_telemetry_setup):
     app.state.memory_service = MagicMock()
     app.state.config_service = MagicMock()
     app.state.audit_service = MagicMock()
+    # Audit service needs both query_entries and query_events returning dict objects
     app.state.audit_service.query_entries = AsyncMock(return_value=[])
+    app.state.audit_service.query_events = AsyncMock(return_value=[])
     app.state.tsdb_consolidation_service = MagicMock()
     app.state.shutdown_service = MagicMock()
     app.state.initialization_service = MagicMock()
@@ -204,6 +206,8 @@ class TestUnifiedEndpoint:
         """Test unified endpoint with JSON format."""
         client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/unified?format=json")
+        if response.status_code != 200:
+            print(f"ERROR Response: {response.json() if response.headers.get('content-type') == 'application/json' else response.text[:200]}")
         assert response.status_code == 200
 
         data = response.json()

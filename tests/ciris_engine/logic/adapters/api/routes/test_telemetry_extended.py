@@ -359,57 +359,103 @@ def full_app(complete_api_telemetry_setup):
     )
     # app.state.visibility_service = visibility_service  # Using centralized fixture instead
 
-    # Audit service with PROPER audit entries as objects
+    # Audit service with PROPER AuditEntry objects
+    from ciris_engine.schemas.services.nodes import AuditEntry, AuditEntryContext
+    from ciris_engine.schemas.services.graph_core import NodeType, GraphScope
+
     audit_service = MagicMock()
+    now = datetime.now(timezone.utc)
 
-    # Create proper audit entry objects
-    class MockAuditEntry:
-        def __init__(self, action, actor, timestamp, context):
-            self.action = action
-            self.actor = actor
-            self.timestamp = timestamp
-            self.context = context
+    # Create proper AuditEntry objects for query_audit_trail
+    async def mock_query_audit_trail(query):
+        """Return proper AuditEntry objects based on query."""
+        entries = [
+            # For logs endpoint - error/warning/critical actions
+            AuditEntry(
+                id="audit_1",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                action="error_occurred",
+                actor="telemetry.service",
+                timestamp=now,
+                context=AuditEntryContext(
+                    service_name="telemetry",
+                    correlation_id="trace_1",
+                    additional_data={"description": "Critical system error"}
+                ),
+            ),
+            AuditEntry(
+                id="audit_2",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                action="warning_issued",
+                actor="memory.service",
+                timestamp=now - timedelta(minutes=1),
+                context=AuditEntryContext(
+                    service_name="memory",
+                    correlation_id="trace_2",
+                    additional_data={"description": "Memory usage high"}
+                ),
+            ),
+            AuditEntry(
+                id="audit_3",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                action="critical_failure",
+                actor="llm.service",
+                timestamp=now - timedelta(minutes=2),
+                context=AuditEntryContext(
+                    service_name="llm",
+                    correlation_id="trace_3",
+                    additional_data={"description": "LLM service unavailable"}
+                ),
+            ),
+            # For traces endpoint - PONDER actions (reasoning traces)
+            AuditEntry(
+                id="audit_4",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                action="handler_action_ponder",
+                actor="visibility.service",
+                timestamp=now - timedelta(minutes=3),
+                context=AuditEntryContext(
+                    service_name="visibility",
+                    correlation_id="trace_4",
+                    additional_data={
+                        "thought": "Analyzing user request",
+                        "task_id": "task_001",
+                        "depth": 2,
+                        "action": "analyze",
+                        "confidence": 0.85,
+                    }
+                ),
+            ),
+            AuditEntry(
+                id="audit_5",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                action="debug_log",
+                actor="audit.service",
+                timestamp=now - timedelta(minutes=4),
+                context=AuditEntryContext(
+                    service_name="audit",
+                    additional_data={"description": "Debug information"}
+                ),
+            ),
+        ]
 
-    audit_entries = [
-        MockAuditEntry(
-            action="error_occurred",
-            actor="telemetry.service",
-            timestamp=datetime.now(timezone.utc),
-            context={
-                "description": "Test error occurred in telemetry",
-                "trace_id": "trace-001",
-                "user_id": "test_user",
-                "error_details": {"code": 500, "message": "Internal error"},
-            },
-        ),
-        MockAuditEntry(
-            action="warning_detected",
-            actor="resource.monitor",
-            timestamp=datetime.now(timezone.utc) - timedelta(minutes=1),
-            context={"description": "Memory usage warning", "trace_id": "trace-002", "user_id": "test_user"},
-        ),
-        MockAuditEntry(
-            action="debug_trace",
-            actor="system.debug",
-            timestamp=datetime.now(timezone.utc) - timedelta(minutes=2),
-            context={"description": "Debug trace information", "trace_id": "trace-003"},
-        ),
-        MockAuditEntry(
-            action="critical_failure",
-            actor="system.critical",
-            timestamp=datetime.now(timezone.utc) - timedelta(minutes=3),
-            context={"description": "Critical system failure detected", "trace_id": "trace-004"},
-        ),
-        MockAuditEntry(
-            action="info_logged",
-            actor="api.handler",
-            timestamp=datetime.now(timezone.utc) - timedelta(minutes=4),
-            context={"description": "Request processed successfully", "trace_id": "trace-005"},
-        ),
-    ]
+        # Filter by event_type if specified (singular field)
+        if hasattr(query, 'event_type') and query.event_type:
+            entries = [e for e in entries if e.action == query.event_type]
 
-    audit_service.query_entries = AsyncMock(return_value=audit_entries)
-    audit_service.query_events = AsyncMock(return_value=audit_entries)  # Add query_events method
+        return entries
+
+    audit_service.query_audit_trail = AsyncMock(side_effect=mock_query_audit_trail)
     audit_service.get_metrics = Mock(return_value={"total_events": 5000, "events_24h": 500})
     app.state.audit_service = audit_service
 
@@ -807,7 +853,7 @@ class TestLogsEndpointExtended:
         assert response.status_code == 200
 
         data = response.json()["data"]
-        assert len(data.get("logs", [])) >= 0
+        assert len(data.get("logs", [])) > 0
 
         # Check we have different severity levels
         levels = set(log["level"] for log in data["logs"])
@@ -890,6 +936,8 @@ class TestQueryEndpointExtended:
                 "search": "error",
             },
         )
+        if response.status_code != 200:
+            print(f"ERROR: {response.json()}")
         assert response.status_code == 200
 
     def test_query_incidents_type(self, client):
@@ -904,12 +952,17 @@ class TestQueryEndpointExtended:
                 },
             },
         )
+        if response.status_code != 200:
+            print(f"ERROR: {response.json()}")
         assert response.status_code == 200
 
         data = response.json()["data"]
+        print(f"DEBUG: Query results count: {len(data.get('results', []))}")
+        if len(data.get('results', [])) > 0:
+            print(f"DEBUG: First result: {data['results'][0]}")
         assert "results" in data
-        # Should find inc-002 which is high severity and investigating
-        assert len(data["results"]) > 0
+        # Should find inc-00 incidents which are high severity and investigating
+        assert len(data["results"]) > 0, f"Expected incidents but got: {data}"
 
     def test_query_insights_type(self, client):
         """Test query with insights type."""

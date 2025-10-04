@@ -553,6 +553,131 @@ class IncidentManagementService(BaseGraphService):
             logger.warning(f"Failed to get incident count: {e}")
             return 0
 
+    async def query_incidents(
+        self,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        severity: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[IncidentNode]:
+        """Query incidents with optional filtering.
+
+        Args:
+            start_time: Filter incidents after this time
+            end_time: Filter incidents before this time
+            severity: Filter by severity (CRITICAL, HIGH, MEDIUM, LOW)
+            status: Filter by status (OPEN, INVESTIGATING, RESOLVED, CLOSED, RECURRING)
+
+        Returns:
+            List of matching IncidentNode objects
+        """
+        try:
+            time_service = self._get_time_service()
+
+            # Use start_time or default to 24 hours ago
+            if not start_time:
+                start_time = time_service.now() - timedelta(hours=24)
+
+            # Get all incidents since start_time
+            incidents = await self._get_recent_incidents(start_time)
+
+            # Apply filters
+            filtered_incidents = []
+            for incident in incidents:
+                # Filter by end_time
+                if end_time and incident.detected_at > end_time:
+                    continue
+
+                # Filter by severity (case-insensitive)
+                if severity and incident.severity.value.upper() != severity.upper():
+                    continue
+
+                # Filter by status (case-insensitive)
+                if status and incident.status.value.upper() != status.upper():
+                    continue
+
+                filtered_incidents.append(incident)
+
+            return filtered_incidents
+
+        except Exception as e:
+            logger.warning(f"Failed to query incidents: {e}")
+            return []
+
+    async def get_insights(
+        self,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 10,
+    ) -> List[IncidentInsightNode]:
+        """Get incident insights with optional filtering.
+
+        Args:
+            start_time: Filter insights after this time
+            end_time: Filter insights before this time
+            limit: Maximum number of insights to return
+
+        Returns:
+            List of IncidentInsightNode objects
+        """
+        if not self._memory_bus:
+            logger.warning("Memory bus not available")
+            return []
+
+        try:
+            from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+
+            time_service = self._get_time_service()
+
+            # Use start_time or default to 7 days ago (insights are less frequent)
+            if not start_time:
+                start_time = time_service.now() - timedelta(days=7)
+
+            # Create search filter for insight nodes
+            search_filter = MemorySearchFilter(
+                node_type=NodeType.CONCEPT.value,
+                created_after=start_time,
+                limit=limit * 2,  # Get extra for filtering
+            )
+
+            # Query for concept nodes (insights are stored as concepts)
+            nodes = await self._memory_bus.search(
+                query="incident insight",
+                filters=search_filter,
+                handler_name="incident_service",
+            )
+
+            # Convert to IncidentInsightNode and filter
+            insights = []
+            for node in nodes:
+                try:
+                    # Check if this is actually an insight node
+                    attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+                    if "insight_type" not in attrs:
+                        continue
+
+                    insight = IncidentInsightNode.from_graph_node(node)
+
+                    # Filter by end_time
+                    if end_time and insight.analysis_timestamp > end_time:
+                        continue
+
+                    insights.append(insight)
+
+                    # Stop if we've reached the limit
+                    if len(insights) >= limit:
+                        break
+
+                except Exception as e:
+                    logger.warning(f"Failed to parse insight node: {e}")
+                    continue
+
+            return insights
+
+        except Exception as e:
+            logger.warning(f"Failed to get insights: {e}")
+            return []
+
     async def _mark_incidents_analyzed(self, incidents: List[IncidentNode]) -> None:
         """Mark incidents as analyzed."""
         for incident in incidents:

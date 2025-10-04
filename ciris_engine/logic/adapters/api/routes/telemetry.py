@@ -1190,17 +1190,24 @@ async def _get_traces_from_audit_service(
     audit_service: Any, start_time: Optional[datetime], end_time: Optional[datetime], limit: int
 ) -> List[ReasoningTraceData]:
     """Get reasoning traces from audit service as fallback."""
-    # Query audit entries related to reasoning
-    entries = await audit_service.query_events(
-        event_type="THINK", start_time=start_time, end_time=end_time, limit=limit * 10  # Get more to group
+    # Query audit entries related to reasoning using the actual audit service method
+    from ciris_engine.schemas.services.graph.audit import AuditQuery
+
+    query = AuditQuery(
+        start_time=start_time,
+        end_time=end_time,
+        event_type="handler_action_ponder",
+        limit=limit * 10  # Get more to group
     )
+    entries = await audit_service.query_audit_trail(query)
 
     # Group by correlation ID or time window
     trace_groups = defaultdict(list)
     for entry in entries:
-        context = entry.get("data", {}).get("context", {})
-        timestamp = _parse_timestamp(entry.get("timestamp"))
-        trace_key = context.get("task_id", timestamp.strftime("%Y%m%d%H%M"))
+        # AuditEntry objects have .context attribute which is AuditEntryContext
+        context_data = entry.context.additional_data or {}
+        timestamp = entry.timestamp
+        trace_key = context_data.get("task_id", timestamp.strftime("%Y%m%d%H%M"))
         trace_groups[trace_key].append(entry)
 
     traces = []
@@ -1214,11 +1221,11 @@ async def _get_traces_from_audit_service(
 
 def _build_trace_from_audit_entries(trace_id: str, entries: List[Any]) -> ReasoningTraceData:
     """Build a ReasoningTraceData from audit entries."""
-    # Sort entries by timestamp
-    entries.sort(key=lambda e: _parse_timestamp(e.get("timestamp")))
+    # Sort entries by timestamp - AuditEntry objects have .timestamp attribute
+    entries.sort(key=lambda e: e.timestamp)
 
-    start_timestamp = _parse_timestamp(entries[0].get("timestamp"))
-    end_timestamp = _parse_timestamp(entries[-1].get("timestamp"))
+    start_timestamp = entries[0].timestamp
+    end_timestamp = entries[-1].timestamp
 
     return ReasoningTraceData(
         trace_id=f"trace_{trace_id}",
@@ -1227,16 +1234,16 @@ def _build_trace_from_audit_entries(trace_id: str, entries: List[Any]) -> Reason
         start_time=start_timestamp,
         duration_ms=(end_timestamp - start_timestamp).total_seconds() * 1000,
         thought_count=len(entries),
-        decision_count=sum(1 for e in entries if "decision" in e.get("event_type", "").lower()),
-        reasoning_depth=(max(e.get("data", {}).get("context", {}).get("depth", 0) for e in entries) if entries else 0),
+        decision_count=sum(1 for e in entries if "decision" in e.action.lower()),
+        reasoning_depth=(max((e.context.additional_data or {}).get("depth", 0) for e in entries) if entries else 0),
         thoughts=[
             APIResponseThoughtStep(
                 step=i,
-                content=(e.get("data", {}).get("context", {}).get("thought", e.get("event_type", ""))),
-                timestamp=_parse_timestamp(e.get("timestamp")),
-                depth=(e.get("data", {}).get("context", {}).get("depth", 0)),
-                action=(e.get("data", {}).get("context", {}).get("action")),
-                confidence=(e.get("data", {}).get("context", {}).get("confidence")),
+                content=(e.context.additional_data or {}).get("thought", e.action),
+                timestamp=e.timestamp,
+                depth=(e.context.additional_data or {}).get("depth", 0),
+                action=(e.context.additional_data or {}).get("action"),
+                confidence=(e.context.additional_data or {}).get("confidence"),
             )
             for i, e in enumerate(entries)
         ],
@@ -1331,20 +1338,23 @@ def _should_include_log(
 
 def _build_log_entry(entry: Any, log_level: str, log_service: str) -> LogEntryResponse:
     """Build LogEntry from audit entry."""
+    # AuditEntry.context is AuditEntryContext with .additional_data dict
+    context_data = entry.context.additional_data or {}
+
     return LogEntryResponse(
         timestamp=entry.timestamp,
         level=log_level,
         service=log_service,
-        message=f"{entry.action}: {entry.context.get('description', '')}".strip(": "),
+        message=f"{entry.action}: {context_data.get('description', '')}".strip(": "),
         context=LogContext(
-            trace_id=entry.context.get("trace_id"),
-            correlation_id=entry.context.get("correlation_id"),
-            user_id=entry.context.get("user_id"),
-            entity_id=entry.context.get("entity_id"),
-            error_details=entry.context.get("error_details", {}) if "error" in log_level.lower() else None,
-            metadata=entry.context,
+            trace_id=entry.context.correlation_id,
+            correlation_id=entry.context.correlation_id,
+            user_id=entry.context.user_id,
+            entity_id=context_data.get("entity_id"),
+            error_details=context_data.get("error_details", {}) if "error" in log_level.lower() else None,
+            metadata=context_data,
         ),
-        trace_id=entry.context.get("trace_id") or entry.context.get("correlation_id"),
+        trace_id=entry.context.correlation_id,
     )
 
 
@@ -1359,9 +1369,14 @@ async def _get_logs_from_audit_service(
     """Get logs from audit service with filtering."""
     logs = []
     try:
-        entries = await audit_service.query_events(
-            start_time=start_time, end_time=end_time, limit=limit * 2  # Get extra for filtering
+        from ciris_engine.schemas.services.graph.audit import AuditQuery
+
+        audit_query = AuditQuery(
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit * 2  # Get extra for filtering
         )
+        entries = await audit_service.query_audit_trail(audit_query)
 
         for entry in entries:
             log_level = _determine_log_level(entry.action)
@@ -1525,9 +1540,14 @@ async def _query_logs(audit_service: Any, query: TelemetryQuery) -> List[QueryRe
     if not audit_service:
         return results
 
-    log_entries = await audit_service.query_entries(
-        start_time=query.start_time, end_time=query.end_time, limit=query.limit
+    from ciris_engine.schemas.services.graph.audit import AuditQuery
+
+    audit_query = AuditQuery(
+        start_time=query.start_time,
+        end_time=query.end_time,
+        limit=query.limit
     )
+    log_entries = await audit_service.query_audit_trail(audit_query)
 
     for entry in log_entries:
         if not _should_include_log_entry(entry, query.filters):
@@ -1542,7 +1562,7 @@ async def _query_logs(audit_service: Any, query: TelemetryQuery) -> List[QueryRe
                     "timestamp": entry.timestamp.isoformat(),
                     "service": entry.actor,
                     "action": entry.action,
-                    "context": entry.context,
+                    "context": entry.context.model_dump() if hasattr(entry.context, 'model_dump') else entry.context,
                 },
             )
         )

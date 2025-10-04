@@ -76,10 +76,13 @@ class ConscienceExecutionPhase:
         }
 
         if action_result.selected_action in exempt_actions:
-            # Exempt actions bypass conscience checks - epistemic_data is REQUIRED
-            raise ValueError(
-                f"Exempt actions ({action_result.selected_action.value}) should not reach conscience execution. "
-                f"This indicates a pipeline configuration error."
+            # Exempt actions bypass conscience checks - return immediately with EXEMPT marker
+            return ConscienceApplicationResult(
+                original_action=action_result,
+                final_action=action_result,
+                overridden=False,
+                override_reason=None,
+                epistemic_data={"status": "EXEMPT", "action": action_result.selected_action.value},
             )
 
         context = {"thought": thought or thought_item, "dma_results": dma_results or {}}

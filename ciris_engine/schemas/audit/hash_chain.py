@@ -45,14 +45,14 @@ class ChainSummary(BaseModel):
 
 
 class AuditEntryResult(BaseModel):
-    """Result from creating an audit entry with optional hash chain data."""
+    """Result from creating an audit entry with hash chain data (ALWAYS enabled in production)."""
 
-    entry_id: str = Field(..., description="Unique ID of the audit entry")
-    sequence_number: Optional[int] = Field(None, description="Sequence number in hash chain (if enabled)")
-    entry_hash: Optional[str] = Field(None, description="Hash of this entry (if hash chain enabled)")
-    previous_hash: Optional[str] = Field(None, description="Hash of previous entry (if hash chain enabled)")
-    signature: Optional[str] = Field(None, description="Cryptographic signature (if hash chain enabled)")
-    signing_key_id: Optional[str] = Field(None, description="ID of key used for signing (if hash chain enabled)")
+    entry_id: str = Field(..., description="Unique ID of the audit entry (REQUIRED)")
+    sequence_number: int = Field(..., description="Sequence number in hash chain (REQUIRED)")
+    entry_hash: str = Field(..., description="Hash of this entry (REQUIRED)")
+    previous_hash: Optional[str] = Field(None, description="Hash of previous entry (None for first entry)")
+    signature: str = Field(..., description="Cryptographic signature (REQUIRED)")
+    signing_key_id: Optional[str] = Field(None, description="ID of key used for signing")
 
 
 __all__ = ["HashChainAuditEntry", "HashChainVerificationResult", "ChainSummary", "AuditEntryResult"]

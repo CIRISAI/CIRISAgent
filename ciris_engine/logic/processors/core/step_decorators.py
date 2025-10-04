@@ -378,10 +378,13 @@ def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: Tupl
             dma_parts.append(f"ethical_pdma: {dma_results_obj.ethical_pdma}")
         dma_results_str = "; ".join(dma_parts) if dma_parts else None
 
+    # Rationale is now REQUIRED in ActionSelectionDMAResult schema
+    action_rationale = result.rationale
+
     return PerformASPDMAStepData(
         **_base_data_dict(base_data),
         selected_action=str(result.selected_action),
-        action_rationale=str(result.rationale),
+        action_rationale=action_rationale,
         dma_results=dma_results_str,  # String summary for display
         dma_results_obj=dma_results_obj,  # Concrete InitialDMAResults object for event creation
     )
@@ -642,10 +645,11 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
             f"FINALIZE_ACTION final_action missing 'selected_action' attribute. Type: {type(final_action)}, attributes: {dir(final_action)}"
         )
 
-    # Extract conscience data
+    # Extract conscience data (epistemic_data is now REQUIRED in ConscienceApplicationResult)
     conscience_passed = not result.overridden
     override_reason = result.override_reason if result.overridden else None
-    epistemic_data = result.epistemic_data if hasattr(result, "epistemic_data") else {}
+    epistemic_data = result.epistemic_data  # REQUIRED field
+    updated_status_detected = getattr(result, "updated_status_detected", None)
 
     return FinalizeActionStepData(
         **_base_data_dict(base_data),
@@ -653,6 +657,7 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
         conscience_passed=conscience_passed,
         conscience_override_reason=override_reason,
         epistemic_data=epistemic_data,
+        updated_status_detected=updated_status_detected,
     )
 
 
@@ -695,53 +700,29 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
     if not result:
         raise ValueError("ACTION_COMPLETE step result is None - this indicates a serious pipeline issue")
 
-    # Extract action_type from dispatch_result dict (primary path)
-    if isinstance(result, dict):
-        if "action_type" not in result:
-            raise KeyError(
-                f"ACTION_COMPLETE dispatch_result missing 'action_type'. Available keys: {list(result.keys())}"
-            )
+    # Result should be ActionResponse (typed) - no more dict access
+    from ciris_engine.schemas.services.runtime_control import ActionResponse
 
-        if "success" not in result:
-            raise KeyError(f"ACTION_COMPLETE dispatch_result missing 'success'. Available keys: {list(result.keys())}")
-
-        if "handler" not in result:
-            raise KeyError(f"ACTION_COMPLETE dispatch_result missing 'handler'. Available keys: {list(result.keys())}")
-
-        return ActionCompleteStepData(
-            **_base_data_dict(base_data),
-            action_executed=str(result["action_type"]),
-            dispatch_success=result["success"],
-            handler_completed=result["handler"] != "Unknown",
-            follow_up_processing_pending=bool(result.get("follow_up_thought_id")),
-            follow_up_thought_id=result.get("follow_up_thought_id"),
-            execution_time_ms=0.0,  # Dict format doesn't include execution time
-            # Extract audit trail data from dispatch_result
-            audit_entry_id=result.get("audit_entry_id"),
-            audit_sequence_number=result.get("audit_sequence_number"),
-            audit_entry_hash=result.get("audit_entry_hash"),
-            audit_signature=result.get("audit_signature"),
+    if not isinstance(result, ActionResponse):
+        raise TypeError(
+            f"ACTION_COMPLETE expects ActionResponse, got {type(result)}. "
+            f"Handlers must return ActionResponse with audit_data."
         )
-    else:
-        # Object-based results (should be rare, fail fast if wrong structure)
-        if not hasattr(result, "selected_action"):
-            raise AttributeError(
-                f"ACTION_COMPLETE object result missing 'selected_action'. Result type: {type(result)}, attributes: {dir(result)}"
-            )
 
-        if not hasattr(result, "success"):
-            raise AttributeError(
-                f"ACTION_COMPLETE object result missing 'success'. Result type: {type(result)}, attributes: {dir(result)}"
-            )
-
-        return ActionCompleteStepData(
-            **_base_data_dict(base_data),
-            action_executed=str(result.selected_action),
-            dispatch_success=result.success,
-            handler_completed=getattr(result, "completed", True),
-            follow_up_processing_pending=getattr(result, "has_follow_up", False),
-            execution_time_ms=getattr(result, "execution_time_ms", 0.0),
-        )
+    return ActionCompleteStepData(
+        **_base_data_dict(base_data),
+        action_executed=result.action_type,
+        dispatch_success=result.success,
+        handler_completed=result.handler != "Unknown",
+        follow_up_processing_pending=bool(result.follow_up_thought_id),
+        follow_up_thought_id=result.follow_up_thought_id,
+        execution_time_ms=result.execution_time_ms,
+        # Audit data from AuditEntryResult (REQUIRED fields)
+        audit_entry_id=result.audit_data.entry_id,
+        audit_sequence_number=result.audit_data.sequence_number,
+        audit_entry_hash=result.audit_data.entry_hash,
+        audit_signature=result.audit_data.signature,
+    )
 
 
 def _create_round_complete_data(base_data: BaseStepData, args: Tuple[Any, ...]) -> RoundCompleteStepData:
@@ -1244,6 +1225,7 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
         epistemic_data=getattr(step_data, "epistemic_data", {}),
         final_action=getattr(step_data, "selected_action", ""),
         action_was_overridden=not getattr(step_data, "conscience_passed", True),
+        updated_status_available=getattr(step_data, "updated_status_detected", None),
     )
 
 

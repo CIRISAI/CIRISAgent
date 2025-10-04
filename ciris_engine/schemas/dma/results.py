@@ -77,7 +77,7 @@ class ActionSelectionDMAResult(BaseModel):
         ForgetParams,
         TaskCompleteParams,
     ] = Field(..., description="Parameters for the selected action")
-    rationale: Optional[str] = Field(None, description="Reasoning for this action selection")
+    rationale: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
 
     # LLM metadata
     raw_llm_response: Optional[str] = Field(None, description="Raw LLM response")

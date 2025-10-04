@@ -181,7 +181,7 @@ class FacultyIntegration:
             metadata_suffix += " through recursive evaluation due to conscience failure"
         metadata_suffix += "."
 
-        updated_rationale = (result.rationale or "") + metadata_suffix
+        updated_rationale = result.rationale + metadata_suffix
 
         return ActionSelectionDMAResult(
             selected_action=result.selected_action,

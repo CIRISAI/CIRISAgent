@@ -121,22 +121,22 @@ Broadcast when a thought begins processing.
 interface ThoughtStartEvent {
   event_type: "thought_start";
   thought_id: string;           // Unique thought identifier
-  task_id: string;              // Parent task ID (empty string if none)
+  task_id: string;              // Source task identifier (always present)
   timestamp: string;            // ISO 8601 timestamp
 
   // Thought metadata
   thought_type: string;         // "standard", "ponder", "recursive", etc.
-  thought_content: string;      // The thought content
+  thought_content: string;      // The thought content/reasoning
   thought_status: string;       // "pending", "processing", etc.
   round_number: number;         // Processing round (0-based)
-  thought_depth: number;        // Ponder depth (0-7)
+  thought_depth: number;        // Ponder depth (0-7, default: 0)
   parent_thought_id?: string;   // Parent thought if pondering
 
-  // Task metadata (when task exists)
-  task_description?: string;    // What the task is about
-  task_status?: string;         // Task status
-  task_priority?: number;       // Priority 0-10
-  channel_id?: string;          // Channel where task originated
+  // Task metadata (always present - context for the thought)
+  task_description: string;     // What needs to be done
+  task_priority: number;        // Priority 0-10
+  channel_id: string;           // Channel where task originated
+  updated_info_available: boolean; // Whether task has updated information (default: false)
 }
 ```
 
@@ -153,9 +153,9 @@ interface ThoughtStartEvent {
   "round_number": 0,
   "thought_depth": 0,
   "task_description": "Respond to user query",
-  "task_status": "active",
   "task_priority": 5,
-  "channel_id": "1234567890"
+  "channel_id": "1234567890",
+  "updated_info_available": false
 }
 ```
 
@@ -326,12 +326,12 @@ Broadcast at the start of CONSCIENCE_EXECUTION step with action selection result
 interface ASPDMAResultEvent {
   event_type: "aspdma_result";
   thought_id: string;
-  task_id: string;
+  task_id: string | null;       // Parent task if any
   timestamp: string;
 
   selected_action: string;      // Action type selected
   action_rationale: string;     // Why this action was chosen
-  is_recursive: boolean;        // Whether in recursive processing
+  is_recursive: boolean;        // Whether this is recursive ASPDMA after conscience override (default: false)
 }
 ```
 
@@ -359,19 +359,27 @@ Broadcast at the start of FINALIZE_ACTION step with conscience validation result
 interface ConscienceResultEvent {
   event_type: "conscience_result";
   thought_id: string;
-  task_id: string;
+  task_id: string | null;               // Parent task if any
   timestamp: string;
 
   conscience_passed: boolean;           // Did conscience approve?
   final_action: string;                 // Action after conscience check
-  epistemic_data: {                     // Epistemic conscience data
-    confidence: number;                 // 0.0-1.0
-    uncertainty_acknowledged: boolean;
-    reasoning: string;
-  };
-  is_recursive: boolean;                // Recursive processing flag
-  conscience_override_reason?: string;  // Why action was overridden
+  epistemic_data: EpistemicData;        // Rich conscience evaluation data from all checks
+  is_recursive: boolean;                // Whether this is recursive conscience check after override (default: false)
+  conscience_override_reason?: string;  // Why action was overridden (null if not overridden)
   action_was_overridden: boolean;       // Was action changed?
+  updated_status_available?: boolean;   // Whether UpdatedStatusConscience detected new info (null if not checked)
+}
+
+// EpistemicData can contain various conscience check results
+interface EpistemicData {
+  [key: string]: any;  // Dynamic data from various conscience checks
+  // Common fields that may appear:
+  confidence?: number;                  // 0.0-1.0
+  uncertainty_acknowledged?: boolean;
+  reasoning?: string;
+  status?: string;
+  reason?: string;
 }
 ```
 
@@ -387,10 +395,13 @@ interface ConscienceResultEvent {
   "epistemic_data": {
     "confidence": 0.85,
     "uncertainty_acknowledged": false,
-    "reasoning": "High confidence in response accuracy"
+    "reasoning": "High confidence in response accuracy",
+    "status": "APPROVED"
   },
   "is_recursive": false,
-  "action_was_overridden": false
+  "conscience_override_reason": null,
+  "action_was_overridden": false,
+  "updated_status_available": false
 }
 ```
 
@@ -405,19 +416,20 @@ Broadcast at ACTION_COMPLETE step with final execution result and audit data.
 interface ActionResultEvent {
   event_type: "action_result";
   thought_id: string;
-  task_id: string;
+  task_id: string | null;           // Parent task if any
   timestamp: string;
 
   action_executed: string;          // Action type executed
   execution_success: boolean;       // Was execution successful?
-  execution_time_ms: number;        // Execution duration
-  follow_up_thought_id?: string;    // Follow-up thought if created
+  execution_time_ms: number;        // Execution duration in milliseconds
+  follow_up_thought_id?: string;    // Follow-up thought created if any (null if none)
+  error?: string;                   // Error message if execution failed (null if successful)
 
-  // Audit trail data
-  audit_entry_id?: string;          // Audit entry ID
-  audit_sequence_number?: number;   // Sequence number
-  audit_entry_hash?: string;        // Entry hash
-  audit_signature?: string;         // Ed25519 signature
+  // Audit trail data (tamper-evident hash chain)
+  audit_entry_id?: string;          // ID of audit entry for this action (null if audit failed)
+  audit_sequence_number?: number;   // Sequence number in audit hash chain (null if audit failed)
+  audit_entry_hash?: string;        // Hash of audit entry (null if audit failed)
+  audit_signature?: string;         // Ed25519 cryptographic signature (null if audit failed)
 }
 ```
 
@@ -430,8 +442,9 @@ interface ActionResultEvent {
   "timestamp": "2025-10-03T18:00:05.000Z",
   "action_executed": "speak",
   "execution_success": true,
-  "execution_time_ms": 245,
+  "execution_time_ms": 245.0,
   "follow_up_thought_id": null,
+  "error": null,
   "audit_entry_id": "audit_abc123",
   "audit_sequence_number": 42,
   "audit_entry_hash": "sha256:abcd1234...",

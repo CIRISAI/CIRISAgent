@@ -82,21 +82,12 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
         messages.append({"role": "user", "content": user_message})
 
-        try:
-            result_tuple = await self.call_llm_structured(
-                messages=messages, response_model=EthicalDMAResult, max_tokens=1024, temperature=0.0
-            )
-            response_obj: EthicalDMAResult = result_tuple[0]
-            logger.info(f"Evaluation successful for thought ID {input_data.thought_id}")
-            return response_obj
-        except Exception as e:
-            logger.error(f"Evaluation failed for thought ID {input_data.thought_id}: {e}", exc_info=True)
-            fallback_data = {
-                "alignment_check": f"Evaluation error occurred: {str(e)}. Unable to complete ethical analysis.",
-                "decision": "defer",
-                "reasoning": "Evaluation failed due to an exception.",
-            }
-            return EthicalDMAResult.model_validate(fallback_data)
+        result_tuple = await self.call_llm_structured(
+            messages=messages, response_model=EthicalDMAResult, max_tokens=1024, temperature=0.0
+        )
+        response_obj: EthicalDMAResult = result_tuple[0]
+        logger.info(f"Evaluation successful for thought ID {input_data.thought_id}")
+        return response_obj
 
     def __repr__(self) -> str:
         return f"<EthicalPDMAEvaluator model='{self.model_name}'>"

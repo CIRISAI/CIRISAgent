@@ -1,4 +1,4 @@
-ciris_sdk/setup.py:3:1: error: Library stubs not installed for "setuptools" 
+ciris_sdk/setup.py:3:1: error: Library stubs not installed for "setuptools"
 [import-untyped]
     from setuptools import find_packages, setup
     ^
@@ -91,7 +91,7 @@ ciris_sdk/pagination.py:50:36: error: Missing type parameters for generic type
 "Callable"  [type-arg]
         def __init__(self, fetch_func: Callable, initial_params: Dict[str,...
                                        ^
-ciris_sdk/pagination.py:96:56: error: Name "self.item_class" is not defined 
+ciris_sdk/pagination.py:96:56: error: Name "self.item_class" is not defined
 [name-defined]
     ...          self._current_page = PaginatedResponse[self.item_class](**re...
                                                         ^
@@ -187,7 +187,7 @@ ciris_sdk/resources/websocket.py:142:27: error: Missing type parameters for
 generic type "Task"  [type-arg]
             self._tasks: List[asyncio.Task] = []
                               ^
-ciris_sdk/resources/websocket.py:225: error: Unused "type: ignore" comment 
+ciris_sdk/resources/websocket.py:225: error: Unused "type: ignore" comment
 [unused-ignore]
             request = SubscribeRequest(channels=channel_filters)  # type: ...
             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
@@ -227,7 +227,7 @@ ciris_sdk/websocket.py:288:40: error: Incompatible types in assignment
 (expression has type "datetime", variable has type "None")  [assignment]
                     self._last_heartbeat = datetime.now(timezone.utc)
                                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
-ciris_sdk/websocket.py:336:15: error: "None" has no attribute "send" 
+ciris_sdk/websocket.py:336:15: error: "None" has no attribute "send"
 [attr-defined]
             await self._websocket.send(message)
                   ^~~~~~~~~~~~~~~~~~~~
@@ -235,7 +235,7 @@ ciris_sdk/transport.py:43:26: error: Item "None" of "AuthStore | None" has no
 attribute "get_api_key"  [union-attr]
                 stored_key = self.auth_store.get_api_key(self.base_url)
                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~
-ciris_sdk/transport.py:67:5: error: Function is missing a type annotation 
+ciris_sdk/transport.py:67:5: error: Function is missing a type annotation
 [no-untyped-def]
         async def __aexit__(self, exc_type, exc, tb):
         ^
@@ -244,7 +244,7 @@ one or more arguments  [no-untyped-def]
         async def request(self, method: str, path: str, **kwargs) -> Dict[...
         ^
 ciris_sdk/transport.py:118:36: error: Argument 1 to "_log_response_headers" of
-"Transport" has incompatible type "Headers"; expected "dict[Any, Any]" 
+"Transport" has incompatible type "Headers"; expected "dict[Any, Any]"
 [arg-type]
             self._log_response_headers(resp.headers)
                                        ^~~~~~~~~~~~
@@ -304,7 +304,7 @@ ciris_sdk/models.py:43:96: error: Missing type parameters for generic type
 "dict"  [type-arg]
     ...emoryAttributes, ConfigAttributes, TelemetryAttributes, dict] = Field(
                                                                ^
-ciris_sdk/models.py:53:5: error: Function is missing a return type annotation 
+ciris_sdk/models.py:53:5: error: Function is missing a return type annotation
 [no-untyped-def]
         def serialize_datetime(self, dt: Optional[datetime], _info):
         ^
@@ -476,7 +476,7 @@ ciris_sdk/resources/emergency.py:29:5: error: Cannot assign to a type  [misc]
         Ed25519PrivateKey = None  # Define for type annotations
         ^~~~~~~~~~~~~~~~~
 ciris_sdk/resources/emergency.py:29:25: error: Incompatible types in assignment
-(expression has type "None", variable has type "type[Ed25519PrivateKey]") 
+(expression has type "None", variable has type "type[Ed25519PrivateKey]")
 [assignment]
         Ed25519PrivateKey = None  # Define for type annotations
                             ^~~~
@@ -557,7 +557,7 @@ ciris_sdk/resources/agent.py:277:5: error: Function is missing a return type
 annotation  [no-untyped-def]
         async def stream(self, websocket_url: Optional[str] = None):
         ^
-ciris_sdk/client.py:96:5: error: Function is missing a type annotation 
+ciris_sdk/client.py:96:5: error: Function is missing a type annotation
 [no-untyped-def]
         async def __aexit__(self, exc_type, exc, tb):
         ^
@@ -588,7 +588,7 @@ missing a return type annotation  [no-untyped-def]
     ^
 ciris_sdk/examples/unified_telemetry_examples.py:13:1: note: Use "-> None" if function does not return a value
 ciris_sdk/examples/unified_telemetry_examples.py:23:38: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
             print(f"Error rate: {summary['overall_error_rate']:.2%}")
                                          ^~~~~~~~~~~~~~~~~~~~
@@ -598,7 +598,7 @@ operand types for / ("str" and "int")  [operator]
                             ^
 ciris_sdk/examples/unified_telemetry_examples.py:24:25: note: Left operand is of type "Any | str"
 ciris_sdk/examples/unified_telemetry_examples.py:24:34: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
             print(f"Uptime: {summary['overall_uptime_seconds'] / 3600:.1f}...
                                      ^~~~~~~~~~~~~~~~~~~~~~~~
@@ -613,12 +613,12 @@ missing a return type annotation  [no-untyped-def]
     ^
 ciris_sdk/examples/unified_telemetry_examples.py:45:1: note: Use "-> None" if function does not return a value
 ciris_sdk/examples/unified_telemetry_examples.py:50:36: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
             print(f"Avg latency: {perf['performance']['avg_latency_ms']}ms...
                                        ^~~~~~~~~~~~~
 ciris_sdk/examples/unified_telemetry_examples.py:51:35: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
             print(f"Throughput: {perf['performance']['throughput_rps']} re...
                                       ^~~~~~~~~~~~~
@@ -628,12 +628,12 @@ operand types for / ("str" and "int")  [operator]
                             ^
 ciris_sdk/examples/unified_telemetry_examples.py:55:25: note: Left operand is of type "Any | str"
 ciris_sdk/examples/unified_telemetry_examples.py:55:38: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
             print(f"Uptime: {reliability['uptime_seconds'] / 86400:.1f} da...
                                          ^~~~~~~~~~~~~~~~
 ciris_sdk/examples/unified_telemetry_examples.py:56:42: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
             print(f"Error rate: {reliability['error_rate']:.4%}")
                                              ^~~~~~~~~~~~
@@ -673,7 +673,7 @@ missing a return type annotation  [no-untyped-def]
     ^
 ciris_sdk/examples/unified_telemetry_examples.py:101:1: note: Use "-> None" if function does not return a value
 ciris_sdk/examples/unified_telemetry_examples.py:112:32: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
                     if not metrics["system_healthy"]:
                                    ^~~~~~~~~~~~~~~~
@@ -682,7 +682,7 @@ ciris_sdk/examples/unified_telemetry_examples.py:115:20: error: Item "str" of
                     if metrics.get("alerts"):
                        ^~~~~~~~~~~
 ciris_sdk/examples/unified_telemetry_examples.py:116:51: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
                         print(f"🚨 ALERTS: {metrics['alerts']}")
                                                       ^~~~~~~~
@@ -691,17 +691,17 @@ ciris_sdk/examples/unified_telemetry_examples.py:118:20: error: Item "str" of
                     if metrics.get("warnings"):
                        ^~~~~~~~~~~
 ciris_sdk/examples/unified_telemetry_examples.py:119:56: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
                         print(f"⚠️  Warnings: {metrics['warnings']}")
                                                            ^~~~~~~~~~
 ciris_sdk/examples/unified_telemetry_examples.py:123:42: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
                         f"Services: {metrics['services_online']}/{metrics[...
                                              ^~~~~~~~~~~~~~~~~
 ciris_sdk/examples/unified_telemetry_examples.py:124:44: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
                         f"Error rate: {metrics['overall_error_rate']:.2%} ...
                                                ^~~~~~~~~~~~~~~~~~~~
@@ -711,7 +711,7 @@ operand types for / ("str" and "int")  [operator]
                                   ^
 ciris_sdk/examples/unified_telemetry_examples.py:125:31: note: Left operand is of type "Any | str"
 ciris_sdk/examples/unified_telemetry_examples.py:125:40: error: Invalid index
-type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]" 
+type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"
 [index]
                         f"Uptime: {metrics['overall_uptime_seconds'] / 360...
                                            ^~~~~~~~~~~~~~~~~~~~~~~~

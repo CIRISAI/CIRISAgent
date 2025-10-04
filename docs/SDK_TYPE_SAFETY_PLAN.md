@@ -37,7 +37,7 @@
 
 ---
 
-## Phase 3: Fix model_types.py (18 errors) 🔥 HIGH PRIORITY  
+## Phase 3: Fix model_types.py (18 errors) 🔥 HIGH PRIORITY
 **Files:** `ciris_sdk/model_types.py`
 **Errors:** 18
 **Effort:** 20 minutes
@@ -54,7 +54,7 @@
 ---
 
 ## Phase 4: Fix resources/telemetry.py (22 errors) 🔥 HIGH PRIORITY
-**Files:** `ciris_sdk/resources/telemetry.py`  
+**Files:** `ciris_sdk/resources/telemetry.py`
 **Errors:** 22
 **Effort:** 25 minutes
 
@@ -66,7 +66,7 @@
 ```python
 # Before
 params = {}
-# After  
+# After
 params: Dict[str, Union[str, int, bool]] = {}
 
 # Before
@@ -78,9 +78,9 @@ def get_data(self) -> List[Dict[str, Any]]:
 ---
 
 ## Phase 5: Fix Data Models (25 errors total) 📊 MEDIUM PRIORITY
-**Files:** 
+**Files:**
 - `telemetry_models.py` (14 errors)
-- `telemetry_responses.py` (8 errors)  
+- `telemetry_responses.py` (8 errors)
 - `models.py` (3 errors)
 
 **Effort:** 30 minutes
@@ -89,7 +89,7 @@ def get_data(self) -> List[Dict[str, Any]]:
 ```python
 # Missing return type on __init__
 def __init__(self, data: dict): -> None:
-    
+
 # Add type params to generics
 data: Dict[str, Any] = {}
 items: List[str] = []
@@ -140,7 +140,7 @@ if self._websocket is not None:
 
 ### Sprint 1 (Immediate - 56 errors → <10 errors)
 1. ✅ Phase 1: agent.py (2 errors) - 5 min
-2. 🔥 Phase 2: transport.py (9 errors) - 15 min  
+2. 🔥 Phase 2: transport.py (9 errors) - 15 min
 3. 🔥 Phase 3: model_types.py (18 errors) - 20 min
 4. 🔥 Phase 4: telemetry.py (22 errors) - 25 min
 5. ⏭️ Phase 7: Skip examples (38 errors) - add exclusion
@@ -152,7 +152,7 @@ if self._websocket is not None:
 6. 📊 Phase 5: Data models (25 errors) - 30 min
 7. 📦 Phase 6: Resource interfaces (29 errors) - 35 min
 
-**Additional effort:** ~65 minutes  
+**Additional effort:** ~65 minutes
 **Error reduction:** 91 → ~37 errors (54 eliminated)
 
 ### Sprint 3 (Future)
@@ -177,4 +177,3 @@ ignore_errors = True
 [mypy-ciris_sdk.rate_limiter]
 ignore_errors = True  # Defer to future sprint
 ```
-

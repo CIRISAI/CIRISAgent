@@ -28,12 +28,16 @@ from ..runtime.enums import HandlerActionType
 class EthicalDMAResult(BaseModel):
     """Result from Principled Decision Making Algorithm (PDMA).
 
-    Note: alignment_check changed from Dict[str, Any] to str in v1.0.6
-    for better LLM compatibility and type safety.
+    PDMA evaluates which of the 10 handler actions (observe, speak, tool, reject,
+    ponder, defer, memorize, recall, forget, task_complete) would be ethically
+    appropriate for the given thought.
     """
 
-    decision: str = Field(..., description="Decision: approve, reject, defer, caution")
-    reasoning: str = Field(..., description="Ethical reasoning")
+    decision: str = Field(
+        ...,
+        description="Sentence identifying which of the 10 handler actions (observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete) could be ethical actions to take and why",
+    )
+    reasoning: str = Field(..., description="Ethical reasoning for the identified actions")
     alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
 
     model_config = ConfigDict(extra="forbid")

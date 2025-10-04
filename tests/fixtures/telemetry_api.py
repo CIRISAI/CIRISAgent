@@ -59,10 +59,18 @@ def mock_api_telemetry_service():
 
     mock.get_aggregated_telemetry = AsyncMock(return_value=AggregatedTelemetry())
 
-    # Query metrics - returns list of metric points
+    # Query metrics - returns list of metric point objects (not dicts)
     async def mock_query_metrics(metric_name, start_time=None, end_time=None, **kwargs):
+        # Return objects with .timestamp, .value, .metric, .tags attributes
+        class MetricPoint:
+            def __init__(self, timestamp, value, metric, tags=None):
+                self.timestamp = timestamp
+                self.value = value
+                self.metric = metric
+                self.tags = tags or {}
+
         return [
-            {"timestamp": now - timedelta(minutes=i * 5), "value": 45.5 + i, "metric": metric_name}
+            MetricPoint(timestamp=now - timedelta(minutes=i * 5), value=45.5 + i, metric=metric_name)
             for i in range(12)  # Last hour in 5-minute intervals
         ]
 

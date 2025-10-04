@@ -146,11 +146,9 @@ def test_app(stateful_runtime_control_service, mock_communication_service):
     # Agent processor with _pipeline_controller attribute
     mock_runtime.agent_processor = Mock()
     mock_runtime.agent_processor.get_current_state = Mock(return_value="PAUSED")
-    mock_runtime.agent_processor.get_snapshot = Mock(return_value={
-        "state": "PAUSED",
-        "uptime_seconds": 100.0,
-        "total_processed": 50
-    })
+    mock_runtime.agent_processor.get_snapshot = Mock(
+        return_value={"state": "PAUSED", "uptime_seconds": 100.0, "total_processed": 50}
+    )
 
     # _pipeline_controller accessed by _extract_pipeline_state_info
     mock_pipeline_controller = Mock()
@@ -160,7 +158,7 @@ def test_app(stateful_runtime_control_service, mock_communication_service):
     mock_pipeline_state_obj.pipeline_state = {
         "step": "GATHER_CONTEXT",
         "status": "paused",
-        "timestamp": "2025-01-01T00:00:00Z"
+        "timestamp": "2025-01-01T00:00:00Z",
     }
     mock_pipeline_controller.get_current_state = Mock(return_value=mock_pipeline_state_obj)
     mock_runtime.agent_processor._pipeline_controller = mock_pipeline_controller

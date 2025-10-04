@@ -403,7 +403,7 @@ def _create_pause_response(
     """Create pause action response."""
     # Create clear message based on success state
     if success:
-        step_suffix = f" at step: {current_step}" if current_step else""
+        step_suffix = f" at step: {current_step}" if current_step else ""
         message = f"Processing paused{step_suffix}"
     else:
         message = "Already paused"

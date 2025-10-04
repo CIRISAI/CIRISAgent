@@ -5,7 +5,7 @@
 # Core Dependencies
 pydantic>=2.7.0,<3.0.0
 openai>=1.0.0,<2.0.0
-instructor>=1.0.0,<2.0.0
+instructor>=1.11.3,<2.0.0
 PyYAML>=6.0.1,<7.0.0
 
 # Async and HTTP

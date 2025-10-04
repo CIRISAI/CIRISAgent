@@ -240,8 +240,8 @@ def app_with_detailed_services():
     app.state.visibility_service = visibility_service
 
     # Audit service with detailed entries for log testing - using proper AuditEntry objects
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
     from ciris_engine.schemas.services.nodes import AuditEntry, AuditEntryContext
-    from ciris_engine.schemas.services.graph_core import NodeType, GraphScope
 
     audit_service = MagicMock()
 

@@ -8,10 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 1.2.2
 
 ### Added
+- **📊 Enhanced Streaming Validation**: Added explicit bug detection in QA streaming tests with detailed error messages
+- **🔒 ActionResponse Schema**: Created typed ActionResponse to replace Dict[str, Any] dispatch_result with audit_data field
 
 ### Changed
+- **🎯 Fail-Fast Philosophy**: Removed ALL fallback logic - system now fails loud when required data missing
+- **✅ REQUIRED Fields Everywhere**: Made critical SSE fields REQUIRED throughout schemas
+  - ActionSelectionDMAResult.rationale (was Optional)
+  - ConscienceApplicationResult.epistemic_data (REQUIRED with fallback markers)
+  - AuditEntryResult: sequence_number, entry_hash, signature (were Optional)
+  - ActionCompleteStepData: All 4 audit fields (were Optional)
 
 ### Fixed
+- **🐛 BUG 1: action_rationale**: Made ActionSelectionDMAResult.rationale REQUIRED - LLM prompt already requires it, schema now enforces
+- **🐛 BUG 2: epistemic_data**: Made ConscienceApplicationResult.epistemic_data REQUIRED with EXEMPT/BYPASS markers for non-epistemic paths
+- **🐛 BUG 3: audit_trail**: Made all 4 audit fields REQUIRED in ActionCompleteStepData, wired ActionResponse with AuditEntryResult
+- **🔍 Type Safety**: All mypy errors resolved - Mypy can now validate entire SSE streaming pipeline and audit trail at compile time
+- **📡 Audit Trail**: AuditServiceProtocol.log_action now returns AuditEntryResult (was None)
+- **🚨 Dispatcher**: ActionDispatcher returns typed ActionResponse with audit_data, fails if audit_service unavailable
 
 ## [1.2.1] - 2025-10-04
 

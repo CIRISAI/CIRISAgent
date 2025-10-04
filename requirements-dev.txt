@@ -13,6 +13,8 @@ hypothesis>=6.0.0,<7.0.0
 # Type Checking
 mypy>=1.8.0,<2.0.0
 types-psutil>=5.9.0,<6.0.0
+types-PyYAML>=6.0.0,<7.0.0
+types-aiofiles>=23.0.0,<24.0.0
 
 # Code Analysis & Quality (for mypy toolkit)
 astunparse>=1.6.3,<2.0.0

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as MockLLMServiceProtocol
+from ciris_engine.protocols.services.runtime.llm import MessageDict
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 

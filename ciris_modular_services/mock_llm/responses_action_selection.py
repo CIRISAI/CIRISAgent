@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.schemas.actions import (
     DeferParams,
@@ -486,9 +486,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                     id=node_id,
                     type=NodeType.CONCEPT,
                     scope=GraphScope.LOCAL,
-                    attributes={
-                        "created_by": "mock_llm", "tags": [f"content:{content[:50]}", "source:mock_llm"]
-                    },
+                    attributes={"created_by": "mock_llm", "tags": [f"content:{content[:50]}", "source:mock_llm"]},
                 )
             )
             action = HandlerActionType.MEMORIZE
@@ -745,7 +743,9 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                     type=NodeType.CONCEPT,
                                     scope=GraphScope.LOCAL,
                                     attributes={
-                                        "created_by": "mock_llm", "content": content, "description": f"Memory: {content}"
+                                        "created_by": "mock_llm",
+                                        "content": content,
+                                        "description": f"Memory: {content}",
                                     },
                                 )
                             )

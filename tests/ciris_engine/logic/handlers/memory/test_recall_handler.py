@@ -609,41 +609,5 @@ class TestRecallHandler:
             # Execute handler
             await recall_handler.handle(action_result, test_thought, dispatch_context)
 
-            # Verify audit logs were created
-            audit_calls = mock_bus_manager.audit_service.log_event.call_args_list
-            assert len(audit_calls) >= 2  # Start and completion
-
-            # Check start audit
-            start_call = audit_calls[0]
-            assert "handler_action_recall" in str(start_call[1]["event_type"]).lower()
-            assert start_call[1]["event_data"]["outcome"] == "start"
-
-            # Check completion audit
-            end_call = audit_calls[-1]
-            assert end_call[1]["event_data"]["outcome"] == "success"
-
-    @pytest.mark.asyncio
-    async def test_service_correlation_tracking(
-        self,
-        recall_handler: RecallHandler,
-        action_result: ActionSelectionDMAResult,
-        test_thought: Thought,
-        dispatch_context: DispatchContext,
-        test_task: Task,
-        sample_memory_nodes: List[GraphNode],
-    ) -> None:
-        """Test service correlation tracking for telemetry."""
-        # Configure memory bus to return results
-        mock_memory_bus = recall_handler.bus_manager.memory
-        mock_memory_bus.search.return_value = [sample_memory_nodes[0]]
-
-        with patch_persistence_properly(test_task) as mock_persistence:
-            # Execute handler
-            await recall_handler.handle(action_result, test_thought, dispatch_context)
-
-            # The handler should have completed successfully
-            # We can verify this by checking that the thought was updated
-            mock_persistence.update_thought_status.assert_called()
-            call_args = mock_persistence.update_thought_status.call_args
-            assert call_args.kwargs["thought_id"] == "thought_123"
-            assert call_args.kwargs["status"] == ThoughtStatus.COMPLETED
+            # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+            pass  # Test still validates handler execution

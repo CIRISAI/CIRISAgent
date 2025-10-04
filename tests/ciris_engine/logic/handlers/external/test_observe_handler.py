@@ -650,14 +650,8 @@ class TestObserveHandler:
             # Execute handler
             await observe_handler.handle(action_result, test_thought, dispatch_context)
 
-            # Verify audit logs were created
-            audit_calls = mock_bus_manager.audit_service.log_event.call_args_list
-            assert len(audit_calls) >= 1  # At least start audit
-
-            # Check start audit
-            start_call = audit_calls[0]
-            assert "handler_action_observe" in str(start_call[1]["event_type"]).lower()
-            assert start_call[1]["event_data"]["outcome"] == "start"
+            # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+            pass  # Test still validates handler execution
 
             # The observe handler only logs a second audit if follow-up creation fails
             # So we might only have one audit log for successful execution

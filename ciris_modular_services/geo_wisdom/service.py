@@ -26,6 +26,7 @@ from ciris_engine.schemas.services.authority_core import (
     WisdomAdvice,
 )
 from ciris_engine.schemas.services.context import GuidanceContext
+from ciris_engine.schemas.services.core import ServiceCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class GeoWisdomAdapter(WiseAuthorityService):
     NO medical/health capabilities.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the geo wisdom adapter."""
         # OpenStreetMap Nominatim doesn't require API key but has usage limits
         # We should respect their usage policy: max 1 request per second
@@ -49,19 +50,22 @@ class GeoWisdomAdapter(WiseAuthorityService):
         self.user_agent = os.getenv("CIRIS_OSM_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
 
         # Rate limiting
-        self._last_request_time = 0
+        self._last_request_time: float = 0.0
         self._min_request_interval = 1.0  # 1 second between requests
 
         logger.info(f"GeoWisdomAdapter initialized with user agent: {self.user_agent}")
 
-    def get_capabilities(self) -> SimpleNamespace:
+    def get_capabilities(self) -> ServiceCapabilities:
         """Return adapter capabilities."""
-        return SimpleNamespace(
+        return ServiceCapabilities(
+            service_name="geo_wisdom",
             actions=["get_guidance", "fetch_guidance"],
-            capabilities=["domain:navigation", "modality:geo:route", "modality:geo:geocode"],
+            version="1.0.0",
+            dependencies=[],
+            metadata={"capabilities": ["domain:navigation", "modality:geo:route", "modality:geo:geocode"]}
         )
 
-    async def _rate_limit(self):
+    async def _rate_limit(self) -> None:
         """Enforce rate limiting for OSM API."""
         import time
 
@@ -76,7 +80,7 @@ class GeoWisdomAdapter(WiseAuthorityService):
         await self._rate_limit()
 
         headers = {"User-Agent": self.user_agent}
-        params = {"q": location, "format": "json", "limit": 1}
+        params: Dict[str, str | int] = {"q": location, "format": "json", "limit": 1}
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -96,7 +100,7 @@ class GeoWisdomAdapter(WiseAuthorityService):
 
         return None
 
-    async def _get_route(self, start_coords: Dict, end_coords: Dict) -> Optional[Dict[str, Any]]:
+    async def _get_route(self, start_coords: Dict[str, Any], end_coords: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get route between two coordinates using OSRM."""
         # OSRM doesn't require rate limiting as aggressively
 
@@ -241,19 +245,15 @@ class GeoWisdomAdapter(WiseAuthorityService):
 
     async def fetch_guidance(self, context: GuidanceContext) -> Optional[str]:
         """Legacy compatibility method."""
-        request = GuidanceRequest(context=context.question, options=context.options, urgency="normal")
+        request = GuidanceRequest(context=context.question, options={}, urgency="normal")
 
         response = await self.get_guidance(request)
         return response.custom_guidance or response.reasoning
 
-    async def send_deferral(self, request: DeferralRequest) -> DeferralResponse:
+    async def send_deferral(self, request: DeferralRequest) -> str:
         """Geographic services don't handle deferrals."""
-        return DeferralResponse(
-            approved=False,
-            reason="Geographic services do not handle deferrals",
-            wa_id="geo_wisdom",
-            signature="geo_sig",
-        )
+        # Protocol expects str return type
+        return "geo_wisdom_not_supported"
 
 
 # Example usage:

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.dependencies.auth import require_admin, require_observer
 from ciris_engine.logic.adapters.api.routes.telemetry import router
+from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
 def override_auth():
@@ -67,7 +68,14 @@ def app_with_detailed_services():
             for i in range(20):
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = 50.0 + (i % 10) * 2  # Varies between 50-68%
-                values.append({"timestamp": timestamp.isoformat(), "value": value})
+                values.append(
+                    MetricRecord(
+                        metric_name=metric_name,
+                        timestamp=timestamp,
+                        value=value,
+                        tags={},
+                    )
+                )
             return values
         elif metric_name == "memory_mb":
             # Memory data between 400-600 MB
@@ -75,7 +83,14 @@ def app_with_detailed_services():
             for i in range(20):
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = 500.0 + (i % 10) * 10  # Varies between 500-590 MB
-                values.append({"timestamp": timestamp.isoformat(), "value": value})
+                values.append(
+                    MetricRecord(
+                        metric_name=metric_name,
+                        timestamp=timestamp,
+                        value=value,
+                        tags={},
+                    )
+                )
             return values
         elif metric_name == "disk_usage_bytes":
             # Disk data around 20GB
@@ -83,7 +98,14 @@ def app_with_detailed_services():
             for i in range(20):
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = 20000000000 + (i % 10) * 100000000  # Varies around 20GB
-                values.append({"timestamp": timestamp.isoformat(), "value": value})
+                values.append(
+                    MetricRecord(
+                        metric_name=metric_name,
+                        timestamp=timestamp,
+                        value=value,
+                        tags={},
+                    )
+                )
             return values
         else:
             # Default data for other metrics
@@ -93,11 +115,12 @@ def app_with_detailed_services():
                 timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 5)
                 value = base_value + (i % 10) * 2  # Create some variation
                 values.append(
-                    {
-                        "timestamp": timestamp.isoformat(),
-                        "value": value,
-                        "tags": {"service": "test_service", "environment": "test"},
-                    }
+                    MetricRecord(
+                        metric_name=metric_name or "test_metric",
+                        timestamp=timestamp,
+                        value=value,
+                        tags={"service": "test_service", "environment": "test"},
+                    )
                 )
             return values
 
@@ -216,80 +239,126 @@ def app_with_detailed_services():
 
     app.state.visibility_service = visibility_service
 
-    # Audit service with detailed entries for log testing
+    # Audit service with detailed entries for log testing - using proper AuditEntry objects
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+    from ciris_engine.schemas.services.nodes import AuditEntry, AuditEntryContext
+
     audit_service = MagicMock()
 
-    # Create audit entries with various log levels
-    audit_entries = []
+    # Create proper AuditEntry objects with various log levels
+    async def mock_query_audit_trail(query):
+        """Return proper AuditEntry objects for log testing."""
+        audit_entries = []
 
-    # ERROR entries
-    for i in range(3):
-        entry = MagicMock()
-        entry.timestamp = datetime.now(timezone.utc) - timedelta(minutes=i * 10)
-        entry.action = f"error_occurred_{i}"
-        entry.actor = "telemetry.service"
-        entry.context = {
-            "description": f"Error {i} occurred",
-            "trace_id": f"trace_{i}",
-            "correlation_id": f"corr_{i}",
-            "user_id": "test_user",
-            "entity_id": f"entity_{i}",
-            "error_details": {"code": 500 + i, "message": f"Error message {i}"},
-            "depth": i + 1,
-        }
-        audit_entries.append(entry)
+        # ERROR entries
+        for i in range(3):
+            audit_entries.append(
+                AuditEntry(
+                    id=f"audit_error_{i}",
+                    type=NodeType.AUDIT_ENTRY,
+                    scope=GraphScope.LOCAL,
+                    attributes={},
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=i * 10),
+                    action=f"error_occurred_{i}",
+                    actor="telemetry.service",
+                    context=AuditEntryContext(
+                        service_name="telemetry",
+                        correlation_id=f"corr_{i}",
+                        user_id="test_user",
+                        additional_data={
+                            "description": f"Error {i} occurred",
+                            "entity_id": f"entity_{i}",
+                            "error_code": 500 + i,
+                            "error_message": f"Error message {i}",
+                            "depth": i + 1,
+                        },
+                    ),
+                )
+            )
 
-    # WARNING entries
-    for i in range(2):
-        entry = MagicMock()
-        entry.timestamp = datetime.now(timezone.utc) - timedelta(minutes=5 + i * 10)
-        entry.action = f"warning_detected_{i}"
-        entry.actor = "resource.monitor"
-        entry.context = {
-            "description": f"Warning {i} detected",
-            "trace_id": f"trace_w_{i}",
-            "thought": f"Warning thought {i}",
-            "decision": "continue with warning",
-            "depth": 1,
-        }
-        audit_entries.append(entry)
+        # WARNING entries
+        for i in range(2):
+            audit_entries.append(
+                AuditEntry(
+                    id=f"audit_warning_{i}",
+                    type=NodeType.AUDIT_ENTRY,
+                    scope=GraphScope.LOCAL,
+                    attributes={},
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=5 + i * 10),
+                    action=f"warning_detected_{i}",
+                    actor="resource.monitor",
+                    context=AuditEntryContext(
+                        service_name="resource_monitor",
+                        correlation_id=f"trace_w_{i}",
+                        additional_data={
+                            "description": f"Warning {i} detected",
+                            "thought": f"Warning thought {i}",
+                            "decision": "continue with warning",
+                            "depth": 1,
+                        },
+                    ),
+                )
+            )
 
-    # DEBUG entries
-    entry = MagicMock()
-    entry.timestamp = datetime.now(timezone.utc) - timedelta(minutes=15)
-    entry.action = "debug_info_logged"
-    entry.actor = "system.debug"
-    entry.context = {
-        "description": "Debug information",
-        "trace_id": "trace_debug",
-    }
-    audit_entries.append(entry)
+        # DEBUG entry
+        audit_entries.append(
+            AuditEntry(
+                id="audit_debug",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=15),
+                action="debug_info_logged",
+                actor="system.debug",
+                context=AuditEntryContext(
+                    service_name="system",
+                    correlation_id="trace_debug",
+                    additional_data={"description": "Debug information"},
+                ),
+            )
+        )
 
-    # CRITICAL entry
-    entry = MagicMock()
-    entry.timestamp = datetime.now(timezone.utc) - timedelta(minutes=1)
-    entry.action = "critical_failure_detected"
-    entry.actor = "system.critical"
-    entry.context = {
-        "description": "Critical system failure",
-        "trace_id": "trace_critical",
-    }
-    audit_entries.append(entry)
+        # CRITICAL entry
+        audit_entries.append(
+            AuditEntry(
+                id="audit_critical",
+                type=NodeType.AUDIT_ENTRY,
+                scope=GraphScope.LOCAL,
+                attributes={},
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=1),
+                action="critical_failure_detected",
+                actor="system.critical",
+                context=AuditEntryContext(
+                    service_name="system",
+                    correlation_id="trace_critical",
+                    additional_data={"description": "Critical system failure"},
+                ),
+            )
+        )
 
-    # INFO entries (default)
-    for i in range(2):
-        entry = MagicMock()
-        entry.timestamp = datetime.now(timezone.utc) - timedelta(minutes=20 + i * 5)
-        entry.action = f"info_logged_{i}"
-        entry.actor = "general.service"
-        entry.context = {
-            "description": f"Information {i}",
-            "trace_id": f"trace_info_{i}",
-        }
-        audit_entries.append(entry)
+        # INFO entries (default)
+        for i in range(2):
+            audit_entries.append(
+                AuditEntry(
+                    id=f"audit_info_{i}",
+                    type=NodeType.AUDIT_ENTRY,
+                    scope=GraphScope.LOCAL,
+                    attributes={},
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=20 + i * 5),
+                    action=f"info_logged_{i}",
+                    actor="general.service",
+                    context=AuditEntryContext(
+                        service_name="general",
+                        correlation_id=f"trace_info_{i}",
+                        additional_data={"description": f"Information {i}"},
+                    ),
+                )
+            )
 
-    audit_service.query_entries = AsyncMock(return_value=audit_entries)
-    audit_service.query_events = AsyncMock(return_value=audit_entries)  # Add query_events method
+        return audit_entries
+
+    audit_service.query_audit_trail = AsyncMock(side_effect=mock_query_audit_trail)
+    audit_service.get_metrics = Mock(return_value={"total_events": 5000, "events_24h": 500})
     app.state.audit_service = audit_service
 
     # Incident management service

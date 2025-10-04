@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import COVENANT_TEXT
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.conscience.core import (
     ConscienceCheckResult,
@@ -72,7 +72,7 @@ class _BaseConscience(ConscienceInterface):
         self._time_service = time_service
 
     def _create_trace_correlation(
-        self, conscience_type: str, context: dict, start_time: datetime
+        self, conscience_type: str, context: Dict[str, Any], start_time: datetime
     ) -> ServiceCorrelation:
         """Helper to create trace correlations for conscience checks."""
         thought = context.get("thought", {})
@@ -168,7 +168,7 @@ class _BaseConscience(ConscienceInterface):
 
 
 class EntropyConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: dict) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("entropy", context, start_time)
 
@@ -262,7 +262,7 @@ class EntropyConscience(_BaseConscience):
 
 
 class CoherenceConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: dict) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("coherence", context, start_time)
 
@@ -376,7 +376,7 @@ class CoherenceConscience(_BaseConscience):
 
 
 class OptimizationVetoConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: dict) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("optimization_veto", context, start_time)
 
@@ -474,7 +474,7 @@ class OptimizationVetoConscience(_BaseConscience):
 
 
 class EpistemicHumilityConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: dict) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("epistemic_humility", context, start_time)
 

@@ -6,7 +6,7 @@ conscience registry to ensure alignment with ethical principles.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -15,6 +15,9 @@ from ciris_engine.schemas.actions.parameters import PonderParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.runtime_control import StepPoint
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +30,32 @@ class ConscienceExecutionPhase:
     - Validates selected action against ethical principles
     - Can override actions that fail safety checks
     - Provides guidance for retry attempts
+
+    Attributes (provided by ThoughtProcessor):
+        conscience_registry: Registry of conscience validation functions
     """
+
+    if TYPE_CHECKING:
+        conscience_registry: Any
+
+        def _describe_action(self, action: ActionSelectionDMAResult) -> str: ...
 
     @streaming_step(StepPoint.CONSCIENCE_EXECUTION)
     @step_point(StepPoint.CONSCIENCE_EXECUTION)
     async def _conscience_execution_step(
-        self, thought_item: ProcessingQueueItem, action_result, thought=None, dma_results=None, processing_context=None
-    ):
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: Any,
+        thought: Any = None,
+        dma_results: Any = None,
+        processing_context: Any = None,
+    ) -> "ConscienceApplicationResult":
         """Step 4: Ethical safety validation matching _apply_conscience_simple expectations."""
         # Import ConscienceApplicationResult here to avoid circular imports
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
         if not action_result:
-            return action_result
+            return action_result  # type: ignore[no-any-return]
 
         # Check if this is a conscience retry
         is_conscience_retry = (
@@ -70,6 +86,8 @@ class ConscienceExecutionPhase:
         overridden = False
         override_reason = None
         epistemic_data: Dict[str, str] = {}
+        thought_depth_triggered: Optional[bool] = None
+        updated_status_detected: Optional[bool] = None
 
         # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
@@ -93,21 +111,22 @@ class ConscienceExecutionPhase:
 
             # Store epistemic data if available
             if result.epistemic_data:
-                epistemic_data[entry.name] = result.epistemic_data.model_dump()
+                epistemic_data[entry.name] = result.epistemic_data.model_dump_json()
+
+            if result.thought_depth_triggered is not None:
+                thought_depth_triggered = result.thought_depth_triggered
+
+            if result.updated_status_detected is not None:
+                updated_status_detected = result.updated_status_detected
 
             if not result.passed:
                 overridden = True
                 override_reason = result.reason
 
-                # Check if the conscience provides a replacement action
-                if (
-                    result.epistemic_data
-                    and hasattr(result.epistemic_data, "get")
-                    and "replacement_action" in result.epistemic_data
-                ):
+                # Check if the conscience provides a replacement action (top-level field)
+                if result.replacement_action:
                     # Use the conscience's suggested replacement action
-                    replacement_data = result.epistemic_data["replacement_action"]
-                    final_action = ActionSelectionDMAResult.model_validate(replacement_data)
+                    final_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
                 else:
                     # Default behavior: create a PONDER action
                     attempted_action_desc = self._describe_action(action_result)
@@ -162,4 +181,8 @@ class ConscienceExecutionPhase:
         )
         if epistemic_data:
             result.epistemic_data = epistemic_data
+        if thought_depth_triggered is not None:
+            result.thought_depth_triggered = thought_depth_triggered
+        if updated_status_detected is not None:
+            result.updated_status_detected = updated_status_detected
         return result

@@ -6,9 +6,11 @@ These schemas are used by the CLI tools test suite.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import ConfigValue, JSONDict
 
 
 class ParameterType(str, Enum):
@@ -38,7 +40,7 @@ class ToolParameter(BaseModel):
     type: ParameterType = Field(..., description="Parameter type")
     description: str = Field(..., description="Parameter description")
     required: bool = Field(True, description="Whether parameter is required")
-    default: Optional[Any] = Field(None, description="Default value if not provided")
+    default: Optional[ConfigValue] = Field(None, description="Default value if not provided")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -59,7 +61,7 @@ class ToolResult(BaseModel):
     """Result from tool execution."""
 
     status: ToolStatus = Field(..., description="Execution status")
-    output: Optional[Dict[str, Any]] = Field(None, description="Tool output data")
+    output: Optional[JSONDict] = Field(None, description="Tool output data")
     error: Optional[str] = Field(None, description="Error message if failed")
     execution_time: Optional[float] = Field(None, description="Execution time in seconds")
     timestamp: Optional[datetime] = Field(None, description="When the tool was executed")

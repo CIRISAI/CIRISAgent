@@ -179,16 +179,22 @@ class TestDocumentParserIntegration:
         """Test timeout scenarios in document processing."""
         attachment = MockAttachment("slow.pdf", 50000, "application/pdf")
 
-        with patch.object(self.parser, "_download_file") as mock_download:
-            # Test download timeout
-            mock_download.side_effect = asyncio.TimeoutError("Download timeout")
-
+        # Test download timeout - use AsyncMock properly
+        mock_download = AsyncMock(side_effect=asyncio.TimeoutError("Download timeout"))
+        with patch.object(self.parser, "_download_file", mock_download):
             result = await self.parser._process_single_document(attachment)
             assert "Processing timeout - file too complex or large" in result
 
-        # Test extraction timeout
-        with patch.object(self.parser, "_download_file", return_value=b"data"):
-            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+        # Mock wait_for to raise TimeoutError without creating unawaited coroutines
+        async def mock_wait_for(coro, timeout):
+            # Properly close the coroutine to avoid warning
+            coro.close()
+            raise asyncio.TimeoutError()
+
+        # Test extraction timeout - use AsyncMock properly
+        mock_download2 = AsyncMock(return_value=b"data")
+        with patch.object(self.parser, "_download_file", mock_download2):
+            with patch("asyncio.wait_for", side_effect=mock_wait_for):
                 result = await self.parser._process_single_document(attachment)
                 assert "Processing timeout - file too complex or large" in result
 

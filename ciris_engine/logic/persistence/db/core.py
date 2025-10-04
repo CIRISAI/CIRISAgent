@@ -110,18 +110,18 @@ class RetryConnection:
 
     def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         """Execute SQL with retry for write operations."""
-        return self._retry_execute("execute", *args, **kwargs)
+        return self._retry_execute("execute", *args, **kwargs)  # type: ignore[no-any-return]
 
     def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         """Execute many SQL statements with retry for write operations."""
-        return self._retry_execute("executemany", *args, **kwargs)
+        return self._retry_execute("executemany", *args, **kwargs)  # type: ignore[no-any-return]
 
     def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         """Execute SQL script with retry."""
         # Scripts may contain multiple operations, so always retry
         if not self._enable_retry:
             return self._conn.executescript(*args, **kwargs)
-        return self._retry_execute("executescript", *args, **kwargs)
+        return self._retry_execute("executescript", *args, **kwargs)  # type: ignore[no-any-return]
 
     def __getattr__(self, name: str) -> Any:
         """Delegate all other attributes to the underlying connection."""

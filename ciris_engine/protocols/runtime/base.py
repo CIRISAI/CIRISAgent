@@ -139,7 +139,7 @@ class BaseAdapterProtocol(Protocol):
         ...
 
     @abstractmethod
-    def get_services_to_register(self) -> list:
+    def get_services_to_register(self) -> List[Any]:
         """Get list of services this adapter provides."""
         ...
 

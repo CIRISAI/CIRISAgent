@@ -26,7 +26,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         # Initialize BaseService for telemetry
         super().__init__(time_service=None, service_name="APICommunicationService")
 
-        self._response_queue: asyncio.Queue = asyncio.Queue()
+        self._response_queue: asyncio.Queue[Any] = asyncio.Queue()
         self._websocket_clients: Dict[str, Any] = {}
         self._config = config  # Store the API adapter config
 
@@ -169,9 +169,11 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
     def _extract_parameters(self, request_data: Any) -> Dict[str, Any]:
         """Extract parameters from request data handling both dict and Pydantic model cases."""
         if hasattr(request_data, "get"):
-            return request_data.get("parameters", {})
+            params = request_data.get("parameters", {})
+            return params if isinstance(params, dict) else {}
         elif hasattr(request_data, "parameters") and request_data.parameters:
-            return request_data.parameters
+            params = request_data.parameters
+            return params if isinstance(params, dict) else {}
         return {}
 
     def _create_speak_message(self, correlation: Any) -> FetchedMessage:
@@ -294,7 +296,8 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             # Use the config method if available
             host = getattr(self._config, "host", "0.0.0.0")
             port = getattr(self._config, "port", 8080)
-            return self._config.get_home_channel_id(host, port)
+            result = self._config.get_home_channel_id(host, port)
+            return str(result) if result is not None else None
 
         # Default fallback
         return "api_0.0.0.0_8080"

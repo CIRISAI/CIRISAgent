@@ -65,6 +65,7 @@ def app():
 
     # Mock runtime properties - fix cognitive state structure
     app.state.runtime.agent_processor = MagicMock()
+    app.state.runtime.agent_processor._is_paused = False  # Ensure processor is not paused
     app.state.runtime.agent_processor.state_manager = MagicMock(current_state="WORK")
 
     # Create a more complete mock for agent identity

@@ -4,7 +4,7 @@ Memory message bus - handles all memory service operations
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -73,7 +73,7 @@ class MemoryBus(BaseBus[MemoryService]):
         self._error_count = 0
 
     async def memorize(
-        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[dict] = None
+        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
     ) -> MemoryOpResult:
         """
         Memorize a node.
@@ -109,7 +109,7 @@ class MemoryBus(BaseBus[MemoryService]):
             return MemoryOpResult(status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def recall(
-        self, recall_query: MemoryQuery, handler_name: Optional[str] = None, metadata: Optional[dict] = None
+        self, recall_query: MemoryQuery, handler_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
     ) -> List[GraphNode]:
         """
         Recall nodes based on query.
@@ -138,7 +138,7 @@ class MemoryBus(BaseBus[MemoryService]):
             return []
 
     async def forget(
-        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[dict] = None
+        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
     ) -> MemoryOpResult:
         """
         Forget a node.
@@ -396,7 +396,7 @@ class MemoryBus(BaseBus[MemoryService]):
         self._broadcast_count += 1
         logger.warning(f"Memory operations should be synchronous, got queued message: {type(message)}")
 
-    def _create_empty_telemetry(self) -> Dict[str, any]:
+    def _create_empty_telemetry(self) -> Dict[str, Any]:
         """Create empty telemetry response when no services available."""
         return {
             "service_name": "memory_bus",
@@ -408,7 +408,7 @@ class MemoryBus(BaseBus[MemoryService]):
             "error": "No memory services available",
         }
 
-    def _create_telemetry_tasks(self, services) -> List:
+    def _create_telemetry_tasks(self, services: List[Any]) -> List[Any]:
         """Create telemetry collection tasks for all services."""
         import asyncio
 
@@ -418,7 +418,9 @@ class MemoryBus(BaseBus[MemoryService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_telemetry_result(self, telemetry: Dict, aggregated: Dict, cache_rates: List):
+    def _aggregate_telemetry_result(
+        self, telemetry: Dict[str, Any], aggregated: Dict[str, Any], cache_rates: List[float]
+    ) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
             aggregated["providers"].append(telemetry.get("service_name", "unknown"))
@@ -428,7 +430,7 @@ class MemoryBus(BaseBus[MemoryService]):
             if "cache_hit_rate" in telemetry:
                 cache_rates.append(telemetry["cache_hit_rate"])
 
-    async def collect_telemetry(self) -> Dict[str, any]:
+    async def collect_telemetry(self) -> Dict[str, Any]:
         """
         Collect telemetry from all memory providers in parallel.
 
@@ -470,7 +472,7 @@ class MemoryBus(BaseBus[MemoryService]):
             task.cancel()
 
         # Aggregate results
-        cache_rates = []
+        cache_rates: List[float] = []
         for task in done:
             try:
                 telemetry = task.result()

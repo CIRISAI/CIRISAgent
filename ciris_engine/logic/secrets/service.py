@@ -6,7 +6,7 @@ and integration with the agent's action pipeline.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -172,8 +172,8 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         return result
 
     async def decapsulate_secrets_in_parameters(
-        self, action_type: str, action_params: dict, context: DecapsulationContext
-    ) -> dict:
+        self, action_type: str, action_params: Dict[str, Any], context: DecapsulationContext
+    ) -> Dict[str, Any]:
         """
         Automatically decapsulate secrets in action parameters.
 
@@ -198,18 +198,21 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             return action_params
 
     async def _deep_decapsulate(
-        self, obj: Union[dict, list, str, int, float, bool, None], action_type: str, context: DecapsulationContext
-    ) -> Union[dict, list, str, int, float, bool, None]:
+        self,
+        obj: Union[Dict[str, Any], List[Any], str, int, float, bool, None],
+        action_type: str,
+        context: DecapsulationContext,
+    ) -> Union[Dict[str, Any], List[Any], str, int, float, bool, None]:
         """Recursively decapsulate secrets in nested structures."""
         if isinstance(obj, str):
             return await self._decapsulate_string(obj, action_type, context)
         elif isinstance(obj, dict):
-            result: dict = {}
+            result: Dict[str, Any] = {}
             for key, value in obj.items():
                 result[key] = await self._deep_decapsulate(value, action_type, context)
             return result
         elif isinstance(obj, list):
-            list_result: List[object] = []
+            list_result: List[Any] = []
             for item in obj:
                 list_result.append(await self._deep_decapsulate(item, action_type, context))
             return list_result
@@ -436,7 +439,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         except Exception:
             return None
 
-    async def get_filter_config(self) -> dict:
+    async def get_filter_config(self) -> Dict[str, Any]:
         """Get current filter configuration."""
         # Wrap the filter's get_filter_config to prevent direct access
         config_export = self.filter.get_filter_config()

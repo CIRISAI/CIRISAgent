@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.utils import map_row_to_task
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task
 
 if TYPE_CHECKING:
@@ -311,7 +311,7 @@ def set_task_updated_info_flag(
 
     # Check if any thought is completed with a non-PONDER action
     for thought in thoughts:
-        if thought.status == TaskStatus.COMPLETED:  # Thoughts have same enum
+        if thought.status == ThoughtStatus.COMPLETED:  # Thoughts use ThoughtStatus enum
             # Check if final_action exists and is not PONDER
             if thought.final_action:
                 action_type = thought.final_action.action_type

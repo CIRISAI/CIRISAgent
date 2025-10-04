@@ -178,7 +178,7 @@ def register_node_type(node_type: Union[str, "NodeType"]) -> Callable[[Type[Type
 
     def decorator(cls: Type[TypedGraphNode]) -> Type[TypedGraphNode]:
         # Handle both string and enum inputs
-        if hasattr(node_type, "value"):
+        if hasattr(node_type, "value") and hasattr(node_type, "name"):
             # It's an enum, register by multiple keys for flexibility
             NodeTypeRegistry.register(node_type.value, cls)  # e.g., "config"
             NodeTypeRegistry.register(node_type.name, cls)  # e.g., "CONFIG"
@@ -186,7 +186,7 @@ def register_node_type(node_type: Union[str, "NodeType"]) -> Callable[[Type[Type
         else:
             # It's a string, register as-is and also lowercase version
             NodeTypeRegistry.register(node_type, cls)
-            if node_type.lower() != node_type:
+            if isinstance(node_type, str) and node_type.lower() != node_type:
                 NodeTypeRegistry.register(node_type.lower(), cls)
         return cls
 

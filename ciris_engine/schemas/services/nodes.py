@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
+from ciris_engine.schemas.types import IdentityData, JSONValue, NodeAttributes
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.core import AgentIdentityRoot
@@ -136,21 +137,12 @@ class ConfigValue(BaseModel):
     float_value: Optional[float] = None
     bool_value: Optional[bool] = None
     list_value: Optional[List[Union[str, int, float, bool]]] = None
-    dict_value: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = None  # Allow None values in dict
+    dict_value: Optional[Dict[str, JSONValue]] = None  # Allow None values in dict
 
     @property
     def value(
         self,
-    ) -> Optional[
-        Union[
-            str,
-            int,
-            float,
-            bool,
-            List[Union[str, int, float, bool]],
-            Dict[str, Union[str, int, float, bool, list, dict, None]],
-        ]
-    ]:
+    ) -> Optional[Union[str, int, float, bool, List[Union[str, int, float, bool]], Dict[str, JSONValue]]]:
         """Get the actual value."""
         # Check each field in order
         if self.string_value is not None:
@@ -267,13 +259,13 @@ class IdentitySnapshot(TypedGraphNode):
     # Additional fields from other versions
     behavioral_patterns: Dict[str, float] = Field(default_factory=dict, description="Behavioral pattern scores")
     config_preferences: Dict[str, str] = Field(default_factory=dict, description="Configuration preferences")
-    attributes: dict = Field(default_factory=dict, description="Additional attributes")
+    attributes: NodeAttributes = Field(default_factory=dict, description="Additional attributes")
     reason: str = Field(default="", description="Why snapshot was taken")
     system_state: Optional[Dict[str, str]] = Field(None, description="System state at snapshot time")
     active_tasks: List[str] = Field(default_factory=list, description="Active tasks at time")
     expires_at: Optional[datetime] = Field(None, description="When snapshot expires")
     tags: List[str] = Field(default_factory=list, description="Snapshot tags")
-    identity_root: Optional[Dict[str, Any]] = Field(None, description="Complete identity data at time")
+    identity_root: Optional[IdentityData] = Field(None, description="Complete identity data at time")
 
     # Required TypedGraphNode fields
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -527,7 +519,7 @@ class IdentityNode(TypedGraphNode):
 
     # Base GraphNode fields (required by TypedGraphNode)
     id: str = Field(default="agent/identity", description="Node ID")
-    attributes: Union[GraphNodeAttributes, Dict[str, Any]] = Field(default_factory=dict, description="Raw attributes")
+    attributes: Union[GraphNodeAttributes, NodeAttributes] = Field(default_factory=dict, description="Raw attributes")
     version: int = Field(default=1, description="Version number")
 
     def to_graph_node(self) -> GraphNode:

@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.protocols.services import TimeServiceProtocol
 
@@ -19,7 +19,7 @@ def build_dispatch_context(
     task: Optional[Any] = None,
     app_config: Optional[Any] = None,
     round_number: Optional[int] = None,
-    extra_context: Optional[dict] = None,
+    extra_context: Optional[Dict[str, Any]] = None,
     conscience_result: Optional["ConscienceApplicationResult"] = None,
     action_type: Optional[Any] = None,
 ) -> DispatchContext:
@@ -38,7 +38,7 @@ def build_dispatch_context(
         DispatchContext object with all relevant fields populated
     """
     # Start with base context data
-    context_data: dict = {}
+    context_data: Dict[str, Any] = {}
 
     # Extract initial context from thought if available
     if hasattr(thought, "initial_context") and thought.initial_context:

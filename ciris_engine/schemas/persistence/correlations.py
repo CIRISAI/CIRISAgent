@@ -2,13 +2,15 @@
 Schemas for correlation data to ensure type safety.
 
 This module defines Pydantic models for correlation data structures,
-replacing Dict[str, Any] usage for better type safety and validation.
+providing better type safety and validation.
 """
 
 from datetime import datetime
 from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class CorrelationRequestData(BaseModel):
@@ -18,11 +20,11 @@ class CorrelationRequestData(BaseModel):
     author_id: Optional[str] = Field(None, description="Author identifier")
     author_name: Optional[str] = Field(None, description="Author display name")
     content: Optional[str] = Field(None, description="Message content")
-    parameters: Dict[str, Any] = Field(
+    parameters: NodeAttributes = Field(
         default_factory=dict, description="Additional parameters"
     )  # NOQA - Extensible request parameters
     headers: Dict[str, str] = Field(default_factory=dict, description="Request headers")
-    metadata: Dict[str, Any] = Field(
+    metadata: NodeAttributes = Field(
         default_factory=dict, description="Request metadata"
     )  # NOQA - Extensible request metadata
 
@@ -37,7 +39,7 @@ class CorrelationResponseData(BaseModel):
     error_type: Optional[str] = Field(None, description="Type of error")
     result: Optional[Any] = Field(None, description="Operation result")
     resource_usage: Dict[str, float] = Field(default_factory=dict, description="Resource metrics")
-    metadata: Dict[str, Any] = Field(
+    metadata: NodeAttributes = Field(
         default_factory=dict, description="Response metadata"
     )  # NOQA - Extensible response metadata
 
@@ -54,7 +56,7 @@ class ChannelInfo(BaseModel):
     # Optional fields for enriched channel info
     channel_name: Optional[str] = Field(None, description="Human-readable channel name")
     participants: Optional[int] = Field(None, description="Number of participants")
-    metadata: Dict[str, Any] = Field(
+    metadata: NodeAttributes = Field(
         default_factory=dict, description="Additional channel metadata"
     )  # NOQA - Extensible channel metadata
 

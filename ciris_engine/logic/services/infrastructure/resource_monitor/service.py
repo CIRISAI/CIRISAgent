@@ -31,14 +31,14 @@ class ResourceSignalBus:
     """Simple signal bus for resource events."""
 
     def __init__(self) -> None:
-        self._handlers: Dict[str, List[Callable[[str, str], asyncio.Future]]] = {
+        self._handlers: Dict[str, List[Callable[[str, str], "asyncio.Future[None]"]]] = {
             "throttle": [],
             "defer": [],
             "reject": [],
             "shutdown": [],
         }
 
-    def register(self, signal: str, handler: Callable[[str, str], asyncio.Future]) -> None:
+    def register(self, signal: str, handler: Callable[[str, str], "asyncio.Future[None]"]) -> None:
         self._handlers.setdefault(signal, []).append(handler)
 
     async def emit(self, signal: str, resource: str) -> None:

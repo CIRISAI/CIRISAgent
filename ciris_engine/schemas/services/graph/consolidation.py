@@ -1,14 +1,15 @@
 """
 Schemas for TSDB Consolidation data structures.
 
-These schemas replace Dict[str, Any] usage in TSDB consolidation service,
-ensuring type safety for all consolidation operations.
+Provides type safety for all consolidation operations.
 """
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import JSONDict, JSONValue
 
 
 class RequestData(BaseModel):
@@ -18,9 +19,7 @@ class RequestData(BaseModel):
     author_id: Optional[str] = Field(None, description="Author ID")
     author_name: Optional[str] = Field(None, description="Author name")
     content: Optional[str] = Field(None, description="Message content")
-    parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = Field(
-        default_factory=dict, description="Request parameters"
-    )
+    parameters: Optional[JSONDict] = Field(default_factory=dict, description="Request parameters")
     headers: Optional[Dict[str, str]] = Field(default_factory=dict, description="Request headers")
     metadata: Optional[Dict[str, str]] = Field(default_factory=dict, description="Request metadata")
 
@@ -32,7 +31,7 @@ class ResponseData(BaseModel):
     success: Optional[bool] = Field(None, description="Whether the operation succeeded")
     error: Optional[str] = Field(None, description="Error message if failed")
     error_type: Optional[str] = Field(None, description="Type of error")
-    result: Optional[Union[str, Dict[str, Any], List[Any]]] = Field(None, description="Response result")
+    result: Optional[JSONValue] = Field(None, description="Response result")
     resource_usage: Optional[Dict[str, float]] = Field(default_factory=dict, description="Resource usage metrics")
     metadata: Optional[Dict[str, str]] = Field(default_factory=dict, description="Response metadata")
 
@@ -151,7 +150,7 @@ class ThoughtSummary(BaseModel):
     status: str = Field(..., description="Thought status")
     created_at: str = Field(..., description="ISO timestamp when created")
     content: Optional[str] = Field(None, description="Thought content summary")
-    final_action: Optional[Dict[str, Union[str, Dict[str, Any]]]] = Field(None, description="Final action taken")
+    final_action: Optional[JSONDict] = Field(None, description="Final action taken")
     handler: Optional[str] = Field(None, description="Handler that processed this thought")
     round_number: int = Field(0, description="Processing round")
     depth: int = Field(0, description="Pondering depth")

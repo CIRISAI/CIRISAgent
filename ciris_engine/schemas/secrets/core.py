@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.runtime.enums import SensitivityLevel
+from ciris_engine.schemas.types import JSONDict
 
 
 class SecretType(str, Enum):
@@ -231,7 +232,7 @@ class ConfigExport(BaseModel):
     builtin_patterns_enabled: bool = Field(True, description="Whether builtin patterns are enabled")
     custom_patterns: List[SecretPattern] = Field(default_factory=list, description="Custom patterns")
     disabled_patterns: List[str] = Field(default_factory=list, description="Disabled pattern names")
-    sensitivity_overrides: Dict[str, Any] = Field(default_factory=dict, description="Sensitivity overrides")
+    sensitivity_overrides: JSONDict = Field(default_factory=dict, description="Sensitivity overrides")
     require_confirmation_for: List[str] = Field(default_factory=list, description="Actions requiring confirmation")
     auto_decrypt_for_actions: List[str] = Field(default_factory=list, description="Actions that auto-decrypt")
 
@@ -241,7 +242,7 @@ class ConfigExport(BaseModel):
 class FilterConfigUpdate(BaseModel):
     """Update to filter configuration."""
 
-    updates: Dict[str, Any] = Field(..., description="Configuration updates to apply")
+    updates: JSONDict = Field(..., description="Configuration updates to apply")
     update_type: str = Field("config", description="Type of update")
     validation_errors: List[str] = Field(default_factory=list, description="Validation errors if any")
 

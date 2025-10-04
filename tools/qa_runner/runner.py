@@ -64,12 +64,18 @@ class QARunner:
                 self.server_manager.stop()
             return False
 
-        # Initialize filter test helper if running filter tests
-        if QAModule.FILTERS in modules:
+        # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
+        # Both now use async /agent/message endpoint + SSE streaming
+        if QAModule.FILTERS in modules or QAModule.HANDLERS in modules:
             self._filter_helper = FilterTestHelper(self.config.base_url, self.token, verbose=self.config.verbose)
             try:
                 self._filter_helper.start_monitoring()
-                self.console.print("[green]✅ SSE monitoring started for filter tests[/green]")
+                module_names = []
+                if QAModule.FILTERS in modules:
+                    module_names.append("filters")
+                if QAModule.HANDLERS in modules:
+                    module_names.append("handlers")
+                self.console.print(f"[green]✅ SSE monitoring started for {', '.join(module_names)} tests[/green]")
             except Exception as e:
                 self.console.print(f"[yellow]⚠️  Failed to start SSE monitoring: {e}[/yellow]")
                 self._filter_helper = None
@@ -379,9 +385,9 @@ class QARunner:
                 if not passed:
                     all_passed = False
 
-                # FILTER TESTS: Wait for task completion between tests
-                # Each filter test creates a task that must complete before the next test
-                if test.module == QAModule.FILTERS:
+                # FILTER & HANDLER TESTS: Wait for task completion between tests
+                # Each test creates a task that must complete before the next test
+                if test.module in (QAModule.FILTERS, QAModule.HANDLERS):
                     if self._filter_helper:
                         if self.config.verbose:
                             self.console.print(f"[dim]⏳ Waiting for TASK_COMPLETE event via SSE...[/dim]")

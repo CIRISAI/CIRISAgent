@@ -1,10 +1,11 @@
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import discord  # Ensure discord.py is available
 
 from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.adapters.discord.ciris_discord_client import CIRISDiscordClient
 from ciris_engine.logic.adapters.discord.discord_adapter import DiscordAdapter
 from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver
 from ciris_engine.logic.adapters.discord.discord_tool_service import DiscordToolService
@@ -22,13 +23,27 @@ logger = logging.getLogger(__name__)
 
 
 class DiscordPlatform(Service):
-    def __init__(self, runtime: Any, context: Optional["AdapterStartupContext"] = None, **kwargs: Any) -> None:
-        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
-
+    def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
+        """Initialize Discord platform adapter."""
         self.runtime = runtime
         self.context = context
         self.config: DiscordAdapterConfig  # type: ignore[assignment]
 
+        # Initialize configuration from various sources
+        self._initialize_config(runtime, kwargs)
+
+        # Create Discord client and adapter
+        self._initialize_discord_client()
+        self._initialize_discord_adapter(kwargs)
+
+        # Initialize state
+        self.discord_observer: Optional[DiscordObserver] = None
+        self._discord_client_task: Optional[asyncio.Task[Any]] = None
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 10
+
+    def _initialize_config(self, runtime: Any, kwargs: Dict[str, Any]) -> None:
+        """Initialize adapter configuration from kwargs, template, or environment."""
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             # Ensure adapter_config is a DiscordAdapterConfig instance
             adapter_config = kwargs["adapter_config"]
@@ -96,185 +111,28 @@ class DiscordPlatform(Service):
             logger.error("DiscordPlatform: 'bot_token' not found in config. This is required.")
             raise ValueError("DiscordPlatform requires 'bot_token' in configuration.")
 
+        # Validate configuration
         self.token = self.config.bot_token
+
+    def _initialize_discord_client(self) -> None:
+        """Create and configure the Discord client."""
         intents = self.config.get_intents()
-
-        # Create a custom client class to handle events properly
-        class CIRISDiscordClient(discord.Client):
-            def __init__(self, platform: "DiscordPlatform", *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.platform = platform
-
-            async def on_ready(self):
-                """Called when the client is ready."""
-                logger.info("Discord client on_ready event")
-                # Let the connection manager know
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    conn_mgr = self.platform.discord_adapter._connection_manager
-                    if conn_mgr and hasattr(conn_mgr, "_handle_connected"):
-                        await conn_mgr._handle_connected()
-
-                # Fetch and monitor threads in monitored channels
-                await self._fetch_threads_in_monitored_channels()
-
-            async def _fetch_threads_in_monitored_channels(self):
-                """Fetch all threads in monitored channels and add them to monitoring."""
-                if not (hasattr(self.platform, "config") and self.platform.config):
-                    return
-
-                logger.info("Fetching threads in monitored channels...")
-                threads_added = 0
-
-                # Load existing thread correlations from persistence
-                try:
-                    from ciris_engine.logic.persistence import get_correlations_by_type
-
-                    existing_threads = get_correlations_by_type("discord_thread", None)
-                    existing_thread_ids = {c.source_id for c in existing_threads if c.metadata.get("monitored")}
-                except Exception as e:
-                    logger.warning(f"Could not load existing thread correlations: {e}")
-                    existing_thread_ids = set()
-
-                for channel_id in self.platform.config.monitored_channel_ids:
-                    try:
-                        channel = self.get_channel(int(channel_id))
-                        if channel and isinstance(channel, discord.TextChannel):
-                            # Get active threads in this channel
-                            for thread in channel.threads:
-                                thread_id = str(thread.id)
-                                if thread_id not in existing_thread_ids:
-                                    # Add to observer if it exists
-                                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                                        if thread_id not in self.platform.discord_observer.monitored_channel_ids:
-                                            self.platform.discord_observer.monitored_channel_ids.append(thread_id)
-                                            threads_added += 1
-
-                                            # Store correlation
-                                            try:
-                                                from datetime import datetime, timezone
-
-                                                from ciris_engine.logic.persistence import add_correlation
-                                                from ciris_engine.schemas.persistence.core import Correlation
-
-                                                correlation = Correlation(
-                                                    correlation_type="discord_thread",
-                                                    source_id=thread_id,
-                                                    target_id=channel_id,
-                                                    metadata={"monitored": True, "thread_name": thread.name},
-                                                    created_at=datetime.now(timezone.utc).isoformat(),
-                                                    updated_at=datetime.now(timezone.utc).isoformat(),
-                                                    timestamp=datetime.now(timezone.utc).isoformat(),
-                                                )
-                                                add_correlation(correlation, None)
-                                            except Exception as e:
-                                                logger.warning(f"Failed to store thread correlation: {e}")
-                                else:
-                                    # Thread already known, just add to observer
-                                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                                        if thread_id not in self.platform.discord_observer.monitored_channel_ids:
-                                            self.platform.discord_observer.monitored_channel_ids.append(thread_id)
-                                            threads_added += 1
-                    except Exception as e:
-                        logger.warning(f"Could not fetch threads for channel {channel_id}: {e}")
-
-                if threads_added > 0:
-                    logger.info(f"Added {threads_added} threads to monitoring")
-
-            async def on_disconnect(self):
-                """Called when the client disconnects."""
-                logger.warning("Discord client on_disconnect event")
-                # Let the connection manager know
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    conn_mgr = self.platform.discord_adapter._connection_manager
-                    if conn_mgr and hasattr(conn_mgr, "_handle_disconnected"):
-                        await conn_mgr._handle_disconnected(None)
-
-            async def on_message(self, message: discord.Message):
-                """Called when a message is received."""
-                # Let the channel manager handle it
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    channel_mgr = self.platform.discord_adapter._channel_manager
-                    if channel_mgr and hasattr(channel_mgr, "on_message"):
-                        await channel_mgr.on_message(message)
-
-            async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-                """Called when a reaction is added."""
-                # Let the discord adapter handle it
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    await self.platform.discord_adapter.on_raw_reaction_add(payload)
-
-            async def on_thread_create(self, thread: discord.Thread):
-                """Called when a thread is created."""
-                logger.info(f"Thread created: {thread.name} (ID: {thread.id}) in parent {thread.parent_id}")
-                # Check if parent channel is monitored
-                if hasattr(self.platform, "discord_adapter") and self.platform.discord_adapter:
-                    if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                        observer = self.platform.discord_observer
-                        if hasattr(self.platform, "config") and self.platform.config:
-                            parent_id = str(thread.parent_id)
-                            if parent_id in self.platform.config.monitored_channel_ids:
-                                # Add thread to monitored channels
-                                thread_id = str(thread.id)
-                                if thread_id not in observer.monitored_channel_ids:
-                                    observer.monitored_channel_ids.append(thread_id)
-                                    logger.info(
-                                        f"Added thread {thread_id} to monitored channels (parent {parent_id} is monitored)"
-                                    )
-
-                                    # Store correlation for persistence
-                                    try:
-                                        from datetime import datetime, timezone
-
-                                        from ciris_engine.logic.persistence import add_correlation
-                                        from ciris_engine.schemas.persistence.core import Correlation
-
-                                        correlation = Correlation(
-                                            correlation_type="discord_thread",
-                                            source_id=thread_id,
-                                            target_id=parent_id,
-                                            metadata={"monitored": True, "thread_name": thread.name},
-                                            created_at=datetime.now(timezone.utc).isoformat(),
-                                            updated_at=datetime.now(timezone.utc).isoformat(),
-                                            timestamp=datetime.now(timezone.utc).isoformat(),
-                                        )
-                                        add_correlation(correlation, None)
-                                        logger.debug(f"Stored thread correlation for {thread_id}")
-                                    except Exception as e:
-                                        logger.warning(f"Failed to store thread correlation: {e}")
-
-            async def on_thread_join(self, thread: discord.Thread):
-                """Called when the bot joins a thread."""
-                logger.info(f"Bot joined thread: {thread.name} (ID: {thread.id})")
-                # Use same logic as on_thread_create
-                await self.on_thread_create(thread)
-
-            async def on_thread_delete(self, thread: discord.Thread):
-                """Called when a thread is deleted."""
-                logger.info(f"Thread deleted: {thread.name} (ID: {thread.id})")
-                # Remove from monitored channels if present
-                if hasattr(self.platform, "discord_observer") and self.platform.discord_observer:
-                    observer = self.platform.discord_observer
-                    thread_id = str(thread.id)
-                    if thread_id in observer.monitored_channel_ids:
-                        observer.monitored_channel_ids.remove(thread_id)
-                        logger.info(f"Removed deleted thread {thread_id} from monitored channels")
-
-        # Create Discord client without explicit loop (discord.py will manage it)
         self.client = CIRISDiscordClient(platform=self, intents=intents)
 
         # Generate adapter_id - will be updated with actual guild_id when bot connects
         # The adapter_id is used by AuthenticationService for observer persistence
         self.adapter_id = "discord_pending"
 
-        # Get time_service from runtime
+    def _initialize_discord_adapter(self, kwargs: Dict[str, Any]) -> None:
+        """Create and configure the Discord adapter and tool service."""
+        # Get runtime services
         time_service = getattr(self.runtime, "time_service", None)
-
-        # Get bus_manager from runtime
         bus_manager = getattr(self.runtime, "bus_manager", None)
 
         # Create tool service for Discord tools
         self.tool_service = DiscordToolService(client=self.client, time_service=time_service)
 
+        # Create Discord adapter
         self.discord_adapter = DiscordAdapter(
             token=self.token,
             bot=self.client,
@@ -284,11 +142,17 @@ class DiscordPlatform(Service):
             config=self.config,
         )
 
+        # Attach adapter to client
         if hasattr(self.discord_adapter, "attach_to_client"):
             self.discord_adapter.attach_to_client(self.client)
         else:
             logger.warning("DiscordPlatform: DiscordAdapter may not have 'attach_to_client' method.")
 
+        # Configure monitored channels from kwargs
+        self._configure_monitored_channels(kwargs)
+
+    def _configure_monitored_channels(self, kwargs: Dict[str, Any]) -> None:
+        """Configure monitored channels from kwargs and validate configuration."""
         kwargs_channel_ids = kwargs.get("discord_monitored_channel_ids", [])
         kwargs_channel_id = kwargs.get("discord_monitored_channel_id")
 
@@ -303,27 +167,12 @@ class DiscordPlatform(Service):
             logger.warning(
                 "DiscordPlatform: No channel configuration found. Please provide channel IDs via constructor kwargs or environment variables."
             )
-
-        if self.config.monitored_channel_ids:
+        elif self.config.monitored_channel_ids:
             logger.info(
                 f"DiscordPlatform: Using {len(self.config.monitored_channel_ids)} channels: {self.config.monitored_channel_ids}"
             )
 
-        # Initialize observer as None - will be created in start() when services are ready
-        self.discord_observer: Optional[DiscordObserver] = None
-
-        # Tool registry removed - tools are handled through ToolBus
-        # self.tool_registry = ToolRegistry()
-        # register_discord_tools(self.tool_registry, self.client)
-
-        # if hasattr(self.discord_adapter, 'tool_registry'):
-        #     self.discord_adapter.tool_registry = self.tool_registry
-
-        self._discord_client_task: Optional[asyncio.Task] = None
-        self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 10
-
-    def get_channel_info(self) -> dict:
+    def get_channel_info(self) -> Dict[str, str]:
         """Provide guild info for authentication."""
         # Get first guild if connected
         try:
@@ -416,9 +265,9 @@ class DiscordPlatform(Service):
 
         if hasattr(self.discord_observer, "start"):
             if self.discord_observer:
-                self.discord_observer.start()
+                await self.discord_observer.start()
         if self.tool_service and hasattr(self.tool_service, "start"):
-            self.tool_service.start()
+            await self.tool_service.start()
         if hasattr(self.discord_adapter, "start"):
             await self.discord_adapter.start()
         logger.info(
@@ -444,7 +293,7 @@ class DiscordPlatform(Service):
 
         raise TimeoutError("Discord client failed to reconnect within timeout")
 
-    def _build_error_context(self, current_agent_task: asyncio.Task) -> dict:
+    def _build_error_context(self, current_agent_task: asyncio.Task[Any]) -> Dict[str, Any]:
         """Build rich error context for troubleshooting Discord issues."""
         return {
             "task_exists": self._discord_client_task is not None,
@@ -462,7 +311,7 @@ class DiscordPlatform(Service):
             "agent_task_done": current_agent_task.done(),
         }
 
-    async def _recreate_discord_task(self, context: dict) -> bool:
+    async def _recreate_discord_task(self, context: Dict[str, Any]) -> bool:
         """
         Recreate Discord client task when it dies unexpectedly.
 
@@ -470,15 +319,10 @@ class DiscordPlatform(Service):
             True if recreation succeeded, False if should continue with backoff
         """
         try:
-            # If client is closed, try to recreate it entirely
+            # If client is closed, we rely on recreating the task with client.start()
+            # Full client recreation is not needed since discord.py handles reconnection internally
             if self.client and self.client.is_closed():
-                logger.warning("Discord client is closed - attempting full client recreation")
-                try:
-                    await self._initialize_discord_client()
-                    logger.info("Discord client recreated successfully")
-                except Exception as client_recreate_error:
-                    logger.error(f"Failed to recreate Discord client: {client_recreate_error}", exc_info=True)
-                    # Continue with existing client anyway
+                logger.warning("Discord client is closed - will recreate task with client.start()")
 
             self._discord_client_task = asyncio.create_task(
                 self.client.start(self.token, reconnect=True), name="DiscordClientTask"
@@ -495,7 +339,7 @@ class DiscordPlatform(Service):
             await asyncio.sleep(backoff_time)
             return False
 
-    def _check_task_health(self, current_agent_task: asyncio.Task) -> bool:
+    def _check_task_health(self, current_agent_task: asyncio.Task[Any]) -> bool:
         """
         Check if Discord task needs recreation.
 
@@ -533,7 +377,7 @@ class DiscordPlatform(Service):
             self._discord_client_task = None  # Force recreation
             return False
 
-    async def _handle_discord_task_failure(self, exc: Exception, current_agent_task: asyncio.Task) -> bool:
+    async def _handle_discord_task_failure(self, exc: Exception, current_agent_task: asyncio.Task[Any]) -> bool:
         """
         Handle Discord task failure with structured error classification and circuit breaker.
 
@@ -542,7 +386,7 @@ class DiscordPlatform(Service):
         """
         task_name = (
             self._discord_client_task.get_name()
-            if hasattr(self._discord_client_task, "get_name")
+            if self._discord_client_task and hasattr(self._discord_client_task, "get_name")
             else "DiscordClientTask"
         )
 
@@ -557,7 +401,7 @@ class DiscordPlatform(Service):
             "token_suffix": self.token[-10:] if self.token else None,
             "agent_task_name": current_agent_task.get_name(),
             "agent_task_done": current_agent_task.done(),
-            "task_cancelled": self._discord_client_task.cancelled(),
+            "task_cancelled": self._discord_client_task.cancelled() if self._discord_client_task else None,
         }
 
         logger.error(f"Discord task failed with rich context: {error_context}", exc_info=exc)
@@ -600,7 +444,7 @@ class DiscordPlatform(Service):
 
         return True
 
-    async def _handle_top_level_exception(self, exc: Exception, agent_run_task: asyncio.Task) -> None:
+    async def _handle_top_level_exception(self, exc: Exception, agent_run_task: asyncio.Task[Any]) -> None:
         """Handle top-level exceptions in run_lifecycle with recovery attempts."""
         logger.error(f"DiscordPlatform: Unexpected error in run_lifecycle: {exc}", exc_info=True)
         error_type = type(exc).__name__
@@ -636,7 +480,8 @@ class DiscordPlatform(Service):
                 await self._discord_client_task
             except asyncio.CancelledError:
                 # Only re-raise if we're being cancelled ourselves
-                if asyncio.current_task() and asyncio.current_task().cancelled():
+                current = asyncio.current_task()
+                if current and current.cancelled():
                     raise
                 # Otherwise, this is a normal stop - don't propagate the cancellation
             except Exception as e:
@@ -652,11 +497,8 @@ class DiscordPlatform(Service):
 
         logger.info("DiscordPlatform: Discord lifecycle complete")
 
-    async def run_lifecycle(self, agent_run_task: asyncio.Task) -> None:
-        """Run Discord lifecycle with simplified best practices."""
-        logger.info("DiscordPlatform: Running lifecycle - attempting to start Discord client.")
-
-        # Fail fast validation following CIRIS best practices
+    def _validate_lifecycle_preconditions(self, agent_run_task: asyncio.Task[Any]) -> None:
+        """Validate preconditions before running lifecycle."""
         if not self.client:
             raise RuntimeError("Discord client not initialized - check adapter configuration")
         if not self.token:
@@ -665,14 +507,118 @@ class DiscordPlatform(Service):
             raise ValueError("Agent task is None - caller must provide valid task")
         if agent_run_task.done():
             raise ValueError(f"Agent task is already done (cancelled={agent_run_task.cancelled()})")
-
-        # REJECT placeholder tasks entirely - this is an architectural improvement
         if agent_run_task.get_name() == "AgentPlaceholderTask":
             raise ValueError(
                 "Placeholder tasks are no longer supported. "
                 "Pass the real agent task directly to run_lifecycle. "
                 "This eliminates race conditions and simplifies the codebase."
             )
+
+    async def _connect_to_discord(self) -> bool:
+        """
+        Start Discord client and wait for ready state.
+
+        Returns:
+            True if connection successful, False otherwise
+        """
+        logger.info(f"DiscordPlatform: Starting Discord client with token ending in ...{self.token[-10:]}")
+        self._discord_client_task = asyncio.create_task(
+            self.client.start(self.token, reconnect=True), name="DiscordClientTask"
+        )
+        logger.info("DiscordPlatform: Discord client start initiated.")
+
+        # Give the client time to initialize
+        await asyncio.sleep(3.0)
+
+        # Wait for Discord client to be ready
+        logger.info("DiscordPlatform: Waiting for Discord client to be ready...")
+        ready = await self.discord_adapter.wait_until_ready(timeout=30.0)
+
+        if not ready:
+            logger.error("DiscordPlatform: Discord client failed to become ready within timeout")
+            return False
+
+        logger.info(f"DiscordPlatform: Discord client ready! Logged in as: {self.client.user}")
+        self._reconnect_attempts = 0
+        return True
+
+    async def _handle_agent_task_completion(self) -> None:
+        """Handle normal shutdown when agent task completes."""
+        if self._discord_client_task and not self._discord_client_task.done():
+            self._discord_client_task.cancel()
+            try:
+                await self._discord_client_task
+            except asyncio.CancelledError:
+                raise
+
+    async def _process_monitoring_iteration(self, current_agent_task: asyncio.Task[Any]) -> tuple[bool, bool]:
+        """
+        Process one iteration of the monitoring loop.
+
+        Returns:
+            (should_continue, should_break) tuple
+        """
+        # Check if Discord task needs recreation
+        if not self._check_task_health(current_agent_task):
+            context = self._build_error_context(current_agent_task)
+            recreation_success = await self._recreate_discord_task(context)
+            if not recreation_success:
+                return (True, False)  # Continue without breaking
+
+        # Type guard: After _check_task_health and potential recreation, task should exist
+        if not self._discord_client_task:
+            logger.error("Discord task is None after health check - this should not happen")
+            return (True, False)  # Continue
+
+        # Wait for either task to complete
+        done, pending = await asyncio.wait(
+            [current_agent_task, self._discord_client_task], return_when=asyncio.FIRST_COMPLETED, timeout=30.0
+        )
+
+        # Agent task completed - normal shutdown
+        if current_agent_task in done:
+            await self._handle_agent_task_completion()
+            return (False, True)  # Break from loop
+
+        # Handle timeout
+        if not done:
+            self._handle_timeout_scenario()
+            return (True, False)  # Continue
+
+        # Handle Discord task failure
+        if self._discord_client_task in done and self._discord_client_task.exception():
+            exc = self._discord_client_task.exception()
+            if exc and isinstance(exc, Exception):
+                should_continue = await self._handle_discord_task_failure(exc, current_agent_task)
+                return (should_continue, not should_continue)
+            return (False, True)  # Break on non-exception error
+
+        return (True, False)  # Continue by default
+
+    async def _run_monitoring_loop(self, current_agent_task: asyncio.Task[Any]) -> None:
+        """Run the main monitoring loop for Discord and agent tasks."""
+        while not current_agent_task.done():
+            should_continue, should_break = await self._process_monitoring_iteration(current_agent_task)
+
+            if should_break:
+                break
+            if should_continue:
+                continue
+
+    async def _handle_login_failure(self, error: discord.LoginFailure, agent_run_task: asyncio.Task[Any]) -> None:
+        """Handle Discord login failures."""
+        logger.error(f"DiscordPlatform: Discord login failed: {error}. Check token and intents.", exc_info=True)
+        if hasattr(self.runtime, "request_shutdown"):
+            self.runtime.request_shutdown("Discord login failure")
+        if not agent_run_task.done():
+            agent_run_task.cancel()
+
+    async def run_lifecycle(self, agent_run_task: asyncio.Task[Any]) -> None:
+        """Run Discord lifecycle with simplified best practices."""
+        logger.info("DiscordPlatform: Running lifecycle - attempting to start Discord client.")
+
+        # Validate preconditions
+        self._validate_lifecycle_preconditions(agent_run_task)
 
         logger.info(f"Managing lifecycle for agent task '{agent_run_task.get_name()}'")
 
@@ -681,77 +627,18 @@ class DiscordPlatform(Service):
         self._current_agent_task = current_agent_task
 
         try:
-            # Start Discord client with reconnect=True to enable automatic reconnection
-            logger.info(f"DiscordPlatform: Starting Discord client with token ending in ...{self.token[-10:]}")
-            self._discord_client_task = asyncio.create_task(
-                self.client.start(self.token, reconnect=True), name="DiscordClientTask"
-            )
-            logger.info("DiscordPlatform: Discord client start initiated.")
-
-            # Give the client more time to initialize before waiting
-            await asyncio.sleep(3.0)
-
-            # Wait for Discord client to be ready with timeout
-            logger.info("DiscordPlatform: Waiting for Discord client to be ready...")
-            ready = await self.discord_adapter.wait_until_ready(timeout=30.0)
-
-            if not ready:
-                logger.error("DiscordPlatform: Discord client failed to become ready within timeout")
+            # Connect to Discord
+            connected = await self._connect_to_discord()
+            if not connected:
                 if not current_agent_task.done():
                     current_agent_task.cancel()
                 return
 
-            logger.info(f"DiscordPlatform: Discord client ready! Logged in as: {self.client.user}")
-
-            # Reset reconnect attempts on successful connection
-            self._reconnect_attempts = 0
-
-            # Robust monitoring loop - Discord SDK is flaky and tasks can die unexpectedly
-            # Keep retrying Discord connection on transient errors
-            # Simplified monitoring loop using helper methods
-            while not current_agent_task.done():
-                # Check if Discord task needs recreation
-                if not self._check_task_health(current_agent_task):
-                    context = self._build_error_context(current_agent_task)
-                    recreation_success = await self._recreate_discord_task(context)
-                    if not recreation_success:
-                        continue
-
-                # Wait for either agent task or Discord task to complete with timeout
-                done, pending = await asyncio.wait(
-                    [current_agent_task, self._discord_client_task], return_when=asyncio.FIRST_COMPLETED, timeout=30.0
-                )
-
-                # Agent task completed - normal shutdown
-                if current_agent_task in done:
-                    if self._discord_client_task and not self._discord_client_task.done():
-                        self._discord_client_task.cancel()
-                        try:
-                            await self._discord_client_task
-                        except asyncio.CancelledError:
-                            raise
-                    break
-
-                # Handle timeout scenario
-                if not done:
-                    self._handle_timeout_scenario()
-                    continue  # Continue monitoring regardless of timeout handler result
-
-                # Handle Discord task failure
-                if self._discord_client_task in done and self._discord_client_task.exception():
-                    exc = self._discord_client_task.exception()
-                    should_continue = await self._handle_discord_task_failure(exc, current_agent_task)
-                    if should_continue:
-                        continue
-                    else:
-                        break
+            # Run monitoring loop
+            await self._run_monitoring_loop(current_agent_task)
 
         except discord.LoginFailure as e:
-            logger.error(f"DiscordPlatform: Discord login failed: {e}. Check token and intents.", exc_info=True)
-            if hasattr(self.runtime, "request_shutdown"):
-                self.runtime.request_shutdown("Discord login failure")
-            if not agent_run_task.done():
-                agent_run_task.cancel()
+            await self._handle_login_failure(e, agent_run_task)
         except Exception as e:
             await self._handle_top_level_exception(e, agent_run_task)
         finally:
@@ -763,9 +650,9 @@ class DiscordPlatform(Service):
         # Stop observer, tool service and adapter first
         if hasattr(self.discord_observer, "stop"):
             if self.discord_observer:
-                self.discord_observer.stop()
+                await self.discord_observer.stop()
         if hasattr(self.tool_service, "stop"):
-            self.tool_service.stop()
+            await self.tool_service.stop()
         if hasattr(self.discord_adapter, "stop"):
             await self.discord_adapter.stop()
 

@@ -23,7 +23,7 @@ def run_migrations(db_path: str | None = None) -> None:
     from .core import get_db_connection
 
     with get_db_connection(db_path) as conn:
-        _ensure_tracking_table(conn)
+        _ensure_tracking_table(conn)  # type: ignore[arg-type]
         conn.commit()
 
         migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))

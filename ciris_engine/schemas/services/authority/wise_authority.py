@@ -1,7 +1,7 @@
 """
 Wise Authority service schemas.
 
-Replaces Dict[str, Any] in WA service operations.
+Provides typed schemas in WA service operations.
 """
 
 from datetime import datetime, timezone

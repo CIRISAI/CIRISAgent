@@ -87,7 +87,7 @@ async def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
     Returns:
         Dictionary with memory statistics
     """
-    stats = {
+    stats: Dict[str, Any] = {
         "total_nodes": 0,
         "total_edges": 0,
         "nodes_by_type": {},

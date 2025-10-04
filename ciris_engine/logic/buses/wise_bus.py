@@ -4,7 +4,7 @@ Wise Authority message bus - handles all WA service operations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -80,28 +80,22 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         """Try to get agent tier from memory/identity."""
         try:
             from ciris_engine.schemas.runtime.enums import ServiceType
-            from ciris_engine.schemas.services.context import RecallQuery
 
             memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
             if not memory_services:
                 return None
 
             memory_service = memory_services[0]
-            if not hasattr(memory_service, "recall"):
-                return None
 
-            # Look for agent tier in identity
-            query = RecallQuery(query="agent_tier OR echo_agent OR community_moderator", scope="identity", limit=5)
-            results = await memory_service.recall(query)
+            # Try to search for tier information in identity nodes
+            if hasattr(memory_service, "search_memories"):
+                results = await memory_service.search_memories("agent_tier stewardship tier", scope="identity", limit=5)
 
-            if not results or not results.memories:
-                return None
-
-            # Check if this is a Tier 4/5 agent
-            for memory in results.memories:
-                memory_str = str(memory).lower()
-                if any(marker in memory_str for marker in ["stewardship", "tier_4", "tier_5"]):
-                    return 4  # Default stewardship tier
+                # Check if this is a Tier 4/5 agent
+                for result in results:
+                    content_str = str(result.content).lower()
+                    if any(marker in content_str for marker in ["stewardship", "tier_4", "tier_5"]):
+                        return 4  # Default stewardship tier
 
         except Exception as e:
             logger.debug(f"Could not get tier from memory: {e}")
@@ -247,7 +241,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             logger.error(f"Failed to fetch guidance: {e}", exc_info=True)
             return None
 
-    async def request_review(self, review_type: str, review_data: dict, handler_name: str) -> bool:
+    async def request_review(self, review_type: str, review_data: Dict[str, Any], handler_name: str) -> bool:
         """Request a review from wise authority (e.g., for identity variance)"""
         # Create a deferral context for the review
         context = DeferralContext(
@@ -320,11 +314,16 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         # Try to get multiple services if capability routing is supported
         try:
-            services = await self.service_registry.get_services(
+            services_result = self.service_registry.get_services(
                 service_type=ServiceType.WISE_AUTHORITY,
                 required_capabilities=required_caps,
                 limit=5,  # Prevent unbounded fan-out
             )
+            # Handle both sync and async returns
+            if hasattr(services_result, "__await__"):
+                services = await services_result
+            else:
+                services = services_result
         except Exception as e:
             logger.debug(f"Multi-provider lookup failed, falling back to single provider: {e}")
             services = []
@@ -335,9 +334,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             if service:
                 services = [service]
 
-        return services
+        return services  # type: ignore[no-any-return]
 
-    def _create_guidance_task(self, svc: Any, request: GuidanceRequest) -> Optional[asyncio.Task]:
+    def _create_guidance_task(self, svc: Any, request: GuidanceRequest) -> Optional[asyncio.Task[Any]]:
         """Create an appropriate guidance task for the service."""
         if hasattr(svc, "get_guidance"):
             return asyncio.create_task(svc.get_guidance(request))
@@ -353,7 +352,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             return asyncio.create_task(self._fetch_guidance_compat(svc, context, request.options))
         return None
 
-    async def _collect_guidance_responses(self, tasks: List[asyncio.Task], timeout: float) -> List[GuidanceResponse]:
+    async def _collect_guidance_responses(
+        self, tasks: List[asyncio.Task[Any]], timeout: float
+    ) -> List[GuidanceResponse]:
         """Collect responses from guidance tasks with timeout."""
         if not tasks:
             return []
@@ -517,7 +518,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     return False
         return True
 
-    def _collect_metrics(self) -> dict[str, float]:
+    def _collect_metrics(self) -> Dict[str, float]:
         """Collect base metrics for the wise bus."""
         # Calculate uptime
         uptime_seconds = 0.0
@@ -532,7 +533,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             "wise_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> dict[str, float]:
+    def get_metrics(self) -> Dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()
@@ -556,7 +557,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         """Process a wise authority message - currently all WA operations are synchronous"""
         logger.warning(f"Wise authority operations should be synchronous, got queued message: {type(message)}")
 
-    def _count_capability_categories(self) -> tuple[dict, int, dict, int]:
+    def _count_capability_categories(self) -> tuple[Dict[str, int], int, Dict[str, int], int]:
         """Count prohibited and community capabilities by category."""
         prohibited_counts = {
             category.lower(): len(capabilities) for category, capabilities in PROHIBITED_CAPABILITIES.items()
@@ -571,8 +572,12 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         return prohibited_counts, total_prohibited, community_counts, total_community
 
     def _create_telemetry_base(
-        self, prohibited_counts: dict, total_prohibited: int, community_counts: dict, total_community: int
-    ) -> dict:
+        self,
+        prohibited_counts: Dict[str, int],
+        total_prohibited: int,
+        community_counts: Dict[str, int],
+        total_community: int,
+    ) -> Dict[str, Any]:
         """Create base telemetry dictionary."""
         return {
             "service_name": "wise_bus",
@@ -582,7 +587,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             "total_community": total_community,
         }
 
-    async def collect_telemetry(self) -> dict[str, Any]:
+    async def collect_telemetry(self) -> Dict[str, Any]:
         """
         Collect telemetry from all wise authority providers in parallel.
 
@@ -643,7 +648,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return aggregated
 
-    def _aggregate_provider_telemetry(self, aggregated: dict, completed_tasks: set) -> None:
+    def _aggregate_provider_telemetry(self, aggregated: Dict[str, Any], completed_tasks: Set[Any]) -> None:
         """Aggregate telemetry from completed provider tasks."""
         for task in completed_tasks:
             try:

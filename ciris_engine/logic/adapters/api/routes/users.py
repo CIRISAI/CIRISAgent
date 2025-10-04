@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -96,7 +96,7 @@ class LinkedOAuthAccount(BaseModel):
     metadata: Dict[str, str] = Field(default_factory=dict)
 
 
-def _build_linked_accounts(user) -> List[LinkedOAuthAccount]:
+def _build_linked_accounts(user: Any) -> List[LinkedOAuthAccount]:
     accounts: List[LinkedOAuthAccount] = []
     seen = set()
 
@@ -141,7 +141,7 @@ def _build_linked_accounts(user) -> List[LinkedOAuthAccount]:
     return accounts
 
 
-def _build_user_detail(user_id: str, user, auth_service: APIAuthService) -> UserDetail:
+def _build_user_detail(user_id: str, user: Any, auth_service: APIAuthService) -> UserDetail:
     """Build UserDetail response from user object (DRY helper)."""
     permissions = auth_service.get_permissions_for_role(user.api_role)
     api_keys = auth_service.list_user_api_keys(user_id)
@@ -596,7 +596,7 @@ async def mint_wise_authority(
         raise HTTPException(status_code=403, detail=ERROR_ONLY_ADMIN_MINT_WA)
 
     # Validate that request.wa_role is not ROOT
-    if request.wa_role == WARole.ROOT:  # type: ignore[unreachable]
+    if request.wa_role == WARole.ROOT:
         raise HTTPException(status_code=400, detail=ERROR_CANNOT_MINT_ROOT)
 
     # If no signature provided but private key path is given, try to auto-sign

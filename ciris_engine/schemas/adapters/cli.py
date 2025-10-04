@@ -1,12 +1,14 @@
 """
 Schemas for CLI adapter operations.
 
-These replace all Dict[str, Any] usage in logic/adapters/cli/cli_adapter.py.
+Provides typed schemas for logic/adapters/cli/cli_adapter.py.
 """
 
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class CLIMessage(BaseModel):
@@ -82,14 +84,14 @@ class CLIDeferralDisplay(BaseModel):
     task_id: str = Field(..., description="Related task ID")
     reason: str = Field(..., description="Reason for deferral")
     defer_until: Optional[str] = Field(None, description="When to reconsider")
-    additional_info: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    additional_info: NodeAttributes = Field(default_factory=dict, description="Additional metadata")
 
 
 class CLICorrelationData(BaseModel):
     """Data stored in correlations for CLI operations."""
 
     action: str = Field(..., description="Action performed")
-    request: Dict[str, Any] = Field(default_factory=dict, description="Request data")
-    response: Dict[str, Any] = Field(default_factory=dict, description="Response data")
+    request: NodeAttributes = Field(default_factory=dict, description="Request data")
+    response: NodeAttributes = Field(default_factory=dict, description="Response data")
     success: bool = Field(True, description="Whether operation succeeded")
     error: Optional[str] = Field(None, description="Error message if failed")

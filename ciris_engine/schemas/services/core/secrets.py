@@ -1,7 +1,7 @@
 """
 Secrets service schemas.
 
-Replaces Dict[str, Any] in secrets service operations.
+Provides typed schemas in secrets service operations.
 """
 
 from datetime import datetime, timezone

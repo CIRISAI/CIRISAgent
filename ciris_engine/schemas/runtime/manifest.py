@@ -1,7 +1,7 @@
 """
 Service manifest schemas for typed module loading.
 
-Replaces Dict[str, Any] in service loading and module manifests.
+Provides typed schemas in service loading and module manifests.
 """
 
 from datetime import datetime, timezone
@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class ServicePriority(str, Enum):
@@ -97,7 +98,7 @@ class ServiceManifest(BaseModel):
     dependencies: Optional[LegacyDependencies] = Field(None, description="Legacy dependencies format")
     configuration: Optional[Dict[str, ConfigurationParameter]] = Field(None, description="Configuration parameters")
     exports: Optional[Dict[str, str]] = Field(None, description="Exported components")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    metadata: Optional[NodeAttributes] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
 
     model_config = ConfigDict(extra="forbid")

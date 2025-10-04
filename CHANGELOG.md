@@ -5,6 +5,144 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-10-04
+
+### Fixed
+- **🧪 Test Compatibility**: Fixed `test_check_pause_state_paused_with_event` to use real `asyncio.Event` instead of `AsyncMock` for isinstance() guard compatibility
+- **📦 Dependency Upgrade**: Upgraded instructor from 1.3.3 to 1.11.3, eliminating 34 DeprecationWarning about FUNCTIONS mode
+- **⚠️ Warning Reduction**: Reduced test warnings by 68% (50 → 16 warnings, all non-critical pytest internals)
+- **🔧 Code Quality**: Removed unused `consent_service` variable in graph.py (SonarCloud code smell)
+- **📋 Schema Conflicts**: Removed duplicate AgentIdentityRoot from self_observation.py __all__ exports
+- **🐛 Identity Variance Monitor**: Fixed multiple implementation bugs in identity_variance_monitor.py
+  - Fixed system_state type mismatch (expects Dict[str, str] not string)
+  - Fixed identity_root serialization (expects dict not AgentIdentityRoot object)
+  - Fixed MemoryOpStatus comparison (use enum not string value)
+  - Fixed None time_service handling in __init__
+  - Fixed VarianceCheckMetadata previous_check validation (expects datetime not string)
+  - Created 48 comprehensive tests (100% passing)
+
+### Added
+- **🔍 Guidance Observation Auditing**: Added audit logging for WA guidance observations
+  - Tracks both solicited (with recommendation) and unsolicited guidance requests
+  - Logs guidance_provided vs no_guidance outcomes
+  - Recorded as observations via `log_event` with action="observe"
+- **📬 Async Message API Endpoint**: New `/agent/message` endpoint for immediate task_id return
+  - Returns immediately with `task_id` for tracking (no blocking wait)
+  - Comprehensive status tracking via `MessageHandlingStatus` enum (9 status types)
+  - Rejection reasons: FILTERED_OUT, CREDIT_DENIED, CREDIT_CHECK_FAILED, PROCESSOR_PAUSED, etc.
+  - Adaptive filter integration with priority levels (CRITICAL, HIGH, MEDIUM, LOW, IGNORE)
+  - Existing task update detection (tracks when messages update existing tasks vs creating new)
+  - Credit policy enforcement with detailed rejection messages
+  - 39 comprehensive tests covering all scenarios
+- **📊 Message Handling Schemas**: New typed schemas for complete message flow
+  - `MessageHandlingStatus` enum: TASK_CREATED, UPDATED_EXISTING_TASK, FILTERED_OUT, CREDIT_DENIED, etc.
+  - `PassiveObservationResult`: Result of observation task creation with metadata
+  - `MessageHandlingResult`: Complete message handling result with status, task_id, and rejection info
+  - Full propagation of results through BaseObserver call chain
+- **🆔 Identity Context Formatting**: Created human-readable identity formatter for system snapshots
+  - Replaces raw escaped dict dump with clean formatted text
+  - Shows "First Start" from earliest startup or shutdown event
+  - Displays last 5 shutdowns with timestamps
+  - Supports both old ("consciousness_preservation") and new ("continuity_awareness") terminology
+  - Provides foundation for future uptime/downtime statistics
+- **⏱️ Startup Node Tracking**: Added automatic startup node creation for continuity awareness
+  - Creates GraphNode on each startup with tags `["startup", "continuity_awareness"]`
+  - Stored in IDENTITY scope alongside shutdown nodes
+  - Enables future calculation of session duration and availability metrics
+
+### Changed
+- **🔒 Audit System Cleanup**: Reduced audit verbosity to only important events
+  - Fixed `log_event` trace correlation to extract action type from event data
+  - Deprecated verbose Discord audit methods (messages, connections) - already covered by handler actions
+  - Hash chain now always enabled (fails fast if initialization fails)
+  - Audit events now logged: handler actions, WA operations, guidance observations, system shutdown, Discord mod actions only
+- **📉 Reduced Cognitive Complexity**: Refactored base_processor.py dispatch_action method
+  - Cognitive complexity reduced from 25 → ~8 (below 15 threshold)
+  - Extracted 4 helper methods: _get_time_service(), _stream_perform_action_step(), _extract_action_name(), _calculate_dispatch_time()
+  - Improved maintainability and readability while preserving functionality
+  - Added 20 comprehensive unit tests covering all helper methods and integration scenarios
+- **🐛 Data Loss Bug Fix**: Fixed missing execution metrics in ACTION_COMPLETE events
+  - dispatch_time_ms and action_name were calculated but not passed to decorator
+  - Now enriches dispatch_result with execution_time_ms, action_type, dispatch_end_time
+  - The _action_complete_step decorator now receives timing data for SSE streaming
+- **🧹 Code Quality Improvements**: Fixed SonarCloud issues in step_decorators.py
+  - Removed unnecessary f-string (L1164) - replaced with normal string
+  - Removed unused `result` parameter from _create_action_result_event() (L1252)
+- **🐛 Critical Bug Fix**: Implemented missing _perform_aspdma_with_guidance method
+  - Renamed _perform_aspdma_with_retry → _perform_aspdma_with_guidance (recursive_processing.py:117)
+  - Method was called but never defined (suppressed by type: ignore[attr-defined])
+  - Now properly uses typed conscience results (ConscienceApplicationResult) to guide retry attempts
+  - Enriches thought context with conscience_guidance containing override_reason and epistemic_data
+  - Fixed unused action_result parameter in _handle_conscience_retry_without_override (main.py:703)
+- **📉 Reduced Cognitive Complexity**: Refactored telemetry helpers aggregate_metric_by_type
+  - Cognitive complexity reduced from 27 → ~8 (below 15 threshold)
+  - Extracted 9 metric-specific handler functions with dispatch table pattern
+  - Created _update_windowed_metric helper to reduce duplication
+  - All 384 telemetry tests pass
+- **🐛 Timing Bug Fix**: Fixed window_start parameter in get_average_thought_depth
+  - Parameter was accepted but ignored - SQL used hardcoded datetime('now', '-24 hours')
+  - Now properly uses window_start parameter for timing consistency with other telemetry
+  - Prevents timing drift between telemetry calculation start and SQL execution
+- **📉 Reduced Cognitive Complexity**: Refactored edge_manager.py create_edges method
+  - Cognitive complexity reduced from 39 → ~8 (below 15 threshold)
+  - Extracted 6 helper methods: _normalize_edge_specifications(), _normalize_edge_tuples(), _create_missing_channel_node(), _create_missing_nodes(), _build_edge_record(), _build_edge_data()
+  - Removed unused nodes_to_create variable (dead code - creation handled inline)
+  - All 144 edge-related tests pass, 19 tsdb_consolidation tests pass
+- **⚡ QA Test Optimization - 3x Performance Improvement**: Updated handlers and filters tests to use SSE streaming
+  - Handlers tests: 48.38s (down from 151.93s) - 3.1x speedup
+  - Filters tests: 169.40s (down from 600+s) - 3.5x+ speedup
+  - Changed from blocking `/agent/interact` to async `/agent/message` endpoint
+  - Implemented SSE-based completion detection for ANY action (speak, memorize, recall, etc.)
+  - Reduced timeouts from 120s to 30s
+  - 100% pass rate maintained (5/5 handlers, 36/36 filters)
+- **📊 Event Streaming Log Cleanup**: Reduced INFO-level logging noise
+  - Changed broadcast and audit debug logs from INFO to DEBUG level
+  - Cleaner production logs during SSE streaming
+- **🧠 Conscience Schema Refactoring**: Separated epistemic metrics from conscience override fields
+  - `EpistemicData` now contains only pure epistemic metrics (entropy, coherence, uncertainty, reasoning transparency)
+  - Moved `replacement_action` and `CIRIS_OBSERVATION_UPDATED_STATUS` to `ConscienceCheckResult` top-level fields
+  - Updated `UpdatedStatusConscience` and `ThoughtDepthGuardrail` to use new structure
+  - Updated conscience execution logic in `conscience_execution.py` and `main.py` to access `replacement_action` from top level
+- **🔧 Type Safety**: Eliminated 97% of `Dict[str, Any]` from schemas/protocols (225 replacements)
+  - Replaced with semantic type aliases: `NodeAttributes`, `JSONDict`, `JSONValue`
+  - All internal schemas now use typed structures
+  - Only external interfaces (OTLP, GraphQL, OAuth) retain `Dict[str, Any]` with NOQA markers
+- **📉 Reduced Cognitive Complexity**: Refactored DiscordPlatform.__init__ method
+  - Cognitive complexity reduced from 120 → ~8 (46% below 15 threshold)
+  - Extracted CIRISDiscordClient to separate file (ciris_discord_client.py, 157 lines)
+  - Created 4 helper methods: _initialize_config(), _initialize_discord_client(), _initialize_discord_adapter(), _configure_monitored_channels()
+  - Reduced __init__ from ~250 lines to 19 lines (92% reduction)
+  - adapter.py: 810 → 711 lines (-99 lines)
+  - All 458 Discord tests passing (zero functionality changes)
+  - Improved maintainability and testability
+
+### Fixed
+- **🎯 H3ERE SSE Streaming - 100% Schema Validation**: Complete concrete type enforcement for all 6 reasoning events
+  - **Duplicate Events**: Removed duplicate ACTION_COMPLETE broadcast (base_processor manual broadcast conflicted with decorator)
+  - **DMA Results**: All 3 DMAs (ethical_pdma, csdma, dsdma) now required and strongly-typed throughout pipeline
+    - DMA orchestrator fails fast if DSDMA not configured
+    - DMA factory raises RuntimeError instead of returning None
+    - InitialDMAResults schema requires all 3 fields (non-optional)
+  - **SystemSnapshot**: snapshot_and_context event now includes full SystemSnapshot from thought context
+    - Extracts complete system state: channel_context, user_profiles, agent_identity, task details
+    - Step decorators pass thought_item to event creation for context extraction
+  - **Schema Validation**: QA runner now validates SystemSnapshot field types deeply
+  - Test results: 100% SSE validation (6/6 events, 0 duplicates, 0 schema errors)
+- **📚 SSE Documentation**: Added comprehensive docs/SSE_EVENT_DETAILS.md
+  - Complete schemas for all 6 H3ERE reasoning events
+  - Usage patterns for /agent/message endpoint and SSE streaming
+  - Client examples (JavaScript, Python, cURL)
+  - Error handling and best practices
+- **📡 ACTION_RESULT Event Data**: Fixed missing follow_up_thought_id and audit trail data
+  - Added `follow_up_thought_id` field to `ActionCompleteStepData` schema
+  - Updated `_create_action_complete_data` to extract audit fields from dispatch_result dict
+  - ACTION_RESULT events now include full audit trail (entry_id, sequence_number, hash, signature)
+- **🧪 Test Fixes**: Updated 8 tests for schema changes
+  - Fixed DMA_RESULTS event test to pass `dma_results` parameter with proper InitialDMAResults mock
+  - Fixed ACTION_RESULT event tests to use `follow_up_thought_id` from step_data
+  - Fixed ConversationSummaryNode test to include required `correlation_id` field
+  - Fixed UpdatedStatusConscience tests to access `replacement_action` from top level instead of `epistemic_data`
+
 ## [1.2.0] - 2025-10-01
 
 ### Added

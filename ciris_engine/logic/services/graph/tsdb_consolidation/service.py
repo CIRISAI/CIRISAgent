@@ -105,9 +105,9 @@ class TSDBConsolidationService(BaseGraphService):
         self._extensive_retention = timedelta(days=30)  # Keep daily summaries for 30 days
 
         # Task management
-        self._consolidation_task: Optional[asyncio.Task] = None
-        self._extensive_task: Optional[asyncio.Task] = None
-        self._profound_task: Optional[asyncio.Task] = None
+        self._consolidation_task: Optional[asyncio.Task[None]] = None
+        self._extensive_task: Optional[asyncio.Task[None]] = None
+        self._profound_task: Optional[asyncio.Task[None]] = None
         self._running = False
 
         # Track last successful consolidation
@@ -189,7 +189,8 @@ class TSDBConsolidationService(BaseGraphService):
             except asyncio.CancelledError:
                 logger.debug("Consolidation task cancelled successfully")
                 # Only re-raise if we're being cancelled ourselves
-                if asyncio.current_task() and asyncio.current_task().cancelled():
+                current = asyncio.current_task()
+                if current and current.cancelled():
                     raise
                 # Otherwise, this is a normal stop - don't propagate the cancellation
             except Exception as e:
@@ -295,7 +296,7 @@ class TSDBConsolidationService(BaseGraphService):
                     await asyncio.sleep(wait_seconds)
 
                 if self._running:
-                    await self._run_profound_consolidation()
+                    self._run_profound_consolidation()
 
                     # CRITICAL: After running, we must ensure we wait until the NEXT month
                     # Otherwise we'll run again immediately if we're still in the same time window
@@ -529,9 +530,9 @@ class TSDBConsolidationService(BaseGraphService):
         # 2. Create summaries
 
         # Store converted correlation objects for reuse in edge creation
-        converted_correlations: Dict[
-            str, Union[List[MetricCorrelationData], List[ServiceInteractionData], List[TraceSpanData]]
-        ] = {}
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]] = (
+            {}
+        )
         converted_tasks: List[TaskCorrelationData] = []  # Store converted tasks separately
 
         # Metrics summary (TSDB data + correlations)
@@ -540,7 +541,7 @@ class TSDBConsolidationService(BaseGraphService):
         ).nodes
         metric_correlations = correlations.metric_correlations
 
-        converted_correlations["metric_datapoint"] = metric_correlations
+        converted_correlations["metric_datapoint"] = list(metric_correlations)
 
         if tsdb_nodes or metric_correlations:
             metric_summary = await self._metrics_consolidator.consolidate(
@@ -564,7 +565,7 @@ class TSDBConsolidationService(BaseGraphService):
         # Conversation summary
         service_interactions = correlations.service_interactions
         if service_interactions:
-            converted_correlations["service_interaction"] = service_interactions
+            converted_correlations["service_interaction"] = list(service_interactions)
 
             if service_interactions:
                 conversation_summary = await self._conversation_consolidator.consolidate(
@@ -584,7 +585,7 @@ class TSDBConsolidationService(BaseGraphService):
         # Trace summary
         trace_spans = correlations.trace_spans
         if trace_spans:
-            converted_correlations["trace_span"] = trace_spans
+            converted_correlations["trace_span"] = list(trace_spans)
 
             trace_summary = await self._trace_consolidator.consolidate(
                 period_start, period_end, period_label, trace_spans
@@ -651,19 +652,25 @@ class TSDBConsolidationService(BaseGraphService):
                 tsdb_nodes = nodes_by_type.get(
                     "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
                 ).nodes
-                metric_correlations = correlations.get("metric_datapoint", [])
+                metric_correlations_raw = correlations.get("metric_datapoint", [])
+                # Cast to correct type
+                metric_correlations = [c for c in metric_correlations_raw if isinstance(c, MetricCorrelationData)]
                 edges = self._metrics_consolidator.get_edges(summary, tsdb_nodes, metric_correlations)
                 all_edges.extend(edges)
 
             elif summary.type == NodeType.CONVERSATION_SUMMARY:
                 # Get edges from conversation consolidator
-                service_interactions = correlations.get("service_interaction", [])
+                service_interactions_raw = correlations.get("service_interaction", [])
+                # Cast to correct type
+                service_interactions = [c for c in service_interactions_raw if isinstance(c, ServiceInteractionData)]
                 edges = self._conversation_consolidator.get_edges(summary, service_interactions)
                 all_edges.extend(edges)
 
             elif summary.type == NodeType.TRACE_SUMMARY:
                 # Get edges from trace consolidator
-                trace_spans = correlations.get("trace_span", [])
+                trace_spans_raw = correlations.get("trace_span", [])
+                # Cast to correct type
+                trace_spans = [c for c in trace_spans_raw if isinstance(c, TraceSpanData)]
                 edges = self._trace_consolidator.get_edges(summary, trace_spans)
                 all_edges.extend(edges)
 
@@ -941,7 +948,7 @@ class TSDBConsolidationService(BaseGraphService):
             logger.error(f"Error during cleanup: {e}", exc_info=True)
             return 0
 
-    def is_healthy(self) -> bool:
+    async def is_healthy(self) -> bool:
         """Check if the service is healthy."""
         return (
             self._running
@@ -1288,12 +1295,12 @@ class TSDBConsolidationService(BaseGraphService):
                         # Update in memory bus if available
                         if self._memory_bus:
                             try:
-                                # Update the node in the graph
-                                status = await self._memory_bus.update_node(node)
-                                if status.success:
+                                # Update the node in the graph using memorize
+                                status = await self._memory_bus.memorize(node, handler_name="tsdb_consolidation")
+                                if status.status == MemoryOpStatus.SUCCESS:
                                     logger.info(f"Successfully anonymized node {old_id}")
                                 else:
-                                    logger.warning(f"Failed to update anonymized node: {status.message}")
+                                    logger.warning(f"Failed to update anonymized node: {status.reason}")
                             except Exception as e:
                                 logger.error(f"Error updating anonymized node: {e}")
 
@@ -1649,8 +1656,10 @@ class TSDBConsolidationService(BaseGraphService):
 
                     # Group by date and create edges
                     from collections import defaultdict
+                    from datetime import date as DateType
+                    from typing import DefaultDict, Dict, List
 
-                    summaries_by_date = defaultdict(list)
+                    summaries_by_date: DefaultDict[DateType, List[GraphNode]] = defaultdict(list)
 
                     for node_id, node_type, period_start_str in all_daily_summaries:
                         if period_start_str:
@@ -1669,10 +1678,11 @@ class TSDBConsolidationService(BaseGraphService):
                             summaries_by_date[date_key].append(node)
 
                     # Create edges for each day
-                    for date_key, day_summaries in summaries_by_date.items():
-                        if len(day_summaries) > 1:
+                    for date_key, daily_summary_nodes in summaries_by_date.items():
+                        summaries_for_day: List[GraphNode] = daily_summary_nodes
+                        if len(summaries_for_day) > 1:
                             await self._create_daily_summary_edges(
-                                day_summaries, datetime.combine(date_key, datetime.min.time(), tzinfo=timezone.utc)
+                                summaries_for_day, datetime.combine(date_key, datetime.min.time(), tzinfo=timezone.utc)
                             )
 
             self._last_extensive_consolidation = now
@@ -1783,8 +1793,8 @@ class TSDBConsolidationService(BaseGraphService):
         consolidation_start = self._now()
         total_daily_summaries = 0
         summaries_compressed = 0
-        storage_before_mb = 0
-        storage_after_mb = 0
+        storage_before_mb = 0.0
+        storage_after_mb = 0.0
 
         try:
             logger.info("=" * 60)
@@ -1874,7 +1884,7 @@ class TSDBConsolidationService(BaseGraphService):
                         summary_attrs_list.append(attrs)
 
                 current_daily_mb = compressor.estimate_daily_size(summary_attrs_list, days_in_period)
-                storage_before_mb = current_daily_mb * days_in_period
+                storage_before_mb = float(current_daily_mb * days_in_period)
                 logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
                 logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
 

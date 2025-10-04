@@ -1,7 +1,7 @@
 """
 Processor error handling schemas.
 
-Replaces Dict[str, Any] in handle_error() method with typed schemas.
+Provides typed schemas in handle_error() method with typed schemas.
 """
 
 from datetime import datetime

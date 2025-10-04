@@ -34,7 +34,7 @@ TELEMETRY_TASK_SEMAPHORE = asyncio.Semaphore(100)
 
 
 def _prepare_log_context(
-    func: Callable, self: Any, args: Any, kwargs: Any, service_name: str, message_template: Optional[str]
+    func: Callable[..., Any], self: Any, args: Any, kwargs: Any, service_name: str, message_template: Optional[str]
 ) -> Dict[str, Any]:
     """Extract common logging context preparation logic."""
     if message_template:
@@ -99,14 +99,14 @@ def _extract_service_name(instance: Any) -> str:
     """Extract service name from instance."""
     # Try common patterns
     if hasattr(instance, "service_name"):
-        return instance.service_name
+        return str(instance.service_name)
     elif hasattr(instance, "__class__"):
         class_name = instance.__class__.__name__
         # Remove common suffixes
         for suffix in ["Service", "Handler", "Manager"]:
             if class_name.endswith(suffix):
-                return class_name[: -len(suffix)]
-        return class_name
+                return str(class_name[: -len(suffix)])
+        return str(class_name)
     return "unknown"
 
 
@@ -149,7 +149,7 @@ def _create_trace_context(trace_context: Any, span_id: str, actual_span_name: st
 
 
 def _capture_request_data(
-    func: Callable, self: Any, args: Any, kwargs: Any, actual_span_name: str
+    func: Callable[..., Any], self: Any, args: Any, kwargs: Any, actual_span_name: str
 ) -> Optional[ServiceRequestData]:
     """Capture request data from function arguments."""
     # Convert args to string representation for storage
@@ -175,7 +175,7 @@ async def _store_correlation_async(self: Any, correlation: ServiceCorrelation) -
     if hasattr(self, "_telemetry_service"):
         try:
 
-            async def bounded_store_correlation(telemetry_service, correlation):
+            async def bounded_store_correlation(telemetry_service: Any, correlation: ServiceCorrelation) -> None:
                 async with TELEMETRY_TASK_SEMAPHORE:
                     await telemetry_service._store_correlation(correlation)
 
@@ -189,7 +189,7 @@ async def _store_correlation_async(self: Any, correlation: ServiceCorrelation) -
 
 
 async def _execute_with_logging(
-    func: Callable,
+    func: Callable[..., Any],
     self: Any,
     args: Any,
     kwargs: Any,
@@ -216,7 +216,7 @@ async def _execute_with_logging(
 
 
 def _execute_with_logging_sync(
-    func: Callable,
+    func: Callable[..., Any],
     self: Any,
     args: Any,
     kwargs: Any,

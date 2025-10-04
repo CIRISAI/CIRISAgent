@@ -284,20 +284,26 @@ class TestAPIChannelManagement:
         with patch(
             "ciris_engine.logic.adapters.api.adapter.get_active_channels_by_adapter"
         ) as mock_get_channels, patch("ciris_engine.logic.adapters.api.adapter.is_admin_channel") as mock_is_admin:
-            # Mock the return value
+            # Mock the return value with ChannelInfo objects (not dicts)
+            from ciris_engine.logic.persistence.models.correlations import ChannelInfo
+
             mock_get_channels.return_value = [
-                {
-                    "channel_id": "api_127.0.0.1_8888",
-                    "channel_type": "api",
-                    "is_active": True,
-                    "last_activity": datetime.now(timezone.utc),
-                },
-                {
-                    "channel_id": "api_192.168.1.1_8080",
-                    "channel_type": "api",
-                    "is_active": True,
-                    "last_activity": datetime.now(timezone.utc),
-                },
+                ChannelInfo(
+                    channel_id="api_127.0.0.1_8888",
+                    channel_name=None,
+                    channel_type="api",
+                    is_active=True,
+                    last_activity=datetime.now(timezone.utc),
+                    message_count=0,
+                ),
+                ChannelInfo(
+                    channel_id="api_192.168.1.1_8080",
+                    channel_name=None,
+                    channel_type="api",
+                    is_active=True,
+                    last_activity=datetime.now(timezone.utc),
+                    message_count=0,
+                ),
             ]
 
             # Mock is_admin_channel to return False for both channels

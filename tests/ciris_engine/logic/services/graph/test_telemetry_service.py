@@ -325,9 +325,11 @@ async def test_telemetry_service_error_handling(telemetry_service, memory_bus):
     # Test query when bus fails
     memory_bus.recall_timeseries.side_effect = Exception("Query error")
 
-    # Should return empty list, not raise
-    metrics = await telemetry_service.query_metrics("test.metric")
-    assert metrics == []
+    # Should raise MetricCollectionError (fail fast and loud)
+    from ciris_engine.logic.services.graph.telemetry_service.exceptions import MetricCollectionError
+
+    with pytest.raises(MetricCollectionError, match="Failed to query metrics: Query error"):
+        await telemetry_service.query_metrics("test.metric")
 
 
 @pytest.mark.asyncio

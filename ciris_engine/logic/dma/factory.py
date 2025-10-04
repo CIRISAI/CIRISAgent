@@ -106,7 +106,7 @@ def create_dsdma_from_identity(
     *,
     model_name: Optional[str] = None,
     sink: Optional[Any] = None,
-) -> Optional[BaseDSDMA]:
+) -> BaseDSDMA:
     """Instantiate a DSDMA based on the agent's identity.
 
     The identity represents the agent's configuration loaded from the graph. If ``identity``
@@ -141,9 +141,10 @@ def create_dsdma_from_identity(
         sink=sink,
     )
 
-    # Ensure we return the correct type
+    # Ensure we return the correct type - FAIL FAST if not BaseDSDMA
     if isinstance(dma_result, BaseDSDMA):
         return dma_result
 
-    logger.error(f"create_dma returned unexpected type: {type(dma_result)}")
-    return None
+    # FAIL FAST: All 3 DMAs are required
+    logger.critical(f"create_dma returned unexpected type: {type(dma_result)} - DSDMA is required!")
+    raise RuntimeError(f"Failed to create DSDMA - got {type(dma_result)} instead of BaseDSDMA")

@@ -1,7 +1,7 @@
 """
 Typed node attribute schemas for graph services.
 
-Replaces Dict[str, Any] attribute storage in graph services with strongly-typed schemas.
+Provides strongly-typed schemas for graph node attributes.
 These schemas ensure type safety across all graph node operations.
 """
 
@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import JSONValue
 
 
 class NodeAttributes(BaseModel):
@@ -102,7 +104,7 @@ class ConfigNodeAttributes(NodeAttributes):
 
     # Validation
     value_type: str = Field(..., description="Expected type: string, integer, float, boolean, list, dict")
-    validation_rules: List[Dict[str, Union[str, int, float]]] = Field(
+    validation_rules: List[Dict[str, JSONValue]] = Field(
         default_factory=list, description="Validation rules for this config"
     )
 
@@ -184,9 +186,7 @@ class TelemetryNodeAttributes(NodeAttributes):
 AnyNodeAttributes = Union[NodeAttributes, MemoryNodeAttributes, ConfigNodeAttributes, TelemetryNodeAttributes]
 
 
-def create_node_attributes(
-    node_type: str, data: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]], created_by: str
-) -> AnyNodeAttributes:
+def create_node_attributes(node_type: str, data: Dict[str, JSONValue], created_by: str) -> AnyNodeAttributes:
     """
     Factory function to create appropriate node attributes based on type.
 

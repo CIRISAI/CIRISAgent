@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -30,7 +30,7 @@ DEFAULT_TEMPLATE = """{system_header}
 {closing_reminder}"""
 
 
-class ActionSelectionPDMAEvaluator(BaseDMA, ActionSelectionDMAProtocol):
+class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMAResult], ActionSelectionDMAProtocol):
     """
     Modular Action Selection PDMA Evaluator.
 
@@ -68,7 +68,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA, ActionSelectionDMAProtocol):
         self.context_builder = ActionSelectionContextBuilder(self.prompts, service_registry, self.sink)
         self.faculty_integration = FacultyIntegration(faculties) if faculties else None
 
-    async def evaluate(
+    async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool = False
     ) -> ActionSelectionDMAResult:
         """Evaluate triaged inputs and select optimal action."""
@@ -117,7 +117,14 @@ class ActionSelectionPDMAEvaluator(BaseDMA, ActionSelectionDMAProtocol):
             logger.warning(
                 "Recursive evaluation requested but no faculties available. Falling back to regular evaluation."
             )
+            # Convert to EnhancedDMAInputs if dict
+            if isinstance(input_data, dict):
+                input_data = EnhancedDMAInputs(**input_data)
             return await self.evaluate(input_data, enable_recursive_evaluation=False)
+
+        # Convert to EnhancedDMAInputs if dict
+        if isinstance(input_data, dict):
+            input_data = EnhancedDMAInputs(**input_data)
 
         original_thought: Thought = input_data.original_thought
         logger.info(f"Starting recursive evaluation with faculties for thought {original_thought.thought_id}")
@@ -129,8 +136,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA, ActionSelectionDMAProtocol):
                 retry_guidance=conscience_failure_context.get("retry_guidance", ""),
             )
 
-        # Convert input_data to dict for faculty integration if needed
-        input_dict = input_data if isinstance(input_data, dict) else input_data.model_dump()
+        # At this point input_data is guaranteed to be EnhancedDMAInputs
+        input_dict = input_data.model_dump()
 
         enhanced_inputs = await self.faculty_integration.enhance_evaluation_with_faculties(
             original_thought=original_thought,
@@ -141,9 +148,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA, ActionSelectionDMAProtocol):
 
         return await self.evaluate(enhanced_inputs, enable_recursive_evaluation=False)
 
-    async def _handle_special_cases(
-        self, input_data: Union[Dict[str, Any], EnhancedDMAInputs]
-    ) -> Optional[ActionSelectionDMAResult]:
+    async def _handle_special_cases(self, input_data: EnhancedDMAInputs) -> Optional[ActionSelectionDMAResult]:
         """Handle special cases that override normal evaluation."""
 
         # Check for forced ponder

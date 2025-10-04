@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Dict, Protocol, runtime_checkable
 
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -13,7 +13,7 @@ class ConscienceInterface(Protocol):
     async def check(
         self,
         action: ActionSelectionDMAResult,
-        context: dict,
+        context: Dict[str, Any],
     ) -> ConscienceCheckResult:
         """Check if action passes conscience."""
         ...

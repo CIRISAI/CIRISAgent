@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import NodeAttributes
+
 from ..actions.parameters import (
     DeferParams,
     ForgetParams,
@@ -83,7 +85,7 @@ class ActionSelectionDMAResult(BaseModel):
     # Processing metadata
     reasoning: Optional[str] = Field(None, description="Detailed reasoning process")
     evaluation_time_ms: Optional[float] = Field(None, description="Time taken for evaluation")
-    resource_usage: Optional[Dict[str, Any]] = Field(None, description="Resource usage details")
+    resource_usage: Optional[NodeAttributes] = Field(None, description="Resource usage details")
 
     model_config = ConfigDict(extra="forbid")
 

@@ -1,11 +1,12 @@
 """Discord channel management component for client and channel operations."""
 
 import logging
-from typing import Any, Awaitable, Callable, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import discord
 from discord.errors import Forbidden, NotFound
 
+from ciris_engine.logic.utils.privacy import sanitize_correlation_parameters
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 
 logger = logging.getLogger(__name__)
@@ -183,7 +184,6 @@ class DiscordChannelManager:
                 from datetime import datetime, timezone
 
                 from ciris_engine.logic import persistence
-                from ciris_engine.logic.utils.privacy import sanitize_correlation_parameters
                 from ciris_engine.schemas.telemetry.core import (
                     ServiceCorrelation,
                     ServiceCorrelationStatus,
@@ -245,7 +245,7 @@ class DiscordChannelManager:
         self.client = client
         # Event handling is now done by CIRISDiscordClient
 
-    def get_client_info(self) -> dict:
+    def get_client_info(self) -> Dict[str, Any]:
         """Get information about the Discord client.
 
         Returns:
@@ -265,7 +265,7 @@ class DiscordChannelManager:
             logger.exception(f"Error getting client info: {e}")
             return {"status": "error", "error": str(e)}
 
-    async def get_channel_info(self, channel_id: str) -> dict:
+    async def get_channel_info(self, channel_id: str) -> Dict[str, Any]:
         """Get information about a Discord channel.
 
         Args:
@@ -300,7 +300,7 @@ class DiscordChannelManager:
             logger.exception(f"Error getting channel info for {channel_id}: {e}")
             return {"exists": True, "accessible": False, "error": str(e)}
 
-    async def _sanitize_message_parameters(self, params: dict, author_id: str) -> dict:
+    async def _sanitize_message_parameters(self, params: Dict[str, Any], author_id: str) -> Dict[str, Any]:
         """
         Sanitize message parameters based on user consent.
 
@@ -339,7 +339,9 @@ class DiscordChannelManager:
                 if hasattr(self.filter_service, "_config") and self.filter_service._config:
                     if user_id in self.filter_service._config.user_profiles:
                         profile = self.filter_service._config.user_profiles[user_id]
-                        return profile.consent_stream
+                        consent_stream_value = profile.consent_stream
+                        # Return as string if it exists, otherwise None
+                        return str(consent_stream_value) if consent_stream_value is not None else None
 
             return None
         except Exception as e:

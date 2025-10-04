@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
+from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import PDMAProtocol
@@ -14,7 +15,7 @@ from .prompt_loader import get_prompt_loader
 logger = logging.getLogger(__name__)
 
 
-class EthicalPDMAEvaluator(BaseDMA, PDMAProtocol):
+class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAProtocol):
     """
     Evaluates a thought against core ethical principles using an LLM
     and returns a structured EthicalDMAResult using the 'instructor' library.

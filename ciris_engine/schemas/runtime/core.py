@@ -5,9 +5,11 @@ Provides type-safe structures for agent identity and capabilities.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import ConfigValue
 
 
 class CoreProfile(BaseModel):
@@ -108,7 +110,7 @@ class IdentityUpdate(BaseModel):
 
     update_type: str = Field(..., description="Type: profile, capabilities, trust, metadata")
     field_path: str = Field(..., description="Dot-notation path to field")
-    new_value: Any = Field(..., description="New value for field")
+    new_value: ConfigValue = Field(..., description="New value for field")
 
     # Authorization
     requested_by: str = Field(..., description="Who requested update")

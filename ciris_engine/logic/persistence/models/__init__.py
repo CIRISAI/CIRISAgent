@@ -90,6 +90,7 @@ __all__ = [
     "delete_graph_edge",
     "get_edges_for_node",
     "add_correlation",
+    "add_correlation_with_telemetry",
     "update_correlation",
     "get_correlation",
     "get_correlations_by_task_and_action",

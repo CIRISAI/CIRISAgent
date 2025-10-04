@@ -1,9 +1,10 @@
 """Tool Service Protocol."""
 
 from abc import abstractmethod
-from typing import List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolInfo, ToolParameterSchema
+from ciris_engine.schemas.types import ToolParameters
 
 from ...runtime.base import ServiceProtocol
 
@@ -12,7 +13,7 @@ class ToolServiceProtocol(ServiceProtocol, Protocol):
     """Protocol for tool execution service."""
 
     @abstractmethod
-    async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: ToolParameters) -> ToolExecutionResult:
         """Execute a tool with validated parameters.
 
         Note: parameters is a plain dict that has been validated against the tool's schema.
@@ -61,7 +62,7 @@ class ToolServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: ToolParameters) -> bool:
         """Validate parameters for a specific tool without executing it.
 
         Args:

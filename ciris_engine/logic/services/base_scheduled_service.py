@@ -35,7 +35,7 @@ class BaseScheduledService(BaseService):
         """
         super().__init__(**kwargs)
         self._run_interval = run_interval_seconds
-        self._task: Optional[asyncio.Task] = None
+        self._task: Optional[asyncio.Task[Any]] = None
         self._task_run_count = 0
         self._task_error_count = 0
         self._last_task_run: Optional[float] = None

@@ -4,9 +4,11 @@ Schemas for WA CLI wizard operations.
 These replace all Dict[str, Any] usage in logic/infrastructure/sub_services/wa_cli_wizard.py.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class WizardResult(BaseModel):
@@ -18,7 +20,7 @@ class WizardResult(BaseModel):
     key_file: Optional[str] = Field(None, description="Key file path if created")
     join_code: Optional[str] = Field(None, description="Join code if generated")
     expires_at: Optional[str] = Field(None, description="Expiration time for join code")
-    additional_info: dict = Field(default_factory=dict, description="Additional result information")
+    additional_info: NodeAttributes = Field(default_factory=dict, description="Additional result information")
 
 
 class RootCreationResult(WizardResult):

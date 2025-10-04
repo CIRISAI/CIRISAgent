@@ -1,13 +1,15 @@
 """
 Graph memory service schemas.
 
-Replaces Dict[str, Any] in memory service operations.
+Provides typed schemas in memory service operations.
 """
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class NodeAttributes(BaseModel):
@@ -23,9 +25,7 @@ class NodeAttributes(BaseModel):
 
     # Dynamic attributes - we use a constrained dict here since node attributes are truly dynamic
     # but we ensure they're JSON-serializable types
-    data: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any], None]] = Field(
-        default_factory=dict, description="Node data attributes"
-    )
+    data: JSONDict = Field(default_factory=dict, description="Node data attributes")
 
     model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
 

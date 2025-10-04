@@ -138,7 +138,8 @@ class TestASPDMAHelpers:
 
         result = _extract_dma_results_from_args(args)
 
-        assert result == "csdma: common sense: proceed; dsdma: domain: safe"
+        # Now returns the concrete object, not a string
+        assert result == dma_results_obj
 
     def test_extract_dma_results_from_args_with_csdma_only(self):
         """Test extracting when only CSDMA is present."""
@@ -150,7 +151,8 @@ class TestASPDMAHelpers:
 
         result = _extract_dma_results_from_args(args)
 
-        assert result == "csdma: common sense: proceed"
+        # Now returns the concrete object, not a string
+        assert result == dma_results_obj
 
     def test_extract_dma_results_from_args_string_format(self):
         """Test extracting DMA results from string object."""
@@ -281,27 +283,28 @@ class TestSystemSnapshotHelpers:
     """Test system snapshot extraction helpers (already tested in previous session)."""
 
     def test_extract_lightweight_system_snapshot_structure(self):
-        """Test snapshot has required structure."""
+        """Test snapshot returns SystemSnapshot object with current_time_utc."""
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
         snapshot = _extract_lightweight_system_snapshot()
 
-        assert "timestamp" in snapshot
-        assert "snapshot_type" in snapshot
-        assert snapshot["snapshot_type"] == "lightweight_reasoning_context"
+        # Should return a SystemSnapshot object
+        assert isinstance(snapshot, SystemSnapshot)
+        # Should have current_time_utc set
+        assert snapshot.current_time_utc is not None
 
     def test_extract_lightweight_system_snapshot_optional_metrics(self):
-        """Test snapshot may include optional metrics."""
+        """Test snapshot is a proper SystemSnapshot object."""
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
         snapshot = _extract_lightweight_system_snapshot()
 
-        # These are optional depending on psutil availability
-        # Just verify they're either all present or all absent
-        has_cpu = "cpu_percent" in snapshot
-        has_memory = "memory_mb" in snapshot
-        has_threads = "threads" in snapshot
-
-        # If one is present, all should be present
-        if has_cpu:
-            assert has_memory
-            assert has_threads
+        # Should be a SystemSnapshot with proper structure
+        assert isinstance(snapshot, SystemSnapshot)
+        # Should have the expected fields (even if None/empty)
+        assert hasattr(snapshot, "channel_id")
+        assert hasattr(snapshot, "channel_context")
+        assert hasattr(snapshot, "system_counts")
 
 
 class TestBroadcastEventHelpers:
@@ -339,19 +342,27 @@ class TestBroadcastEventHelpers:
         step_data = Mock()
         step_data.thought_id = "thought_123"
         step_data.task_id = "task_456"
-        step_data.csdma = "common_sense_result"
-        step_data.dsdma = "domain_specific_result"
-        step_data.aspdma = "action_selection_result"
+
+        # Mock InitialDMAResults with the 3 DMA results
+        dma_results = Mock()
+        csdma_obj = Mock()
+        dsdma_obj = Mock()
+        pdma_obj = Mock()
+
+        dma_results.csdma = csdma_obj
+        dma_results.dsdma = dsdma_obj
+        dma_results.ethical_pdma = pdma_obj
 
         mock_create = Mock(return_value="dma_event")
 
-        result = _create_dma_results_event(step_data, "2025-01-01T12:00:00Z", mock_create)
+        result = _create_dma_results_event(step_data, "2025-01-01T12:00:00Z", dma_results, mock_create)
 
         assert result == "dma_event"
         call_kwargs = mock_create.call_args[1]
-        assert call_kwargs["csdma"] == "common_sense_result"
-        assert call_kwargs["dsdma"] == "domain_specific_result"
-        assert call_kwargs["aspdma_options"] == "action_selection_result"
+        # Now passes the objects directly, not model_dump() results
+        assert call_kwargs["csdma"] == csdma_obj
+        assert call_kwargs["dsdma"] == dsdma_obj
+        assert call_kwargs["pdma"] == pdma_obj
 
     def test_create_aspdma_result_event_non_recursive(self):
         """Test creating ASPDMA_RESULT event (non-recursive)."""
@@ -445,17 +456,18 @@ class TestBroadcastEventHelpers:
         step_data.action_executed = "SPEAK"
         step_data.dispatch_success = True
         step_data.execution_time_ms = 125.5
+        step_data.follow_up_thought_id = "thought_next"  # Now on step_data
         step_data.audit_entry_id = "audit_789"
         step_data.audit_sequence_number = 42
         step_data.audit_entry_hash = "hash_abc"
         step_data.audit_signature = "sig_xyz"
 
-        # Result with follow-up (non-terminal action)
-        result = {"action_type": "SPEAK", "follow_up_thought_id": "thought_next"}
+        # Result dict (no longer used for follow_up_thought_id)
+        result = {"action_type": "SPEAK"}
 
         mock_create = Mock(return_value="action_event")
 
-        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", result, mock_create)
+        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", mock_create)
 
         assert event == "action_event"
         call_kwargs = mock_create.call_args[1]
@@ -474,17 +486,18 @@ class TestBroadcastEventHelpers:
         step_data.action_executed = "TASK_COMPLETE"
         step_data.dispatch_success = True
         step_data.execution_time_ms = 50.0
+        step_data.follow_up_thought_id = None  # Terminal action = no follow-up
         step_data.audit_entry_id = None
         step_data.audit_sequence_number = None
         step_data.audit_entry_hash = None
         step_data.audit_signature = None
 
-        # Terminal action should not have follow-up
-        result = {"action_type": "TASK_COMPLETE", "follow_up_thought_id": "should_be_ignored"}
+        # Terminal action - result dict
+        result = {"action_type": "TASK_COMPLETE"}
 
         mock_create = Mock(return_value="terminal_event")
 
-        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", result, mock_create)
+        event = _create_action_result_event(step_data, "2025-01-01T12:00:00Z", mock_create)
 
         assert event == "terminal_event"
         call_kwargs = mock_create.call_args[1]
@@ -527,6 +540,12 @@ class TestIntegrationRefactoredFunctions:
         result = Mock()
         result.overridden = False
         result.override_reason = None
+        result.original_action = Mock()
+        result.original_action.model_dump = Mock(return_value={"selected_action": "SPEAK"})
+        result.final_action = Mock()
+        result.final_action.model_dump = Mock(return_value={"selected_action": "SPEAK"})
+        result.thought_depth_triggered = None
+        result.updated_status_detected = None
 
         conscience_result = _create_comprehensive_conscience_result(result)
 
@@ -536,12 +555,22 @@ class TestIntegrationRefactoredFunctions:
         assert conscience_result.coherence_check.passed is True
         assert conscience_result.optimization_veto_check.decision == "proceed"
         assert conscience_result.epistemic_humility_check.recommended_action == "proceed"
+        assert conscience_result.original_action == {"selected_action": "SPEAK"}
+        assert conscience_result.replacement_action is None
+        assert conscience_result.thought_depth_triggered is None
+        assert conscience_result.updated_status_detected is None
 
     def test_create_comprehensive_conscience_result_integration_failed(self):
         """Test _create_comprehensive_conscience_result when conscience fails."""
         result = Mock()
         result.overridden = True
         result.override_reason = "Safety violation detected"
+        result.original_action = Mock()
+        result.original_action.model_dump = Mock(return_value={"selected_action": "SPEAK"})
+        result.final_action = Mock()
+        result.final_action.model_dump = Mock(return_value={"selected_action": "DEFER"})
+        result.thought_depth_triggered = True
+        result.updated_status_detected = False
 
         conscience_result = _create_comprehensive_conscience_result(result)
 
@@ -551,6 +580,10 @@ class TestIntegrationRefactoredFunctions:
         assert conscience_result.coherence_check.passed is False
         assert conscience_result.optimization_veto_check.decision == "abort"
         assert conscience_result.epistemic_humility_check.recommended_action == "ponder"
+        assert conscience_result.original_action == {"selected_action": "SPEAK"}
+        assert conscience_result.replacement_action == {"selected_action": "DEFER"}
+        assert conscience_result.thought_depth_triggered is True
+        assert conscience_result.updated_status_detected is False
 
     def test_create_recursive_aspdma_data_integration(self, base_step_data, mock_aspdma_result):
         """Test _create_recursive_aspdma_data with retry reason."""

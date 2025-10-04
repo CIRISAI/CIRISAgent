@@ -27,13 +27,11 @@ class TestDiscordAuditCoverage:
 
     @pytest.mark.asyncio
     async def test_log_connection_event_success(self):
-        """Test successful connection event logging."""
+        """Test connection event logging - DEPRECATED (too verbose)."""
         await self.audit.log_connection_event("connected", guild_count=5, user_count=100)
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.connection_connected"
-        assert call_args["event_data"]["outcome"] == "success"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_connection_event_no_audit_service(self):
@@ -45,88 +43,70 @@ class TestDiscordAuditCoverage:
 
     @pytest.mark.asyncio
     async def test_log_connection_event_with_error(self):
-        """Test connection event logging with error."""
+        """Test connection event logging with error - DEPRECATED (too verbose)."""
         await self.audit.log_connection_event("disconnected", guild_count=0, user_count=0, error="Connection lost")
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.connection_disconnected.failed"
-        assert call_args["event_data"]["outcome"] == "failure"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_message_sent_success(self):
-        """Test successful message send logging."""
+        """Test message send logging - DEPRECATED (already audited via speak handler action)."""
         await self.audit.log_message_sent("channel123", "user456", "Hello world!", "corr-123")
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.send_message"
-        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
-        assert call_args["event_data"]["details"]["correlation_id"] == "corr-123"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_message_sent_truncation(self):
-        """Test message send logging with long content truncation."""
+        """Test message send logging - DEPRECATED (already audited via speak handler action)."""
         long_message = "x" * 150  # Longer than 100 char limit
         await self.audit.log_message_sent("channel123", "user456", long_message)
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        # Message logging doesn't expose content in audit trail - verify call happened
-        assert call_args["event_type"] == "discord.send_message"
-        assert call_args["event_data"]["actor"] == "user456"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_message_received_success(self):
-        """Test successful message receive logging - targets line 134."""
+        """Test message receive logging - DEPRECATED (too verbose)."""
         await self.audit.log_message_received("channel123", "user456", "TestUser", "msg789")
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.receive_message"
-        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_guidance_request_success(self):
-        """Test successful guidance request logging - targets line 151."""
+        """Test guidance request logging - DEPRECATED (already audited via defer handler action)."""
         context = {"task_id": "task123", "thought_id": "thought456"}
         await self.audit.log_guidance_request("channel123", "user456", context, "guidance received")
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.request_guidance"
-        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_guidance_request_no_guidance(self):
-        """Test guidance request logging when no guidance received."""
+        """Test guidance request logging - DEPRECATED (already audited via defer handler action)."""
         context = {"task_id": "task123"}
         await self.audit.log_guidance_request("channel123", "user456", context, None)
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.request_guidance"
-        assert call_args["event_data"]["actor"] == "user456"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_approval_request_success(self):
-        """Test successful approval request logging - targets line 174."""
+        """Test approval request logging - DEPRECATED (already audited via handler actions)."""
         await self.audit.log_approval_request("channel123", "user456", "delete_file", "approved", "admin789")
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.request_approval"
-        assert call_args["event_data"]["details"]["channel_id"] == "channel123"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_permission_change_success(self):
-        """Test successful permission change logging - targets line 197."""
+        """Test permission change logging - DEPRECATED (already audited via grant/revoke handler actions)."""
         await self.audit.log_permission_change("admin123", "user456", "AUTHORITY", "grant", "guild789")
 
-        self.mock_audit_service.log_event.assert_called_once()
-        call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_type"] == "discord.grant_permission"
-        assert call_args["event_data"]["actor"] == "admin123"
+        # Method is now deprecated - should not call audit service
+        self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_tool_execution_success(self):
@@ -137,7 +117,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool"
-        assert call_args["event_data"]["actor"] == "user123"
+        assert call_args["event_data"].user_id == "user123"
 
     @pytest.mark.asyncio
     async def test_log_tool_execution_failure(self):
@@ -148,7 +128,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool.failed"
-        assert call_args["event_data"]["outcome"] == "failure"
+        assert call_args["event_data"].result == "failure"
 
     @pytest.mark.asyncio
     async def test_audit_service_exception_handling(self):
@@ -182,7 +162,9 @@ class TestDiscordAuditCoverage:
 
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
-        assert call_args["event_data"]["details"]["correlation_id"] == "corr-789"
+        # EventPayload is a Pydantic model - use attribute access
+        event_data = call_args["event_data"]
+        assert event_data.channel_id == "channel123"
 
     @pytest.mark.asyncio
     async def test_empty_parameters_handling(self):
@@ -192,7 +174,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool"
-        assert call_args["event_data"]["actor"] == "user123"
+        assert call_args["event_data"].user_id == "user123"
 
     @pytest.mark.asyncio
     async def test_none_parameters_handling(self):
@@ -202,7 +184,7 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_called_once()
         call_args = self.mock_audit_service.log_event.call_args[1]
         assert call_args["event_type"] == "discord.execute_tool"
-        assert call_args["event_data"]["actor"] == "user123"
+        assert call_args["event_data"].user_id == "user123"
 
     def test_set_audit_service_method(self):
         """Test setting audit service after initialization."""

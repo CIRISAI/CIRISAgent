@@ -6,7 +6,7 @@ Authentication = "Who are you?"
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Optional, Protocol, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Tuple, Union
 
 from ...runtime.base import ServiceProtocol
 
@@ -82,7 +82,7 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    def verify_token_sync(self, token: str) -> Optional[dict]:
+    def verify_token_sync(self, token: str) -> Optional[Dict[str, Any]]:
         """Synchronously verify a token (for non-async contexts)."""
         ...
 

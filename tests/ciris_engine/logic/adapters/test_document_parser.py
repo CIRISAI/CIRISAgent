@@ -295,67 +295,109 @@ class TestDocumentProcessing:
     @pytest.mark.asyncio
     async def test_download_file_http_error(self):
         """Test download with HTTP error."""
-        from unittest.mock import MagicMock
+        # Create proper async context manager using async functions
+        mock_response = MagicMock()
+        mock_response.status = 404
 
-        with patch("aiohttp.ClientSession") as mock_session:
-            mock_response = MagicMock()
-            mock_response.status = 404
-            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_response.__aexit__ = AsyncMock(return_value=None)
+        # Define proper async context manager methods
+        async def aenter_response(*args):
+            return mock_response
 
-            mock_session_inst = MagicMock()
-            mock_session_inst.get = MagicMock(return_value=mock_response)
-            mock_session_inst.__aenter__ = AsyncMock(return_value=mock_session_inst)
-            mock_session_inst.__aexit__ = AsyncMock(return_value=None)
-            mock_session.return_value = mock_session_inst
+        async def aexit_response(*args):
+            return False
 
+        mock_response.__aenter__ = aenter_response
+        mock_response.__aexit__ = aexit_response
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+
+        async def aenter_session(*args):
+            return mock_session
+
+        async def aexit_session(*args):
+            return False
+
+        mock_session.__aenter__ = aenter_session
+        mock_session.__aexit__ = aexit_session
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
             result = await self.parser._download_file("https://example.com/file.pdf")
             assert result is None
 
     @pytest.mark.asyncio
     async def test_download_file_too_large(self):
         """Test download rejection for oversized content."""
-        from unittest.mock import MagicMock
+        # Create proper async context manager using async functions
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.headers = {"content-length": str(2 * 1024 * 1024)}  # 2MB
 
-        with patch("aiohttp.ClientSession") as mock_session:
-            mock_response = MagicMock()
-            mock_response.status = 200
-            mock_response.headers = {"content-length": str(2 * 1024 * 1024)}  # 2MB
-            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_response.__aexit__ = AsyncMock(return_value=None)
+        async def aenter_response(*args):
+            return mock_response
 
-            mock_session_inst = MagicMock()
-            mock_session_inst.get = MagicMock(return_value=mock_response)
-            mock_session_inst.__aenter__ = AsyncMock(return_value=mock_session_inst)
-            mock_session_inst.__aexit__ = AsyncMock(return_value=None)
-            mock_session.return_value = mock_session_inst
+        async def aexit_response(*args):
+            return False
 
+        mock_response.__aenter__ = aenter_response
+        mock_response.__aexit__ = aexit_response
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+
+        async def aenter_session(*args):
+            return mock_session
+
+        async def aexit_session(*args):
+            return False
+
+        mock_session.__aenter__ = aenter_session
+        mock_session.__aexit__ = aexit_session
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
             result = await self.parser._download_file("https://example.com/file.pdf")
             assert result is None
 
     @pytest.mark.asyncio
     async def test_download_file_streaming_size_limit(self):
         """Test size limit during streaming download."""
-        from unittest.mock import MagicMock
-
         # Create chunks that exceed size limit
         large_chunk = b"x" * (1024 * 1024)  # 1MB chunks
         chunks = [large_chunk, large_chunk]  # 2MB total
 
-        with patch("aiohttp.ClientSession") as mock_session:
-            mock_response = MagicMock()
-            mock_response.status = 200
-            mock_response.headers = {}  # No content-length header
-            mock_response.content.iter_chunked.return_value = chunks
-            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_response.__aexit__ = AsyncMock(return_value=None)
+        # Create async iterator for chunks
+        async def async_chunk_iterator():
+            for chunk in chunks:
+                yield chunk
 
-            mock_session_inst = MagicMock()
-            mock_session_inst.get = MagicMock(return_value=mock_response)
-            mock_session_inst.__aenter__ = AsyncMock(return_value=mock_session_inst)
-            mock_session_inst.__aexit__ = AsyncMock(return_value=None)
-            mock_session.return_value = mock_session_inst
+        # Create proper async context manager using async functions
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.headers = {}  # No content-length header
+        mock_response.content.iter_chunked = MagicMock(return_value=async_chunk_iterator())
 
+        async def aenter_response(*args):
+            return mock_response
+
+        async def aexit_response(*args):
+            return False
+
+        mock_response.__aenter__ = aenter_response
+        mock_response.__aexit__ = aexit_response
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+
+        async def aenter_session(*args):
+            return mock_session
+
+        async def aexit_session(*args):
+            return False
+
+        mock_session.__aenter__ = aenter_session
+        mock_session.__aexit__ = aexit_session
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
             result = await self.parser._download_file("https://example.com/file.pdf")
             assert result is None
 
@@ -555,8 +597,16 @@ class TestAsyncProcessing:
         """Test processing timeout."""
         attachment = MockAttachment("test.pdf", 1000, "application/pdf")
 
-        with patch.object(self.parser, "_download_file", return_value=b"test data"):
-            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+        # Mock wait_for to raise TimeoutError without creating unawaited coroutines
+        async def mock_wait_for(coro, timeout):
+            # Properly close the coroutine to avoid warning
+            coro.close()
+            raise asyncio.TimeoutError()
+
+        # Use AsyncMock properly for async function
+        mock_download = AsyncMock(return_value=b"test data")
+        with patch.object(self.parser, "_download_file", mock_download):
+            with patch("asyncio.wait_for", side_effect=mock_wait_for):
                 result = await self.parser._process_single_document(attachment)
                 assert "Processing timeout - file too complex or large" in result
 

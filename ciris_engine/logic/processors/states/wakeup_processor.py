@@ -5,7 +5,7 @@ Wakeup processor handling the agent's initialization sequence.
 import asyncio
 import logging
 import uuid
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
@@ -91,7 +91,7 @@ class WakeupProcessor(BaseProcessor):
         """Wakeup processor only handles WAKEUP state."""
         return [AgentState.WAKEUP]
 
-    def can_process(self, state: AgentState) -> bool:
+    async def can_process(self, state: AgentState) -> bool:
         """Check if we can process the given state."""
         return state == AgentState.WAKEUP and not self.wakeup_complete
 
@@ -128,7 +128,7 @@ class WakeupProcessor(BaseProcessor):
             duration_seconds=duration,
         )
 
-    async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> dict:
+    async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> Dict[str, Any]:
         """
         Execute wakeup processing for one round.
         In non-blocking mode, creates thoughts for incomplete steps and returns immediately.
@@ -334,7 +334,7 @@ class WakeupProcessor(BaseProcessor):
             # Get more diagnostic info
             from ciris_engine.logic.registries.base import ServiceRegistry
 
-            registry = ServiceRegistry.get_instance()
+            registry = ServiceRegistry.get_instance()  # type: ignore[attr-defined]
             provider_info = registry.get_provider_info(service_type="communication") if registry else {}
             num_providers = len(provider_info.get("providers", []))
 
@@ -586,7 +586,7 @@ class WakeupProcessor(BaseProcessor):
         self.wakeup_complete = True
         logger.info("Wakeup processor stopped")
 
-    def get_status(self) -> dict:
+    def get_status(self) -> Dict[str, Any]:
         """Get current wakeup processor status and metrics."""
         wakeup_sequence = self._get_wakeup_sequence()
         total_steps = len(wakeup_sequence)

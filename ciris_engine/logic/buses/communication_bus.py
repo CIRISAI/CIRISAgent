@@ -5,7 +5,7 @@ Communication message bus - handles all communication service operations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -100,7 +100,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
                 logger.debug(f"Provider {service.__class__.__name__} returned home_channel: {home_channel}")
                 if home_channel:
                     logger.debug(f"Found home channel '{home_channel}' from {service.__class__.__name__}")
-                    return home_channel
+                    return home_channel  # type: ignore[no-any-return]
             else:
                 logger.debug(f"Provider {service.__class__.__name__} does not have get_home_channel_id method")
 
@@ -108,7 +108,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
         return None
 
     async def send_message(
-        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[dict] = None
+        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Send a message to a channel.
@@ -120,7 +120,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
             handler_name=handler_name,
             timestamp=self._time_service.now(),
             metadata=metadata or {},
-            channel_id=channel_id,
+            channel_id=channel_id or "",  # Provide empty string if None
             content=content,
         )
 
@@ -131,7 +131,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
         return success
 
     async def send_message_sync(
-        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[dict] = None
+        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Send a message synchronously (wait for completion).
@@ -185,7 +185,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
             return False
 
         try:
-            result = await service.send_message(resolved_channel_id, content)
+            result = await service.send_message(resolved_channel_id or "", content)  # Ensure non-None
             if result:
                 self._messages_sent += 1
             return bool(result)
@@ -249,8 +249,8 @@ class CommunicationBus(BaseBus[CommunicationService]):
 
         # First, try to find the right service based on channel_id prefix
         service = None
-        channel_id = request.channel_id
-        resolved_channel_id = channel_id
+        channel_id: Optional[str] = request.channel_id
+        resolved_channel_id: Optional[str] = channel_id
 
         # If no channel_id provided or empty string, find highest priority adapter's home channel
         if not channel_id or channel_id == "":
@@ -294,8 +294,8 @@ class CommunicationBus(BaseBus[CommunicationService]):
         if not service:
             raise RuntimeError(f"No communication service available for channel {resolved_channel_id}")
 
-        # Send the message
-        success = await service.send_message(resolved_channel_id, request.content)
+        # Send the message (ensure non-None channel_id)
+        success = await service.send_message(resolved_channel_id or "", request.content)
 
         if success:
             logger.debug(f"Successfully sent message to {resolved_channel_id} " f"via {type(service).__name__}")
@@ -305,7 +305,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
         else:
             logger.warning(f"Failed to send message to {resolved_channel_id} " f"via {type(service).__name__}")
 
-    def _collect_metrics(self) -> dict:
+    def _collect_metrics(self) -> Dict[str, float]:
         """Collect base metrics for the communication bus."""
         uptime_seconds = 0.0
         if hasattr(self, "_time_service") and self._time_service:
@@ -321,7 +321,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
             "communication_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> dict:
+    def get_metrics(self) -> Dict[str, float]:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()

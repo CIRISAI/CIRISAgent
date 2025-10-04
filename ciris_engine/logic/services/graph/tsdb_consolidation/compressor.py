@@ -7,7 +7,7 @@ Future versions will include multimedia compression for images, video, and telem
 
 import json
 import logging
-from typing import List
+from typing import Dict, List
 
 from ciris_engine.schemas.services.graph.tsdb_models import CompressionResult, SummaryAttributes
 
@@ -77,17 +77,17 @@ class SummaryCompressor:
             Attributes with compressed metrics
         """
         # Compress basic metrics into a simplified format
-        compressed_metrics = {}
+        compressed_metrics: Dict[str, float] = {}
 
-        # Only keep non-zero metrics
+        # Only keep non-zero metrics (convert to float for schema compatibility)
         if attrs.total_interactions > 0:
-            compressed_metrics["ti"] = attrs.total_interactions  # Shortened key
+            compressed_metrics["ti"] = float(attrs.total_interactions)  # Shortened key
         if attrs.unique_services > 0:
-            compressed_metrics["us"] = attrs.unique_services
+            compressed_metrics["us"] = float(attrs.unique_services)
         if attrs.total_tasks > 0:
-            compressed_metrics["tt"] = attrs.total_tasks
+            compressed_metrics["tt"] = float(attrs.total_tasks)
         if attrs.total_thoughts > 0:
-            compressed_metrics["tth"] = attrs.total_thoughts
+            compressed_metrics["tth"] = float(attrs.total_thoughts)
 
         # Store compressed version
         attrs.compressed_metrics = compressed_metrics if compressed_metrics else None

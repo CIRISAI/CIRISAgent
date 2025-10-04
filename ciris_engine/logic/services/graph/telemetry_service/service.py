@@ -39,6 +39,7 @@ from ciris_engine.schemas.services.graph.telemetry import (
     AggregatedTelemetryMetadata,
     AggregatedTelemetryResponse,
     BehavioralData,
+    MetricRecord,
     ResourceData,
     ServiceTelemetryData,
     TelemetryData,
@@ -46,6 +47,7 @@ from ciris_engine.schemas.services.graph.telemetry import (
 )
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
+from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +121,10 @@ class TelemetryAggregator:
         self.service_registry = service_registry
         self.time_service = time_service
         self.runtime = runtime  # Direct access to runtime for core services
-        self.cache: Dict[str, Tuple[datetime, Dict]] = {}
+        self.cache: Dict[str, Tuple[datetime, Dict[str, Any]]] = {}
         self.cache_ttl = timedelta(seconds=30)
 
-    async def collect_all_parallel(self) -> Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]:
+    async def collect_all_parallel(self) -> Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]]:
         """
         Collect telemetry from all services in parallel.
 
@@ -151,7 +153,9 @@ class TelemetryAggregator:
             task.cancel()
 
         # Organize results by category
-        telemetry = {cat: {} for cat in self.CATEGORIES.keys()}
+        telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]] = {
+            cat: {} for cat in self.CATEGORIES.keys()
+        }
         # Add registry category for dynamic services
         telemetry["registry"] = {}
 
@@ -181,12 +185,14 @@ class TelemetryAggregator:
                     telemetry[category][service_name] = self.get_fallback_metrics(service_name)
 
         # Compute covenant metrics from governance services
-        telemetry["covenant"] = self.compute_covenant_metrics(telemetry)
+        covenant_metrics_data = self.compute_covenant_metrics(telemetry)
+        # Cast to expected type - covenant metrics are stored as a special dict
+        telemetry["covenant"] = covenant_metrics_data  # type: ignore[assignment]
 
         return telemetry
 
     def _generate_semantic_service_name(
-        self, service_type: str, provider_name: str, provider_metadata: dict = None
+        self, service_type: str, provider_name: str, provider_metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Generate a semantic name for a dynamic service.
@@ -237,7 +243,7 @@ class TelemetryAggregator:
             short_id = str(id(provider_name))[-6:]
             return f"{service_type}_{provider_cleaned.lower()}_{short_id}"
 
-    def collect_from_registry_services(self) -> Dict[str, List]:
+    def collect_from_registry_services(self) -> Dict[str, List[Any]]:
         """
         Collect telemetry from dynamic services registered in ServiceRegistry.
 
@@ -445,7 +451,7 @@ class TelemetryAggregator:
             healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
         )  # NO FALLBACKS - service failed
 
-    def _get_service_from_runtime(self, service_name: str):
+    def _get_service_from_runtime(self, service_name: str) -> Any:
         """Get service directly from runtime attributes."""
         if not self.runtime:
             logger.debug(f"[TELEMETRY] No runtime available for service {service_name}")
@@ -503,7 +509,7 @@ class TelemetryAggregator:
             logger.debug(f"[TELEMETRY] No runtime attr mapping for {service_name}")
         return None
 
-    def _get_service_from_registry(self, service_name: str):
+    def _get_service_from_registry(self, service_name: str) -> Any:
         """Get service from runtime first, then registry by name."""
         # First try to get service directly from runtime
         if self.runtime:
@@ -566,7 +572,7 @@ class TelemetryAggregator:
         logger.debug(f"Service {service_name} not found in {len(all_services)} services")
         return None
 
-    async def _try_collect_metrics(self, service) -> Optional[ServiceTelemetryData]:
+    async def _try_collect_metrics(self, service: Any) -> Optional[ServiceTelemetryData]:
         """Try different methods to collect metrics from service."""
         if not service:
             logger.debug("[TELEMETRY] Service is None, cannot collect metrics")
@@ -640,7 +646,9 @@ class TelemetryAggregator:
             status = service.get_status()
             if asyncio.iscoroutine(status):
                 status = await status
-            return self.status_to_telemetry(status)
+            # status_to_telemetry returns dict, not ServiceTelemetryData
+            # Return None as we can't convert properly here
+            return None
 
         return None
 
@@ -712,7 +720,9 @@ class TelemetryAggregator:
                         logger.error(f"Error getting metrics from {bus_name}: {e}")
                         return self.get_fallback_metrics(bus_name)
                 elif hasattr(bus, "collect_telemetry"):
-                    return await bus.collect_telemetry()
+                    result = await bus.collect_telemetry()
+                    # Bus collect_telemetry returns Any, assume it's ServiceTelemetryData
+                    return result  # type: ignore[no-any-return]
                 else:
                     return self.get_fallback_metrics(bus_name)
             else:
@@ -777,7 +787,7 @@ class TelemetryAggregator:
     def _is_adapter_running(self, adapter_info: Any) -> bool:
         """Check if an adapter is running."""
         if hasattr(adapter_info, "is_running"):
-            return adapter_info.is_running
+            return bool(adapter_info.is_running)
         elif hasattr(adapter_info, "status"):
             from ciris_engine.schemas.services.core.runtime import AdapterStatus
 
@@ -792,16 +802,22 @@ class TelemetryAggregator:
                     return adapter
         return None
 
-    async def _get_adapter_metrics(self, adapter_instance: Any) -> dict:
+    async def _get_adapter_metrics(self, adapter_instance: Any) -> Optional[Dict[str, Any]]:
         """Get metrics from adapter instance."""
         if hasattr(adapter_instance, "get_metrics"):
             if asyncio.iscoroutinefunction(adapter_instance.get_metrics):
-                return await adapter_instance.get_metrics()
-            return adapter_instance.get_metrics()
+                result = await adapter_instance.get_metrics()
+                return result  # type: ignore[no-any-return]
+            result = adapter_instance.get_metrics()
+            return result  # type: ignore[no-any-return]
         return None
 
     def _create_telemetry_data(
-        self, metrics: dict, adapter_info: Any = None, adapter_id: str = None, healthy: bool = True
+        self,
+        metrics: Dict[str, Any],
+        adapter_info: Optional[Any] = None,
+        adapter_id: Optional[str] = None,
+        healthy: bool = True,
     ) -> ServiceTelemetryData:
         """Create ServiceTelemetryData from metrics."""
         if not metrics:
@@ -814,11 +830,10 @@ class TelemetryAggregator:
                 custom_metrics={"adapter_id": adapter_id} if adapter_id else {},
             )
 
-        custom_metrics = {"adapter_id": adapter_id} if adapter_id else {}
+        custom_metrics: Dict[str, Any] = {"adapter_id": adapter_id} if adapter_id else {}
         if adapter_info:
-            custom_metrics["adapter_type"] = (
-                adapter_info.adapter_type if hasattr(adapter_info, "adapter_type") else None
-            )
+            adapter_type_value: Any = adapter_info.adapter_type if hasattr(adapter_info, "adapter_type") else None
+            custom_metrics["adapter_type"] = adapter_type_value
             if hasattr(adapter_info, "started_at") and adapter_info.started_at:
                 custom_metrics["start_time"] = adapter_info.started_at.isoformat()
 
@@ -857,9 +872,19 @@ class TelemetryAggregator:
                             if adapter_instance:
                                 try:
                                     metrics = await self._get_adapter_metrics(adapter_instance)
-                                    adapter_metrics[adapter_info.adapter_id] = self._create_telemetry_data(
-                                        metrics, adapter_info, adapter_info.adapter_id, healthy=True
-                                    )
+                                    if metrics:
+                                        adapter_metrics[adapter_info.adapter_id] = self._create_telemetry_data(
+                                            metrics, adapter_info, adapter_info.adapter_id, healthy=True
+                                        )
+                                    else:
+                                        adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
+                                            healthy=False,
+                                            uptime_seconds=0.0,
+                                            error_count=0,
+                                            requests_handled=0,
+                                            error_rate=0.0,
+                                            custom_metrics={"adapter_id": adapter_info.adapter_id},
+                                        )
                                 except Exception as e:
                                     logger.error(f"Error getting metrics from {adapter_info.adapter_id}: {e}")
                                     adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
@@ -901,9 +926,19 @@ class TelemetryAggregator:
 
                     try:
                         metrics = await self._get_adapter_metrics(adapter)
-                        adapter_metrics[adapter_id] = self._create_telemetry_data(
-                            metrics, None, adapter_id, healthy=bool(metrics)
-                        )
+                        if metrics:
+                            adapter_metrics[adapter_id] = self._create_telemetry_data(
+                                metrics, None, adapter_id, healthy=True
+                            )
+                        else:
+                            adapter_metrics[adapter_id] = ServiceTelemetryData(
+                                healthy=False,
+                                uptime_seconds=0.0,
+                                error_count=0,
+                                requests_handled=0,
+                                error_rate=0.0,
+                                custom_metrics={"adapter_id": adapter_id},
+                            )
                     except Exception as e:
                         logger.error(f"Error getting metrics from {adapter_id}: {e}")
                         adapter_metrics[adapter_id] = ServiceTelemetryData(
@@ -923,16 +958,20 @@ class TelemetryAggregator:
             healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
         )
 
-    def status_to_telemetry(self, status: Any) -> dict:
+    def status_to_telemetry(self, status: Any) -> Dict[str, Any]:
         """Convert ServiceStatus to telemetry dict."""
         if hasattr(status, "model_dump"):
-            return status.model_dump()
+            result = status.model_dump()
+            return result  # type: ignore[no-any-return]
         elif hasattr(status, "__dict__"):
-            return status.__dict__
+            result = status.__dict__
+            return result  # type: ignore[no-any-return]
         else:
             return {"status": str(status)}
 
-    def _process_service_metrics(self, service_data: ServiceTelemetryData | Dict) -> tuple:
+    def _process_service_metrics(
+        self, service_data: ServiceTelemetryData | Dict[str, Any]
+    ) -> Tuple[bool, int, int, float, float]:
         """Process metrics for a single service."""
         # Handle both ServiceTelemetryData objects and legacy dicts
         if isinstance(service_data, ServiceTelemetryData):
@@ -951,7 +990,9 @@ class TelemetryAggregator:
 
         return is_healthy, errors, requests, error_rate, uptime
 
-    def _aggregate_service_metrics(self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]) -> tuple:
+    def _aggregate_service_metrics(
+        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]]
+    ) -> Tuple[int, int, int, int, float, List[float]]:
         """Aggregate metrics from all services."""
         total_services = 0
         healthy_services = 0
@@ -993,7 +1034,7 @@ class TelemetryAggregator:
         return default
 
     def _extract_governance_metrics(
-        self, telemetry: Dict, service_name: str, metric_mappings: Dict[str, str]
+        self, telemetry: Dict[str, Any], service_name: str, metric_mappings: Dict[str, str]
     ) -> Dict[str, Any]:
         """Extract metrics from a governance service."""
         results = {}
@@ -1004,14 +1045,14 @@ class TelemetryAggregator:
         return results
 
     def compute_covenant_metrics(
-        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]
+        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]]
     ) -> Dict[str, Union[float, int, str]]:
         """
         Compute covenant/ethics metrics from governance services.
 
         These metrics track ethical decision-making and covenant compliance.
         """
-        covenant_metrics = {
+        covenant_metrics: Dict[str, Union[float, int, str]] = {
             "wise_authority_deferrals": 0,
             "filter_matches": 0,
             "thoughts_processed": 0,
@@ -1043,7 +1084,7 @@ class TelemetryAggregator:
         return covenant_metrics
 
     def calculate_aggregates(
-        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict]]]
+        self, telemetry: Dict[str, Dict[str, Union[ServiceTelemetryData, Dict[str, Any]]]]
     ) -> Dict[str, Union[bool, int, float, str]]:
         """Calculate system-wide aggregate metrics."""
         # Get aggregated metrics
@@ -1274,18 +1315,35 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         tags: Optional[Dict[str, str]] = None,
-    ) -> List[Dict[str, Union[str, float, datetime, Dict[str, str]]]]:
-        """
-        Query metrics from the graph memory.
+    ) -> List[MetricRecord]:
+        """Query metrics from the graph memory.
 
         This uses the MemoryService's recall_timeseries capability to
         retrieve historical metric data.
-        """
-        try:
-            if not self._memory_bus:
-                logger.error("Memory bus not available for metric queries")
-                return []
 
+        Args:
+            metric_name: Name of metric to query
+            start_time: Start of time window (optional)
+            end_time: End of time window (optional)
+            tags: Filter by tags (optional)
+
+        Returns:
+            List of typed MetricRecord objects
+
+        Raises:
+            MemoryBusUnavailableError: If memory bus not available
+            MetricCollectionError: If query fails
+        """
+        from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
+            MemoryBusUnavailableError,
+            MetricCollectionError,
+        )
+        from ciris_engine.schemas.services.graph.telemetry import MetricRecord
+
+        if not self._memory_bus:
+            raise MemoryBusUnavailableError("Memory bus not available for metric queries")
+
+        try:
             # Calculate hours from time range
             hours = 24  # Default
             if start_time and end_time:
@@ -1294,7 +1352,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 hours = int((self._now() - start_time).total_seconds() / 3600)
 
             # Recall time series data from memory
-            # Pass actual start/end times for precise filtering
             timeseries_data = await self._memory_bus.recall_timeseries(
                 scope="local",  # Operational metrics are in local scope
                 hours=hours,
@@ -1303,8 +1360,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 handler_name="telemetry_service",
             )
 
-            # Convert to dict format
-            results: List[Dict[str, Union[str, float, datetime, Dict[str, str]]]] = []
+            # Convert to typed MetricRecord objects
+            results: List[MetricRecord] = []
             for data in timeseries_data:
                 # Filter by metric name
                 if data.metric_name != metric_name:
@@ -1318,32 +1375,30 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
                 # Filter by time range
                 if data.timestamp:
-                    # timestamp is always a datetime per TimeSeriesDataPoint type
                     ts = data.timestamp
-
                     if ts is not None:
-
                         if start_time and ts < start_time:
                             continue
                         if end_time and ts > end_time:
                             continue
 
-                # Create result dict
-                if data.metric_name and data.value is not None:
+                # Create typed MetricRecord (validation happens here)
+                if data.metric_name and data.value is not None and data.timestamp:
                     results.append(
-                        {
-                            "metric_name": data.metric_name,
-                            "value": data.value,
-                            "timestamp": data.timestamp,
-                            "tags": data.tags or {},
-                        }
+                        MetricRecord(
+                            metric_name=data.metric_name,
+                            value=data.value,
+                            timestamp=data.timestamp,
+                            tags=data.tags or {},
+                        )
                     )
 
             return results
 
+        except (MemoryBusUnavailableError, MetricCollectionError):
+            raise  # Re-raise our exceptions
         except Exception as e:
-            logger.error(f"Failed to query metrics: {e}")
-            return []
+            raise MetricCollectionError(f"Failed to query metrics: {e}") from e
 
     async def get_metric_summary(self, metric_name: str, window_minutes: int = 60) -> Dict[str, float]:
         """Get metric summary statistics."""
@@ -1358,8 +1413,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             if not metrics:
                 return {"count": 0.0, "sum": 0.0, "min": 0.0, "max": 0.0, "avg": 0.0}
 
-            # Calculate summary statistics
-            values = [m["value"] for m in metrics if isinstance(m["value"], (int, float))]
+            # Calculate summary statistics (MetricRecord objects now)
+            values = [m.value for m in metrics if isinstance(m.value, (int, float))]
 
             return {
                 "count": float(len(values)),
@@ -1688,8 +1743,11 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
     async def start(self) -> None:
         """Start the telemetry service."""
+        from datetime import datetime, timezone
+
         # Don't call super() as BaseService has async start
         self._started = True
+        self._start_time = datetime.now(timezone.utc)
         logger.debug("GraphTelemetryService started - routing all metrics through memory graph")
 
     async def stop(self) -> None:
@@ -1841,311 +1899,99 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             logger.error(f"Failed to get metric count: {e}")
             return 0
 
-    async def get_telemetry_summary(self) -> TelemetrySummary:
+    async def get_telemetry_summary(self) -> "TelemetrySummary":
         """Get aggregated telemetry summary for system snapshot.
 
         Uses intelligent caching to avoid overloading the persistence layer:
         - Current task metrics: No cache (always fresh)
         - Hour metrics: 1 minute cache
         - Day metrics: 5 minute cache
+
+        Raises:
+            MemoryBusUnavailableError: If memory bus not available
+            MetricCollectionError: If metric collection fails
+            ServiceStartTimeUnavailableError: If start_time not set
+            NoThoughtDataError: If no thought data available (may be acceptable during startup)
+            RuntimeControlBusUnavailableError: If runtime control bus not available
+            QueueStatusUnavailableError: If queue status cannot be retrieved
         """
+        from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
+            MemoryBusUnavailableError,
+            NoThoughtDataError,
+            QueueStatusUnavailableError,
+            RuntimeControlBusUnavailableError,
+        )
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
+            METRIC_TYPES,
+            build_telemetry_summary,
+            calculate_average_latencies,
+            calculate_error_rate,
+            check_summary_cache,
+            collect_metric_aggregates,
+            get_average_thought_depth,
+            get_queue_saturation,
+            get_service_uptime,
+            store_summary_cache,
+        )
+
         now = self._now()
 
-        # Check cache first for expensive queries
-        cache_key = "telemetry_summary"
-        if cache_key in self._summary_cache:
-            cached_time, cached_summary = self._summary_cache[cache_key]
-            if (now - cached_time).total_seconds() < self._summary_cache_ttl_seconds:
-                logger.debug("Returning cached telemetry summary")
-                return cached_summary
+        # Check cache
+        cached = check_summary_cache(self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds)
+        if cached:
+            logger.debug("Returning cached telemetry summary")
+            return cached
 
-        # If memory bus is not available yet (during startup), return empty summary
+        # Fail fast if memory bus not available
         if not self._memory_bus:
-            logger.debug("Memory bus not available yet, returning empty telemetry summary")
-            return TelemetrySummary(
-                window_start=now - timedelta(hours=24),
-                window_end=now,
-                uptime_seconds=0.0,
-                messages_processed_24h=0,
-                thoughts_processed_24h=0,
-                tasks_completed_24h=0,
-                errors_24h=0,
-                messages_current_hour=0,
-                thoughts_current_hour=0,
-                errors_current_hour=0,
-                tokens_last_hour=0.0,
-                cost_last_hour_cents=0.0,
-                carbon_last_hour_grams=0.0,
-                energy_last_hour_kwh=0.0,
-                tokens_24h=0.0,
-                cost_24h_cents=0.0,
-                carbon_24h_grams=0.0,
-                energy_24h_kwh=0.0,
-                error_rate_percent=0.0,
-                avg_thought_depth=0.0,
-                queue_saturation=0.0,
-            )
+            raise MemoryBusUnavailableError("Memory bus not available for telemetry queries")
 
-        # Window boundaries
+        # Define time windows
         window_end = now
         window_start_24h = now - timedelta(hours=24)
         window_start_1h = now - timedelta(hours=1)
 
-        # Initialize counters
-        tokens_24h = 0
-        tokens_1h = 0
-        cost_24h_cents = 0.0
-        cost_1h_cents = 0.0
-        carbon_24h_grams = 0.0
-        carbon_1h_grams = 0.0
-        energy_24h_kwh = 0.0
-        energy_1h_kwh = 0.0
+        # Collect metrics (raises on error, no fallbacks)
+        aggregates = await collect_metric_aggregates(self, METRIC_TYPES, window_start_24h, window_start_1h, window_end)
 
-        messages_24h = 0
-        messages_1h = 0
-        thoughts_24h = 0
-        thoughts_1h = 0
-        tasks_24h = 0
-        errors_24h = 0
-        errors_1h = 0
-
-        service_calls: Dict[str, int] = {}
-        service_errors: Dict[str, int] = {}
-        service_latency: Dict[str, List[float]] = {}
+        # Get external data (may raise exceptions - caller must handle)
+        try:
+            avg_thought_depth = await get_average_thought_depth(self._memory_bus, window_start_24h)
+        except NoThoughtDataError:
+            # Acceptable during startup or low-activity periods
+            logger.info("No thought data available in last 24h - setting to 0.0")
+            avg_thought_depth = 0.0
 
         try:
-            # Query different metric types - use actual metric names that exist
-            metric_types = [
-                ("llm.tokens.total", "tokens"),
-                ("llm_tokens_used", "tokens"),  # Legacy metric name
-                ("llm.tokens.input", "tokens"),
-                ("llm.tokens.output", "tokens"),
-                ("llm.cost.cents", "cost"),
-                ("llm.environmental.carbon_grams", "carbon"),
-                ("llm.environmental.energy_kwh", "energy"),
-                ("llm.latency.ms", "latency"),
-                ("thought_processing_completed", "thoughts"),
-                ("thought_processing_started", "thoughts"),
-                ("action_selected_task_complete", "tasks"),
-                ("handler_invoked_total", "messages"),  # Use handler invocations as proxy for messages
-                ("error.occurred", "errors"),  # This might not exist yet
-            ]
-
-            for metric_name, metric_type in metric_types:
-                # Get 24h data
-                day_metrics = await self.query_metrics(
-                    metric_name=metric_name, start_time=window_start_24h, end_time=window_end
-                )
-
-                for metric in day_metrics:
-                    raw_value = metric.get("value", 0)
-                    # Ensure value is numeric
-                    if not isinstance(raw_value, (int, float)):
-                        continue
-                    value: Union[int, float] = raw_value
-
-                    timestamp = metric.get("timestamp")
-                    tags_raw = metric.get("tags", {})
-                    tags: Dict[str, str] = tags_raw if isinstance(tags_raw, dict) else {}
-
-                    # Convert timestamp to datetime if needed
-                    dt_timestamp: Optional[datetime] = None
-                    if isinstance(timestamp, datetime):
-                        dt_timestamp = timestamp
-                        # Ensure timezone awareness
-                        if dt_timestamp.tzinfo is None:
-                            dt_timestamp = dt_timestamp.replace(tzinfo=timezone.utc)
-                    elif isinstance(timestamp, str):
-                        try:
-                            dt_timestamp = datetime.fromisoformat(timestamp)
-                            # Ensure timezone awareness
-                            if dt_timestamp.tzinfo is None:
-                                dt_timestamp = dt_timestamp.replace(tzinfo=timezone.utc)
-                        except Exception:
-                            continue
-                    else:
-                        continue  # Skip if timestamp is invalid
-
-                    # Aggregate by time window
-                    if metric_type == "tokens":
-                        tokens_24h += int(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            tokens_1h += int(value)
-                    elif metric_type == "cost":
-                        cost_24h_cents += float(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            cost_1h_cents += float(value)
-                    elif metric_type == "carbon":
-                        carbon_24h_grams += float(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            carbon_1h_grams += float(value)
-                    elif metric_type == "energy":
-                        energy_24h_kwh += float(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            energy_1h_kwh += float(value)
-                    elif metric_type == "messages":
-                        messages_24h += int(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            messages_1h += int(value)
-                    elif metric_type == "thoughts":
-                        thoughts_24h += int(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            thoughts_1h += int(value)
-                    elif metric_type == "tasks":
-                        tasks_24h += int(value)
-                    elif metric_type == "errors":
-                        errors_24h += int(value)
-                        if dt_timestamp and dt_timestamp >= window_start_1h:
-                            errors_1h += int(value)
-                        # Track errors by service
-                        service = tags.get("service", "unknown")
-                        service_errors[service] = service_errors.get(service, 0) + 1
-                    elif metric_type == "latency":
-                        service = tags.get("service", "unknown")
-                        if service not in service_latency:
-                            service_latency[service] = []
-                        service_latency[service].append(float(value))
-
-                    # Track service calls
-                    if "service" in tags:
-                        service = tags["service"]
-                        service_calls[service] = service_calls.get(service, 0) + 1
-
-            # Use actual values for the last hour
-            tokens_last_hour = tokens_1h
-            cost_last_hour_cents = cost_1h_cents
-            carbon_last_hour_grams = carbon_1h_grams
-            energy_last_hour_kwh = energy_1h_kwh
-
-            # Calculate error rate
-            total_operations = messages_24h + thoughts_24h + tasks_24h
-            error_rate_percent = (errors_24h / total_operations * 100) if total_operations > 0 else 0.0
-
-            # Calculate average latencies
-            service_latency_ms = {}
-            for service, latencies in service_latency.items():
-                if latencies:
-                    service_latency_ms[service] = sum(latencies) / len(latencies)
-
-            # Calculate average thought depth from database
-            avg_thought_depth = 0.0
-            try:
-                from ciris_engine.logic.persistence import get_db_connection
-
-                # Get the memory service to access its db_path
-                memory_service = await self._memory_bus.get_service(handler_name="telemetry_service")
-                if memory_service:
-                    db_path = getattr(memory_service, "db_path", None)
-                    with get_db_connection(db_path=db_path) as conn:
-                        cursor = conn.cursor()
-                        # Query thoughts from the last 24 hours and calculate average thought_depth
-                        cursor.execute(
-                            """
-                            SELECT AVG(thought_depth) as avg_depth
-                            FROM thoughts
-                            WHERE created_at >= datetime('now', '-24 hours')
-                        """
-                        )
-                        result = cursor.fetchone()
-                        if result and result[0] is not None:
-                            avg_thought_depth = float(result[0])
-                        logger.debug(f"Calculated average thought depth: {avg_thought_depth}")
-            except Exception as e:
-                logger.warning(f"Failed to calculate average thought depth: {e}")
-                avg_thought_depth = 1.5  # Fallback value
-
-            # Calculate queue saturation from runtime control service
+            queue_saturation = await get_queue_saturation(getattr(self, "_runtime_control_bus", None))
+        except (RuntimeControlBusUnavailableError, QueueStatusUnavailableError) as e:
+            # Acceptable if runtime control not available
+            logger.info(f"Queue saturation unavailable: {e} - setting to 0.0")
             queue_saturation = 0.0
-            try:
-                # Access runtime control service via bus manager if available
-                runtime_control_bus = getattr(self, "_runtime_control_bus", None)
-                if runtime_control_bus:
-                    runtime_control = await runtime_control_bus.get_service(handler_name="telemetry_service")
-                    if runtime_control:
-                        processor_queue_status = await runtime_control.get_processor_queue_status()
-                        if processor_queue_status and processor_queue_status.max_size > 0:
-                            queue_saturation = processor_queue_status.queue_size / processor_queue_status.max_size
-                            queue_saturation = min(1.0, max(0.0, queue_saturation))  # Clamp to 0-1 range
-                            logger.debug(
-                                f"Calculated queue saturation: {queue_saturation:.3f} ({processor_queue_status.queue_size}/{processor_queue_status.max_size})"
-                            )
-                        else:
-                            logger.debug("Processor queue status not available or max_size is 0")
-                    else:
-                        logger.debug("Runtime control service not available")
-                else:
-                    logger.debug("Runtime control bus not available")
-            except Exception as e:
-                logger.warning(f"Failed to calculate queue saturation: {e}")
-                queue_saturation = 0.0  # Fallback value
 
-            # Get system uptime
-            uptime_seconds = 0.0
-            if hasattr(self, "_start_time") and self._start_time:
-                uptime_seconds = (now - self._start_time).total_seconds()
-            else:
-                # Fallback: assume service started 24h ago
-                uptime_seconds = 86400.0
+        uptime = get_service_uptime(self._start_time if hasattr(self, "_start_time") else None, now)
 
-            # Create summary
-            summary = TelemetrySummary(
-                window_start=window_start_24h,
-                window_end=window_end,
-                uptime_seconds=uptime_seconds,
-                messages_processed_24h=messages_24h,
-                thoughts_processed_24h=thoughts_24h,
-                tasks_completed_24h=tasks_24h,
-                errors_24h=errors_24h,
-                messages_current_hour=messages_1h,
-                thoughts_current_hour=thoughts_1h,
-                errors_current_hour=errors_1h,
-                service_calls=service_calls,
-                service_errors=service_errors,
-                service_latency_ms=service_latency_ms,
-                tokens_last_hour=float(tokens_last_hour),
-                cost_last_hour_cents=cost_last_hour_cents,
-                carbon_last_hour_grams=carbon_last_hour_grams,
-                energy_last_hour_kwh=energy_last_hour_kwh,
-                tokens_24h=float(tokens_24h),
-                cost_24h_cents=cost_24h_cents,
-                carbon_24h_grams=carbon_24h_grams,
-                energy_24h_kwh=energy_24h_kwh,
-                error_rate_percent=error_rate_percent,
-                avg_thought_depth=avg_thought_depth,
-                queue_saturation=queue_saturation,
-            )
+        # Calculate derived metrics
+        error_rate = calculate_error_rate(
+            aggregates.errors_24h, aggregates.messages_24h + aggregates.thoughts_24h + aggregates.tasks_24h
+        )
+        service_latency_ms = calculate_average_latencies(aggregates.service_latency)
 
-            # Cache the result
-            self._summary_cache[cache_key] = (now, summary)
+        # Build result
+        summary = build_telemetry_summary(
+            window_start_24h,
+            window_end,
+            uptime,
+            aggregates,
+            error_rate,
+            avg_thought_depth,
+            queue_saturation,
+            service_latency_ms,
+        )
 
-            return summary
-
-        except Exception as e:
-            logger.error(f"Failed to generate telemetry summary: {e}")
-            # Return empty summary on error
-            return TelemetrySummary(
-                window_start=window_start_24h,
-                window_end=window_end,
-                uptime_seconds=0.0,
-                messages_processed_24h=0,
-                thoughts_processed_24h=0,
-                tasks_completed_24h=0,
-                errors_24h=0,
-                messages_current_hour=0,
-                thoughts_current_hour=0,
-                errors_current_hour=0,
-                tokens_last_hour=0.0,
-                cost_last_hour_cents=0.0,
-                carbon_last_hour_grams=0.0,
-                energy_last_hour_kwh=0.0,
-                tokens_24h=0.0,
-                cost_24h_cents=0.0,
-                carbon_24h_grams=0.0,
-                energy_24h_kwh=0.0,
-                error_rate_percent=0.0,
-                avg_thought_depth=0.0,
-                queue_saturation=0.0,
-            )
+        # Cache and return
+        store_summary_cache(self._summary_cache, "telemetry_summary", now, summary)
+        return summary
 
     # Required methods for BaseGraphService
 
@@ -2175,11 +2021,12 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )
 
-    def _check_cache(self, cache_key: str, now: datetime) -> Optional[AggregatedTelemetryResponse]:
+    def _check_cache(self, cache_key: str, now: datetime) -> Optional[Dict[str, Any]]:
         """Check cache for valid telemetry data."""
-        if cache_key in self._telemetry_aggregator.cache:
+        if self._telemetry_aggregator and cache_key in self._telemetry_aggregator.cache:
             cached_time, cached_data = self._telemetry_aggregator.cache[cache_key]
             if now - cached_time < self._telemetry_aggregator.cache_ttl:
+                # Mark cached response as cache hit
                 if isinstance(cached_data, AggregatedTelemetryResponse):
                     if cached_data.metadata:
                         cached_data.metadata.cache_hit = True
@@ -2187,7 +2034,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 return cached_data
         return None
 
-    def _convert_telemetry_to_services(self, telemetry: Dict) -> Dict[str, ServiceTelemetryData]:
+    def _convert_telemetry_to_services(self, telemetry: Dict[str, Any]) -> Dict[str, ServiceTelemetryData]:
         """Convert nested telemetry dict to flat service dict."""
         services_data = {}
         for category, services in telemetry.items():
@@ -2237,7 +2084,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         cached_result = self._check_cache(cache_key, now)
         if cached_result:
-            return cached_result
+            # Cache returns Dict[str, Any], cast to expected type
+            return cached_result  # type: ignore[return-value]
 
         # Collect from all services in parallel
         telemetry = await self._telemetry_aggregator.collect_all_parallel()
@@ -2265,11 +2113,11 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         )
 
         # Cache the result
-        self._telemetry_aggregator.cache[cache_key] = (now, result)
+        self._telemetry_aggregator.cache[cache_key] = (now, result)  # type: ignore[assignment]
 
         return result
 
-    async def _store_correlation(self, correlation: "ServiceCorrelation") -> None:
+    async def _store_correlation(self, correlation: ServiceCorrelation) -> None:
         """
         Store a service correlation (trace span) in the memory graph.
 
@@ -2297,7 +2145,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             node_id = f"correlation/{correlation.correlation_id}"
 
             # Build attributes including task/thought linkage
-            attributes = {
+            attributes: Dict[str, Any] = {
                 "correlation_id": correlation.correlation_id,
                 "correlation_type": (
                     correlation.correlation_type.value

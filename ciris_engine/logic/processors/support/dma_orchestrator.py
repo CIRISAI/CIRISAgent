@@ -66,10 +66,14 @@ class DMAOrchestrator:
         dsdma_context: Optional[DMAMetadata] = None,
     ) -> InitialDMAResults:
         """
-        Run EthicalPDMA, CSDMA, and DSDMA in parallel (async). Returns a dict with results or escalates on error.
+        Run EthicalPDMA, CSDMA, and DSDMA in parallel (async). All 3 DMA results are required.
         """
         logger.info(f"[DEBUG TIMING] run_initial_dmas START for thought {thought_item.thought_id}")
-        results = InitialDMAResults()
+
+        # FAIL FAST: All 3 DMAs are required
+        if not self.dsdma:
+            raise RuntimeError("DSDMA is not configured - all 3 DMA results (ethical_pdma, csdma, dsdma) are required")
+
         errors = DMAErrors()
         tasks = {
             "ethical_pdma": asyncio.create_task(
@@ -93,9 +97,7 @@ class DMAOrchestrator:
                     time_service=self.time_service,
                 )
             ),
-        }
-        if self.dsdma:
-            tasks["dsdma"] = asyncio.create_task(
+            "dsdma": asyncio.create_task(
                 run_dma_with_retries(
                     run_dsdma,
                     self.dsdma,
@@ -105,19 +107,14 @@ class DMAOrchestrator:
                     timeout_seconds=self.timeout_seconds,
                     time_service=self.time_service,
                 )
-            )
-        else:
-            results.dsdma = None
+            ),
+        }
 
+        # Collect results - must get ALL 3
+        dma_results = {}
         for name, task in tasks.items():
             try:
-                result = await task
-                if name == "ethical_pdma":
-                    results.ethical_pdma = result
-                elif name == "csdma":
-                    results.csdma = result
-                elif name == "dsdma":
-                    results.dsdma = result
+                dma_results[name] = await task
             except Exception as e:
                 logger.error(f"DMA '{name}' failed: {e}", exc_info=True)
                 error = DMAError(dma_name=name, error_message=str(e), error_type=type(e).__name__)
@@ -130,7 +127,13 @@ class DMAOrchestrator:
 
         if errors.has_errors():
             raise Exception(f"DMA(s) failed: {errors.get_error_summary()}")
-        return results
+
+        # Create InitialDMAResults with all 3 required fields
+        return InitialDMAResults(
+            ethical_pdma=dma_results["ethical_pdma"],
+            csdma=dma_results["csdma"],
+            dsdma=dma_results["dsdma"],
+        )
 
     async def run_dmas(
         self,
@@ -143,7 +146,7 @@ class DMAOrchestrator:
         from ciris_engine.schemas.processors.core import DMAResults
 
         results = DMAResults()
-        tasks: Dict[str, asyncio.Task] = {}
+        tasks: Dict[str, asyncio.Task[Any]] = {}
 
         # Ethical PDMA
         cb = self._circuit_breakers.get("ethical_pdma")
@@ -178,7 +181,7 @@ class DMAOrchestrator:
         else:
             results.errors.append("csdma circuit open")
 
-        # DSDMA (optional)
+        # DSDMA (required)
         if self.dsdma:
             cb = self._circuit_breakers.get("dsdma")
             if cb and cb.is_available():
@@ -196,7 +199,8 @@ class DMAOrchestrator:
             elif cb:
                 results.errors.append("dsdma circuit open")
         else:
-            results.dsdma = None
+            # FAIL FAST: All 3 DMA results are required
+            raise RuntimeError("DSDMA is not configured - all 3 DMA results (ethical_pdma, csdma, dsdma) are required")
 
         if tasks:
             task_results = await asyncio.gather(*tasks.values(), return_exceptions=True)

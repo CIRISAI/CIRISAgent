@@ -92,8 +92,8 @@ class TestDreamProcessor:
     @pytest.mark.asyncio
     async def test_can_process_dream_state(self, dream_processor):
         """Test that DreamProcessor can process DREAM state."""
-        assert dream_processor.can_process(AgentState.DREAM) is True
-        assert dream_processor.can_process(AgentState.WORK) is False
+        assert await dream_processor.can_process(AgentState.DREAM) is True
+        assert await dream_processor.can_process(AgentState.WORK) is False
 
     @pytest.mark.asyncio
     async def test_initialize(self, dream_processor):

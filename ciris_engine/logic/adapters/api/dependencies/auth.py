@@ -5,13 +5,21 @@ Provides role-based access control through dependency injection.
 """
 
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
-from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, UserRole
+from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, APIKeyInfo, AuthContext, UserInfo, UserRole
 
 from ..services.auth_service import APIAuthService
+
+__all__ = [
+    "AuthContext",
+    "get_auth_service",
+    "require_admin",
+    "require_observer",
+    "require_authenticated",
+]
 
 
 def get_auth_service(request: Request) -> APIAuthService:
@@ -89,7 +97,7 @@ async def _handle_password_auth(request: Request, auth_service: APIAuthService, 
     return context
 
 
-def _build_permissions_set(key_info, user) -> set:
+def _build_permissions_set(key_info: Any, user: Any) -> Set[Any]:
     """Build permissions set from role and custom permissions."""
     permissions = set(ROLE_PERMISSIONS.get(key_info.role, set()))
 
@@ -170,7 +178,7 @@ async def optional_auth(
         return None
 
 
-def require_role(minimum_role: UserRole) -> Callable:
+def require_role(minimum_role: UserRole) -> Callable[..., AuthContext]:
     """
     Factory for role-based access control dependencies.
 
@@ -197,6 +205,7 @@ def require_role(minimum_role: UserRole) -> Callable:
 
 
 # Convenience dependencies for common roles
+require_authenticated = get_auth_context  # Alias for basic authentication
 require_observer = require_role(UserRole.OBSERVER)
 require_admin = require_role(UserRole.ADMIN)
 require_authority = require_role(UserRole.AUTHORITY)
@@ -204,7 +213,7 @@ require_system_admin = require_role(UserRole.SYSTEM_ADMIN)
 require_service_account = require_role(UserRole.SERVICE_ACCOUNT)
 
 
-def check_permissions(permissions: list[str]) -> Callable:
+def check_permissions(permissions: list[str]) -> Callable[..., Any]:
     """
     Factory for permission-based access control dependencies.
 

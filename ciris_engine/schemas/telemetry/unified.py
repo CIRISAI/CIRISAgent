@@ -6,7 +6,7 @@ replacing Dict[str, Any] returns with proper Pydantic models.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -23,7 +23,7 @@ class MetricDataPoint(BaseModel):
     tags: Optional[Dict[str, str]] = Field(default_factory=dict, description="Metric tags")
 
     @field_serializer("timestamp")
-    def serialize_timestamp(self, timestamp: datetime, _info) -> str:
+    def serialize_timestamp(self, timestamp: datetime, _info: Any) -> str:
         return timestamp.isoformat()
 
 

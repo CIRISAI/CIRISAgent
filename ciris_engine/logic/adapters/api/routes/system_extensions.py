@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.core.runtime import (
     ProcessorQueueStatus,
@@ -25,7 +26,7 @@ from ..constants import (
     DESC_HUMAN_READABLE_STATUS,
     ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE,
 )
-from ..dependencies.auth import AuthContext, require_admin, require_observer
+from ..dependencies.auth import require_admin, require_observer
 
 router = APIRouter(prefix="/system", tags=["system-extensions"])
 logger = logging.getLogger(__name__)
@@ -130,7 +131,7 @@ class SingleStepResponse(RuntimeControlResponse):
 # Helper functions for single-step processor
 
 
-def _extract_cognitive_state(runtime) -> Optional[str]:
+def _extract_cognitive_state(runtime: Any) -> Optional[str]:
     """Extract cognitive state from runtime safely."""
     try:
         if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
@@ -142,7 +143,7 @@ def _extract_cognitive_state(runtime) -> Optional[str]:
     return None
 
 
-async def _get_queue_depth(runtime_control) -> int:
+async def _get_queue_depth(runtime_control: Any) -> int:
     """Get queue depth safely."""
     try:
         queue_status = await runtime_control.get_processor_queue_status()
@@ -152,7 +153,7 @@ async def _get_queue_depth(runtime_control) -> int:
         return 0
 
 
-def _get_pipeline_controller(runtime):
+def _get_pipeline_controller(runtime: Any) -> Any:
     """Safely extract pipeline controller from runtime."""
     if not runtime:
         return None
@@ -161,7 +162,7 @@ def _get_pipeline_controller(runtime):
     return runtime.pipeline_controller
 
 
-def _get_pipeline_state(pipeline_controller) -> Optional[Any]:
+def _get_pipeline_state(pipeline_controller: Any) -> Optional[Any]:
     """Get current pipeline state, returning None on error."""
     if not pipeline_controller:
         return None
@@ -172,7 +173,7 @@ def _get_pipeline_state(pipeline_controller) -> Optional[Any]:
         return None
 
 
-def _get_latest_step_data(pipeline_controller) -> tuple[Optional[Any], Optional[Dict[str, Any]]]:
+def _get_latest_step_data(pipeline_controller: Any) -> tuple[Optional[Any], Optional[Dict[str, Any]]]:
     """Extract step point and result from pipeline controller."""
     if not pipeline_controller:
         return None, None
@@ -192,7 +193,7 @@ def _get_latest_step_data(pipeline_controller) -> tuple[Optional[Any], Optional[
         return None, None
 
 
-def _get_processing_metrics(pipeline_controller) -> tuple[float, Optional[int]]:
+def _get_processing_metrics(pipeline_controller: Any) -> tuple[float, Optional[int]]:
     """Extract processing time and token usage from metrics."""
     if not pipeline_controller:
         return 0.0, None
@@ -211,7 +212,7 @@ def _get_processing_metrics(pipeline_controller) -> tuple[float, Optional[int]]:
 
 
 def _extract_pipeline_data(
-    runtime,
+    runtime: Any,
 ) -> tuple[Optional[Any], Optional[Dict[str, Any]], Optional[Any], float, Optional[int], Optional[Dict[str, Any]]]:
     """Extract pipeline state, step result, and processing metrics."""
     try:
@@ -227,7 +228,7 @@ def _extract_pipeline_data(
         return None, None, None, 0.0, None, None
 
 
-def _get_runtime_control_service_for_step(request: Request):
+def _get_runtime_control_service_for_step(request: Request) -> Any:
     """Get runtime control service for single step operations."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
@@ -237,7 +238,7 @@ def _get_runtime_control_service_for_step(request: Request):
     return runtime_control
 
 
-def _create_basic_response_data(result, cognitive_state: str, queue_depth: int) -> dict:
+def _create_basic_response_data(result: Any, cognitive_state: Optional[str], queue_depth: int) -> Dict[str, Any]:
     """Create basic response data for single step."""
     return {
         "success": result.success,
@@ -248,7 +249,7 @@ def _create_basic_response_data(result, cognitive_state: str, queue_depth: int) 
     }
 
 
-def _convert_step_point(result) -> Optional[Any]:
+def _convert_step_point(result: Any) -> Optional[Any]:
     """Convert step_point string to enum if needed."""
     from ciris_engine.schemas.services.runtime_control import StepPoint
 
@@ -261,7 +262,7 @@ def _convert_step_point(result) -> Optional[Any]:
         return None
 
 
-def _consolidate_step_results(result) -> Optional[dict]:
+def _consolidate_step_results(result: Any) -> Optional[Dict[str, Any]]:
     """Convert step_results list to consolidated step_result dict for API response."""
     if not (result.step_results and isinstance(result.step_results, list)):
         return None
@@ -291,7 +292,7 @@ def _consolidate_step_results(result) -> Optional[dict]:
 
 @router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
 async def single_step_processor(
-    request: Request, auth: AuthContext = Depends(require_admin), body: dict = Body(default={})
+    request: Request, auth: AuthContext = Depends(require_admin), body: Dict[str, Any] = Body(default={})
 ) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
@@ -513,7 +514,7 @@ class ProcessorStateInfo(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="What this state can do")
 
 
-def _get_current_state_name(runtime) -> Optional[str]:
+def _get_current_state_name(runtime: Any) -> Optional[str]:
     """Extract current state name from runtime."""
     if not hasattr(runtime.agent_processor, "state_manager") or not runtime.agent_processor.state_manager:
         return None
@@ -604,7 +605,7 @@ async def get_processor_states(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _determine_user_role(current_user: dict):
+def _determine_user_role(current_user: Dict[str, Any]) -> Any:
     """Determine user role from current_user dict."""
     from ciris_engine.schemas.api.auth import UserRole
 
@@ -617,7 +618,7 @@ def _determine_user_role(current_user: dict):
     return user_role
 
 
-async def _get_user_allowed_channel_ids(auth_service, user_id: str) -> set[str]:
+async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
     """Get set of channel IDs user is allowed to see (user_id + OAuth links)."""
     allowed_channel_ids = {user_id}
 
@@ -640,9 +641,9 @@ async def _get_user_allowed_channel_ids(auth_service, user_id: str) -> set[str]:
     return allowed_channel_ids
 
 
-async def _batch_fetch_task_channel_ids(auth_service, task_ids: list[str]) -> dict[str, str]:
+async def _batch_fetch_task_channel_ids(auth_service: Any, task_ids: List[str]) -> Dict[str, str]:
     """Batch fetch channel_ids for multiple task_ids."""
-    task_channel_map = {}
+    task_channel_map: Dict[str, str] = {}
     if not task_ids:
         return task_channel_map
 
@@ -662,8 +663,8 @@ async def _batch_fetch_task_channel_ids(auth_service, task_ids: list[str]) -> di
 
 
 def _filter_events_by_channel_access(
-    events: list, allowed_channel_ids: set[str], task_channel_cache: dict[str, str]
-) -> list:
+    events: List[Any], allowed_channel_ids: set[str], task_channel_cache: Dict[str, str]
+) -> List[Any]:
     """Filter events to only those the user can access based on channel_id whitelist."""
     filtered_events = []
     for event in events:
@@ -680,7 +681,7 @@ def _filter_events_by_channel_access(
 
 
 @router.get("/runtime/reasoning-stream")
-async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)):
+async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)) -> Any:
     """
     Stream live H3ERE reasoning steps as they occur.
 
@@ -722,14 +723,14 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
         allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
 
-    async def stream_reasoning_steps():
+    async def stream_reasoning_steps() -> Any:
         """Generate Server-Sent Events for live reasoning steps."""
         try:
             # Subscribe to the global reasoning event stream
             from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
             # Create a queue for this client
-            stream_queue = asyncio.Queue(maxsize=100)
+            stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
             reasoning_event_stream.subscribe(stream_queue)
 
             try:

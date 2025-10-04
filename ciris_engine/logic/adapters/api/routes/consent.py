@@ -5,7 +5,7 @@ Implements Consensual Evolution Protocol v0.2.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -106,10 +106,14 @@ def get_consent_manager(request: Request) -> ConsentService:
         time_service = TimeService()
         request.app.state.consent_manager = ConsentService(time_service=time_service)
 
-    return request.app.state.consent_manager
+    # Return the consent manager with explicit type
+    manager: ConsentService = request.app.state.consent_manager
+    return manager
 
 
-def _build_consent_dict(consent_status, user_id: str, status_filter: Optional[str] = None) -> dict:
+def _build_consent_dict(
+    consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Build consent dictionary - eliminates duplication.
 
@@ -121,7 +125,8 @@ def _build_consent_dict(consent_status, user_id: str, status_filter: Optional[st
     Returns:
         Consent dictionary
     """
-    is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]
+    # TEMPORARY and PARTNERED are the active streams
+    is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PARTNERED]
 
     # Determine status
     if status_filter == "ACTIVE":
@@ -145,7 +150,7 @@ def _build_consent_dict(consent_status, user_id: str, status_filter: Optional[st
 async def get_consent_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> dict:
+) -> Dict[str, Any]:
     """
     Get current consent status for authenticated user.
 
@@ -159,7 +164,9 @@ async def get_consent_status(
             "user_id": user_id,
             "stream": consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
             "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
-            "expires_at": consent.expires_at.isoformat() if hasattr(consent, "expires_at") else None,
+            "expires_at": (
+                consent.expires_at.isoformat() if hasattr(consent, "expires_at") and consent.expires_at else None
+            ),
         }
     except ConsentNotFoundError:
         # No consent exists yet - user hasn't interacted
@@ -176,7 +183,7 @@ async def query_consents(
     user_id: Optional[str] = None,
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> dict:
+) -> Dict[str, Any]:
     """
     Query consent records with optional filters.
 
@@ -198,7 +205,8 @@ async def query_consents(
     # Get user's consent status
     try:
         consent_status = await manager.get_consent(user_id)
-        is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PERSISTENT]
+        # TEMPORARY and PARTNERED are the active streams
+        is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PARTNERED]
 
         # Filter by status if requested
         if status == "ACTIVE" and not is_active:
@@ -322,8 +330,8 @@ async def get_audit_trail(
     return await manager.get_audit_trail(user_id, limit)
 
 
-@router.get("/streams", response_model=dict)
-async def get_consent_streams() -> dict:
+@router.get("/streams", response_model=Dict[str, Any])
+async def get_consent_streams() -> Dict[str, Any]:
     """
     Get available consent streams and their descriptions.
     """
@@ -333,8 +341,8 @@ async def get_consent_streams() -> dict:
     }
 
 
-@router.get("/categories", response_model=dict)
-async def get_consent_categories() -> dict:
+@router.get("/categories", response_model=Dict[str, Any])
+async def get_consent_categories() -> Dict[str, Any]:
     """
     Get available consent categories for PARTNERED stream.
     """
@@ -343,11 +351,11 @@ async def get_consent_categories() -> dict:
     }
 
 
-@router.get("/partnership/status", response_model=dict)
+@router.get("/partnership/status", response_model=Dict[str, Any])
 async def check_partnership_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> dict:
+) -> Dict[str, Any]:
     """
     Check status of pending partnership request.
 
@@ -377,11 +385,11 @@ async def check_partnership_status(
     return response
 
 
-@router.post("/cleanup", response_model=dict)
+@router.post("/cleanup", response_model=Dict[str, Any])
 async def cleanup_expired(
     _auth: AuthContext = Depends(require_observer),
     manager: ConsentService = Depends(get_consent_manager),
-) -> dict:
+) -> Dict[str, Any]:
     """
     Clean up expired TEMPORARY consents (admin only).
 

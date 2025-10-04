@@ -23,7 +23,7 @@ class ConfigBootstrap:
     """Load essential config from multiple sources in priority order."""
 
     @staticmethod
-    def _deep_merge(base: dict, update: dict) -> dict:
+    def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
         """Recursively merge two dictionaries."""
         for key, value in update.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
@@ -33,7 +33,7 @@ class ConfigBootstrap:
         return base
 
     @staticmethod
-    def _apply_env_overrides(config_data: dict) -> dict:
+    def _apply_env_overrides(config_data: Dict[str, Any]) -> Dict[str, Any]:
         """Apply environment variable overrides to config data."""
         # Database paths
         db_path = get_env_var("CIRIS_DB_PATH")

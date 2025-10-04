@@ -6,9 +6,11 @@ This is the single source of truth for all tool-related schemas.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class ToolExecutionStatus(str, Enum):
@@ -25,7 +27,7 @@ class ToolParameterSchema(BaseModel):
     """Schema definition for tool parameters."""
 
     type: str = Field(..., description="JSON Schema type")
-    properties: Dict[str, Any] = Field(..., description="Parameter properties")
+    properties: JSONDict = Field(..., description="Parameter properties")
     required: List[str] = Field(default_factory=list, description="Required parameters")
 
     model_config = ConfigDict(extra="forbid")
@@ -48,7 +50,7 @@ class ToolResult(BaseModel):
     """Result from tool execution."""
 
     success: bool = Field(..., description="Whether execution succeeded")
-    data: Optional[Dict[str, Any]] = Field(None, description="Result data")
+    data: Optional[JSONDict] = Field(None, description="Result data")
     error: Optional[str] = Field(None, description="Error message if failed")
 
     model_config = ConfigDict(extra="forbid")
@@ -60,7 +62,7 @@ class ToolExecutionResult(BaseModel):
     tool_name: str = Field(..., description="Name of executed tool")
     status: ToolExecutionStatus = Field(..., description="Execution status")
     success: bool = Field(..., description="Whether execution succeeded")
-    data: Optional[Dict[str, Any]] = Field(None, description="Result data")
+    data: Optional[JSONDict] = Field(None, description="Result data")
     error: Optional[str] = Field(None, description="Error message if failed")
     correlation_id: str = Field(..., description="Correlation ID for tracking")
 

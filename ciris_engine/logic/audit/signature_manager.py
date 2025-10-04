@@ -11,7 +11,7 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -287,7 +287,7 @@ class AuditSignatureManager:
         except sqlite3.Error as e:
             logger.error(f"Failed to revoke key {key_id}: {e}")
 
-    def get_key_info(self) -> dict:
+    def get_key_info(self) -> Dict[str, Any]:
         """Get information about the current signing key"""
         if not self._key_id:
             return {"error": "Not initialized"}

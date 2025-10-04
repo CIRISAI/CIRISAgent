@@ -12,6 +12,7 @@ from pydantic import Field
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
+from ciris_engine.schemas.types import NodeAttributes
 
 
 @register_node_type("TRACE_SUMMARY")
@@ -32,7 +33,7 @@ class TraceSummaryNode(TypedGraphNode):
     total_tasks_processed: int = Field(0, description="Total tasks processed")
     tasks_by_status: Dict[str, int] = Field(default_factory=dict, description="Task count by final status")
     unique_task_ids: Set[str] = Field(default_factory=set, description="Set of unique task IDs processed")
-    task_summaries: Dict[str, Dict[str, Any]] = Field(
+    task_summaries: Dict[str, NodeAttributes] = Field(
         default_factory=dict, description="Elegant task summaries showing handler selections per thought"
     )
 
@@ -89,7 +90,7 @@ class TraceSummaryNode(TypedGraphNode):
     scope: GraphScope = Field(default=GraphScope.LOCAL)
     id: str = Field(..., description="Node ID")
     version: int = Field(default=1)
-    attributes: Union[Dict[str, Any], Any] = Field(default_factory=dict, description="Node attributes")
+    attributes: NodeAttributes = Field(default_factory=dict, description="Node attributes")
 
     def to_graph_node(self) -> GraphNode:
         """Convert to GraphNode for storage."""

@@ -1,6 +1,6 @@
 import inspect
 import logging
-from typing import Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
@@ -22,8 +22,8 @@ class ActionDispatcher:
         self,
         handlers: Dict[HandlerActionType, BaseActionHandler],
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
-        time_service=None,
-        audit_service=None,
+        time_service: Any = None,
+        audit_service: Any = None,
     ) -> None:
         """
         Initializes the ActionDispatcher with a map of action types to their handler instances.
@@ -35,7 +35,9 @@ class ActionDispatcher:
             audit_service: Optional audit service for centralized action auditing.
         """
         self.handlers: Dict[HandlerActionType, BaseActionHandler] = handlers
-        self.action_filter: Optional[Callable[[ActionSelectionDMAResult, dict], Awaitable[bool] | bool]] = None
+        self.action_filter: Optional[Callable[[ActionSelectionDMAResult, Dict[str, Any]], Awaitable[bool] | bool]] = (
+            None
+        )
         self.telemetry_service = telemetry_service
         self._time_service = time_service
         self.audit_service = audit_service
@@ -45,7 +47,7 @@ class ActionDispatcher:
             from datetime import datetime
 
             class SimpleTimeService:
-                def now(self):
+                def now(self) -> datetime:
                     return datetime.now()
 
             self._time_service = SimpleTimeService()
@@ -61,7 +63,9 @@ class ActionDispatcher:
 
     @streaming_step(StepPoint.PERFORM_ACTION)
     @step_point(StepPoint.PERFORM_ACTION)
-    async def _perform_action_step(self, thought_item: ProcessingQueueItem, result, context: dict):
+    async def _perform_action_step(
+        self, thought_item: ProcessingQueueItem, result: Any, context: Dict[str, Any]
+    ) -> Any:
         """Step 9: Dispatch action to handler - streaming decorator for visibility."""
         # This is a pass-through that just enables streaming
         # The actual dispatch happens in the dispatch method
@@ -69,7 +73,7 @@ class ActionDispatcher:
 
     @streaming_step(StepPoint.ACTION_COMPLETE)
     @step_point(StepPoint.ACTION_COMPLETE)
-    async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result):
+    async def _action_complete_step(self, thought_item: ProcessingQueueItem, dispatch_result: Any) -> Any:
         """Step 10: Action execution completed - streaming decorator for visibility."""
         # This marks the completion of action execution
         return dispatch_result

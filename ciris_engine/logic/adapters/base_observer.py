@@ -1,7 +1,9 @@
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, cast
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from pydantic import BaseModel
 
@@ -13,10 +15,12 @@ from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
+from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -89,15 +93,13 @@ def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] 
     Returns:
         Content with mentions formatted as <@123456789> (username: UserName)
     """
-    import re
-
     if not user_lookup:
         return content
 
     # Pattern to match Discord mentions: <@USER_ID> or <@!USER_ID>
     mention_pattern = r"<@!?(\d+)>"
 
-    def replace_mention(match):
+    def replace_mention(match: re.Match[str]) -> str:
         user_id = match.group(1)
         username = user_lookup.get(user_id, "Unknown")
         return f"{match.group(0)} (username: {username})"
@@ -110,7 +112,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     def __init__(
         self,
-        on_observe: Callable[[dict], Awaitable[None]],
+        on_observe: Callable[[JSONDict], Awaitable[None]],
         bus_manager: Optional[BusManager] = None,
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
@@ -237,7 +239,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
         )
 
-    def _create_history_entry(self, msg, protected_content: str, is_agent_message: bool) -> Dict[str, Any]:
+    def _create_history_entry(self, msg: MessageT, protected_content: str, is_agent_message: bool) -> JSONDict:
         """Create a history entry from a message."""
         return {
             "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
@@ -247,7 +249,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             "is_agent": is_agent_message,
         }
 
-    async def _fetch_messages_from_bus(self, channel_id: str, limit: int):
+    async def _fetch_messages_from_bus(self, channel_id: str, limit: int) -> List[Any]:
         """Fetch messages from communication bus."""
         if not self.bus_manager or not hasattr(self.bus_manager, "communication"):
             logger.warning("No communication bus available for channel history")
@@ -255,7 +257,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         return await self.bus_manager.communication.fetch_messages(channel_id, limit, "DiscordAdapter")
 
-    async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[Dict[str, Any]]:
+    async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[JSONDict]:
         """Get message history from channel using communication bus."""
         if not self.bus_manager:
             logger.warning("No bus manager available for channel history")
@@ -381,30 +383,31 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         persistence.add_task(task)
 
-    def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[Dict]) -> Dict[str, str]:
+    def _build_user_lookup_from_history(self, msg: MessageT, history_context: List[JSONDict]) -> Dict[str, str]:
         """Build a user lookup dictionary for mention resolution."""
-        user_lookup = {}
+        user_lookup: Dict[str, str] = {}
 
         # Add users from history
         for hist_msg in history_context:
             aid = hist_msg.get("author_id")
             aname = hist_msg.get("author")
-            if aid and aname:
+            if aid and aname and isinstance(aname, str):
                 user_lookup[str(aid)] = aname
 
         # Add current message author
         if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-            user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+            user_lookup[str(msg.author_id)] = msg.author_name
 
         return user_lookup
 
-    def _format_history_lines(self, history_context: List[Dict], user_lookup: Dict[str, str]) -> List[str]:
+    def _format_history_lines(self, history_context: List[JSONDict], user_lookup: Dict[str, str]) -> List[str]:
         """Format conversation history lines with mentions."""
         lines = []
         for i, hist_msg in enumerate(history_context, 1):
             author = hist_msg.get("author", "Unknown")
             author_id = hist_msg.get("author_id", "unknown")
-            content = hist_msg.get("content", "")
+            content_raw = hist_msg.get("content", "")
+            content = str(content_raw) if content_raw is not None else ""
 
             # Format mentions in content to include usernames
             content = format_discord_mentions(content, user_lookup)
@@ -413,7 +416,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         return lines
 
     async def _add_custom_context_sections(
-        self, task_lines: List[str], msg: MessageT, history_context: List[Dict]
+        self, task_lines: List[str], msg: MessageT, history_context: List[JSONDict]
     ) -> None:
         """Extension point for subclasses to add custom context sections.
 
@@ -479,7 +482,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
     async def _create_passive_observation_result(
         self, msg: MessageT, priority: int = 0, filter_result: Optional[Any] = None
-    ) -> None:
+    ) -> Optional[PassiveObservationResult]:
+        """
+        Create passive observation result (task + thought).
+
+        Returns:
+            Optional[PassiveObservationResult]: Result with task_id and metadata, None on error
+        """
         try:
             import uuid
             from datetime import datetime, timezone
@@ -504,7 +513,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             # Format mentions for task description
             passive_task_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                passive_task_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+                passive_task_lookup[str(msg.author_id)] = msg.author_name
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
             # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel
@@ -524,7 +533,12 @@ class BaseObserver[MessageT: BaseModel](ABC):
                         f"with new observation from @{msg.author_name} in channel {channel_id}"  # type: ignore[attr-defined]
                     )
                     # Don't create a new task - the existing task will see the update via UpdatedStatusConscience
-                    return
+                    # Return result for existing task update
+                    return PassiveObservationResult(
+                        task_id=existing_task.task_id,
+                        task_created=False,
+                        existing_task_updated=True,
+                    )
                 else:
                     logger.info(
                         f"[OBSERVER] Task {existing_task.task_id} already committed to action, creating new task"
@@ -564,7 +578,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             # Build user lookup for the current message
             initial_user_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                initial_user_lookup[str(msg.author_id)] = msg.author_name  # type: ignore[attr-defined]
+                initial_user_lookup[str(msg.author_id)] = msg.author_name
             formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
             # Build thought content based on priority vs passive
             if filter_result and priority > 0:
@@ -596,7 +610,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             )
 
             # Handle consent-aware content formatting
-            await self._append_consent_aware_content(task_lines, msg, user_lookup)  # type: ignore[attr-defined]
+            await self._append_consent_aware_content(task_lines, msg, user_lookup)
 
             task_content = "\n".join(task_lines)
 
@@ -634,29 +648,56 @@ class BaseObserver[MessageT: BaseModel](ABC):
             persistence.add_thought(thought)
             logger.info(f"Created task {task.task_id} for: {getattr(msg, 'content', 'unknown')[:50]}...")
 
+            # Return result for new task creation
+            return PassiveObservationResult(
+                task_id=task.task_id,
+                task_created=True,
+                thought_id=thought.thought_id,
+                existing_task_updated=False,
+            )
+
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error creating observation task: %s", e, exc_info=True)
+            return None
 
-    async def _create_priority_observation_result(self, msg: MessageT, filter_result: Any) -> None:
-        """Create priority observation by delegating to passive observation with higher priority."""
+    async def _create_priority_observation_result(
+        self, msg: MessageT, filter_result: Any
+    ) -> Optional[PassiveObservationResult]:
+        """
+        Create priority observation by delegating to passive observation with higher priority.
+
+        Returns:
+            Optional[PassiveObservationResult]: Result with task_id and metadata, None on error
+        """
         try:
             # Determine priority based on filter result
             task_priority = 10 if getattr(filter_result.priority, "value", "") == "critical" else 5
 
             # Delegate to passive observation with priority and filter information
-            await self._create_passive_observation_result(msg, priority=task_priority, filter_result=filter_result)
-
-            logger.info(
-                f"[OBSERVER] PRIORITY OBSERVATION: Message {msg.message_id} from @{msg.author_name} "  # type: ignore[attr-defined]
-                f"triggered {filter_result.priority.value} priority "
-                f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
+            result = await self._create_passive_observation_result(
+                msg, priority=task_priority, filter_result=filter_result
             )
+
+            if result:
+                logger.info(
+                    f"[OBSERVER] PRIORITY OBSERVATION: Message {msg.message_id} from @{msg.author_name} "  # type: ignore[attr-defined]
+                    f"triggered {filter_result.priority.value} priority "
+                    f"(filters: {', '.join(filter_result.triggered_filters) if filter_result.triggered_filters else 'none'})"
+                )
+
+            return result
 
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error creating priority observation task: %s", e, exc_info=True)
+            return None
 
-    async def handle_incoming_message(self, msg: MessageT) -> None:
-        """Standard message handling flow for all observers."""
+    async def handle_incoming_message(self, msg: MessageT) -> MessageHandlingResult:
+        """
+        Standard message handling flow for all observers.
+
+        Returns:
+            MessageHandlingResult: Complete result of message handling including status and task_id
+        """
         msg_id = getattr(msg, "message_id", "unknown")
         channel_id = getattr(msg, "channel_id", "unknown")
         author = f"{getattr(msg, 'author_name', 'unknown')} (ID: {getattr(msg, 'author_id', 'unknown')})"
@@ -666,7 +707,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
 
-        # Enforce credit policy if configured
+        # Enforce credit policy if configured (may raise CreditDenied/CreditCheckFailed)
         await self._enforce_credit_policy(msg)
 
         # Process message for secrets detection and replacement
@@ -678,7 +719,11 @@ class BaseObserver[MessageT: BaseModel](ABC):
         # If it's the agent's message, stop here (no task creation)
         if is_agent_message:
             logger.info(f"[OBSERVER] Message {msg_id} is from agent itself - NO TASK CREATED")
-            return
+            return MessageHandlingResult(
+                status=MessageHandlingStatus.AGENT_OWN_MESSAGE,
+                message_id=msg_id,
+                channel_id=channel_id,
+            )
 
         # Apply adaptive filtering to determine message priority and processing
         filter_result = await self._apply_message_filtering(msg, self.origin_service)
@@ -687,7 +732,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 f"[OBSERVER] Message {msg_id} from {author} in channel {channel_id} FILTERED OUT by adaptive filter: "
                 f"{filter_result.reasoning} (triggered filters: {', '.join(filter_result.triggered_filters) or 'none'})"
             )
-            return
+            return MessageHandlingResult(
+                status=MessageHandlingStatus.FILTERED_OUT,
+                message_id=msg_id,
+                channel_id=channel_id,
+                filtered=True,
+                filter_reasoning=filter_result.reasoning,
+            )
 
         logger.info(
             f"[OBSERVER] Message {msg_id} PASSED filter with priority {filter_result.priority.value}: "
@@ -699,34 +750,75 @@ class BaseObserver[MessageT: BaseModel](ABC):
         setattr(processed_msg, "_filter_context", filter_result.context_hints)
         setattr(processed_msg, "_filter_reasoning", filter_result.reasoning)
 
-        # Process based on priority
+        # Determine task priority
+        task_priority = (
+            10 if filter_result.priority.value == "critical" else (5 if filter_result.priority.value == "high" else 0)
+        )
+
+        # Process based on priority and capture result
+        obs_result: Optional[PassiveObservationResult] = None
         if filter_result.priority.value in ["critical", "high"]:
             logger.info(f"Processing {filter_result.priority.value} priority message: {filter_result.reasoning}")
-            await self._handle_priority_observation(processed_msg, filter_result)
+            obs_result = await self._handle_priority_observation(processed_msg, filter_result)
         else:
-            await self._handle_passive_observation(processed_msg)
+            obs_result = await self._handle_passive_observation(processed_msg)
 
         # Recall relevant context
         await self._recall_context(processed_msg)
+
+        # Determine status and extract task_id
+        if obs_result:
+            task_id = obs_result.task_id
+            if obs_result.existing_task_updated:
+                status = MessageHandlingStatus.UPDATED_EXISTING_TASK
+            else:
+                status = MessageHandlingStatus.TASK_CREATED
+        else:
+            task_id = None
+            status = MessageHandlingStatus.CHANNEL_RESTRICTED
+
+        # Return result
+        return MessageHandlingResult(
+            status=status,
+            task_id=task_id,
+            message_id=msg_id,
+            channel_id=channel_id,
+            task_priority=task_priority,
+            existing_task_updated=obs_result.existing_task_updated if obs_result else False,
+        )
 
     async def _enhance_message(self, msg: MessageT) -> MessageT:
         """Hook for subclasses to enhance messages (e.g., vision processing)."""
         return msg
 
-    async def _handle_priority_observation(self, msg: MessageT, filter_result: Any) -> None:
-        """Handle high-priority messages - to be implemented by subclasses"""
+    async def _handle_priority_observation(
+        self, msg: MessageT, filter_result: Any
+    ) -> Optional[PassiveObservationResult]:
+        """
+        Handle high-priority messages.
+
+        Returns:
+            Optional[PassiveObservationResult]: Result if task created/updated, None otherwise
+        """
         # Default implementation: check if message should be processed by this observer
         if await self._should_process_message(msg):
-            await self._create_priority_observation_result(msg, filter_result)
+            return await self._create_priority_observation_result(msg, filter_result)
         else:
             logger.debug(f"Ignoring priority message from channel {getattr(msg, 'channel_id', 'unknown')}")
+            return None
 
-    async def _handle_passive_observation(self, msg: MessageT) -> None:
-        """Handle passive observation routing - to be implemented by subclasses"""
+    async def _handle_passive_observation(self, msg: MessageT) -> Optional[PassiveObservationResult]:
+        """
+        Handle passive observation routing.
+
+        Returns:
+            Optional[PassiveObservationResult]: Result if task created/updated, None otherwise
+        """
         if await self._should_process_message(msg):
-            await self._create_passive_observation_result(msg)
+            return await self._create_passive_observation_result(msg)
         else:
             logger.debug(f"Ignoring passive message from channel {getattr(msg, 'channel_id', 'unknown')}")
+            return None
 
     async def _enforce_credit_policy(self, msg: MessageT) -> None:
         """Ensure external credit policy allows processing of this message."""
@@ -828,7 +920,8 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 if hasattr(self.filter_service, "_config") and self.filter_service._config:
                     if user_id in self.filter_service._config.user_profiles:
                         profile = self.filter_service._config.user_profiles[user_id]
-                        return profile.consent_stream
+                        consent_stream_value: str = profile.consent_stream
+                        return consent_stream_value
 
             return None
         except Exception as e:

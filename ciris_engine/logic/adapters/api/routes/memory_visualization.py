@@ -318,7 +318,7 @@ def generate_svg(
     svg_parts.append("</g>")
 
     # Calculate edge counts for each node
-    edge_counts = {}
+    edge_counts: Dict[str, int] = {}
     for edge in edges:
         edge_counts[edge.source] = edge_counts.get(edge.source, 0) + 1
         edge_counts[edge.target] = edge_counts.get(edge.target, 0) + 1
@@ -338,7 +338,7 @@ def generate_svg(
 
 def _circular_layout(nodes: List[GraphNode], width: int, height: int) -> Dict[str, Tuple[float, float]]:
     """Create a circular layout for nodes."""
-    positions = {}
+    positions: Dict[str, Tuple[float, float]] = {}
     center_x = width / 2
     center_y = height / 2
     radius = min(width, height) / 2 - 50

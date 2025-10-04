@@ -9,12 +9,12 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-# Import typed schemas directly - no Dict[str, Any] allowed per our principles
 from ciris_engine.schemas.adapters.tools import ToolInfo
 
 # Import ShutdownContext directly to avoid forward reference issues
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
+from ciris_engine.schemas.types import JSONDict
 
 
 class SystemSnapshot(BaseModel):
@@ -68,9 +68,7 @@ class SystemSnapshot(BaseModel):
     )
 
     # Agent identity (loaded once from graph memory)
-    agent_identity: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        default_factory=dict, description="Raw agent identity data from graph node - typed values only"
-    )
+    agent_identity: JSONDict = Field(default_factory=dict, description="Raw agent identity data from graph node")
     identity_purpose: Optional[str] = Field(None, description="Agent's purpose statement extracted from identity")
     identity_capabilities: List[str] = Field(
         default_factory=list, description="List of agent capabilities from identity"
@@ -132,7 +130,6 @@ class SystemSnapshot(BaseModel):
     )
 
     # Available tools - for agent visibility into tools across all adapters
-    # Type-safe: Use ToolInfo objects, not Dict[str, Any]
     available_tools: Dict[str, List[ToolInfo]] = Field(
         default_factory=dict, description="Available tools by adapter type with full ToolInfo objects"
     )

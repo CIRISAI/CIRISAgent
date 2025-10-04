@@ -11,14 +11,16 @@ from ciris_engine.schemas.runtime.models import TaskContext
 class TestDiscordObserverLifecycle:
     """Test Discord observer lifecycle methods."""
 
-    def test_start_observer(self, discord_observer):
+    @pytest.mark.asyncio
+    async def test_start_observer(self, discord_observer):
         """Test starting the observer."""
-        discord_observer.start()
+        await discord_observer.start()
         # Should not raise any exceptions
 
-    def test_stop_observer(self, discord_observer):
+    @pytest.mark.asyncio
+    async def test_stop_observer(self, discord_observer):
         """Test stopping the observer."""
-        discord_observer.stop()
+        await discord_observer.stop()
         # Should not raise any exceptions
 
     @pytest.mark.asyncio
@@ -285,7 +287,16 @@ class TestMessageObservation:
         priority_filter_result.context_hints = []
 
         # Mock the handler methods that would be called by the workflow
-        discord_observer._handle_priority_observation = AsyncMock()
+        from ciris_engine.schemas.runtime.messages import PassiveObservationResult
+
+        discord_observer._handle_priority_observation = AsyncMock(
+            return_value=PassiveObservationResult(
+                task_id="test-task-123",
+                task_created=True,
+                thought_id="test-thought-456",
+                existing_task_updated=False,
+            )
+        )
 
         await discord_observer.handle_incoming_message(msg)
 
@@ -321,7 +332,16 @@ class TestMessageObservation:
         passive_filter_result.context_hints = []
 
         # Mock the handler methods that would be called by the workflow
-        discord_observer._handle_passive_observation = AsyncMock()
+        from ciris_engine.schemas.runtime.messages import PassiveObservationResult
+
+        discord_observer._handle_passive_observation = AsyncMock(
+            return_value=PassiveObservationResult(
+                task_id="test-task-789",
+                task_created=True,
+                thought_id="test-thought-101",
+                existing_task_updated=False,
+            )
+        )
 
         await discord_observer.handle_incoming_message(msg)
 
@@ -406,7 +426,7 @@ class TestChannelIdExtraction:
             result = discord_observer._extract_channel_id(input_id)
             assert result == expected
 
-    def test_should_process_message_monitored_channel(self, discord_observer):
+    async def test_should_process_message_monitored_channel(self, discord_observer):
         """Test message processing check for monitored channels."""
         msg = DiscordMessage(
             message_id="msg123",
@@ -416,10 +436,10 @@ class TestChannelIdExtraction:
             channel_id="test_channel",  # This is in monitored_channel_ids
         )
 
-        result = discord_observer._should_process_message(msg)
+        result = await discord_observer._should_process_message(msg)
         assert result is True
 
-    def test_should_process_message_deferral_channel(self, discord_observer):
+    async def test_should_process_message_deferral_channel(self, discord_observer):
         """Test message processing check for deferral channel."""
         msg = DiscordMessage(
             message_id="msg123",
@@ -429,10 +449,10 @@ class TestChannelIdExtraction:
             channel_id="deferral_channel",  # This is the deferral channel
         )
 
-        result = discord_observer._should_process_message(msg)
+        result = await discord_observer._should_process_message(msg)
         assert result is True
 
-    def test_should_process_message_unmonitored_channel(self, discord_observer):
+    async def test_should_process_message_unmonitored_channel(self, discord_observer):
         """Test message processing check for unmonitored channel."""
         msg = DiscordMessage(
             message_id="msg123",
@@ -442,16 +462,16 @@ class TestChannelIdExtraction:
             channel_id="random_channel",  # This is NOT monitored
         )
 
-        result = discord_observer._should_process_message(msg)
+        result = await discord_observer._should_process_message(msg)
         assert result is False
 
-    def test_should_process_message_empty_channel_id(self, discord_observer):
+    async def test_should_process_message_empty_channel_id(self, discord_observer):
         """Test message processing check with empty channel ID."""
         msg = DiscordMessage(
             message_id="msg123", author_id="user456", author_name="TestUser", content="Test message", channel_id=""
         )
 
-        result = discord_observer._should_process_message(msg)
+        result = await discord_observer._should_process_message(msg)
         assert result is False
 
     def test_extract_channel_id_none(self, discord_observer):

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
 
@@ -7,7 +7,7 @@ async def extract_user_nick(
     *,
     message: Optional[object] = None,
     params: Optional[object] = None,
-    dispatch_context: Optional[dict] = None,
+    dispatch_context: Optional[Dict[str, Any]] = None,
     thought_id: Optional[str] = None,
 ) -> Optional[str]:
     """Attempt to determine a user nickname from various sources."""

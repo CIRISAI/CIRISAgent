@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Set, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.types import JSONValue
+
 
 class VarianceImpact(str, Enum):
     """Impact levels for different types of changes (not used in variance calculation)."""
@@ -103,7 +105,7 @@ class IdentityData(BaseModel):
     description: str = Field(..., description="Agent description")
     role: str = Field(..., description="Agent role description")
     trust_level: float = Field(0.5, ge=0.0, le=1.0, description="Agent trust level")
-    stewardship: Optional[Union[str, Dict[str, Any]]] = Field(
+    stewardship: Optional[Union[str, JSONValue]] = Field(
         None, description="Stewardship description or data structure if present"
     )
 

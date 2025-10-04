@@ -11,7 +11,7 @@ from ciris_engine.schemas.persistence.correlations import ChannelInfo
 from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation, ServiceCorrelationStatus
 
 if TYPE_CHECKING:
-    from ciris_engine.logic.services.graph.telemetry_service import TelemetryService
+    from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 
 logger = logging.getLogger(__name__)
 
@@ -530,18 +530,18 @@ def get_active_channels_by_adapter(
                             if channel_id.startswith(f"{adapter_type}_"):
                                 # Update channel info if not already present or if this is more recent
                                 if channel_id not in channels:
-                                    channels[channel_id] = {
-                                        "channel_id": channel_id,
-                                        "channel_type": adapter_type,
-                                        "last_activity": datetime.fromisoformat(
+                                    channels[channel_id] = ChannelInfo(
+                                        channel_id=channel_id,
+                                        channel_type=adapter_type,
+                                        last_activity=datetime.fromisoformat(
                                             node_data.get("period_end", cutoff_time.isoformat())
                                         ),
-                                        "message_count": len(conversations),
-                                        "is_active": True,
-                                    }
+                                        message_count=len(conversations),
+                                        is_active=True,
+                                    )
                                 else:
                                     # Update message count
-                                    channels[channel_id]["message_count"] += len(conversations)
+                                    channels[channel_id].message_count += len(conversations)
                     except Exception as e:
                         logger.debug("Failed to parse conversation summary: %s", e)
     except Exception as e:
@@ -630,7 +630,7 @@ def get_channel_last_activity(
     return last_activity
 
 
-def _row_to_service_correlation(row) -> ServiceCorrelation:
+def _row_to_service_correlation(row: Any) -> ServiceCorrelation:
     """
     Convert a database row to a ServiceCorrelation object.
 
@@ -793,7 +793,7 @@ def get_recent_correlations(limit: int = 100, db_path: Optional[str] = None) -> 
 async def add_correlation_with_telemetry(
     corr: ServiceCorrelation,
     time_service: Optional[TimeServiceProtocol] = None,
-    telemetry_service: Optional["TelemetryService"] = None,
+    telemetry_service: Optional["GraphTelemetryService"] = None,
     db_path: Optional[str] = None,
 ) -> str:
     """

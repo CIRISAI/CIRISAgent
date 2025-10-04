@@ -1,13 +1,15 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import DiscordMessage
-from ciris_engine.schemas.runtime.models import TaskContext, ThoughtType
+from ciris_engine.schemas.runtime.models import TaskContext
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +82,11 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         except Exception as e:
             logger.error(f"Failed to send deferral message: {e}")
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the observer - no polling needed since we receive messages directly."""
         logger.info("DiscordObserver started - ready to receive messages directly from Discord adapter")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the observer - no background tasks to clean up."""
         logger.info("DiscordObserver stopped")
 
@@ -100,7 +102,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 return parts[2]
         return full_channel_id  # Return as-is if not in expected format
 
-    def _should_process_message(self, msg: DiscordMessage) -> bool:
+    async def _should_process_message(self, msg: DiscordMessage) -> bool:
         """Check if Discord observer should process this message."""
         # Extract the raw channel ID from the formatted channel_id
         raw_channel_id = self._extract_channel_id(msg.channel_id) if msg.channel_id else ""
@@ -133,7 +135,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         return detect_and_replace_spoofed_markers(content)
 
-    async def _collect_message_attachments_with_reply(self, raw_message) -> dict:
+    async def _collect_message_attachments_with_reply(self, raw_message: Any) -> JSONDict:
         """Collect attachments from message and reply with priority rules.
 
         Priority rules:
@@ -145,12 +147,13 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         Returns:
             dict with keys: images, documents, embeds, reply_context
         """
-        result = {"images": [], "documents": [], "embeds": [], "reply_context": None}
+        result: JSONDict = {"images": [], "documents": [], "embeds": [], "reply_context": None}
 
         # Fetch referenced message and build reply context
         referenced_message = await self._fetch_referenced_message(raw_message)
         if referenced_message:
-            result["reply_context"] = self._build_reply_context(referenced_message)
+            reply_ctx = self._build_reply_context(referenced_message)
+            result["reply_context"] = reply_ctx
 
         # Build message processing order (reply gets priority)
         messages_to_process = self._build_message_processing_order(raw_message, referenced_message)
@@ -160,7 +163,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         return result
 
-    async def _fetch_referenced_message(self, raw_message):
+    async def _fetch_referenced_message(self, raw_message: Any) -> Optional[Any]:
         """Fetch the referenced message if this is a reply."""
         if not hasattr(raw_message, "reference") or not raw_message.reference:
             return None
@@ -178,7 +181,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
             logger.warning(f"Failed to fetch referenced message: {e}")
             return None
 
-    def _build_reply_context(self, referenced_message) -> str | None:
+    def _build_reply_context(self, referenced_message: Any) -> Optional[str]:
         """Build reply context string from referenced message."""
         if not referenced_message or not referenced_message.content:
             return None
@@ -186,9 +189,11 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         author_name = getattr(referenced_message.author, "display_name", "Unknown")
         return f"@{author_name}: {referenced_message.content}"
 
-    def _build_message_processing_order(self, raw_message, referenced_message) -> list:
+    def _build_message_processing_order(
+        self, raw_message: Any, referenced_message: Optional[Any]
+    ) -> List[Tuple[str, Any]]:
         """Build the order of messages to process (reply gets priority)."""
-        messages_to_process = []
+        messages_to_process: List[Tuple[str, Any]] = []
 
         # Reply message gets first priority
         if raw_message:
@@ -200,26 +205,34 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         return messages_to_process
 
-    def _process_message_attachments(self, messages_to_process, result):
+    def _process_message_attachments(self, messages_to_process: List[Tuple[str, Any]], result: JSONDict) -> None:
         """Process attachments from messages respecting limits."""
         image_count = 0
         document_count = 0
+
+        # Get lists with type safety
+        images_list: List[Any] = result.get("images", []) if isinstance(result.get("images"), list) else []  # type: ignore[assignment]
+        documents_list: List[Any] = result.get("documents", []) if isinstance(result.get("documents"), list) else []  # type: ignore[assignment]
 
         for message_type, message in messages_to_process:
             if not message:
                 continue
 
             # Process image attachments (max 1 total)
-            image_count += self._process_image_attachments(message, result["images"], image_count)
+            image_count += self._process_image_attachments(message, images_list, image_count)
 
             # Process document attachments (max 3 total)
-            document_count += self._process_document_attachments(message, result["documents"], document_count)
+            document_count += self._process_document_attachments(message, documents_list, document_count)
 
             # Process embeds (only from reply message to avoid duplication)
             if message_type == "reply" and hasattr(message, "embeds") and message.embeds:
                 result["embeds"] = message.embeds
 
-    def _process_image_attachments(self, message, images_list, current_count) -> int:
+        # Update result with processed lists
+        result["images"] = images_list
+        result["documents"] = documents_list
+
+    def _process_image_attachments(self, message: Any, images_list: List[Any], current_count: int) -> int:
         """Process image attachments from a message, return count of images added."""
         added_count = 0
         if not hasattr(message, "attachments") or not message.attachments or current_count >= 1:
@@ -234,7 +247,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         return added_count
 
-    def _process_document_attachments(self, message, documents_list, current_count) -> int:
+    def _process_document_attachments(self, message: Any, documents_list: List[Any], current_count: int) -> int:
         """Process document attachments from a message, return count of documents added."""
         added_count = 0
         if not hasattr(message, "attachments") or not message.attachments or current_count >= 3:
@@ -251,7 +264,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         return added_count
 
-    def _is_image_attachment(self, attachment) -> bool:
+    def _is_image_attachment(self, attachment: Any) -> bool:
         """Check if attachment is an image."""
         if not hasattr(attachment, "content_type") or not attachment.content_type:
             return False
@@ -273,15 +286,15 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 attachments_data = await self._collect_message_attachments_with_reply(msg.raw_message)
 
                 # Process images if vision is available
-                if self._vision_helper.is_available() and attachments_data.get("images"):
-                    image_descriptions = await self._vision_helper.process_image_attachments_list(
-                        attachments_data["images"]
-                    )
+                images_raw = attachments_data.get("images")
+                if self._vision_helper.is_available() and images_raw and isinstance(images_raw, list):
+                    image_descriptions = await self._vision_helper.process_image_attachments_list(images_raw)
 
                     # Process embeds if any
                     embed_descriptions = None
-                    if attachments_data.get("embeds"):
-                        embed_descriptions = await self._vision_helper.process_embeds(attachments_data["embeds"])
+                    embeds_raw = attachments_data.get("embeds")
+                    if embeds_raw and isinstance(embeds_raw, list):
+                        embed_descriptions = await self._vision_helper.process_embeds(embeds_raw)
 
                     # Add image descriptions to content
                     if image_descriptions or embed_descriptions:
@@ -294,8 +307,9 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                             additional_content += embed_descriptions
 
                 # Process document attachments if document parser is available
-                if self._document_parser.is_available() and attachments_data.get("documents"):
-                    document_text = await self._document_parser.process_attachments(attachments_data["documents"])
+                documents_raw = attachments_data.get("documents")
+                if self._document_parser.is_available() and documents_raw and isinstance(documents_raw, list):
+                    document_text = await self._document_parser.process_attachments(documents_raw)
 
                     if document_text:
                         additional_content += "\n\n[Document Analysis]\n" + document_text
@@ -504,7 +518,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                         if original_thought.final_action:
                             action_params = original_thought.final_action.action_params
                             if isinstance(action_params, dict) and "reason" in action_params:
-                                deferral_reason = action_params["reason"]
+                                reason_value = action_params["reason"]
+                                deferral_reason = (
+                                    str(reason_value) if reason_value is not None else "Unknown deferral reason"
+                                )
 
                         # Create a new thought with PROCESSING status that includes original content + deferral reason + WA response
                         # Reset round_number to 0 to give fresh rounds after deferral
@@ -603,7 +620,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         except Exception as e:
             logger.error(f"Error processing guidance message {msg.message_id}: {e}", exc_info=True)
 
-    async def _get_guild_moderators(self, guild_id: str) -> List[Dict[str, str]]:
+    async def _get_guild_moderators(self, guild_id: str) -> List[JSONDict]:
         """Get list of guild moderators using the Discord tool service."""
         try:
             if not self.communication_service:
@@ -616,7 +633,8 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 result = await tool_service._get_guild_moderators({"guild_id": guild_id})
 
                 if result.get("success") and "data" in result:
-                    moderators = result["data"].get("moderators", [])
+                    moderators_raw = result["data"].get("moderators", [])
+                    moderators: List[JSONDict] = [dict(mod) for mod in moderators_raw if isinstance(mod, dict)]
                     logger.info(f"Retrieved {len(moderators)} moderators from guild {guild_id}")
                     return moderators
                 else:
@@ -636,11 +654,12 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         return None
 
     async def _add_custom_context_sections(
-        self, task_lines: List[str], msg: DiscordMessage, history_context: List[Dict]
+        self, task_lines: List[str], msg: DiscordMessage, history_context: List[JSONDict]
     ) -> None:
         """Add Discord-specific ACTIVE MODS section to context."""
         # Add ACTIVE MODS section for Discord
-        guild_id = self._extract_guild_id_from_channel(msg.channel_id)
+        channel_id = msg.channel_id if msg.channel_id else ""
+        guild_id = self._extract_guild_id_from_channel(channel_id)
         if guild_id:
             moderators = await self._get_guild_moderators(guild_id)
             if moderators:

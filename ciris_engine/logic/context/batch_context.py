@@ -21,7 +21,7 @@ class BatchContextData:
 
     def __init__(self) -> None:
         # Agent identity - using typed values per SystemSnapshot definition
-        self.agent_identity: Dict[str, Union[str, int, float, bool, list, dict]] = {}
+        self.agent_identity: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = {}
         self.identity_purpose: Optional[str] = None
         self.identity_capabilities: List[str] = []
         self.identity_restrictions: List[str] = []

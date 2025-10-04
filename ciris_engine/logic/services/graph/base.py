@@ -64,7 +64,7 @@ class BaseGraphService(ABC, GraphServiceProtocol):
         self._start_time = datetime.now()
         # Initialize telemetry if available
         if hasattr(self, "_telemetry_service") and self._telemetry_service:
-            from ciris_engine.schemas.telemetry import ServiceMetrics
+            from ciris_engine.schemas.api.telemetry import ServiceMetrics
 
             metrics = ServiceMetrics(
                 service_name=self.service_name,
@@ -128,7 +128,7 @@ class BaseGraphService(ABC, GraphServiceProtocol):
 
         import psutil
 
-        from ciris_engine.schemas.telemetry import ServiceMetrics
+        from ciris_engine.schemas.api.telemetry import ServiceMetrics
 
         # Get process info
         process = psutil.Process()

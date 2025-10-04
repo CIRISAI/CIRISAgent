@@ -7,10 +7,22 @@ These nodes preserve conversation content while consolidating metrics.
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
+from ciris_engine.schemas.types import NodeAttributes
+
+
+class ConversationMessage(BaseModel):
+    """A single message in a conversation."""
+
+    timestamp: str = Field(..., description="ISO timestamp")
+    author_id: str = Field(..., description="Author ID")
+    author_name: str = Field(..., description="Author name")
+    content: str = Field(..., description="Message content")
+    action_type: str = Field(..., description="Action type (speak, observe, etc.)")
+    correlation_id: str = Field(..., description="Correlation ID")
 
 
 @register_node_type("CONVERSATION_SUMMARY")
@@ -28,7 +40,7 @@ class ConversationSummaryNode(TypedGraphNode):
     period_label: str = Field(..., description="Human-readable period label")
 
     # Conversation content - CRITICAL for memory
-    conversations_by_channel: Dict[str, List[Dict[str, Any]]] = Field(
+    conversations_by_channel: Dict[str, List[ConversationMessage]] = Field(
         default_factory=dict, description="Full conversation history by channel"
     )
 
@@ -93,7 +105,7 @@ class ConversationSummaryNode(TypedGraphNode):
     scope: GraphScope = Field(default=GraphScope.LOCAL)
     id: str = Field(..., description="Node ID")
     version: int = Field(default=1)
-    attributes: Union[Dict[str, Any], Any] = Field(default_factory=dict, description="Node attributes")
+    attributes: NodeAttributes = Field(default_factory=dict, description="Node attributes")
 
     def to_graph_node(self) -> GraphNode:
         """Convert to GraphNode for storage."""

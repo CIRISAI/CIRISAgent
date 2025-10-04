@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_serializer
 
+from ciris_engine.schemas.types import ConfigDict, ConfigValue
+
 from .auth import UserRole
 
 
@@ -113,9 +115,7 @@ class ConfigSecurity:
         return "[REDACTED]"
 
     @classmethod
-    def filter_config(
-        cls, config: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]], role: UserRole
-    ) -> Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]:
+    def filter_config(cls, config: ConfigDict, role: UserRole) -> ConfigDict:
         """
         Filter entire configuration dictionary based on role.
 
@@ -168,7 +168,7 @@ class ConfigValueResponse(BaseModel):
     """Response for a single configuration value."""
 
     key: str = Field(..., description="Configuration key")
-    value: Any = Field(..., description="Configuration value (may be redacted)")
+    value: ConfigValue = Field(..., description="Configuration value (may be redacted)")
     is_sensitive: bool = Field(..., description="Whether this is a sensitive key")
     is_redacted: bool = Field(..., description="Whether value was redacted")
     last_updated: Optional[datetime] = Field(None, description="When value was last updated")
@@ -182,15 +182,11 @@ class ConfigValueResponse(BaseModel):
 class ConfigListResponse(BaseModel):
     """Response for configuration list."""
 
-    configs: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        ..., description="Configuration values"
-    )
+    configs: ConfigDict = Field(..., description="Configuration values")
     metadata: Dict[str, Union[str, int, float, bool]] = Field(..., description="Response metadata")
 
 
-def filter_config_for_role(
-    config: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]], role: UserRole
-) -> Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]:
+def filter_config_for_role(config: ConfigDict, role: UserRole) -> ConfigDict:
     """
     Filter configuration values based on user role.
 
@@ -207,7 +203,7 @@ def filter_config_for_role(
 class ConfigUpdateRequest(BaseModel):
     """Request to update configuration value."""
 
-    value: Any = Field(..., description="New configuration value")
+    value: ConfigValue = Field(..., description="New configuration value")
     comment: Optional[str] = Field(None, description="Optional comment about change")
 
 
@@ -224,8 +220,8 @@ class ConfigHistoryEntry(BaseModel):
     """Configuration change history entry."""
 
     key: str = Field(..., description="Configuration key")
-    old_value: Any = Field(..., description="Previous value (may be redacted)")
-    new_value: Any = Field(..., description="New value (may be redacted)")
+    old_value: ConfigValue = Field(..., description="Previous value (may be redacted)")
+    new_value: ConfigValue = Field(..., description="New value (may be redacted)")
     changed_at: datetime = Field(..., description="When change occurred")
     changed_by: str = Field(..., description="Who made the change")
     comment: Optional[str] = Field(None, description="Change comment")
@@ -234,9 +230,7 @@ class ConfigHistoryEntry(BaseModel):
 class ConfigValidationRequest(BaseModel):
     """Request to validate configuration changes."""
 
-    changes: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = Field(
-        ..., description="Proposed changes"
-    )
+    changes: ConfigDict = Field(..., description="Proposed changes")
 
 
 class ConfigValidationResponse(BaseModel):

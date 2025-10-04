@@ -179,13 +179,15 @@ def mock_secrets_service():
 
 @pytest.fixture
 def mock_telemetry_service():
-    """Create a mock telemetry service."""
+    """Create a comprehensive mock telemetry service with all required async methods."""
     from datetime import timedelta
 
     from ciris_engine.schemas.runtime.system_context import TelemetrySummary
 
     mock = AsyncMock()
     now = datetime.now(timezone.utc)
+
+    # Create telemetry summary
     telemetry_summary = TelemetrySummary(
         window_start=now - timedelta(hours=24),
         window_end=now,
@@ -196,7 +198,85 @@ def mock_telemetry_service():
         errors_24h=5,
         messages_current_hour=42,
     )
+
+    # Mock all async methods
     mock.get_telemetry_summary = AsyncMock(return_value=telemetry_summary)
+    mock.get_aggregated_telemetry = AsyncMock(
+        return_value=Mock(
+            system_healthy=True,
+            services_online=35,
+            services_total=35,
+            overall_error_rate=0.0,
+            overall_uptime_seconds=86400.0,
+            total_errors=0,
+            total_requests=1000,
+            services={},
+        )
+    )
+    mock.query_metrics = AsyncMock(return_value=[])
+    mock.get_metrics = AsyncMock(return_value={"uptime_seconds": 86400.0, "messages_processed": 1000, "errors": 0})
+    mock.collect_all = AsyncMock(return_value={})
+
+    return mock
+
+
+@pytest.fixture
+def mock_visibility_service():
+    """Create a comprehensive mock visibility service with all required async methods."""
+    mock = AsyncMock()
+
+    # Mock current state
+    current_state = Mock()
+    current_state.reasoning_depth = 3
+    current_state.current_task = Mock(description="Processing user request")
+    mock.get_current_state = AsyncMock(return_value=current_state)
+
+    # Mock system status
+    mock.get_system_status = AsyncMock(return_value={"status": "healthy", "active_tasks": 5, "reasoning_depth": 3})
+
+    # Mock task history
+    mock.get_task_history = AsyncMock(return_value=[])
+
+    # Mock reasoning traces
+    mock.get_reasoning_trace = AsyncMock(return_value=None)
+    mock.query_traces = AsyncMock(return_value=[])
+    mock.get_current_reasoning = AsyncMock(return_value=None)
+    mock.get_recent_traces = AsyncMock(return_value=[])
+
+    # Mock metrics
+    mock.get_metrics = Mock(return_value={"visibility_metrics": 100, "status": "healthy"})
+
+    return mock
+
+
+@pytest.fixture
+def mock_incident_service():
+    """Create a comprehensive mock incident management service."""
+    mock = AsyncMock()
+
+    # Mock incident counting
+    mock.count_active_incidents = AsyncMock(return_value=2)
+    mock.get_recent_incidents = AsyncMock(return_value=[])
+    mock.get_insights = AsyncMock(return_value=[])
+
+    # Mock metrics
+    mock.get_metrics = Mock(return_value={"total_incidents": 10, "active_incidents": 2, "resolved_incidents": 8})
+
+    return mock
+
+
+@pytest.fixture
+def mock_wise_authority():
+    """Create a comprehensive mock wise authority service."""
+    mock = AsyncMock()
+
+    # Mock deferral counting
+    mock.count_active_deferrals = AsyncMock(return_value=1)
+    mock.get_active_deferrals = AsyncMock(return_value=[])
+
+    # Mock metrics
+    mock.get_metrics = Mock(return_value={"total_deferrals": 5, "active_deferrals": 1, "resolved_deferrals": 4})
+
     return mock
 
 
@@ -218,6 +298,9 @@ def complete_system_snapshot_setup(
     mock_runtime,
     mock_secrets_service,
     mock_telemetry_service,
+    mock_visibility_service,
+    mock_incident_service,
+    mock_wise_authority,
     mock_graphql_provider,
 ):
     """
@@ -232,6 +315,9 @@ def complete_system_snapshot_setup(
         "runtime": mock_runtime,
         "secrets_service": mock_secrets_service,
         "telemetry_service": mock_telemetry_service,
+        "visibility_service": mock_visibility_service,
+        "incident_service": mock_incident_service,
+        "wise_authority": mock_wise_authority,
         "graphql_provider": mock_graphql_provider,
         "mocks": comprehensive_system_snapshot_mocks,
     }

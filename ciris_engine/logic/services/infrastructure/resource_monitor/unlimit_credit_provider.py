@@ -31,7 +31,7 @@ class UnlimitCreditProvider(CreditGateProtocol):
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key

@@ -567,6 +567,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             # Track guidance provided
             self._guidance_provided_count += 1
 
+            # Audit log guidance observation
+            if hasattr(self, "_audit_service") and self._audit_service:
+                from ciris_engine.schemas.audit.core import EventPayload
+
+                event_data = EventPayload(
+                    action="observe",
+                    service_name="wise_authority",
+                    user_id="system",
+                    result="guidance_provided",
+                )
+                await self._audit_service.log_event(event_type="guidance_observation", event_data=event_data)
+
             # Parse the guidance response (assuming it's structured)
             return GuidanceResponse(
                 selected_option=None,  # Would be parsed from guidance
@@ -576,6 +588,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 signature="",  # Would be signed by the WA
             )
         else:
+            # Audit log no guidance available
+            if hasattr(self, "_audit_service") and self._audit_service:
+                from ciris_engine.schemas.audit.core import EventPayload
+
+                event_data = EventPayload(
+                    action="observe",
+                    service_name="wise_authority",
+                    user_id="system",
+                    result="no_guidance",
+                )
+                await self._audit_service.log_event(event_type="guidance_observation", event_data=event_data)
+
             # No guidance available
             return GuidanceResponse(
                 selected_option=None,

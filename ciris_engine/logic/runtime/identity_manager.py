@@ -7,7 +7,7 @@ Handles loading, creating, and persisting agent identity.
 import hashlib
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -68,7 +68,7 @@ class IdentityManager:
 
     async def _get_identity_from_graph(
         self,
-    ) -> Optional[dict]:  # NOSONAR: Maintains async consistency in identity chain
+    ) -> Optional[Dict[str, Any]]:  # NOSONAR: Maintains async consistency in identity chain
         """Retrieve agent identity from the persistence tier."""
         try:
             from ciris_engine.logic.config import get_sqlite_db_full_path

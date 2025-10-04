@@ -594,8 +594,14 @@ class TestRuntimeAdapterManager:
             # Execute - test full config update
             await adapter_manager._on_adapter_config_change("adapter.test.config", None, config_dict)
 
-            # Verify
-            mock_reload.assert_called_once_with("test", config_dict)
+            # Verify - now expects AdapterConfig object, not dict
+            expected_config = AdapterConfig(adapter_type="cli", enabled=True, settings={})
+            mock_reload.assert_called_once()
+            call_args = mock_reload.call_args[0]
+            assert call_args[0] == "test"
+            assert isinstance(call_args[1], AdapterConfig)
+            assert call_args[1].adapter_type == expected_config.adapter_type
+            assert call_args[1].enabled == expected_config.enabled
 
     @pytest.mark.asyncio
     async def test_unload_adapter_with_runtime_adapters_list(self, adapter_manager, mock_runtime, mock_time_service):

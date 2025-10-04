@@ -42,7 +42,7 @@ USER_ID_NOT_FOUND = "User ID not found in token"
 # ============================================================================
 
 
-def get_memory_service(request: Request):
+def get_memory_service(request: Request) -> Any:
     """Dependency to get memory service from app state (DRY helper)."""
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
@@ -90,7 +90,7 @@ def calculate_time_buckets(nodes: List[GraphNode], hours: int) -> Dict[str, int]
     Buckets by hour if <= 48 hours, otherwise by day.
     Returns dict mapping bucket key to node count.
     """
-    buckets = {}
+    buckets: Dict[str, int] = {}
     bucket_size = "hour" if hours <= 48 else "day"
 
     for node in nodes:
@@ -105,16 +105,18 @@ def calculate_time_buckets(nodes: List[GraphNode], hours: int) -> Dict[str, int]
     return buckets
 
 
-def _convert_to_graph_scope(scope: Any) -> "GraphScope":
+def _convert_to_graph_scope(scope: Any) -> GraphScope:
     """Convert scope value to GraphScope enum."""
     from ciris_engine.schemas.services.graph_core import GraphScope
 
     if isinstance(scope, str):
-        return GraphScope(scope)
-    return scope
+        converted_scope: GraphScope = GraphScope(scope)
+        return converted_scope
+    result_scope: GraphScope = scope
+    return result_scope
 
 
-def _is_edge_valid(edge: "GraphEdge", node_ids: set, seen_edges: set) -> bool:
+def _is_edge_valid(edge: "GraphEdge", node_ids: set[str], seen_edges: set[tuple[str, str]]) -> bool:
     """
     Check if an edge is valid for visualization.
 
@@ -138,7 +140,11 @@ def _is_edge_valid(edge: "GraphEdge", node_ids: set, seen_edges: set) -> bool:
 
 
 def _collect_edges_for_node(
-    node: "GraphNode", node_ids: set, seen_edges: set, max_edges: int, current_edges: List["GraphEdge"]
+    node: "GraphNode",
+    node_ids: set[str],
+    seen_edges: set[tuple[str, str]],
+    max_edges: int,
+    current_edges: List["GraphEdge"],
 ) -> bool:
     """
     Collect edges for a single node.
@@ -183,9 +189,9 @@ def query_edges_for_visualization(nodes: List[GraphNode], max_edges: int = 500) 
     if not nodes:
         return []
 
-    edges = []
-    node_ids = set(node.id for node in nodes)
-    seen_edges = set()
+    edges: List[GraphEdge] = []
+    node_ids: set[str] = set(node.id for node in nodes)
+    seen_edges: set[tuple[str, str]] = set()
 
     try:
         for node in nodes[:500]:  # Query edges for up to 500 nodes
@@ -287,7 +293,7 @@ async def store_memory(
     request: Request,
     body: StoreRequest,
     auth: AuthContext = Depends(require_admin),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult]:
     """
     Store typed nodes in memory (MEMORIZE).
@@ -319,7 +325,7 @@ async def query_memory(
     request: Request,
     body: QueryRequest,
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphNode]]:
     """
     Query memories with flexible filters (RECALL).
@@ -391,7 +397,7 @@ async def forget_memory(
     request: Request,
     node_id: str = Path(..., description="Node ID to forget"),
     auth: AuthContext = Depends(require_admin),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[MemoryOpResult]:
     """
     Forget a specific memory node (FORGET).
@@ -439,7 +445,7 @@ async def get_timeline(
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.
@@ -496,7 +502,7 @@ async def get_timeline(
 async def get_stats(
     request: Request,
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[MemoryStats]:
     """
     Get statistics about memory storage.
@@ -564,7 +570,7 @@ async def visualize_graph(
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> Response:
     """
     Generate an interactive SVG visualization of the memory graph.
@@ -617,7 +623,7 @@ async def get_node_edges(
     request: Request,
     node_id: str = Path(..., description="Node ID"),
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphEdge]]:
     """
     Get all edges connected to a node.
@@ -652,7 +658,7 @@ async def recall_by_id(
     request: Request,
     node_id: str = Path(..., description="Node ID to recall"),
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Recall a specific node by ID (legacy endpoint).
@@ -713,11 +719,11 @@ async def get_node(
     request: Request,
     node_id: str = Path(..., description="Node ID"),
     auth: AuthContext = Depends(require_observer),
-    memory_service=Depends(get_memory_service),
+    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Get a specific node by ID.
 
     Standard RESTful endpoint for node retrieval.
     """
-    return await recall_by_id(request, node_id, auth)
+    return await recall_by_id(request, node_id, auth, memory_service)

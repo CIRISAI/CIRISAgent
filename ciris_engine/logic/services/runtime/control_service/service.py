@@ -13,6 +13,7 @@ from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.protocols.services import TimeServiceProtocol
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.core.runtime import (
@@ -46,6 +47,7 @@ from ciris_engine.schemas.services.runtime_control import (
     WAPublicKeyMap,
 )
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, KillSwitchConfig, WASignedCommand
+from ciris_engine.schemas.types import ConfigDict, ConfigValue
 
 # GraphConfigService is injected via dependency injection to avoid circular imports
 
@@ -90,7 +92,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         self._thoughts_processed = 0
         self._thoughts_pending = 0
         self._average_thought_time_ms = 0.0
-        self._thought_times = []  # Track last N thought processing times
+        self._thought_times: List[float] = []  # Track last N thought processing times
         self._max_thought_history = 100
         self._messages_processed = 0
         # Note: _message_times removed - not applicable since messages can be REJECTed
@@ -597,8 +599,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error="Adapter manager not available",
             )
 
-        # Convert config dict to proper type if needed
-        adapter_config = config if config else {}
+        # Convert config dict to AdapterConfig if needed
+        if config:
+            adapter_config = AdapterConfig(**config) if isinstance(config, dict) else config
+        else:
+            adapter_config = None
         result = await self.adapter_manager.load_adapter(adapter_type, adapter_id or "", adapter_config)
 
         return AdapterOperationResponse(
@@ -652,7 +657,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """List all loaded adapters including bootstrap adapters."""
         self._ensure_adapter_manager_initialized()
 
-        adapters_list = []
+        adapters_list: List[AdapterInfo] = []
         adapters_list.extend(await self._get_bootstrap_adapters())
         adapters_list.extend(await self._get_managed_adapters())
 
@@ -673,7 +678,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def _get_bootstrap_adapters(self) -> List[AdapterInfo]:
         """Get bootstrap adapters from runtime."""
-        adapters = []
+        adapters: List[AdapterInfo] = []
 
         if not (self.runtime and hasattr(self.runtime, "adapters")):
             return adapters
@@ -691,15 +696,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     def _extract_adapter_type(self, adapter: Any) -> str:
         """Extract adapter type from class name."""
-        return adapter.__class__.__name__.lower().replace("platform", "").replace("adapter", "")
+        class_name: str = adapter.__class__.__name__
+        return class_name.lower().replace("platform", "").replace("adapter", "")
 
     async def _should_skip_bootstrap_adapter(self, adapter_type: str) -> bool:
         """Check if bootstrap adapter should be skipped because it's managed."""
-        return (
-            adapter_type == "discord"
-            and self.adapter_manager
-            and any(a.adapter_type == "discord" for a in await self.adapter_manager.list_adapters())
-        )
+        if adapter_type != "discord" or not self.adapter_manager:
+            return False
+
+        adapter_list = await self.adapter_manager.list_adapters()
+        return any(a.adapter_type == "discord" for a in adapter_list)
 
     async def _create_bootstrap_adapter_info(self, adapter: Any, adapter_type: str) -> AdapterInfo:
         """Create AdapterInfo for a bootstrap adapter."""
@@ -718,7 +724,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def _extract_adapter_tools(self, adapter: Any, adapter_type: str) -> List[Dict[str, Any]]:
         """Extract tools from adapter tool service."""
-        tools = []
+        tools: List[Dict[str, Any]] = []
 
         if not (hasattr(adapter, "tool_service") and adapter.tool_service):
             return tools
@@ -736,7 +742,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def _create_tool_info(self, tool_service: Any, tool_name: str) -> Dict[str, Any]:
         """Create tool info dictionary."""
-        tool_info = {"name": tool_name, "description": f"{tool_name} tool"}
+        tool_info: Dict[str, Any] = {"name": tool_name, "description": f"{tool_name} tool"}
 
         if hasattr(tool_service, "get_tool_schema"):
             schema = await tool_service.get_tool_schema(tool_name)
@@ -797,36 +803,21 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         if not self.adapter_manager:
             return None
 
-        info = await self.adapter_manager.get_adapter_info(adapter_id)
-        if info is None or "error" in info:
+        info = self.adapter_manager.get_adapter_info(adapter_id)
+        if info is None:
             return None
 
-        # Map the status string to AdapterStatus enum
-        status_str = info.get("status", "unknown")
-        try:
-            status = AdapterStatus(status_str)
-        except ValueError:
-            status = AdapterStatus.ERROR
-
-        # Extract metrics using proper type checking
-        metrics = info.get("metrics", {})
-        messages_processed = 0
-        error_count = 0
-        last_error = None
-
-        if isinstance(metrics, dict):
-            messages_processed = metrics.get("messages_processed", 0)
-            error_count = metrics.get("errors_count", 0)
-            last_error = metrics.get("last_error")
+        # Convert adapter_management.AdapterInfo to core.runtime.AdapterInfo
+        from datetime import datetime
 
         return AdapterInfo(
-            adapter_id=info.get("adapter_id", adapter_id),
-            adapter_type=info.get("adapter_type", ""),
-            status=status,
-            started_at=info.get("loaded_at", self._now()),
-            messages_processed=messages_processed,
-            error_count=error_count,
-            last_error=last_error,
+            adapter_id=info.adapter_id,
+            adapter_type=info.adapter_type,
+            status=AdapterStatus.RUNNING if info.is_running else AdapterStatus.STOPPED,
+            started_at=datetime.fromisoformat(info.load_time) if info.load_time else None,
+            messages_processed=0,  # Not tracked in adapter_management.AdapterInfo
+            error_count=0,  # Not tracked in adapter_management.AdapterInfo
+            last_error=None,
             tools=None,
         )
 
@@ -994,7 +985,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error=str(e),
             )
 
-    def _extract_backup_configs(self, backup_config: Any) -> Dict[str, Union[str, int, float, bool, list, dict]]:
+    def _extract_backup_configs(self, backup_config: Any) -> ConfigDict:
         """Extract backup configuration data from ConfigValue wrapper."""
         backup_raw = backup_config.value
         backup_value = backup_raw.value if hasattr(backup_raw, "value") else backup_raw
@@ -1003,11 +994,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return self._parse_structured_backup(backup_value)
         elif isinstance(backup_value, dict):
             # Filter out None values to match the expected type
-            return {k: v for k, v in backup_value.items() if v is not None}
+            result: ConfigDict = {}
+            for k, v in backup_value.items():
+                if v is not None and isinstance(v, (str, int, float, bool, list, dict)):
+                    result[k] = v
+            return result
         else:
             raise ValueError("Backup data is not in expected format")
 
-    def _parse_structured_backup(self, backup_value: dict) -> Dict[str, Union[str, int, float, bool, list, dict]]:
+    def _parse_structured_backup(self, backup_value: Dict[str, Any]) -> ConfigDict:
         """Parse structured backup data with metadata."""
         timestamp_str = backup_value.get("backup_timestamp")
         if not isinstance(timestamp_str, str):
@@ -1021,7 +1016,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         )
         return backup_data.configs
 
-    async def _restore_configs_from_backup(self, configs: Dict[str, Union[str, int, float, bool, list, dict]]) -> None:
+    async def _restore_configs_from_backup(self, configs: ConfigDict) -> None:
         """Restore individual configuration values from backup."""
         for key, value in configs.items():
             if not key.startswith("backup_"):  # Don't restore backups
@@ -1247,7 +1242,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     def _has_service_registry(self) -> bool:
         """Check if service registry is available."""
-        return self.runtime and hasattr(self.runtime, "service_registry")
+        return self.runtime is not None and hasattr(self.runtime, "service_registry")
 
     def _validate_priority_and_strategy(
         self, provider_name: str, new_priority: str, new_strategy: Optional[str]
@@ -1280,7 +1275,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         return None  # Valid
 
-    def _parse_priority_and_strategy(self, new_priority: str, new_strategy: Optional[str]):
+    def _parse_priority_and_strategy(self, new_priority: str, new_strategy: Optional[str]) -> tuple[Any, Optional[Any]]:
         """Parse and return priority and strategy enums."""
         from ciris_engine.logic.registries.base import Priority, SelectionStrategy
 
@@ -1297,6 +1292,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         new_strategy_enum: Optional[Any],
     ) -> ServicePriorityUpdateResponse:
         """Update the provider priority in the registry."""
+        if not self.runtime or not hasattr(self.runtime, "service_registry"):
+            return ServicePriorityUpdateResponse(
+                success=False, provider_name=provider_name, error="Service registry not available"
+            )
+
         registry = self.runtime.service_registry
 
         provider_info = self._find_provider_in_registry(registry, provider_name)
@@ -1410,7 +1410,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     def _has_circuit_breaker_registry(self) -> bool:
         """Check if service registry is available for circuit breaker operations."""
-        return self.runtime and hasattr(self.runtime, "service_registry") and self.runtime.service_registry is not None
+        return (
+            self.runtime is not None
+            and hasattr(self.runtime, "service_registry")
+            and self.runtime.service_registry is not None
+        )
 
     async def _reset_specific_service_type_breakers(self, service_type: str) -> CircuitBreakerResetResponse:
         """Reset circuit breakers for a specific service type."""
@@ -1439,7 +1443,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     def _reset_providers_by_service_type(self, service_type_enum: Any) -> List[str]:
         """Reset circuit breakers for providers of a specific service type."""
-        providers_reset = []
+        providers_reset: List[str] = []
+
+        if not self.runtime or not hasattr(self.runtime, "service_registry"):
+            return providers_reset
 
         if service_type_enum in self.runtime.service_registry._services:
             for provider in self.runtime.service_registry._services[service_type_enum]:
@@ -1451,6 +1458,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def _reset_all_circuit_breakers(self) -> CircuitBreakerResetResponse:
         """Reset all circuit breakers in the registry."""
+        if not self.runtime or not hasattr(self.runtime, "service_registry"):
+            return CircuitBreakerResetResponse(
+                success=False,
+                message="Service registry not available",
+                timestamp=self._now(),
+                service_type=None,
+                error="Service registry not available",
+            )
+
         self.runtime.service_registry.reset_circuit_breakers()
         providers_reset = list(self.runtime.service_registry._circuit_breakers.keys())
         message = f"Reset all {len(providers_reset)} circuit breakers"

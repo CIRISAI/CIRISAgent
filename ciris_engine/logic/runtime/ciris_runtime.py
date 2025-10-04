@@ -31,6 +31,7 @@ from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.operations import InitializationPhase
 
@@ -48,7 +49,7 @@ class CIRISRuntime:
     Implements the RuntimeInterface protocol.
     """
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Any, **kwargs: Any) -> "CIRISRuntime":
         """Custom __new__ to handle CI environment issues."""
         # This fixes a pytest/CI issue where object.__new__ gets called incorrectly
         instance = object.__new__(cls)
@@ -77,6 +78,15 @@ class CIRISRuntime:
         # Import RuntimeBootstrapConfig here to avoid circular imports
         from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
 
+        # Declare attributes that will be set in _parse_bootstrap_config
+        self.essential_config: EssentialConfig
+        self.startup_channel_id: str
+        self.adapter_configs: Dict[str, AdapterConfig]
+        self.modules_to_load: List[str]
+        self.debug: bool
+        self._preload_tasks: List[Any]
+        self.bootstrap: RuntimeBootstrapConfig
+
         # Use bootstrap config if provided, otherwise construct from legacy parameters
         self._parse_bootstrap_config(
             bootstrap, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
@@ -92,7 +102,7 @@ class CIRISRuntime:
         self.service_initializer = ServiceInitializer(essential_config=essential_config)
         self.component_builder: Optional[ComponentBuilder] = None
         self.agent_processor: Optional["AgentProcessor"] = None
-        self._adapter_tasks: List[asyncio.Task] = []
+        self._adapter_tasks: List[asyncio.Task[Any]] = []
 
         # Load adapters from bootstrap config
         self._load_adapters_from_bootstrap()
@@ -105,11 +115,11 @@ class CIRISRuntime:
         self._shutdown_manager = get_shutdown_manager()
         self._shutdown_event: Optional[asyncio.Event] = None
         self._shutdown_reason: Optional[str] = None
-        self._agent_task: Optional[asyncio.Task] = None
+        self._agent_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_complete = False
 
         # Identity - will be loaded during initialization
-        self.agent_identity: Optional[Any] = None
+        self.agent_identity: Optional[AgentIdentityRoot] = None
 
     # Properties to access services from the service initializer
     @property
@@ -389,6 +399,9 @@ class CIRISRuntime:
             raise RuntimeError("TimeService not available for IdentityManager")
         self.identity_manager = IdentityManager(config, self.time_service)
         self.agent_identity = await self.identity_manager.initialize_identity()
+
+        # Create startup node for continuity tracking
+        await self._create_startup_node()
 
     def _register_initialization_steps(self, init_manager: Any) -> None:
         """Register all initialization steps with the initialization manager."""
@@ -1155,6 +1168,27 @@ class CIRISRuntime:
         validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
 
+    async def _create_startup_node(self) -> None:
+        """Create startup node for continuity tracking."""
+        try:
+            from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+
+            # Create memory node for startup
+            startup_node = GraphNode(
+                id=f"startup_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
+                type=NodeType.AGENT,
+                scope=GraphScope.IDENTITY,
+                attributes=GraphNodeAttributes(created_by="runtime_startup", tags=["startup", "continuity_awareness"]),
+            )
+
+            # Store in memory service
+            if self.memory_service:
+                await self.memory_service.memorize(startup_node)
+                logger.info(f"Created startup continuity node: {startup_node.id}")
+
+        except Exception as e:
+            logger.error(f"Failed to create startup node: {e}")
+
     async def _preserve_shutdown_continuity(self) -> None:
         """Preserve agent state for future reactivation."""
         try:
@@ -1221,8 +1255,8 @@ class CIRISRuntime:
         essential_config: Optional[EssentialConfig],
         startup_channel_id: Optional[str],
         adapter_types: List[str],
-        adapter_configs: Optional[dict],
-        kwargs: dict,
+        adapter_configs: Optional[Dict[str, AdapterConfig]],
+        kwargs: Dict[str, Any],
     ) -> None:
         """Parse bootstrap configuration or create from legacy parameters."""
         if bootstrap is not None:
@@ -1243,11 +1277,11 @@ class CIRISRuntime:
         essential_config: Optional[EssentialConfig],
         startup_channel_id: Optional[str],
         adapter_types: List[str],
-        adapter_configs: Optional[dict],
-        kwargs: dict,
+        adapter_configs: Optional[Dict[str, AdapterConfig]],
+        kwargs: Dict[str, Any],
     ) -> None:
         """Create bootstrap config from legacy parameters."""
-        self.essential_config = essential_config
+        self.essential_config = essential_config or EssentialConfig()
         self.startup_channel_id = startup_channel_id or ""
         self.adapter_configs = adapter_configs or {}
         self.modules_to_load = kwargs.get("modules", [])
@@ -1303,7 +1337,7 @@ class CIRISRuntime:
 
                 # Create adapter with context
                 # Pass the settings as adapter_config so adapters can find them
-                adapter_instance = adapter_class(self, context=context, adapter_config=config.settings)
+                adapter_instance = adapter_class(self, context=context, adapter_config=config.settings)  # type: ignore[call-arg]
                 self.adapters.append(adapter_instance)
                 logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
             except Exception as e:

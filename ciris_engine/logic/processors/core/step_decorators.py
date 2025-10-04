@@ -16,8 +16,9 @@ import asyncio
 import logging
 from datetime import datetime
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
+from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.services.runtime_control import (
     ActionCompleteStepData,
     AllStepsExecutionResult,
@@ -47,7 +48,7 @@ _paused_thoughts: Dict[str, asyncio.Event] = {}
 _single_step_mode = False
 
 
-def _base_data_dict(base_data: BaseStepData) -> dict:
+def _base_data_dict(base_data: BaseStepData) -> Dict[str, Any]:
     """Convert BaseStepData to dict for **unpacking into step data constructors."""
     return {
         "timestamp": base_data.timestamp,
@@ -59,7 +60,7 @@ def _base_data_dict(base_data: BaseStepData) -> dict:
     }
 
 
-def streaming_step(step: StepPoint):
+def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that streams step results in real-time.
 
@@ -80,7 +81,7 @@ def streaming_step(step: StepPoint):
 
     def decorator[F: Callable[..., Any]](func: F) -> F:
         @wraps(func)
-        async def wrapper(self, thought_item, *args, **kwargs):
+        async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
             thought_id = getattr(thought_item, "thought_id", "unknown")
             time_service = getattr(self, "_time_service", None)
             if not time_service or not hasattr(time_service, "now"):
@@ -109,7 +110,7 @@ def streaming_step(step: StepPoint):
                 step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)
 
                 # Broadcast simplified reasoning event for key steps only
-                await _broadcast_reasoning_event(step, step_data, result)
+                await _broadcast_reasoning_event(step, step_data, thought_item=thought_item)
 
                 return result
 
@@ -126,7 +127,7 @@ def streaming_step(step: StepPoint):
     return decorator
 
 
-def step_point(step: StepPoint):
+def step_point(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that handles pause/resume mechanics for single-step debugging.
 
@@ -148,7 +149,7 @@ def step_point(step: StepPoint):
 
     def decorator[F: Callable[..., Any]](func: F) -> F:
         @wraps(func)
-        async def wrapper(self, thought_item, *args, **kwargs):
+        async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
             thought_id = getattr(thought_item, "thought_id", "unknown")
 
             # Check if we should pause at this step point
@@ -195,7 +196,7 @@ async def _pause_thought_execution(thought_id: str) -> None:
     _paused_thoughts[thought_id].clear()
 
 
-def _get_step_data_creators() -> dict[StepPoint, callable]:
+def _get_step_data_creators() -> Dict[StepPoint, Callable[..., Any]]:
     """Get dispatch dictionary for step data creators."""
     return {
         StepPoint.START_ROUND: lambda base_data, result, args, kwargs, thought_item: _create_start_round_data(
@@ -252,7 +253,12 @@ def _log_step_debug_info(step: StepPoint, base_data: BaseStepData, thought_item:
 
 
 def _create_typed_step_data(
-    step: StepPoint, base_data: BaseStepData, thought_item: Any, result: Any, args: tuple, kwargs: dict
+    step: StepPoint,
+    base_data: BaseStepData,
+    thought_item: Any,
+    result: Any,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
 ) -> StepDataUnion:
     """Create typed step data based on step type using dispatch pattern."""
     # Prepare base data with task_id
@@ -267,14 +273,14 @@ def _create_typed_step_data(
         raise ValueError(f"Unknown step point: {step.value}. No step data creator available.")
 
     # Create step-specific typed data - fail fast and loud on any errors
-    return step_creators[step](base_data, result, args, kwargs, thought_item)
+    return step_creators[step](base_data, result, args, kwargs, thought_item)  # type: ignore[no-any-return]
 
 
 # This function is now integrated into _create_typed_step_data
 # Keeping for potential backward compatibility but marked as deprecated
 
 
-def _create_start_round_data(base_data: BaseStepData, args: tuple) -> StartRoundStepData:
+def _create_start_round_data(base_data: BaseStepData, args: Tuple[Any, ...]) -> StartRoundStepData:
     """Create START_ROUND specific typed data."""
     if not args:
         raise ValueError("START_ROUND args is empty - thought list is required for processing")
@@ -338,8 +344,12 @@ def _validate_aspdma_result(result: Any) -> None:
         )
 
 
-def _extract_dma_results_from_args(args: tuple) -> Optional[str]:
-    """Extract and format DMA results from ASPDMA args."""
+def _extract_dma_results_from_args(args: Tuple[Any, ...]) -> Any:
+    """
+    Extract DMA results object from ASPDMA args.
+
+    Returns the concrete InitialDMAResults object (NOT a string or dict).
+    """
     # Extract dma_results from args - it's the second positional arg after thought_context
     # Function signature: _perform_aspdma_step(self, thought_item, thought_context, dma_results)
     # args = (thought_context, dma_results)
@@ -347,32 +357,33 @@ def _extract_dma_results_from_args(args: tuple) -> Optional[str]:
         return None
 
     dma_results_obj = args[1]
-    if not dma_results_obj:
-        return None
+    # Return the concrete InitialDMAResults object directly
+    return dma_results_obj
 
-    # Convert dma_results object to string representation
-    if hasattr(dma_results_obj, "dsdma") and hasattr(dma_results_obj, "csdma"):
-        # InitialDMAResults object - format like PERFORM_DMAS does
+
+def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> PerformASPDMAStepData:
+    """Create PERFORM_ASPDMA specific typed data."""
+    _validate_aspdma_result(result)
+    dma_results_obj = _extract_dma_results_from_args(args)
+
+    # Create string summary for display
+    dma_results_str = None
+    if dma_results_obj and hasattr(dma_results_obj, "csdma"):
         dma_parts = []
         if dma_results_obj.csdma:
             dma_parts.append(f"csdma: {dma_results_obj.csdma}")
         if dma_results_obj.dsdma:
             dma_parts.append(f"dsdma: {dma_results_obj.dsdma}")
-        return "; ".join(dma_parts) if dma_parts else None
-    else:
-        return str(dma_results_obj)
-
-
-def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> PerformASPDMAStepData:
-    """Create PERFORM_ASPDMA specific typed data."""
-    _validate_aspdma_result(result)
-    dma_results = _extract_dma_results_from_args(args)
+        if dma_results_obj.ethical_pdma:
+            dma_parts.append(f"ethical_pdma: {dma_results_obj.ethical_pdma}")
+        dma_results_str = "; ".join(dma_parts) if dma_parts else None
 
     return PerformASPDMAStepData(
         **_base_data_dict(base_data),
         selected_action=str(result.selected_action),
         action_rationale=str(result.rationale),
-        dma_results=dma_results,
+        dma_results=dma_results_str,  # String summary for display
+        dma_results_obj=dma_results_obj,  # Concrete InitialDMAResults object for event creation
     )
 
 
@@ -412,8 +423,8 @@ def _extract_conscience_execution_values(result: Any) -> tuple[str, bool, str, s
 
 
 def _build_conscience_result_from_check(
-    conscience_check_result: "ConscienceCheckResult", override_reason: str | None
-) -> "ConscienceResult":
+    conscience_check_result: Any, override_reason: Optional[str]  # ConscienceCheckResult
+) -> Any:  # ConscienceResult
     """Build ConscienceResult from ConscienceCheckResult."""
     from ciris_engine.schemas.conscience.results import ConscienceResult
 
@@ -466,7 +477,7 @@ def _create_conscience_execution_data(base_data: BaseStepData, result: Any) -> C
     )
 
 
-def _create_entropy_check(passed: bool) -> "EntropyCheckResult":
+def _create_entropy_check(passed: bool) -> Any:  # EntropyCheckResult
     """Create entropy check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import EntropyCheckResult
 
@@ -482,7 +493,7 @@ def _create_entropy_check(passed: bool) -> "EntropyCheckResult":
     )
 
 
-def _create_coherence_check(passed: bool) -> "CoherenceCheckResult":
+def _create_coherence_check(passed: bool) -> Any:  # CoherenceCheckResult
     """Create coherence check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import CoherenceCheckResult
 
@@ -498,7 +509,7 @@ def _create_coherence_check(passed: bool) -> "CoherenceCheckResult":
     )
 
 
-def _create_optimization_veto_check(passed: bool) -> "OptimizationVetoResult":
+def _create_optimization_veto_check(passed: bool) -> Any:  # OptimizationVetoResult
     """Create optimization veto check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import OptimizationVetoResult
 
@@ -514,7 +525,7 @@ def _create_optimization_veto_check(passed: bool) -> "OptimizationVetoResult":
     )
 
 
-def _create_epistemic_humility_check(passed: bool) -> "EpistemicHumilityResult":
+def _create_epistemic_humility_check(passed: bool) -> Any:  # EpistemicHumilityResult
     """Create epistemic humility check result for conscience evaluation."""
     from ciris_engine.schemas.conscience.core import EpistemicHumilityResult
 
@@ -530,7 +541,7 @@ def _create_epistemic_humility_check(passed: bool) -> "EpistemicHumilityResult":
     )
 
 
-def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResult":
+def _create_comprehensive_conscience_result(result: Any) -> Any:  # ConscienceCheckResult
     """Create comprehensive ConscienceCheckResult with all 4 typed evaluations for transparency."""
     from datetime import datetime, timezone
 
@@ -569,12 +580,18 @@ def _create_comprehensive_conscience_result(result: Any) -> "ConscienceCheckResu
         coherence_score=coherence_check.coherence_score,
         check_timestamp=datetime.now(timezone.utc),
         processing_time_ms=None,  # Could be calculated if timing info available
+        original_action=result.original_action.model_dump(),
+        replacement_action=result.final_action.model_dump() if result.overridden else None,
+        thought_depth_triggered=getattr(result, "thought_depth_triggered", None),
+        updated_status_detected=getattr(result, "updated_status_detected", None),
     )
 
     return conscience_result
 
 
-def _create_recursive_aspdma_data(base_data: BaseStepData, result: Any, args: tuple) -> RecursiveASPDMAStepData:
+def _create_recursive_aspdma_data(
+    base_data: BaseStepData, result: Any, args: Tuple[Any, ...]
+) -> RecursiveASPDMAStepData:
     """Create RECURSIVE_ASPDMA specific typed data."""
     if not args:
         raise ValueError("RECURSIVE_ASPDMA args is empty - retry reason is required")
@@ -640,7 +657,7 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
 
 
 def _create_perform_action_data(
-    base_data: BaseStepData, result: Any, args: tuple, kwargs: dict
+    base_data: BaseStepData, result: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]
 ) -> PerformActionStepData:
     """Create PERFORM_ACTION specific typed data."""
     # Extract selected_action - first try result, then args
@@ -697,7 +714,13 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
             dispatch_success=result["success"],
             handler_completed=result["handler"] != "Unknown",
             follow_up_processing_pending=bool(result.get("follow_up_thought_id")),
+            follow_up_thought_id=result.get("follow_up_thought_id"),
             execution_time_ms=0.0,  # Dict format doesn't include execution time
+            # Extract audit trail data from dispatch_result
+            audit_entry_id=result.get("audit_entry_id"),
+            audit_sequence_number=result.get("audit_sequence_number"),
+            audit_entry_hash=result.get("audit_entry_hash"),
+            audit_signature=result.get("audit_signature"),
         )
     else:
         # Object-based results (should be rare, fail fast if wrong structure)
@@ -721,7 +744,7 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
         )
 
 
-def _create_round_complete_data(base_data: BaseStepData, args: tuple) -> RoundCompleteStepData:
+def _create_round_complete_data(base_data: BaseStepData, args: Tuple[Any, ...]) -> RoundCompleteStepData:
     """Create ROUND_COMPLETE specific typed data."""
     if not args:
         raise ValueError("ROUND_COMPLETE args is empty - completed thought count is required")
@@ -729,7 +752,7 @@ def _create_round_complete_data(base_data: BaseStepData, args: tuple) -> RoundCo
     return RoundCompleteStepData(**_base_data_dict(base_data), round_status="completed", thoughts_processed=len(args))
 
 
-def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion):
+def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion) -> Any:
     """Create appropriate step result schema based on step type."""
     # Import here to avoid circular dependency
     from ciris_engine.schemas.services.runtime_control import (
@@ -768,7 +791,7 @@ def _create_step_result_schema(step: StepPoint, step_data: StepDataUnion):
     return None
 
 
-def _extract_timing_data(step_data: StepDataUnion) -> tuple:
+def _extract_timing_data(step_data: StepDataUnion) -> Tuple[Any, Any]:
     """Extract and normalize timing data from typed step_data."""
     from datetime import datetime, timezone
 
@@ -812,7 +835,7 @@ async def _broadcast_step_result(step: StepPoint, step_data: StepDataUnion) -> N
 
 
 async def _broadcast_reasoning_event(
-    step: StepPoint, step_data: StepDataUnion, result: Any, is_recursive: bool = False
+    step: StepPoint, step_data: StepDataUnion, is_recursive: bool = False, thought_item: Any = None
 ) -> None:
     """
     Broadcast simplified reasoning event for one of the 6 key steps.
@@ -820,21 +843,21 @@ async def _broadcast_reasoning_event(
     CORRECT Step Point Mapping:
     0. START_ROUND → THOUGHT_START (thought + task metadata)
     1. GATHER_CONTEXT + PERFORM_DMAS → SNAPSHOT_AND_CONTEXT (snapshot + context)
-    2. PERFORM_ASPDMA → DMA_RESULTS (Results of the 3 DMAs)
-    3. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → ASPDMA_RESULT (result of ASPDMA, with is_recursive flag)
-    4. FINALIZE_ACTION → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
+    2. PERFORM_DMAS → DMA_RESULTS (Results of the 3 DMAs: CSDMA, DSDMA, PDMA)
+    3. PERFORM_ASPDMA → ASPDMA_RESULT (result of ASPDMA action selection)
+    4. CONSCIENCE_EXECUTION (+ RECURSIVE_CONSCIENCE) → CONSCIENCE_RESULT (result of 5 consciences, with is_recursive flag)
     5. ACTION_COMPLETE → ACTION_RESULT (execution + audit)
     """
-    logger.info(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
+    logger.debug(f"[BROADCAST DEBUG] _broadcast_reasoning_event called for step {step.value}")
     try:
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
-        logger.info("[BROADCAST DEBUG] Imports successful")
+        logger.debug("[BROADCAST DEBUG] Imports successful")
 
         event = None
         timestamp = step_data.timestamp or datetime.now().isoformat()
-        logger.info(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
+        logger.debug(f"[BROADCAST DEBUG] timestamp={timestamp}, step={step.value}")
 
         # Map step points to reasoning events using helper functions
         if step == StepPoint.START_ROUND:
@@ -844,12 +867,17 @@ async def _broadcast_reasoning_event(
         elif step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
             if step == StepPoint.PERFORM_DMAS:
-                logger.info("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
-                event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event)
+                logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
+                event = _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
 
         elif step == StepPoint.PERFORM_ASPDMA:
-            # Event 2: DMA_RESULTS
-            event = _create_dma_results_event(step_data, timestamp, create_reasoning_event)
+            # Event 2: DMA_RESULTS - get InitialDMAResults from step_data.dma_results (extracted from args)
+            # step_data for PERFORM_ASPDMA contains dma_results from the previous PERFORM_DMAS step
+            dma_results_for_event = getattr(step_data, "dma_results_obj", None)
+            if dma_results_for_event:
+                event = _create_dma_results_event(step_data, timestamp, dma_results_for_event, create_reasoning_event)
+            else:
+                logger.warning(f"No dma_results_obj found in step_data for PERFORM_ASPDMA step {step_data.thought_id}")
 
         elif step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
             # Event 3: ASPDMA_RESULT
@@ -862,17 +890,17 @@ async def _broadcast_reasoning_event(
 
         elif step == StepPoint.ACTION_COMPLETE:
             # Event 5: ACTION_RESULT
-            event = _create_action_result_event(step_data, timestamp, result, create_reasoning_event)
+            event = _create_action_result_event(step_data, timestamp, create_reasoning_event)
 
         # Broadcast the event if we created one
         if event:
-            logger.info(f"[BROADCAST DEBUG] About to broadcast {event.event_type}")
+            logger.debug(f"[BROADCAST DEBUG] About to broadcast {event.event_type}")
             await reasoning_event_stream.broadcast_reasoning_event(event)
-            logger.info(
+            logger.debug(
                 f"[BROADCAST DEBUG] Broadcasted {event.event_type} reasoning event for thought {step_data.thought_id}"
             )
         else:
-            logger.info(f"[BROADCAST DEBUG] No event created for step {step.value}")
+            logger.debug(f"[BROADCAST DEBUG] No event created for step {step.value}")
 
     except Exception as e:
         logger.warning(f"Error broadcasting reasoning event for {step.value}: {e}")
@@ -1065,33 +1093,19 @@ def _extract_follow_up_thought_id(result: Any) -> Optional[str]:
     return None
 
 
-def _extract_lightweight_system_snapshot() -> Dict[str, Any]:
+def _extract_lightweight_system_snapshot() -> SystemSnapshot:
     """
     Extract lightweight system snapshot for reasoning event context.
 
-    This provides basic system state without heavy data collection:
-    - Current timestamp
-    - Process health indicators (if available)
-    - Basic resource metrics (if available)
+    Returns a proper SystemSnapshot object with minimal fields populated.
+    This is used for SSE streaming and must be a concrete typed object.
     """
-    from datetime import datetime, timezone
+    from datetime import timezone
 
-    snapshot: Dict[str, Any] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "snapshot_type": "lightweight_reasoning_context",
-    }
-
-    # Try to get basic resource info if available (non-blocking)
-    try:
-        import psutil
-
-        process = psutil.Process()
-        snapshot["cpu_percent"] = float(process.cpu_percent(interval=0.01))
-        snapshot["memory_mb"] = float(process.memory_info().rss / (1024 * 1024))
-        snapshot["threads"] = int(process.num_threads())
-    except Exception:
-        # Resource monitoring not available - continue without it
-        pass
+    # Create a minimal SystemSnapshot with current time
+    snapshot = SystemSnapshot(
+        current_time_utc=datetime.now(timezone.utc).isoformat(),
+    )
 
     return snapshot
 
@@ -1125,12 +1139,29 @@ def _create_thought_start_event(step_data: StepDataUnion, timestamp: str, create
     )
 
 
-def _create_snapshot_and_context_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create SNAPSHOT_AND_CONTEXT reasoning event."""
+def _create_snapshot_and_context_event(
+    step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any, thought_item: Any = None
+) -> Any:
+    """Create SNAPSHOT_AND_CONTEXT reasoning event with full system snapshot from thought context."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     context = getattr(step_data, "context", "")
-    system_snapshot = _extract_lightweight_system_snapshot()
+
+    # Extract full SystemSnapshot from thought_item.initial_context
+    system_snapshot = None
+    if thought_item and hasattr(thought_item, "initial_context"):
+        initial_context = thought_item.initial_context
+        if isinstance(initial_context, dict):
+            # Extract system_snapshot from ProcessingThoughtContext dict
+            system_snapshot = initial_context.get("system_snapshot")
+        elif hasattr(initial_context, "system_snapshot"):
+            # Extract from ProcessingThoughtContext object
+            system_snapshot = initial_context.system_snapshot
+
+    # Fallback to minimal snapshot if we couldn't extract the full one
+    if not system_snapshot:
+        logger.warning("Could not extract full SystemSnapshot from thought_item, using minimal snapshot")
+        system_snapshot = _extract_lightweight_system_snapshot()
 
     return create_reasoning_event(
         event_type=ReasoningEvent.SNAPSHOT_AND_CONTEXT,
@@ -1143,18 +1174,41 @@ def _create_snapshot_and_context_event(step_data: StepDataUnion, timestamp: str,
     )
 
 
-def _create_dma_results_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create DMA_RESULTS reasoning event."""
+def _create_dma_results_event(
+    step_data: StepDataUnion, timestamp: str, dma_results: Any, create_reasoning_event: Any
+) -> Any:
+    """
+    Create DMA_RESULTS reasoning event from InitialDMAResults.
+
+    This event is broadcast at the START of PERFORM_ASPDMA step, using the
+    result parameter which contains InitialDMAResults from PERFORM_DMAS.
+    """
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+    # Extract the 3 DMA results from InitialDMAResults object - pass concrete typed objects
+    if not dma_results:
+        raise ValueError(f"DMA results is None or empty: {dma_results}")
+    if not hasattr(dma_results, "csdma"):
+        raise ValueError(
+            f"DMA results missing 'csdma' attribute. Type: {type(dma_results)}, attributes: {dir(dma_results)}"
+        )
+
+    # All 3 DMA results are required (non-optional)
+    if not dma_results.csdma:
+        raise ValueError(f"CSDMA result is None: {dma_results.csdma}")
+    if not dma_results.dsdma:
+        raise ValueError(f"DSDMA result is None: {dma_results.dsdma}")
+    if not dma_results.ethical_pdma:
+        raise ValueError(f"Ethical PDMA result is None: {dma_results.ethical_pdma}")
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
         thought_id=step_data.thought_id,
         task_id=step_data.task_id,
         timestamp=timestamp,
-        csdma=getattr(step_data, "csdma", None),
-        dsdma=getattr(step_data, "dsdma", None),
-        aspdma_options=getattr(step_data, "aspdma", None),
+        csdma=dma_results.csdma,  # Pass CSDMAResult object directly
+        dsdma=dma_results.dsdma,  # Pass DSDMAResult object directly
+        pdma=dma_results.ethical_pdma,  # Pass EthicalDMAResult object directly
     )
 
 
@@ -1193,13 +1247,12 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
     )
 
 
-def _create_action_result_event(
-    step_data: StepDataUnion, timestamp: str, result: Any, create_reasoning_event: Any
-) -> Any:
-    """Create ACTION_RESULT reasoning event."""
+def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
+    """Create ACTION_RESULT reasoning event with audit trail and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
-    follow_up_thought_id = _extract_follow_up_thought_id(result)
+    # Extract follow_up_thought_id from step_data (already populated from dispatch_result)
+    follow_up_thought_id = getattr(step_data, "follow_up_thought_id", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.ACTION_RESULT,

@@ -17,7 +17,7 @@ from ciris_engine.protocols.services.infrastructure.authentication import Authen
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 from ciris_engine.schemas.services.authority.wise_authority import WAUpdate
-from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WARole
+from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WACertificate, WARole
 
 # Permission constants to avoid duplication
 PERMISSION_SYSTEM_READ = "system.read"
@@ -137,7 +137,7 @@ class APIAuthService:
         await self._load_users_from_db()
         self._users_loaded = True
 
-    def _update_existing_oauth_user(self, oauth_user_id: str, wa) -> None:
+    def _update_existing_oauth_user(self, oauth_user_id: str, wa: "WACertificate") -> None:
         """Update existing OAuth user record with WA info."""
         existing_user = self._users[oauth_user_id]
         existing_user.wa_role = wa.role
@@ -146,7 +146,7 @@ class APIAuthService:
         existing_user.wa_auto_minted = wa.auto_minted
         existing_user.api_role = self._wa_role_to_api_role(wa.role)
 
-    def _create_user_from_wa(self, wa) -> User:
+    def _create_user_from_wa(self, wa: "WACertificate") -> User:
         """Convert WA certificate to User."""
         return User(
             wa_id=wa.wa_id,
@@ -166,7 +166,7 @@ class APIAuthService:
             oauth_links=list(wa.oauth_links),
         )
 
-    async def _process_wa_record(self, wa) -> None:
+    async def _process_wa_record(self, wa: "WACertificate") -> None:
         """Process a single WA record and add/update user."""
         # Remove stale cache entries for this WA
         to_remove = [key for key, value in self._users.items() if getattr(value, "wa_id", None) == wa.wa_id]
@@ -383,7 +383,7 @@ class APIAuthService:
         if not user:
             return None
 
-        if self._verify_password(password, user.password_hash):
+        if user.password_hash and self._verify_password(password, user.password_hash):
             return user
         return None
 
@@ -682,7 +682,7 @@ class APIAuthService:
 
         # Verify current password unless skip_current_check is True
         if not skip_current_check and current_password:
-            if not self._verify_password(current_password, user.password_hash):
+            if not user.password_hash or not self._verify_password(current_password, user.password_hash):
                 return False
 
         # Update password
@@ -946,6 +946,8 @@ class APIAuthService:
 
     async def _update_existing_wa(self, user_id: str, wa_role: WARole) -> None:
         """Update existing WA certificate."""
+        if not self._auth_service:
+            return
         await self._auth_service.update_wa(
             user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
         )
@@ -965,6 +967,9 @@ class APIAuthService:
 
     async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
         """Create new WA certificate for OAuth user and return the wa_id."""
+        if not self._auth_service:
+            raise ValueError("Authentication service not available")
+
         wa_permissions = self._get_wa_permissions(user)
 
         # Create WA certificate with proper wa_id format, but link to OAuth user
@@ -976,7 +981,10 @@ class APIAuthService:
         timestamp = datetime.now(timezone.utc)
 
         # Generate proper wa_id (format: wa-YYYY-MM-DD-XXXXXX)
-        wa_id = self._auth_service._generate_wa_id(timestamp)
+        # Must match pattern: ^wa-\d{4}-\d{2}-\d{2}-[A-Z0-9]{6}$
+        import secrets
+
+        wa_id = f"wa-{timestamp.strftime('%Y-%m-%d')}-{secrets.token_hex(3).upper()}"
         jwt_kid = f"wa-jwt-oauth-{wa_id[-6:].lower()}"
 
         # Extract OAuth info from user_id (format: "provider:external_id")
@@ -1001,7 +1009,12 @@ class APIAuthService:
         )
 
         # Store WA certificate in database
-        await self._auth_service._store_wa_certificate(wa_cert)
+        # Note: Accessing private method - ideally this would be a public API
+        if hasattr(self._auth_service, "_store_wa_certificate"):
+            store_method = getattr(self._auth_service, "_store_wa_certificate")
+            await store_method(wa_cert)
+        else:
+            raise ValueError("Cannot store WA certificate - method not available")
 
         print(f"Created WA certificate {wa_id} for OAuth user {user_id} with role {wa_role}")
         return wa_id
@@ -1016,6 +1029,8 @@ class APIAuthService:
 
     async def _handle_wa_database_operations(self, user: User, user_id: str, wa_role: WARole) -> None:
         """Handle WA database create/update operations."""
+        if not self._auth_service:
+            return
         existing_wa = await self._auth_service.get_wa(user_id)
 
         if existing_wa:

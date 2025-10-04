@@ -4,7 +4,7 @@ import json
 import secrets
 from datetime import timedelta
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.prompt import Prompt
@@ -25,7 +25,7 @@ class WACLIBootstrapService:
 
     async def bootstrap_new_root(
         self, name: str, use_password: bool = False, shamir_shares: Optional[Tuple[int, int]] = None
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Bootstrap a new root WA."""
         try:
             self.console.print(f"🌱 Creating new root WA: [bold]{name}[/bold]")
@@ -85,7 +85,7 @@ class WACLIBootstrapService:
         role: str = "authority",
         scopes: Optional[List[str]] = None,
         use_password: bool = False,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Mint a new WA as a child of an existing WA."""
         try:
             self.console.print(f"🪙 Minting new WA: [bold]{name}[/bold]")
@@ -175,7 +175,7 @@ class WACLIBootstrapService:
 
     def generate_mint_request(
         self, name: str, requested_role: str = "authority", requested_scopes: Optional[List[str]] = None
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Generate a mint request code for approval by existing WA."""
         try:
             # Generate temporary keypair
@@ -212,7 +212,7 @@ class WACLIBootstrapService:
             self.console.print(f"❌ Error generating mint request: {e}")
             return {"status": "error", "error": str(e)}
 
-    def approve_mint_request(self, code: str, approver_wa_id: str, _approver_key_file: str) -> dict:
+    def approve_mint_request(self, code: str, approver_wa_id: str, _approver_key_file: str) -> Dict[str, Any]:
         """Approve a mint request and create new WA."""
         try:
             # In production, would fetch from DB

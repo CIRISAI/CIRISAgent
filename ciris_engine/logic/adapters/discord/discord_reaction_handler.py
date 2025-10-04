@@ -59,7 +59,7 @@ class DiscordReactionHandler:
         self.client = client
         self._pending_approvals: Dict[int, ApprovalRequest] = {}
         self._approval_callbacks: Dict[int, Callable[[ApprovalRequest], Awaitable[None]]] = {}
-        self._timeout_task: Optional[asyncio.Task] = None
+        self._timeout_task: Optional[asyncio.Task[None]] = None
         self._time_service: TimeServiceProtocol
 
         # Ensure we have a time service

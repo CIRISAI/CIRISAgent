@@ -32,6 +32,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, Thought
 from ciris_engine.schemas.services.visibility import ReasoningTrace, TaskDecisionHistory, VisibilitySnapshot
+from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
 
 class VisibilityService(BaseService, VisibilityServiceProtocol):
@@ -165,6 +166,14 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 active_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
                 tasks.extend(active_tasks[:remaining])
+
+        # If still need more, add failed tasks
+        if len(tasks) < limit:
+            failed_tasks = get_tasks_by_status(TaskStatus.FAILED, db_path=self._db_path)
+            if failed_tasks:
+                failed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
+                remaining = limit - len(tasks)
+                tasks.extend(failed_tasks[:remaining])
 
         # If still need more, add pending
         if len(tasks) < limit:
@@ -382,30 +391,6 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         except Exception as e:
             return f"Unable to explain action {action_id}: {str(e)}"
 
-    async def get_task_history(self, limit: int = 10) -> List[Task]:
-        """Get recent task history for the agent."""
-        tasks = []
-
-        # Get completed tasks
-        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED, db_path=self._db_path)
-
-        # Get failed tasks
-        failed_tasks = get_tasks_by_status(TaskStatus.FAILED, db_path=self._db_path)
-
-        # Combine and sort by most recent first
-        all_tasks = []
-        if completed_tasks:
-            all_tasks.extend(completed_tasks)
-        if failed_tasks:
-            all_tasks.extend(failed_tasks)
-
-        if all_tasks:
-            # Sort by updated_at (most recent first)
-            all_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
-            tasks = all_tasks[:limit]
-
-        return tasks
-
     def apply_redaction(self, content: str, redacted_content: str) -> str:
         """Apply redaction to content and track the operation."""
         self._redaction_operations += 1
@@ -426,7 +411,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                     # Return the most recent correlations
                     correlations = telemetry_service._recent_correlations[-limit:]
                     logger.debug(f"Retrieved {len(correlations)} traces from telemetry service")
-                    return correlations
+                    return list(correlations)
                 else:
                     logger.warning("Telemetry service found but _recent_correlations not available")
             else:
@@ -451,7 +436,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 correlations = get_recent_correlations(limit=limit)
                 # The correlations are already ServiceCorrelation objects from the database
                 logger.debug(f"Retrieved {len(correlations)} traces from database")
-                return correlations
+                return list(correlations)
             except Exception as e:
                 # Log the error loudly
                 logger.error(f"Failed to get traces from database: {e}", exc_info=True)

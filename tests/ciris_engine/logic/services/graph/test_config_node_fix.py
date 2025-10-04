@@ -64,7 +64,7 @@ async def services(temp_db, time_service):
     memory_service = LocalGraphMemoryService(
         db_path=temp_db, secrets_service=secrets_service, time_service=time_service
     )
-    memory_service.start()
+    await memory_service.start()
 
     config_service = GraphConfigService(graph_memory_service=memory_service, time_service=time_service)
     await config_service.start()
@@ -93,7 +93,7 @@ async def services(temp_db, time_service):
     # Cleanup
     await filter_service.stop()
     await config_service.stop()
-    memory_service.stop()
+    await memory_service.stop()
     await secrets_service.stop()
 
     if os.path.exists(secrets_db):

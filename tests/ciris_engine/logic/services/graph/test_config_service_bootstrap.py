@@ -69,7 +69,7 @@ async def memory_service_factory(temp_db, time_service):
 
         # Create memory service
         service = LocalGraphMemoryService(db_path=temp_db, secrets_service=secrets_service, time_service=time_service)
-        service.start()
+        await service.start()
         created_services.append((service, secrets_service))
         return service
 
@@ -77,7 +77,7 @@ async def memory_service_factory(temp_db, time_service):
 
     # Cleanup
     for memory_service, secrets_service in created_services:
-        memory_service.stop()
+        await memory_service.stop()
         await secrets_service.stop()
 
 

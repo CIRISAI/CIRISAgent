@@ -28,7 +28,7 @@ from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.graph_core import CONFIG_SCOPE_MAP, ConfigNodeType, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.nodes import IdentitySnapshot
-from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         # Baseline tracking
         self._baseline_snapshot_id: Optional[str] = None
-        self._last_check = self._time_service.now()
+        self._last_check = self._time_service.now() if self._time_service else datetime.now()
 
         # Simple variance calculation - no weights needed
 
@@ -138,9 +138,9 @@ class IdentityVarianceMonitor(BaseScheduledService):
             baseline_snapshot = IdentitySnapshot(
                 id=baseline_id,
                 scope=GraphScope.IDENTITY,
-                system_state="BASELINE",
+                system_state={"type": "BASELINE"},
                 expires_at=None,
-                identity_root=identity,
+                identity_root=identity.model_dump() if identity else None,
                 snapshot_id=baseline_id,
                 timestamp=self._time_service.now() if self._time_service else datetime.now(),
                 agent_id=identity.agent_id,
@@ -177,7 +177,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
                     ).model_dump(),
                 )
 
-                if result.status.value == "OK":
+                if result.status == MemoryOpStatus.OK:
                     self._baseline_snapshot_id = baseline_id
                     logger.info(f"Identity baseline established: {baseline_id}")
 
@@ -248,7 +248,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
             baseline_snapshot = IdentitySnapshot(
                 id=baseline_id,
                 scope=GraphScope.IDENTITY,
-                system_state="BASELINE",
+                system_state={"type": "BASELINE"},
                 expires_at=None,
                 identity_root=None,  # No identity root for re-baseline
                 snapshot_id=baseline_id,
@@ -287,7 +287,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 ).model_dump(),
             )
 
-            if result.status.value == "OK":
+            if result.status == MemoryOpStatus.OK:
                 # Update baseline reference
                 old_baseline = self._baseline_snapshot_id
                 self._baseline_snapshot_id = baseline_id
@@ -410,7 +410,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
         snapshot = IdentitySnapshot(
             id=snapshot_id,
             scope=GraphScope.IDENTITY,
-            system_state="SNAPSHOT",
+            system_state={"type": "SNAPSHOT"},
             expires_at=None,
             identity_root=None,  # No identity root for snapshots
             snapshot_id=snapshot_id,
@@ -447,9 +447,9 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 metadata=VarianceCheckMetadata(
                     handler_name="identity_variance_monitor",
                     check_reason="snapshot",
-                    previous_check=self._baseline_snapshot_id,
+                    previous_check=self._last_check,
                     check_type="snapshot",
-                    baseline_established=self._time_service.now(),
+                    baseline_established=self._last_check,
                 ).model_dump(),
             )
 
@@ -779,7 +779,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return trust_params
 
-    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> dict:
+    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> Dict[str, Any]:
         """Extract current trust parameters from config nodes."""
         trust_params = {}
 
@@ -809,7 +809,9 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return capabilities
 
-    def _compare_patterns(self, baseline_patterns: dict, current_patterns: dict) -> List[IdentityDiff]:
+    def _compare_patterns(
+        self, baseline_patterns: Dict[str, Any], current_patterns: Dict[str, Any]
+    ) -> List[IdentityDiff]:
         """Compare behavioral patterns between baseline and current."""
         differences = []
 

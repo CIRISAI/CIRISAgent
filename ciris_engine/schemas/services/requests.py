@@ -1,14 +1,17 @@
 """
 Service request/response schemas for contract-driven architecture.
 
-Replaces Dict[str, Any] in service method calls.
+Provides typed schemas in service method calls.
 """
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ciris_engine.schemas.types import ConfigDict as ConfigDictType
+from ciris_engine.schemas.types import NodeAttributes
 
 from .metadata import ServiceMetadata
 
@@ -61,7 +64,7 @@ class RecallRequest(ServiceRequest):
 class RecallResponse(ServiceResponse):
     """Response from memory service recall method."""
 
-    nodes: List[dict] = Field(..., description="Retrieved nodes")  # Would be typed as List[GraphNode]
+    nodes: List[NodeAttributes] = Field(..., description="Retrieved nodes as attribute dictionaries")
     count: int = Field(..., ge=0, description="Number of nodes retrieved")
 
 
@@ -72,7 +75,7 @@ class ToolExecutionRequest(ServiceRequest):
     """Request for tool service execution."""
 
     tool_name: str = Field(..., description="Name of tool to execute")
-    tool_args: dict = Field(..., description="Tool arguments")
+    tool_args: ConfigDictType = Field(..., description="Tool arguments")
     timeout: Optional[float] = Field(30.0, description="Execution timeout in seconds")
 
 
@@ -112,7 +115,7 @@ class AuditRequest(ServiceRequest):
     """Request for audit service."""
 
     event_type: str = Field(..., description="Type of event to audit")
-    event_data: dict = Field(..., description="Event data to audit")
+    event_data: ConfigDictType = Field(..., description="Event data to audit")
     severity: str = Field("info", description="Event severity level")
 
 

@@ -1,7 +1,7 @@
 """
 Schemas for main processor operations.
 
-These replace all Dict[str, Any] usage in logic/processors/core/main_processor.py.
+Provides typed schemas for logic/processors/core/main_processor.py.
 """
 
 from datetime import datetime
@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class ProcessorServices(BaseModel):
@@ -37,7 +38,7 @@ class ProcessingRoundResult(BaseModel):
     state_changed: bool = Field(False, description="Whether state changed")
     new_state: Optional[AgentState] = Field(None, description="New state if changed")
     processing_time_ms: float = Field(..., description="Processing time in milliseconds")
-    details: Dict[str, Any] = Field(default_factory=dict, description="Additional round details")
+    details: NodeAttributes = Field(default_factory=dict, description="Additional round details")
 
 
 class ProcessingStatus(BaseModel):
@@ -59,7 +60,7 @@ class PreloadTask(BaseModel):
     description: str = Field(..., description="Task description")
     priority: int = Field(5, description="Task priority")
     channel_id: Optional[str] = Field(None, description="Channel to use")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional task metadata")
+    metadata: NodeAttributes = Field(default_factory=dict, description="Additional task metadata")
 
 
 class StateTransitionResult(BaseModel):

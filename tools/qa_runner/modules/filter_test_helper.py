@@ -123,7 +123,7 @@ class FilterTestHelper:
                             for event in events:
                                 event_type = event.get("event_type")
 
-                                # Look for action_result events with TASK_COMPLETE action
+                                # Look for action_result events (ANY action completes the thought)
                                 if event_type == "action_result":
                                     action_executed = event.get("action_executed", "")
                                     execution_success = event.get("execution_success", False)
@@ -136,12 +136,16 @@ class FilterTestHelper:
                                             f"action={action_executed}, success={execution_success}"
                                         )
 
-                                    # Check if this is a TASK_COMPLETE action that succeeded
-                                    if "TASK_COMPLETE" in action_executed and execution_success:
+                                    # ANY action_result that succeeded indicates thought completion
+                                    # (speak, memorize, recall, task_complete, etc. all complete the thought)
+                                    if execution_success:
                                         if self.verbose:
-                                            print(f"[SSE] ✅ TASK_COMPLETE detected for task {task_id}")
-                                        if task_id:
-                                            self.completed_tasks.add(task_id)
+                                            print(
+                                                f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8]}"
+                                            )
+                                        # Use thought_id as the completion marker (not task_id which may be None)
+                                        if thought_id and thought_id != "unknown":
+                                            self.completed_tasks.add(thought_id)
 
                         except json.JSONDecodeError:
                             pass

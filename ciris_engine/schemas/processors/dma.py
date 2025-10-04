@@ -9,6 +9,7 @@ from typing import Dict, Optional
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.types import ConfigDict
 
 
 class DMAMetadata(BaseModel):
@@ -17,16 +18,16 @@ class DMAMetadata(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel ID if available")
     user_id: Optional[str] = Field(None, description="User ID if available")
     platform: Optional[str] = Field(None, description="Platform name")
-    session_data: dict = Field(default_factory=dict, description="Session-specific data")
-    metadata: dict = Field(default_factory=dict, description="Additional context metadata")
+    session_data: ConfigDict = Field(default_factory=dict, description="Session-specific data")
+    metadata: ConfigDict = Field(default_factory=dict, description="Additional context metadata")
 
 
 class InitialDMAResults(BaseModel):
-    """Results from initial DMA runs."""
+    """Results from initial DMA runs - all 3 DMA results are required."""
 
-    ethical_pdma: Optional[EthicalDMAResult] = Field(None, description="Ethical PDMA result")
-    csdma: Optional[CSDMAResult] = Field(None, description="CSDMA result")
-    dsdma: Optional[DSDMAResult] = Field(None, description="DSDMA result if available")
+    ethical_pdma: EthicalDMAResult = Field(..., description="Ethical PDMA result (required)")
+    csdma: CSDMAResult = Field(..., description="CSDMA result (required)")
+    dsdma: DSDMAResult = Field(..., description="DSDMA result (required)")
 
 
 class DMAError(BaseModel):
@@ -70,7 +71,7 @@ class ActionSelectionContext(BaseModel):
     ethical_pdma_result: EthicalDMAResult = Field(..., description="Ethical evaluation")
     csdma_result: CSDMAResult = Field(..., description="Common sense evaluation")
     dsdma_result: Optional[DSDMAResult] = Field(None, description="Domain specific evaluation")
-    metadata: dict = Field(default_factory=dict, description="Additional context")
+    metadata: ConfigDict = Field(default_factory=dict, description="Additional context")
 
 
 class CircuitBreakerStatus(BaseModel):

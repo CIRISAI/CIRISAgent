@@ -52,6 +52,11 @@ class IncidentManagementService(BaseGraphService):
         self.service_name = "IncidentManagementService"
         self._started = False
         self._start_time: Optional[datetime] = None
+        self._metrics_tracking: Dict[str, float] = {
+            "created": 0.0,
+            "resolved": 0.0,
+            "active": 0.0,
+        }
 
     def _get_time_service(self) -> "TimeServiceProtocol":
         """Get time service for consistent timestamps."""
@@ -548,6 +553,131 @@ class IncidentManagementService(BaseGraphService):
             logger.warning(f"Failed to get incident count: {e}")
             return 0
 
+    async def query_incidents(
+        self,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        severity: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[IncidentNode]:
+        """Query incidents with optional filtering.
+
+        Args:
+            start_time: Filter incidents after this time
+            end_time: Filter incidents before this time
+            severity: Filter by severity (CRITICAL, HIGH, MEDIUM, LOW)
+            status: Filter by status (OPEN, INVESTIGATING, RESOLVED, CLOSED, RECURRING)
+
+        Returns:
+            List of matching IncidentNode objects
+        """
+        try:
+            time_service = self._get_time_service()
+
+            # Use start_time or default to 24 hours ago
+            if not start_time:
+                start_time = time_service.now() - timedelta(hours=24)
+
+            # Get all incidents since start_time
+            incidents = await self._get_recent_incidents(start_time)
+
+            # Apply filters
+            filtered_incidents = []
+            for incident in incidents:
+                # Filter by end_time
+                if end_time and incident.detected_at > end_time:
+                    continue
+
+                # Filter by severity (case-insensitive)
+                if severity and incident.severity.value.upper() != severity.upper():
+                    continue
+
+                # Filter by status (case-insensitive)
+                if status and incident.status.value.upper() != status.upper():
+                    continue
+
+                filtered_incidents.append(incident)
+
+            return filtered_incidents
+
+        except Exception as e:
+            logger.warning(f"Failed to query incidents: {e}")
+            return []
+
+    async def get_insights(
+        self,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 10,
+    ) -> List[IncidentInsightNode]:
+        """Get incident insights with optional filtering.
+
+        Args:
+            start_time: Filter insights after this time
+            end_time: Filter insights before this time
+            limit: Maximum number of insights to return
+
+        Returns:
+            List of IncidentInsightNode objects
+        """
+        if not self._memory_bus:
+            logger.warning("Memory bus not available")
+            return []
+
+        try:
+            from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+
+            time_service = self._get_time_service()
+
+            # Use start_time or default to 7 days ago (insights are less frequent)
+            if not start_time:
+                start_time = time_service.now() - timedelta(days=7)
+
+            # Create search filter for insight nodes
+            search_filter = MemorySearchFilter(
+                node_type=NodeType.CONCEPT.value,
+                created_after=start_time,
+                limit=limit * 2,  # Get extra for filtering
+            )
+
+            # Query for concept nodes (insights are stored as concepts)
+            nodes = await self._memory_bus.search(
+                query="incident insight",
+                filters=search_filter,
+                handler_name="incident_service",
+            )
+
+            # Convert to IncidentInsightNode and filter
+            insights = []
+            for node in nodes:
+                try:
+                    # Check if this is actually an insight node
+                    attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+                    if "insight_type" not in attrs:
+                        continue
+
+                    insight = IncidentInsightNode.from_graph_node(node)
+
+                    # Filter by end_time
+                    if end_time and insight.analysis_timestamp > end_time:
+                        continue
+
+                    insights.append(insight)
+
+                    # Stop if we've reached the limit
+                    if len(insights) >= limit:
+                        break
+
+                except Exception as e:
+                    logger.warning(f"Failed to parse insight node: {e}")
+                    continue
+
+            return insights
+
+        except Exception as e:
+            logger.warning(f"Failed to get insights: {e}")
+            return []
+
     async def _mark_incidents_analyzed(self, incidents: List[IncidentNode]) -> None:
         """Mark incidents as analyzed."""
         for incident in incidents:
@@ -605,7 +735,7 @@ class IncidentManagementService(BaseGraphService):
             last_health_check=current_time,
         )
 
-    def is_healthy(self) -> bool:
+    async def is_healthy(self) -> bool:
         """Check if service is healthy."""
         return self._started and self._memory_bus is not None
 
@@ -618,9 +748,9 @@ class IncidentManagementService(BaseGraphService):
         # Initialize tracking if not present
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
-                "created": 0,
-                "resolved": 0,
-                "active": 0,
+                "created": 0.0,
+                "resolved": 0.0,
+                "active": 0.0,
             }
 
         # Calculate uptime
@@ -630,17 +760,17 @@ class IncidentManagementService(BaseGraphService):
             uptime_seconds = (current_time - self._start_time).total_seconds()
 
         # Get active incident count safely
-        active_count = 0
+        active_count = 0.0
         try:
             # Get recent unresolved incidents as active count
             incidents_24h = await self.get_incident_count(hours=24)
             # For simplicity, treat last 24h incidents as active if not resolved
-            active_count = incidents_24h - self._track_metric("resolved", 0)
+            active_count = float(incidents_24h) - self._track_metric("resolved", 0.0)
             if active_count < 0:
-                active_count = 0
+                active_count = 0.0
         except Exception as e:
             logger.warning(f"Failed to get active incident count: {e}")
-            active_count = 0
+            active_count = 0.0
 
         # Return exactly the 4 required v1.4.3 metrics
         return {
@@ -654,9 +784,9 @@ class IncidentManagementService(BaseGraphService):
         """Track a metric with real values from service state."""
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
-                "created": 0,
-                "resolved": 0,
-                "active": 0,
+                "created": 0.0,
+                "resolved": 0.0,
+                "active": 0.0,
             }
         return float(self._metrics_tracking.get(metric_name, default))
 
@@ -664,10 +794,10 @@ class IncidentManagementService(BaseGraphService):
         """Increment a tracked metric."""
         if not hasattr(self, "_metrics_tracking"):
             self._metrics_tracking = {
-                "created": 0,
-                "resolved": 0,
-                "active": 0,
+                "created": 0.0,
+                "resolved": 0.0,
+                "active": 0.0,
             }
-        self._metrics_tracking[metric_name] = self._metrics_tracking.get(metric_name, 0) + amount
+        self._metrics_tracking[metric_name] = self._metrics_tracking.get(metric_name, 0.0) + amount
 
     # get_telemetry() removed - use get_metrics() from BaseService instead

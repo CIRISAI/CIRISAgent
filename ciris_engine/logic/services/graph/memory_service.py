@@ -20,6 +20,7 @@ from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, No
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
+from ciris_engine.schemas.types import JSONDict, JSONList, JSONValue
 
 # No longer using psutil - resource_monitor handles process metrics
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles datetime objects and Pydantic models."""
 
-    def default(self, obj: object) -> Union[str, dict, list, int, float, bool, None]:
+    def default(self, obj: object) -> Union[str, JSONDict, JSONList, int, float, bool, None]:
         if isinstance(obj, datetime):
             return obj.isoformat()
         # Handle Pydantic models
@@ -156,7 +157,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
     async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
         """Process a single node for recall, handling secrets and edges."""
         # Process attributes - convert to proper schema
-        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, dict] = {}
+        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]] = {}
         if node.attributes:
             processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
 
@@ -177,7 +178,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return processed_node
 
-    def forget(self, node: GraphNode) -> MemoryOpResult:
+    async def forget(self, node: GraphNode) -> MemoryOpResult:
         """Forget a node and clean up any associated secrets."""
         self._track_request()
         try:
@@ -196,17 +197,29 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             logger.exception("Error forgetting node %s: %s", node.id, e)
             return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
 
-    def export_identity_context(self) -> str:
-        lines: List[str] = []
+    async def export_identity_context(self) -> str:
+        """
+        Export agent identity context as formatted text.
+
+        Uses format_agent_identity() to convert raw graph node data into
+        human-readable text with shutdown history.
+        """
+        from ciris_engine.logic.formatters.identity import format_agent_identity
+
         with get_db_connection(db_path=self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
             )
-            for row in cursor.fetchall():
-                attrs = json.loads(row["attributes_json"]) if row["attributes_json"] else {}
-                lines.append(f"{row['node_id']}: {attrs}")
-        return "\n".join(lines)
+            rows = cursor.fetchall()
+
+            # If we have identity nodes, format the first one
+            # (typically there's only one identity node per agent)
+            if rows:
+                attrs = json.loads(rows[0]["attributes_json"]) if rows[0]["attributes_json"] else {}
+                return format_agent_identity(attrs)
+
+            return ""
 
     async def _process_secrets_for_memorize(self, node: GraphNode) -> GraphNode:
         """Process secrets in node attributes during memorization."""
@@ -249,14 +262,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         )
 
     async def _process_secrets_for_recall(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, dict], action_type: str
-    ) -> dict:
+        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]], action_type: str
+    ) -> Dict[str, Any]:
         """Process secrets in recalled attributes for potential decryption."""
         if not attributes:
             return {}
 
         # Convert GraphNodeAttributes to dict if needed
-        attributes_dict: dict
+        attributes_dict: Dict[str, Any]
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
         else:  # isinstance(attributes, dict)
@@ -291,13 +304,15 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return attributes_dict
 
-    def _process_secrets_for_forget(self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, dict]) -> None:
+    def _process_secrets_for_forget(
+        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]]
+    ) -> None:
         """Clean up secrets when forgetting a node."""
         if not attributes:
             return
 
         # Convert GraphNodeAttributes to dict if needed
-        attributes_dict: dict
+        attributes_dict: Dict[str, Any]
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
         else:  # isinstance(attributes, dict)
@@ -362,7 +377,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             loop = asyncio.get_event_loop()
 
-            def _query_tsdb_nodes():
+            def _query_tsdb_nodes() -> List[Any]:
                 with get_db_connection(db_path=self.db_path) as conn:
                     cursor = conn.cursor()
 
@@ -400,6 +415,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
                     # Get timestamp from created_at or attributes
                     timestamp_str = attrs.get("created_at", row["created_at"])
+                    timestamp: datetime
                     if isinstance(timestamp_str, str):
                         # Handle both timezone-aware and naive timestamps
                         if "Z" in timestamp_str:
@@ -412,9 +428,9 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                             if timestamp.tzinfo is None:
                                 timestamp = timestamp.replace(tzinfo=timezone.utc)
                     else:
-                        timestamp = timestamp_str
+                        timestamp = timestamp_str if isinstance(timestamp_str, datetime) else datetime.now(timezone.utc)
                         # Ensure timezone awareness
-                        if hasattr(timestamp, "tzinfo") and timestamp.tzinfo is None:
+                        if timestamp.tzinfo is None:
                             timestamp = timestamp.replace(tzinfo=timezone.utc)
 
                     # Get tags
@@ -503,7 +519,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             logger.exception(f"Error memorizing metric {metric_name}: {e}")
             return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
 
-    def create_edge(self, edge: GraphEdge) -> MemoryOpResult:
+    async def create_edge(self, edge: GraphEdge) -> MemoryOpResult:
         """Create an edge between two nodes in the memory graph."""
         self._track_request()
         try:
@@ -517,7 +533,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             logger.exception(f"Error creating edge: {e}")
             return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
 
-    def get_node_edges(self, node_id: str, scope: GraphScope) -> List[GraphEdge]:
+    async def get_node_edges(self, node_id: str, scope: GraphScope) -> List[GraphEdge]:
         """Get all edges connected to a node."""
         try:
             from ciris_engine.logic.persistence.models.graph import get_edges_for_node
@@ -624,9 +640,16 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             search_terms, query_node_type, query_scope = self._parse_search_query(query)
 
             # Extract filters, preferring query string values
-            scope = query_scope or (filters.scope if filters and hasattr(filters, "scope") else GraphScope.LOCAL)
+            # Convert filter scope string to GraphScope enum
+            filter_scope: Optional[GraphScope] = None
+            if filters and hasattr(filters, "scope") and filters.scope:
+                try:
+                    filter_scope = GraphScope(filters.scope)
+                except ValueError:
+                    filter_scope = None
+            scope = query_scope or filter_scope or GraphScope.LOCAL
             node_type = query_node_type or (filters.node_type if filters and hasattr(filters, "node_type") else None)
-            limit = filters.limit if filters and hasattr(filters, "limit") else 100
+            limit = filters.limit if filters and hasattr(filters, "limit") and filters.limit else 100
 
             # Fetch nodes based on type
             nodes = await self._fetch_nodes_for_search(scope, node_type, limit)
@@ -896,7 +919,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         return all_nodes
 
     async def _process_edge_connection(
-        self, edge: Any, current_node: GraphNode, visited_nodes: set, current_depth: int
+        self, edge: Any, current_node: GraphNode, visited_nodes: set[str], current_depth: int
     ) -> Optional[Tuple[GraphNode, bool]]:
         """Process a single edge connection and return the connected node if valid."""
         from ciris_engine.logic.persistence.models import graph as persistence
@@ -933,7 +956,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return connected_node, True
 
-    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[dict]) -> List[GraphNode]:
+    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[Dict[str, Any]]) -> List[GraphNode]:
         """Apply time-based filters to a list of nodes."""
         if not filters:
             return nodes
@@ -958,7 +981,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return filtered
 
-    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[dict]) -> List[GraphNode]:
+    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[Dict[str, Any]]) -> List[GraphNode]:
         """Apply tag-based filters to a list of nodes."""
         if not filters or "tags" not in filters:
             return nodes
@@ -1024,10 +1047,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return filtered
 
-    def _get_attributes_dict(self, attributes: Any) -> dict:
+    def _get_attributes_dict(self, attributes: Any) -> Dict[str, Any]:
         """Extract attributes as dictionary from various formats."""
         if hasattr(attributes, "model_dump"):
-            return attributes.model_dump()
+            return attributes.model_dump()  # type: ignore[no-any-return]
         elif attributes:
             return dict(attributes)
         else:

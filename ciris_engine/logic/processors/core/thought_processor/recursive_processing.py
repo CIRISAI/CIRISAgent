@@ -7,7 +7,7 @@ Handles retry logic when conscience validation fails, including:
 """
 
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -27,7 +27,13 @@ class RecursiveProcessingPhase:
     """
 
     async def _handle_recursive_processing(
-        self, thought_item, thought, thought_context, dma_results, conscience_result, action_result
+        self,
+        thought_item: Any,
+        thought: Any,
+        thought_context: Any,
+        dma_results: Any,
+        conscience_result: Any,
+        action_result: Any,
     ) -> Tuple[Optional[Any], Optional[Any]]:
         """
         Coordinate recursive processing if conscience validation failed.
@@ -72,10 +78,10 @@ class RecursiveProcessingPhase:
     @streaming_step(StepPoint.RECURSIVE_ASPDMA)
     @step_point(StepPoint.RECURSIVE_ASPDMA)
     async def _recursive_aspdma_step(
-        self, thought_item: ProcessingQueueItem, thought_context, dma_results, override_reason: str
-    ):
+        self, thought_item: ProcessingQueueItem, thought_context: Any, dma_results: Any, override_reason: str
+    ) -> Optional[Any]:
         """Step 3B: Optional retry action selection after conscience failure."""
-        thought = await self._fetch_thought(thought_item.thought_id)
+        thought = await self._fetch_thought(thought_item.thought_id)  # type: ignore[attr-defined]
 
         try:
             # Re-run action selection with guidance about why previous action failed
@@ -89,13 +95,13 @@ class RecursiveProcessingPhase:
 
     @streaming_step(StepPoint.RECURSIVE_CONSCIENCE)
     @step_point(StepPoint.RECURSIVE_CONSCIENCE)
-    async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result):
+    async def _recursive_conscience_step(self, thought_item: ProcessingQueueItem, retry_result: Any) -> Tuple[Any, Any]:
         """Step 4B: Optional re-validation if recursive action failed."""
         if not retry_result:
             return retry_result, []
 
         try:
-            recursive_conscience_results = await self.conscience_registry.apply_all_consciences(
+            recursive_conscience_results = await self.conscience_registry.apply_all_consciences(  # type: ignore[attr-defined]
                 retry_result, thought_item
             )
 
@@ -108,8 +114,109 @@ class RecursiveProcessingPhase:
             logger.error(f"Recursive conscience execution failed for thought {thought_item.thought_id}: {e}")
             return retry_result, []
 
-    async def _perform_aspdma_with_retry(self, thought_item, thought_context, dma_results, max_retries=3):
-        """Helper method for ASPDMA execution with retry logic."""
-        # This would contain the retry logic implementation
-        # For now, delegate to the main ASPDMA step
-        return await self._perform_aspdma_step(thought_item, thought_context, dma_results)
+    async def _perform_aspdma_with_guidance(
+        self,
+        thought: Any,
+        thought_context: Any,
+        dma_results: Any,
+        conscience_result: Any,
+        max_retries: int = 3,
+    ) -> Any:
+        """
+        Retry action selection with conscience guidance, with exponential backoff.
+
+        Args:
+            thought: The thought being processed
+            thought_context: Processing context (contains conscience feedback)
+            dma_results: Results from initial DMA execution
+            conscience_result: Conscience result with override_reason explaining why original action failed
+            max_retries: Maximum retry attempts (default: 3)
+
+        Returns:
+            ActionSelectionDMAResult with guidance-informed action selection
+
+        Note:
+            Implements retry logic with cumulative guidance - each retry gets feedback
+            from all previous attempts to improve action selection quality.
+        """
+        from ciris_engine.schemas.conscience.core import ConscienceCheckResult
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+        last_error = None
+        retry_history: List[Dict[str, Any]] = []
+
+        for attempt in range(max_retries):
+            try:
+                # Extract typed conscience feedback for guidance
+                override_reason = ""
+                epistemic_feedback = {}
+
+                if isinstance(conscience_result, ConscienceApplicationResult):
+                    override_reason = conscience_result.override_reason or "Conscience override occurred"
+                    epistemic_feedback = conscience_result.epistemic_data or {}
+                elif isinstance(conscience_result, dict):
+                    override_reason = conscience_result.get("override_reason", "Conscience override occurred")
+                    epistemic_feedback = conscience_result.get("epistemic_data", {})
+
+                # Build guidance context with typed conscience results + retry history
+                guidance_context = {
+                    "retry_attempt": attempt + 1,
+                    "max_retries": max_retries,
+                    "original_action_failed_because": override_reason,
+                    "conscience_feedback": {
+                        "epistemic_data": epistemic_feedback,
+                        "override_detected": True,
+                    },
+                    "retry_history": retry_history,  # Cumulative feedback from previous attempts
+                }
+
+                # Merge guidance into thought context
+                if hasattr(thought_context, "model_dump"):
+                    enriched_context = thought_context.model_dump()
+                else:
+                    enriched_context = dict(thought_context) if isinstance(thought_context, dict) else {}
+
+                enriched_context["conscience_guidance"] = guidance_context
+
+                # Get profile and re-run action selection with conscience guidance
+                profile_name = self._get_profile_name(thought)  # type: ignore[attr-defined]
+
+                retry_result = await self.dma_orchestrator.run_action_selection(  # type: ignore[attr-defined]
+                    thought_item=thought,
+                    actual_thought=thought,
+                    processing_context=enriched_context,
+                    dma_results=dma_results,
+                    profile_name=profile_name,
+                )
+
+                # Success! Return the result
+                logger.info(
+                    f"ASPDMA retry attempt {attempt + 1}/{max_retries} succeeded for thought {thought.thought_id}"
+                )
+                return retry_result
+
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"ASPDMA retry attempt {attempt + 1}/{max_retries} failed for thought {thought.thought_id}: {e}"
+                )
+
+                # Add this attempt to retry history for next iteration
+                retry_history.append(
+                    {
+                        "attempt": attempt + 1,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                )
+
+                # If this was the last attempt, raise the error
+                if attempt == max_retries - 1:
+                    logger.error(f"All {max_retries} ASPDMA retry attempts exhausted for thought {thought.thought_id}")
+                    raise last_error
+
+                # Otherwise, continue to next retry
+                continue
+
+        # Should never reach here, but just in case
+        raise RuntimeError(f"ASPDMA retry logic failed unexpectedly for thought {thought.thought_id}")

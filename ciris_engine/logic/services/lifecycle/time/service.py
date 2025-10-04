@@ -40,7 +40,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
 
         # NTP drift monitoring
         self._ntp_offset_ms = 0.0  # Current offset in milliseconds
-        self._ntp_last_check = None  # Last time we checked NTP
+        self._ntp_last_check: Optional[datetime] = None  # Last time we checked NTP
         self._ntp_check_interval = 3600  # Check every hour
         self._ntp_check_count = 0
         self._ntp_failures = 0
@@ -169,8 +169,8 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
     def _update_ntp_offset(self) -> None:
         """Update NTP offset by querying NTP servers."""
         try:
-            # Try to import ntplib (optional dependency)
-            import ntplib
+            # Try to import ntplib  # type: ignore[import-not-found] (optional dependency)
+            import ntplib  # type: ignore[import-not-found]
         except ImportError:
             # ntplib not available, use simulated drift based on system clock precision
             self._simulate_drift()

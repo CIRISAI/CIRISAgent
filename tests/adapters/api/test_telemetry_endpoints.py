@@ -38,8 +38,8 @@ def client(app):
 
 
 @pytest.fixture
-def mock_app_state(app):
-    """Mock app state with services."""
+def mock_app_state(app, complete_api_telemetry_setup):
+    """Mock app state with services using centralized fixtures."""
     from datetime import datetime, timezone
     from unittest.mock import create_autospec
 
@@ -49,15 +49,15 @@ def mock_app_state(app):
     app.state = MagicMock()
     app.state.service_registry = MagicMock()
 
-    # Create telemetry_service with proper async/sync methods
-    telemetry_service = MagicMock()
-    # Make query_metrics async
-    telemetry_service.query_metrics = AsyncMock(return_value=[])
-    # get_metrics should be a regular Mock (not async)
-    telemetry_service.get_metrics = MagicMock(return_value={})
-    app.state.telemetry_service = telemetry_service
+    # Use centralized fixtures for telemetry-critical services
+    app.state.telemetry_service = complete_api_telemetry_setup["telemetry_service"]
+    app.state.visibility_service = complete_api_telemetry_setup["visibility_service"]
+    app.state.time_service = complete_api_telemetry_setup["time_service"]
+    app.state.resource_monitor = complete_api_telemetry_setup["resource_monitor"]
+    app.state.incident_management_service = complete_api_telemetry_setup["incident_management_service"]
+    app.state.wise_authority_service = complete_api_telemetry_setup["wise_authority_service"]
 
-    app.state.resource_monitor = MagicMock()
+    # Other services use MagicMock
     app.state.memory_service = MagicMock()
     app.state.audit_service = MagicMock()
 
@@ -96,16 +96,17 @@ def mock_app_state(app):
 
     app.state.auth_service = mock_auth
 
-    # Add other services that telemetry might need
-    app.state.time_service = MagicMock()
-    app.state.visibility_service = MagicMock()
-    app.state.incident_management_service = MagicMock()
-    app.state.wise_authority_service = MagicMock()
+    # Other services
     app.state.tsdb_consolidation_service = MagicMock()
     app.state.self_observation_service = MagicMock()
     app.state.adaptive_filter_service = MagicMock()
     app.state.task_scheduler = MagicMock()
     app.state.authentication_service = MagicMock()
+
+    # Runtime with cognitive state (used by _update_cognitive_state)
+    app.state.runtime = Mock()
+    app.state.runtime.state_manager = Mock()
+    app.state.runtime.state_manager.current_state = "WORK"  # str, not Mock
 
     return app.state
 
@@ -268,7 +269,7 @@ class TestTelemetryMetricsEndpoint:
 
         # The get_metrics method returns a dict of metric_name -> value
         # The endpoint then builds DetailedMetric objects from this
-        mock_app_state.telemetry_service.get_metrics = MagicMock(
+        mock_app_state.telemetry_service.get_metrics = AsyncMock(
             return_value={
                 "llm_tokens_used": 16670.0,
                 "cpu_percent": 25.0,

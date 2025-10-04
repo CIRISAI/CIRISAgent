@@ -9,7 +9,7 @@ Note: This is NOT a handler - it's a utility class used by ConsentService.
 
 import logging
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -148,7 +148,7 @@ class PartnershipRequestHandler:
 
         return ("failed", "Task failed without clear reason")
 
-    def _extract_action_from_thought(self, thought) -> Optional[tuple[str, str]]:
+    def _extract_action_from_thought(self, thought: Any) -> Optional[tuple[str, str]]:
         """Extract action outcome from a single thought."""
         if not hasattr(thought, "final_action") or not thought.final_action:
             return None
@@ -165,8 +165,8 @@ class PartnershipRequestHandler:
 
         return None
 
-    def _extract_reason_from_params(self, params, default: str) -> str:
+    def _extract_reason_from_params(self, params: Any, default: str) -> str:
         """Extract reason from action params safely."""
         if isinstance(params, dict):
-            return params.get("reason", default)
+            return str(params.get("reason", default))
         return default

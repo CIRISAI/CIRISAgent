@@ -4,16 +4,18 @@ Schemas for CLI tool operations.
 These replace all Dict[str, Any] usage in logic/adapters/cli/cli_tools.py.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import NodeAttributes
 
 
 class ToolParameters(BaseModel):
     """Base parameters for tool execution."""
 
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracking")
-    metadata: dict = Field(default_factory=dict, description="Additional metadata")
+    metadata: NodeAttributes = Field(default_factory=dict, description="Additional metadata")
 
 
 class ListFilesParams(ToolParameters):

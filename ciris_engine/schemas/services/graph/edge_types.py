@@ -8,13 +8,15 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import NodeAttributes
+
 
 class EdgeAttributes(BaseModel):
     """Attributes for a graph edge."""
 
     weight: float = Field(1.0, description="Edge weight")
     confidence: float = Field(1.0, ge=0.0, le=1.0, description="Confidence score")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: NodeAttributes = Field(default_factory=dict, description="Additional metadata")
 
     model_config = ConfigDict(extra="allow")
 

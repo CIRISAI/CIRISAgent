@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.adapters.api.services.auth_service import OAuthUser
 from ciris_engine.logic.adapters.api.services.oauth_security import validate_oauth_picture_url
 from ciris_engine.schemas.api.auth import (
     AuthContext,
@@ -462,7 +463,8 @@ def _load_oauth_config(provider: str) -> Dict[str, str]:
     if provider not in config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"OAuth provider '{provider}' not configured")
 
-    return config[provider]
+    provider_config: Dict[str, str] = config[provider]
+    return provider_config
 
 
 async def _handle_google_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
@@ -644,7 +646,7 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
         logger.warning(f"Invalid OAuth picture URL rejected for user {user_id}: {picture}")
 
 
-def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user, provider: str) -> str:
+def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user: OAuthUser, provider: str) -> str:
     """Generate API key and store it for the OAuth user."""
     role_prefix = "ciris_admin" if oauth_user.role == UserRole.ADMIN else "ciris_observer"
     api_key = f"{role_prefix}_{secrets.token_urlsafe(32)}"
@@ -661,7 +663,7 @@ def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user, provid
     return api_key
 
 
-def _build_redirect_response(api_key: str, oauth_user, provider: str) -> RedirectResponse:
+def _build_redirect_response(api_key: str, oauth_user: OAuthUser, provider: str) -> RedirectResponse:
     """Build the redirect response for OAuth callback."""
     VALID_PROVIDERS = {"google", "github", "discord"}
     if provider not in VALID_PROVIDERS:
@@ -687,7 +689,7 @@ def _build_redirect_response(api_key: str, oauth_user, provider: str) -> Redirec
 @router.get("/auth/oauth/{provider}/callback")
 async def oauth_callback(
     provider: str, code: str, state: str, auth_service: APIAuthService = Depends(get_auth_service)
-) -> LoginResponse:
+) -> RedirectResponse:
     """
     Handle OAuth callback.
 
@@ -713,16 +715,23 @@ async def oauth_callback(
 
         # Determine user role and create OAuth user
         user_role = _determine_user_role(user_data["email"])
+
+        # Validate required fields
+        external_id = user_data["external_id"]
+        if not external_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth provider did not return user ID")
+
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
-            external_id=user_data["external_id"],
+            external_id=external_id,
             email=user_data["email"],
             name=user_data["name"],
             role=user_role,
         )
 
         # Store OAuth profile data
-        _store_oauth_profile(auth_service, oauth_user.user_id, user_data["name"], user_data["picture"])
+        name = user_data["name"] or "Unknown"
+        _store_oauth_profile(auth_service, oauth_user.user_id, name, user_data["picture"])
 
         # Generate API key and store it
         api_key = _generate_api_key_and_store(auth_service, oauth_user, provider)

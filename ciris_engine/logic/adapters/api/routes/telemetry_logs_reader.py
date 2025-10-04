@@ -14,8 +14,8 @@ from ciris_engine.schemas.api.telemetry import LogContext
 
 logger = logging.getLogger(__name__)
 
-# Import LogEntry from the route file where it's defined
-from .telemetry import LogEntry
+# Import LogEntry from the models file where it's defined
+from .telemetry_models import LogEntry
 
 
 class LogFileReader:

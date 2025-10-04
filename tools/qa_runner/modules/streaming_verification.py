@@ -50,6 +50,10 @@ class StreamingVerificationModule:
         recursive_conscience_count = 0
         unexpected_events: Set[str] = set()  # Track events outside the expected 6
 
+        # Track duplicates: (thought_id, event_type) -> count
+        event_occurrences: Dict[Tuple[str, str], int] = {}
+        duplicates_found: List[str] = []
+
         # Shared state for thread communication
         stream_connected = threading.Event()
         stream_error = threading.Event()
@@ -58,6 +62,7 @@ class StreamingVerificationModule:
             """Monitor SSE stream in a separate thread."""
             nonlocal events_with_audit_data, events_with_recursive_flag
             nonlocal recursive_aspdma_count, recursive_conscience_count, unexpected_events
+            nonlocal event_occurrences, duplicates_found
 
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
@@ -102,6 +107,17 @@ class StreamingVerificationModule:
                                 if event_type not in StreamingVerificationModule.EXPECTED_EVENTS:
                                     unexpected_events.add(event_type)
 
+                                # Track duplicates: (thought_id, event_type)
+                                thought_id = event.get("thought_id")
+                                if thought_id:
+                                    key = (thought_id, event_type)
+                                    event_occurrences[key] = event_occurrences.get(key, 0) + 1
+                                    if event_occurrences[key] > 1:
+                                        dup_msg = f"Duplicate {event_type} for thought {thought_id} (occurrence #{event_occurrences[key]})"
+                                        if dup_msg not in duplicates_found:
+                                            duplicates_found.append(dup_msg)
+                                            errors.append(dup_msg)
+
                                 # Validate event structure
                                 event_detail = {
                                     "event_type": event_type,
@@ -111,81 +127,225 @@ class StreamingVerificationModule:
                                     "issues": [],
                                 }
 
-                                # Event-specific validation
+                                # Event-specific validation (comprehensive schema checks)
                                 if event_type == "thought_start":
-                                    if "thought_type" not in event:
-                                        event_detail["issues"].append("Missing thought_type")
-                                    elif not event["thought_type"]:
-                                        event_detail["issues"].append("Empty thought_type")
-                                    if "thought_content" not in event:
-                                        event_detail["issues"].append("Missing thought_content")
-                                    elif not event["thought_content"]:
-                                        event_detail["issues"].append("Empty thought_content")
-                                    if "task_description" not in event:
-                                        event_detail["issues"].append("Missing task_description")
-                                    elif not event["task_description"]:
-                                        event_detail["issues"].append("Empty task_description")
-                                    if "round_number" not in event:
-                                        event_detail["issues"].append("Missing round_number")
+                                    # Required fields per schema
+                                    required_fields = {
+                                        "thought_type": str,
+                                        "thought_content": str,
+                                        "task_description": str,
+                                        "round_number": int,
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+                                        elif field_type == str and not event[field]:
+                                            event_detail["issues"].append(f"Empty string for required field: {field}")
 
                                 elif event_type == "snapshot_and_context":
-                                    if "system_snapshot" not in event:
-                                        event_detail["issues"].append("Missing system_snapshot")
-                                    elif not event["system_snapshot"]:
-                                        event_detail["issues"].append("Empty system_snapshot")
-                                    if "context" not in event:
-                                        event_detail["issues"].append("Missing context")
-                                    elif not event["context"]:
-                                        event_detail["issues"].append("Empty context")
-                                    if "context_size" not in event:
-                                        event_detail["issues"].append("Missing context_size")
+                                    # Required fields per schema
+                                    required_fields = {
+                                        "system_snapshot": dict,
+                                        "context": str,
+                                        "context_size": int,
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+                                        elif field_type == str and not event[field]:
+                                            event_detail["issues"].append(f"Empty string for required field: {field}")
+
+                                    # Validate SystemSnapshot schema deeply
+                                    if "system_snapshot" in event and isinstance(event["system_snapshot"], dict):
+                                        snapshot = event["system_snapshot"]
+
+                                        # SystemSnapshot optional fields that should be proper types when present
+                                        snapshot_field_types = {
+                                            "channel_id": (str, type(None)),
+                                            "channel_context": (dict, type(None)),
+                                            "current_task_details": (dict, type(None)),
+                                            "current_thought_summary": (dict, type(None)),
+                                            "system_counts": (dict,),  # dict is required, but can be empty
+                                            "top_pending_tasks_summary": (list,),  # list is required, but can be empty
+                                            "recently_completed_tasks_summary": (
+                                                list,
+                                            ),  # list is required, but can be empty
+                                            "agent_identity": (str, type(None)),
+                                            "user_profiles": (list, type(None)),
+                                            "current_time_utc": (str, type(None)),
+                                        }
+
+                                        for field, allowed_types in snapshot_field_types.items():
+                                            if field in snapshot:
+                                                if not isinstance(snapshot[field], allowed_types):
+                                                    event_detail["issues"].append(
+                                                        f"system_snapshot.{field} has wrong type: {type(snapshot[field]).__name__} "
+                                                        f"(expected one of {[t.__name__ for t in allowed_types]})"
+                                                    )
 
                                 elif event_type == "dma_results":
-                                    # Should have csdma, dsdma, aspdma_options
-                                    if (
-                                        event.get("csdma") is None
-                                        and event.get("dsdma") is None
-                                        and event.get("aspdma_options") is None
-                                    ):
-                                        event_detail["issues"].append("All DMA results are None")
+                                    # Required base fields
+                                    required_fields = {
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+
+                                    # All 3 DMA results are REQUIRED (non-optional strongly-typed objects)
+                                    # CSDMA: Common Sense DMA
+                                    if "csdma" not in event:
+                                        event_detail["issues"].append("Missing required field: csdma")
+                                    elif not isinstance(event["csdma"], dict):
+                                        event_detail["issues"].append("csdma should be dict (CSDMAResult)")
+                                    else:
+                                        # CSDMAResult schema: plausibility_score, flags, reasoning
+                                        if "plausibility_score" not in event["csdma"]:
+                                            event_detail["issues"].append("csdma missing 'plausibility_score' field")
+                                        elif not isinstance(event["csdma"]["plausibility_score"], (int, float)):
+                                            event_detail["issues"].append("csdma.plausibility_score should be float")
+                                        if "flags" not in event["csdma"]:
+                                            event_detail["issues"].append("csdma missing 'flags' field")
+                                        elif not isinstance(event["csdma"]["flags"], list):
+                                            event_detail["issues"].append("csdma.flags should be list")
+                                        if "reasoning" not in event["csdma"]:
+                                            event_detail["issues"].append("csdma missing 'reasoning' field")
+                                        elif not isinstance(event["csdma"]["reasoning"], str):
+                                            event_detail["issues"].append("csdma.reasoning should be string")
+
+                                    # DSDMA: Domain Specific DMA
+                                    if "dsdma" not in event:
+                                        event_detail["issues"].append("Missing required field: dsdma")
+                                    elif not isinstance(event["dsdma"], dict):
+                                        event_detail["issues"].append("dsdma should be dict (DSDMAResult)")
+                                    else:
+                                        # DSDMAResult schema: domain, domain_alignment, flags, reasoning
+                                        if "domain" not in event["dsdma"]:
+                                            event_detail["issues"].append("dsdma missing 'domain' field")
+                                        elif not isinstance(event["dsdma"]["domain"], str):
+                                            event_detail["issues"].append("dsdma.domain should be string")
+                                        if "domain_alignment" not in event["dsdma"]:
+                                            event_detail["issues"].append("dsdma missing 'domain_alignment' field")
+                                        elif not isinstance(event["dsdma"]["domain_alignment"], (int, float)):
+                                            event_detail["issues"].append("dsdma.domain_alignment should be float")
+                                        if "flags" not in event["dsdma"]:
+                                            event_detail["issues"].append("dsdma missing 'flags' field")
+                                        elif not isinstance(event["dsdma"]["flags"], list):
+                                            event_detail["issues"].append("dsdma.flags should be list")
+                                        if "reasoning" not in event["dsdma"]:
+                                            event_detail["issues"].append("dsdma missing 'reasoning' field")
+                                        elif not isinstance(event["dsdma"]["reasoning"], str):
+                                            event_detail["issues"].append("dsdma.reasoning should be string")
+
+                                    # PDMA: Ethical Perspective DMA (from ethical_pdma)
+                                    if "pdma" not in event:
+                                        event_detail["issues"].append("Missing required field: pdma")
+                                    elif not isinstance(event["pdma"], dict):
+                                        event_detail["issues"].append("pdma should be dict (EthicalDMAResult)")
+                                    else:
+                                        # EthicalDMAResult schema: decision, reasoning, alignment_check
+                                        if "decision" not in event["pdma"]:
+                                            event_detail["issues"].append("pdma missing 'decision' field")
+                                        elif not isinstance(event["pdma"]["decision"], str):
+                                            event_detail["issues"].append("pdma.decision should be string")
+                                        if "reasoning" not in event["pdma"]:
+                                            event_detail["issues"].append("pdma missing 'reasoning' field")
+                                        elif not isinstance(event["pdma"]["reasoning"], str):
+                                            event_detail["issues"].append("pdma.reasoning should be string")
+                                        if "alignment_check" not in event["pdma"]:
+                                            event_detail["issues"].append("pdma missing 'alignment_check' field")
+                                        elif not isinstance(event["pdma"]["alignment_check"], str):
+                                            event_detail["issues"].append("pdma.alignment_check should be string")
 
                                 elif event_type == "aspdma_result":
-                                    if "selected_action" not in event:
-                                        event_detail["issues"].append("Missing selected_action")
-                                    elif not event["selected_action"]:
-                                        event_detail["issues"].append("Empty selected_action")
-                                    if "action_rationale" not in event:
-                                        event_detail["issues"].append("Missing action_rationale")
-                                    elif not event["action_rationale"]:
-                                        event_detail["issues"].append("Empty action_rationale")
+                                    # Required fields per schema
+                                    required_fields = {
+                                        "selected_action": str,
+                                        "action_rationale": str,
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+                                        elif field_type == str and not event[field]:
+                                            event_detail["issues"].append(f"Empty string for required field: {field}")
+                                    # Optional recursive flag
                                     if "is_recursive" in event:
                                         events_with_recursive_flag += 1
                                         if event["is_recursive"]:
                                             recursive_aspdma_count += 1
 
                                 elif event_type == "conscience_result":
-                                    if "conscience_passed" not in event:
-                                        event_detail["issues"].append("Missing conscience_passed")
-                                    if "final_action" not in event:
-                                        event_detail["issues"].append("Missing final_action")
-                                    elif not event["final_action"]:
-                                        event_detail["issues"].append("Empty final_action")
-                                    if "epistemic_data" not in event:
-                                        event_detail["issues"].append("Missing epistemic_data")
+                                    # Required fields per schema
+                                    required_fields = {
+                                        "conscience_passed": bool,
+                                        "final_action": str,
+                                        "epistemic_data": dict,
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+                                        elif field_type == str and not event[field]:
+                                            event_detail["issues"].append(f"Empty string for required field: {field}")
+                                    # Optional recursive flag
                                     if "is_recursive" in event:
                                         events_with_recursive_flag += 1
                                         if event["is_recursive"]:
                                             recursive_conscience_count += 1
 
                                 elif event_type == "action_result":
-                                    if "action_executed" not in event:
-                                        event_detail["issues"].append("Missing action_executed")
-                                    elif not event["action_executed"]:
-                                        event_detail["issues"].append("Empty action_executed")
-                                    if "execution_success" not in event:
-                                        event_detail["issues"].append("Missing execution_success")
+                                    # Required fields per schema
+                                    required_fields = {
+                                        "action_executed": str,
+                                        "execution_success": bool,
+                                        "thought_id": str,
+                                        "task_id": str,
+                                        "timestamp": str,
+                                    }
+                                    for field, field_type in required_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing required field: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+                                        elif field_type == str and not event[field]:
+                                            event_detail["issues"].append(f"Empty string for required field: {field}")
 
-                                    # Validate audit trail
+                                    # Optional audit trail fields (all or none)
                                     if event.get("audit_entry_id"):
                                         events_with_audit_data += 1
                                         event_detail["has_audit_trail"] = True
@@ -197,6 +357,59 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 "Has audit_entry_id but missing audit_entry_hash"
                                             )
+
+                                # Check for unexpected extra fields (exhaustive validation)
+                                expected_common_fields = {"event_type", "thought_id", "task_id", "timestamp"}
+                                event_type_specific_fields = {
+                                    "thought_start": {
+                                        "thought_type",
+                                        "thought_content",
+                                        "task_description",
+                                        "round_number",
+                                        "thought_status",
+                                        "thought_depth",
+                                        "parent_thought_id",
+                                        "task_priority",
+                                        "channel_id",
+                                        "updated_info_available",
+                                    },
+                                    "snapshot_and_context": {"system_snapshot", "context", "context_size"},
+                                    "dma_results": {"csdma", "dsdma", "pdma"},  # Changed from aspdma_options to pdma
+                                    "aspdma_result": {"selected_action", "action_rationale", "is_recursive"},
+                                    "conscience_result": {
+                                        "conscience_passed",
+                                        "final_action",
+                                        "epistemic_data",
+                                        "is_recursive",
+                                        "conscience_override_reason",
+                                        "action_was_overridden",
+                                    },
+                                    "action_result": {
+                                        "action_executed",
+                                        "execution_success",
+                                        "execution_time_ms",
+                                        "follow_up_thought_id",
+                                        "error",
+                                        "audit_entry_id",
+                                        "audit_sequence_number",
+                                        "audit_entry_hash",
+                                        "audit_signature",
+                                    },
+                                }
+
+                                expected_fields = expected_common_fields | event_type_specific_fields.get(
+                                    event_type, set()
+                                )
+                                actual_fields = set(event.keys())
+                                extra_fields = actual_fields - expected_fields
+
+                                if extra_fields:
+                                    event_detail["issues"].append(
+                                        f"Unexpected extra fields: {', '.join(sorted(extra_fields))}"
+                                    )
+                                    errors.append(
+                                        f"{event_type} has unexpected fields: {', '.join(sorted(extra_fields))}"
+                                    )
 
                                 event_details.append(event_detail)
 
@@ -224,16 +437,27 @@ class StreamingVerificationModule:
         # Wait a bit for events to stream
         time.sleep(1)
 
-        # Trigger a task to generate events
+        # Trigger a task to generate events using new async message endpoint
         try:
-            requests.post(
-                f"{base_url}/v1/agent/interact",
+            response = requests.post(
+                f"{base_url}/v1/agent/message",
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                 json={"message": "Test reasoning event streaming"},
                 timeout=10,
             )
-        except:
-            pass  # Ignore errors, just trying to trigger events
+            # Validate the response schema
+            if response.status_code == 200:
+                data = response.json().get("data", {})
+                # Validate MessageSubmissionResponse schema
+                required_fields = ["message_id", "task_id", "channel_id", "submitted_at", "accepted"]
+                for field in required_fields:
+                    if field not in data:
+                        errors.append(f"Message submission response missing field: {field}")
+                # Ensure accepted is True for successful submission
+                if not data.get("accepted"):
+                    errors.append(f"Message was not accepted: {data.get('rejection_reason')}")
+        except Exception as e:
+            errors.append(f"Failed to trigger task via /agent/message: {e}")
 
         # Wait for events to stream (60s timeout allows wakeup to complete and actions to dispatch)
         elapsed = 0
@@ -249,10 +473,16 @@ class StreamingVerificationModule:
 
         # Build result
         result = {
-            "success": len(missing_events) == 0 and len(unexpected_events) == 0,  # Require all 6 events, no extras
+            "success": (
+                len(missing_events) == 0
+                and len(unexpected_events) == 0
+                and len(duplicates_found) == 0
+                and len(errors) == 0
+            ),  # Require all 6 events, no extras, no duplicates, no errors
             "received_events": sorted(list(received_events)),
             "missing_events": sorted(list(missing_events)),
             "unexpected_events": sorted(list(unexpected_events)),
+            "duplicates": duplicates_found,
             "duration": duration,
             "total_events": len(event_details),
             "events_with_audit_data": events_with_audit_data,
@@ -265,7 +495,7 @@ class StreamingVerificationModule:
 
         # Build status message
         if result["success"]:
-            message = f"✅ All 6 reasoning events received (no unexpected events)"
+            message = f"✅ All 6 reasoning events received with valid schemas (no duplicates, no unexpected events)"
             if events_with_audit_data > 0:
                 message += f"\n✅ Audit trail data present in {events_with_audit_data} ACTION_RESULT events"
             if recursive_aspdma_count > 0 or recursive_conscience_count > 0:
@@ -279,6 +509,18 @@ class StreamingVerificationModule:
                 error_parts.append(f"Missing events: {', '.join(missing_events)}")
             if unexpected_events:
                 error_parts.append(f"Unexpected events: {', '.join(unexpected_events)}")
+            if duplicates_found:
+                error_parts.append(f"Duplicates: {len(duplicates_found)} found")
+                # Add detailed duplicate information (duplicates_found contains strings)
+                for dup in duplicates_found:
+                    error_parts.append(f"  → {dup}")
+            if errors:
+                error_parts.append(f"Schema errors: {len(errors)} found")
+                # Add first 3 errors for debugging
+                for i, error in enumerate(errors[:3]):
+                    error_parts.append(f"  → Error {i+1}: {error}")
+                if len(errors) > 3:
+                    error_parts.append(f"  → ... and {len(errors) - 3} more errors")
             result["message"] = "❌ " + "; ".join(error_parts)
 
         return result

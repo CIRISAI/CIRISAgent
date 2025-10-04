@@ -4,7 +4,7 @@ Agent configuration schemas.
 Minimal schemas for agent identity and templates.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -78,73 +78,73 @@ class AgentTemplate(BaseModel):
 
     @field_validator("stewardship", mode="before")
     @classmethod
-    def convert_stewardship(cls, v):
+    def convert_stewardship(cls, v: Any) -> Optional["Stewardship"]:
         """Convert dict to Stewardship if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return Stewardship(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already a Stewardship instance
 
     @field_validator("dsdma_kwargs", mode="before")
     @classmethod
-    def convert_dsdma_kwargs(cls, v):
+    def convert_dsdma_kwargs(cls, v: Any) -> Optional["DSDMAConfiguration"]:
         """Convert dict to DSDMAConfiguration if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return DSDMAConfiguration(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already a DSDMAConfiguration instance
 
     @field_validator("csdma_overrides", mode="before")
     @classmethod
-    def convert_csdma_overrides(cls, v):
+    def convert_csdma_overrides(cls, v: Any) -> Optional["CSDMAOverrides"]:
         """Convert dict to CSDMAOverrides if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return CSDMAOverrides(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already a CSDMAOverrides instance
 
     @field_validator("action_selection_pdma_overrides", mode="before")
     @classmethod
-    def convert_action_selection_overrides(cls, v):
+    def convert_action_selection_overrides(cls, v: Any) -> Optional["ActionSelectionOverrides"]:
         """Convert dict to ActionSelectionOverrides if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return ActionSelectionOverrides(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already an ActionSelectionOverrides instance
 
     @field_validator("discord_config", mode="before")
     @classmethod
-    def convert_discord_config(cls, v):
+    def convert_discord_config(cls, v: Any) -> Optional["DiscordAdapterOverrides"]:
         """Convert dict to DiscordAdapterOverrides if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return DiscordAdapterOverrides(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already a DiscordAdapterOverrides instance
 
     @field_validator("api_config", mode="before")
     @classmethod
-    def convert_api_config(cls, v):
+    def convert_api_config(cls, v: Any) -> Optional["APIAdapterOverrides"]:
         """Convert dict to APIAdapterOverrides if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return APIAdapterOverrides(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already an APIAdapterOverrides instance
 
     @field_validator("cli_config", mode="before")
     @classmethod
-    def convert_cli_config(cls, v):
+    def convert_cli_config(cls, v: Any) -> Optional["CLIAdapterOverrides"]:
         """Convert dict to CLIAdapterOverrides if needed."""
         if v is None:
             return None
         if isinstance(v, dict):
             return CLIAdapterOverrides(**v)
-        return v
+        return v  # type: ignore[no-any-return]  # Already a CLIAdapterOverrides instance
 
 
 class DSDMAConfiguration(BaseModel):

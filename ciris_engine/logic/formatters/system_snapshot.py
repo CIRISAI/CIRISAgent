@@ -1,5 +1,7 @@
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot
 
+from .identity import format_agent_identity
+
 
 def format_continuity_summary(continuity: ContinuitySummary) -> str:
     """Format continuity awareness metrics for LLM context.

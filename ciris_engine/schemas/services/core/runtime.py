@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepResultData
+from ciris_engine.schemas.types import ConfigDict
 
 
 class AdapterStatus(str, Enum):
@@ -123,7 +124,7 @@ class ServiceHealthStatus(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     healthy_services: int = Field(..., description="Number of healthy services")
     unhealthy_services: int = Field(..., description="Number of unhealthy services")
-    service_details: Dict[str, dict] = Field(..., description="Per-service health details")
+    service_details: Dict[str, ConfigDict] = Field(..., description="Per-service health details")
     recommendations: List[str] = Field(default_factory=list, description="Health recommendations")
 
 
@@ -132,11 +133,11 @@ class ServiceSelectionExplanation(BaseModel):
 
     overview: str = Field(..., description="Overview of selection logic")
     priority_groups: Dict[int, str] = Field(..., description="Priority group explanations")
-    priorities: Optional[Dict[str, dict]] = Field(default_factory=dict, description="Priority level details")
+    priorities: Optional[Dict[str, ConfigDict]] = Field(default_factory=dict, description="Priority level details")
     selection_strategies: Dict[str, str] = Field(..., description="Strategy explanations")
     selection_flow: Optional[List[str]] = Field(default_factory=list, description="Selection flow steps")
-    circuit_breaker_info: Optional[dict] = Field(default_factory=dict, description="Circuit breaker information")
-    examples: List[dict] = Field(..., description="Example scenarios")
+    circuit_breaker_info: Optional[ConfigDict] = Field(default_factory=dict, description="Circuit breaker information")
+    examples: List[ConfigDict] = Field(..., description="Example scenarios")
     configuration_tips: List[str] = Field(..., description="Configuration recommendations")
 
 
@@ -146,7 +147,7 @@ class RuntimeEvent(BaseModel):
     event_type: str = Field(..., description="Type of event")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source: str = Field(..., description="Event source")
-    details: dict = Field(..., description="Event details")
+    details: ConfigDict = Field(..., description="Event details")
     severity: str = Field("info", description="Event severity")
 
 
@@ -235,7 +236,7 @@ class ConfigOperationResponse(BaseModel):
     success: bool = Field(..., description="Whether operation succeeded")
     operation: str = Field(..., description="Operation performed")
     config_path: Optional[str] = Field(None, description="Configuration path")
-    details: dict = Field(default_factory=dict, description="Operation details")
+    details: ConfigDict = Field(default_factory=dict, description="Operation details")
     error: Optional[str] = Field(None, description="Error message if failed")
 
 

@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class MessageContext(BaseModel):
     """Context information for messages."""
@@ -14,7 +16,7 @@ class MessageContext(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel/conversation ID")
     thread_id: Optional[str] = Field(None, description="Thread ID if in thread")
     reply_to_id: Optional[str] = Field(None, description="Message being replied to")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
 
 
 class AgentLineage(BaseModel):

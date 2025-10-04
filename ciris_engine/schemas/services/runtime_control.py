@@ -7,7 +7,7 @@ in the runtime control service, ensuring full type safety and validation.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,38 @@ from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+from ciris_engine.schemas.types import ConfigDict, ConfigValue, EpistemicData, SerializedModel
+
+# Type aliases for configuration values
+ConfigItem = Tuple[str, ConfigValue]
+
+
+class ConfigDictMixin:
+    """Mixin providing standard config dict access methods.
+
+    Classes using this mixin must have a 'configs: ConfigDict' field.
+    DRY pattern to avoid code duplication across classes with config fields.
+    """
+
+    configs: ConfigDict  # Type hint for IDEs
+
+    def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
+        """Get a configuration value with optional default."""
+        return self.configs.get(key, default)
+
+    def set(self, key: str, value: ConfigValue) -> None:
+        """Set a configuration value."""
+        self.configs[key] = value
+
+    def update(self, values: ConfigDict) -> None:
+        """Update multiple configuration values."""
+        self.configs.update(values)
+
+    def keys(self) -> List[str]:
+        """Get all configuration keys."""
+        return list(self.configs.keys())
+
 
 # Field description constants (DRY principle - avoid duplication)
 DESC_THOUGHT_ID = "Thought being processed"
@@ -118,39 +150,21 @@ class SpanAttribute(BaseModel):
     )  # NOQA - OTLP standard requires Dict[str, Any]
 
 
-class ConfigValueMap(BaseModel):
+class ConfigValueMap(ConfigDictMixin, BaseModel):
     """Typed map for configuration values."""
 
-    configs: Dict[str, str | int | float | bool | list | dict] = Field(
-        default_factory=dict, description="Configuration key-value pairs with typed values"
-    )
+    configs: ConfigDict = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
 
-    def get(self, key: str, default=None):
-        """Get a configuration value with optional default."""
-        return self.configs.get(key, default)
-
-    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
-        """Set a configuration value."""
-        self.configs[key] = value
-
-    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
-        """Update multiple configuration values."""
-        self.configs.update(values)
-
-    def keys(self):
-        """Get all configuration keys."""
-        return self.configs.keys()
-
-    def items(self):
+    def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
-        return self.configs.items()
+        return list(self.configs.items())
 
-    def values(self):
+    def values(self) -> List[ConfigValue]:
         """Get all configuration values."""
-        return self.configs.values()
+        return list(self.configs.values())
 
 
-class TaskSelectionCriteria(BaseModel):
+class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
     """Criteria used for task selection in processing rounds."""
 
     max_priority: Optional[int] = Field(None, description="Maximum priority threshold")
@@ -162,29 +176,11 @@ class TaskSelectionCriteria(BaseModel):
     max_retry_count: int = Field(3, description="Maximum retry count for tasks")
     user_id_filter: Optional[str] = Field(None, description="User ID filter")
     batch_size: int = Field(10, description="Maximum number of tasks to select")
-    configs: Dict[str, str | int | float | bool | list | dict] = Field(
+    configs: ConfigDict = Field(
         default_factory=dict, description="Additional configuration key-value pairs with typed values"
     )
 
-    def get(
-        self, key: str, default: Optional[str | int | float | bool | list | dict] = None
-    ) -> Optional[str | int | float | bool | list | dict]:
-        """Get a configuration value with optional default."""
-        return self.configs.get(key, default)
-
-    def set(self, key: str, value: str | int | float | bool | list | dict) -> None:
-        """Set a configuration value."""
-        self.configs[key] = value
-
-    def update(self, values: Dict[str, str | int | float | bool | list | dict]) -> None:
-        """Update multiple configuration values."""
-        self.configs.update(values)
-
-    def keys(self) -> List[str]:
-        """Get all configuration keys."""
-        return list(self.configs.keys())
-
-    def items(self) -> List[tuple]:
+    def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
         return list(self.configs.items())
 
@@ -230,10 +226,8 @@ class ServiceProviderInfo(BaseModel):
     priority: str = Field(..., description="Priority level name")
     priority_group: int = Field(..., description="Priority group number")
     strategy: str = Field(..., description="Selection strategy")
-    capabilities: Optional[Dict[str, str | int | float | bool | list]] = Field(
-        None, description="Provider capabilities"
-    )
-    metadata: Optional[Dict[str, str | int | float | bool]] = Field(None, description="Provider metadata")
+    capabilities: Optional[ConfigDict] = Field(None, description="Provider capabilities")
+    metadata: Optional[ConfigDict] = Field(None, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state if available")
 
 
@@ -286,16 +280,14 @@ class WAPublicKeyMap(BaseModel):
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 
-    configs: Dict[str, str | int | float | bool | list | dict] = Field(
-        ..., description="Backed up configuration values"
-    )
+    configs: ConfigDict = Field(..., description="Backed up configuration values")
     backup_timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When the backup was created"
     )
     backup_version: str = Field(..., description="Version of the configuration")
     backup_by: str = Field("RuntimeControlService", description="Who created the backup")
 
-    def to_config_value(self) -> dict:
+    def to_config_value(self) -> SerializedModel:
         """Convert to a format suitable for storage as a config value."""
         return {
             "configs": self.configs,
@@ -305,7 +297,7 @@ class ConfigBackupData(BaseModel):
         }
 
     @classmethod
-    def from_config_value(cls, data: dict) -> "ConfigBackupData":
+    def from_config_value(cls, data: SerializedModel) -> "ConfigBackupData":
         """Create from a stored config value."""
         return cls(
             configs=data.get("configs", {}),
@@ -381,6 +373,11 @@ class ThoughtInPipeline(BaseModel):
     recursion_count: int = Field(0, description="Number of ASPDMA recursions")
 
 
+def _create_empty_pipeline_steps() -> Dict[str, List["ThoughtInPipeline"]]:
+    """Create empty pipeline step dictionary with proper typing."""
+    return {step.value: [] for step in StepPoint}
+
+
 class PipelineState(BaseModel):
     """Complete state of the processing pipeline."""
 
@@ -389,7 +386,7 @@ class PipelineState(BaseModel):
 
     # Thoughts at each step point
     thoughts_by_step: Dict[str, List[ThoughtInPipeline]] = Field(
-        default_factory=lambda: {step.value: [] for step in StepPoint},
+        default_factory=_create_empty_pipeline_steps,
         description="Thoughts grouped by their current step point",
     )
 
@@ -618,7 +615,7 @@ class StepResultFinalizeAction(BaseModel):
     selected_action: str = Field(..., description="Selected action from SUT")
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
-    epistemic_data: Dict[str, Any] = Field(default_factory=dict, description="Rich conscience evaluation data")
+    epistemic_data: EpistemicData = Field(default_factory=dict, description="Rich conscience evaluation data")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
     error: Optional[str] = Field(None)
@@ -733,7 +730,8 @@ class PerformASPDMAStepData(BaseStepData):
 
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for action selection")
-    dma_results: Optional[str] = Field(None, description="DMA results from previous PERFORM_DMAS step")
+    dma_results: Optional[str] = Field(None, description="DMA results string summary from previous PERFORM_DMAS step")
+    dma_results_obj: Optional[Any] = Field(None, description="Concrete InitialDMAResults object from PERFORM_DMAS step")
 
 
 class ConscienceExecutionStepData(BaseStepData):
@@ -766,7 +764,7 @@ class FinalizeActionStepData(BaseStepData):
     selected_action: str = Field(..., description="Final selected action")
     conscience_passed: bool = Field(..., description="Whether conscience checks passed")
     conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
-    epistemic_data: Dict[str, Any] = Field(
+    epistemic_data: EpistemicData = Field(
         default_factory=dict, description="Rich conscience evaluation data from all checks"
     )
 
@@ -786,6 +784,7 @@ class ActionCompleteStepData(BaseStepData):
     dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
     handler_completed: bool = Field(..., description="Whether action handler completed")
     follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
+    follow_up_thought_id: Optional[str] = Field(None, description="ID of follow-up thought if created")
     execution_time_ms: float = Field(0.0, description="Action execution time")
     audit_entry_id: Optional[str] = Field(None, description="ID of audit entry created for this action")
     audit_sequence_number: Optional[int] = Field(None, description="Sequence number in audit hash chain")
@@ -885,7 +884,7 @@ class SnapshotAndContextResult(BaseModel):
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
     # System snapshot
-    system_snapshot: Dict[str, Any] = Field(..., description="Current system state")
+    system_snapshot: SystemSnapshot = Field(..., description="Current system state")
 
     # Gathered context
     context: str = Field(..., description="Context gathered for DMA processing")
@@ -900,10 +899,10 @@ class DMAResultsEvent(BaseModel):
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
-    # All 3 DMA results
-    csdma: Optional[str] = Field(None, description="Cognitive State DMA result")
-    dsdma: Optional[str] = Field(None, description="Decision Space DMA result")
-    aspdma_options: Optional[str] = Field(None, description="ASPDMA available action options")
+    # All 3 DMA results - strongly typed, non-optional
+    csdma: CSDMAResult = Field(..., description="Common Sense DMA result")
+    dsdma: DSDMAResult = Field(..., description="Domain Specific DMA result")
+    pdma: EthicalDMAResult = Field(..., description="Ethical Perspective DMA result (PDMA)")
 
 
 class ASPDMAResultEvent(BaseModel):
@@ -932,7 +931,7 @@ class ConscienceResultEvent(BaseModel):
     # Conscience evaluation
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
-    epistemic_data: Dict[str, Any] = Field(
+    epistemic_data: EpistemicData = Field(
         default_factory=dict, description="Rich conscience evaluation data from all checks"
     )
 

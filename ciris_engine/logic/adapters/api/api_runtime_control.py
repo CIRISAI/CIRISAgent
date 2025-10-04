@@ -241,9 +241,9 @@ class APIRuntimeControlService(Service):
             adapter_type=status.adapter_type,
             status=adapter_status,
             started_at=status.loaded_at,
-            messages_processed=status.metrics.messages_processed if status.metrics else 0,  # type: ignore[attr-defined]
-            error_count=status.metrics.errors_count if status.metrics else 0,  # type: ignore[attr-defined]
-            last_error=status.metrics.last_error if status.metrics else None,  # type: ignore[attr-defined]
+            messages_processed=status.metrics.messages_processed if status.metrics else 0,
+            error_count=status.metrics.errors_count if status.metrics else 0,
+            last_error=status.metrics.last_error if status.metrics else None,
         )
 
     async def load_adapter(
@@ -268,7 +268,14 @@ class APIRuntimeControlService(Service):
 
             adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
 
-        result = await self.adapter_manager.load_adapter(adapter_type, adapter_id, config)
+        # Convert config dict to AdapterConfig if provided
+        adapter_config = None
+        if config:
+            from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+            adapter_config = AdapterConfig(**config)
+
+        result = await self.adapter_manager.load_adapter(adapter_type, adapter_id, adapter_config)
 
         # Convert to runtime control response format
         from ciris_engine.schemas.services.core.runtime import AdapterOperationResponse, AdapterStatus

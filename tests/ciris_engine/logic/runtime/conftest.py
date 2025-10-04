@@ -143,13 +143,14 @@ def mock_runtime_with_identity(mock_runtime):
 @pytest.fixture
 def mock_agent_processor():
     """Mock agent processor with state manager based on real AgentState schema."""
-    processor = Mock()
+    # Use spec_set to prevent auto-creation of AsyncMock attributes
+    processor = Mock(spec_set=["state_manager", "_processing_task", "_stop_event", "shutdown_processor"])
 
     # Mock state manager with schema-based behavior matching real StateManager:
     # - get_state() is synchronous (returns AgentState directly)
     # - can_transition_to() is async (returns bool)
     # - transition_to() is async (returns bool)
-    state_manager = Mock()
+    state_manager = Mock(spec_set=["get_state", "can_transition_to", "transition_to"])
     state_manager.get_state.return_value = AgentState.WORK
     state_manager.can_transition_to = AsyncMock(return_value=True)
     state_manager.transition_to = AsyncMock(return_value=True)
@@ -157,11 +158,12 @@ def mock_agent_processor():
 
     # Mock processing task - None initially (no active processing)
     processor._processing_task = None
-    processor._stop_event = Mock()
+    processor._stop_event = Mock(spec_set=["set"])
     processor._stop_event.set = Mock()
 
     # Mock shutdown processor with schema-compliant behavior
-    shutdown_processor = Mock()
+    # Use spec_set to prevent auto-creation of AsyncMock attributes
+    shutdown_processor = Mock(spec_set=["process", "shutdown_complete", "shutdown_result"])
     shutdown_processor.process = AsyncMock()
     shutdown_processor.shutdown_complete = False
     shutdown_processor.shutdown_result = None

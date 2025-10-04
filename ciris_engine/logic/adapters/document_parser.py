@@ -13,7 +13,7 @@ import asyncio
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 
@@ -36,7 +36,7 @@ class DocumentParser:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize document parser with security checks."""
         self._check_dependencies()
 
@@ -51,7 +51,7 @@ class DocumentParser:
             self._pdf_available = False
 
         try:
-            import docx2txt  # noqa: F401
+            import docx2txt  # type: ignore[import-untyped]  # noqa: F401
 
             self._docx_available = True
         except ImportError:
@@ -297,7 +297,7 @@ class DocumentParser:
                 text = docx2txt.process(temp_file.name)
 
                 if text and text.strip():
-                    return text.strip()
+                    return str(text.strip())
                 else:
                     return "No text found in DOCX"
 
@@ -305,7 +305,7 @@ class DocumentParser:
             logger.exception(f"DOCX extraction error: {e}")
             return f"DOCX error: {str(e)}"
 
-    def get_status(self) -> dict:
+    def get_status(self) -> Dict[str, Any]:
         """Get parser status for debugging."""
         return {
             "available": self.is_available(),

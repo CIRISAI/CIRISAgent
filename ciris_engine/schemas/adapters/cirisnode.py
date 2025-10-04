@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.types import EventData, JSONDict, NodeAttributes
+
 
 # Request/Response schemas for benchmarks
 class SimpleBenchRequest(BaseModel):
@@ -74,7 +76,7 @@ class WAServiceRequest(BaseModel):
 
     service: str = Field(..., description="WA service name")
     action: str = Field(..., description="Action to perform")
-    params: Dict[str, Any] = Field(default_factory=dict, description="Service parameters")
+    params: JSONDict = Field(default_factory=dict, description="Service parameters")
 
 
 class WAServiceResponse(BaseModel):
@@ -83,7 +85,7 @@ class WAServiceResponse(BaseModel):
     service: str = Field(..., description="WA service name")
     action: str = Field(..., description="Action performed")
     success: bool = Field(..., description="Whether action succeeded")
-    result: Optional[Dict[str, Any]] = Field(None, description="Action result")
+    result: Optional[JSONDict] = Field(None, description="Action result")
     error: Optional[str] = Field(None, description="Error message if failed")
 
 
@@ -92,7 +94,7 @@ class EventLogRequest(BaseModel):
     """Request to log an event."""
 
     event_type: str = Field(..., description="Type of event")
-    event_data: Dict[str, Any] = Field(..., description="Event data")
+    event_data: EventData = Field(..., description="Event data")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     agent_id: Optional[str] = Field(None, description="Agent that generated event")
 
@@ -111,7 +113,7 @@ class AssessmentSubmission(BaseModel):
 
     assessment_id: str = Field(..., description="Assessment ID")
     agent_id: str = Field(..., description="Agent taking assessment")
-    answers: List[Dict[str, Any]] = Field(..., description="Assessment answers")
+    answers: List[NodeAttributes] = Field(..., description="Assessment answers as attribute dictionaries")
 
 
 class AssessmentResult(BaseModel):

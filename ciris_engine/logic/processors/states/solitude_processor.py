@@ -58,7 +58,7 @@ class SolitudeProcessor(BaseProcessor):
         """Solitude processor only handles SOLITUDE state."""
         return [AgentState.SOLITUDE]
 
-    def can_process(self, state: AgentState) -> bool:
+    async def can_process(self, state: AgentState) -> bool:
         """Check if we can process the given state."""
         return state == AgentState.SOLITUDE
 

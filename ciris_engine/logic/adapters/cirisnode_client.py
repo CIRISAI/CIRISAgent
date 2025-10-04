@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 import httpx
 
@@ -23,6 +23,7 @@ from ciris_engine.schemas.adapters.cirisnode import (
 from ciris_engine.schemas.config.essential import CIRISNodeConfig
 from ciris_engine.schemas.runtime.audit import AuditActionContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -100,7 +101,7 @@ class CIRISNodeClient(Service):
     def is_closed(self) -> bool:
         return self._closed
 
-    async def _post(self, endpoint: str, payload: dict) -> Any:
+    async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Any:
         async def _make_request() -> Any:
             resp = await self._client.post(endpoint, json=payload)
             if 400 <= resp.status_code < 500:
@@ -115,7 +116,7 @@ class CIRISNodeClient(Service):
             **self.get_retry_config("http_request"),
         )
 
-    async def _get(self, endpoint: str, params: dict) -> Any:
+    async def _get(self, endpoint: str, params: Dict[str, Any]) -> Any:
         async def _make_request() -> Any:
             resp = await self._client.get(endpoint, params=params)
             if 400 <= resp.status_code < 500:
@@ -130,7 +131,7 @@ class CIRISNodeClient(Service):
             **self.get_retry_config("http_request"),
         )
 
-    async def _put(self, endpoint: str, payload: dict) -> Any:
+    async def _put(self, endpoint: str, payload: Dict[str, Any]) -> Any:
         async def _make_request() -> Any:
             resp = await self._client.put(endpoint, json=payload)
             if 400 <= resp.status_code < 500:
@@ -202,7 +203,7 @@ class CIRISNodeClient(Service):
             )
         return result
 
-    async def run_wa_service(self, service: str, action: str, params: dict) -> WAServiceResponse:
+    async def run_wa_service(self, service: str, action: str, params: Dict[str, Any]) -> WAServiceResponse:
         """Call a WA service on CIRISNode."""
         request = WAServiceRequest(service=service, action=action, params=params)
         response = await self._post(f"/wa/{service}", request.model_dump())
@@ -221,7 +222,9 @@ class CIRISNodeClient(Service):
             )
         return result
 
-    async def log_event(self, event_type: str, event_data: dict, agent_id: Optional[str] = None) -> EventLogResponse:
+    async def log_event(
+        self, event_type: str, event_data: Dict[str, Any], agent_id: Optional[str] = None
+    ) -> EventLogResponse:
         """Send an event payload to CIRISNode for storage."""
         request = EventLogRequest(event_type=event_type, event_data=event_data, agent_id=agent_id)
         response = await self._post("/events", request.model_dump())
@@ -245,10 +248,10 @@ class CIRISNodeClient(Service):
         benchmark: str,
         model_id: str,
         agent_id: str,
-    ) -> List[dict]:
+    ) -> List[JSONDict]:
         """Retrieve benchmark prompts from CIRISNode."""
         result = cast(
-            List[dict],
+            List[JSONDict],
             await self._get(
                 f"/bench/{benchmark}/prompts",
                 {"model_id": model_id, "agent_id": agent_id},
@@ -273,7 +276,7 @@ class CIRISNodeClient(Service):
         benchmark: str,
         model_id: str,
         agent_id: str,
-        answers: List[dict],
+        answers: List[JSONDict],
     ) -> AssessmentResult:
         """Send benchmark answers back to CIRISNode."""
         submission = AssessmentSubmission(assessment_id=benchmark, agent_id=agent_id, answers=answers)

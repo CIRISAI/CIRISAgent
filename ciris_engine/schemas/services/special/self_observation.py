@@ -1,16 +1,17 @@
 """
 Self-observation service schemas.
 
-Replaces Dict[str, Any] in self-observation operations.
+Provides typed schemas for self-observation operations.
 """
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+from ciris_engine.schemas.types import JSONValue
 
 
 class ObservationState(str, Enum):
@@ -137,24 +138,14 @@ class ReviewOutcome(BaseModel):
 # ========== New Schemas for Enhanced Protocol ==========
 
 
-class AgentIdentityRoot(BaseModel):
-    """Root identity configuration for baseline establishment."""
-
-    identity_id: str = Field(..., description="Unique identity identifier")
-    core_values: List[str] = Field(..., description="Core ethical values")
-    capabilities: List[str] = Field(..., description="Core capabilities")
-    behavioral_constraints: List[str] = Field(..., description="Behavioral boundaries")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
 class ConfigurationChange(BaseModel):
     """A proposed or applied configuration change."""
 
     change_id: str = Field(..., description="Unique change identifier")
     scope: str = Field(..., description="Scope: LOCAL, ENVIRONMENT, IDENTITY, COMMUNITY")
     target_path: str = Field(..., description="Configuration path to change")
-    old_value: Optional[Union[str, int, float, bool, List, Dict]] = Field(None)
-    new_value: Union[str, int, float, bool, List, Dict] = Field(...)
+    old_value: Optional[JSONValue] = Field(None, description="Previous configuration value")
+    new_value: JSONValue = Field(..., description="New configuration value")
     estimated_variance_impact: float = Field(..., description="Estimated variance %")
     reliability_score: float = Field(..., description="Reliability score for this change")
     reason: str = Field(..., description="Why this change is proposed")
@@ -190,7 +181,15 @@ class ObservabilitySignal(BaseModel):
     timestamp: datetime = Field(..., description="When signal occurred")
     severity: str = Field("info", description="info, warning, error, critical")
     source: str = Field(..., description="Source service or component")
-    details: Dict[str, Union[str, int, float, bool, List]] = Field(default_factory=dict)
+    details: Dict[str, JSONValue] = Field(default_factory=dict, description="Signal details")
+
+
+class ImprovementMetrics(BaseModel):
+    """Expected improvement metrics for an observation opportunity."""
+
+    performance_gain_percent: float = Field(0.0, description="Expected performance improvement %")
+    error_reduction_percent: float = Field(0.0, description="Expected error rate reduction %")
+    resource_efficiency_gain: float = Field(0.0, description="Expected resource efficiency gain %")
 
 
 class ObservationOpportunity(BaseModel):
@@ -199,7 +198,7 @@ class ObservationOpportunity(BaseModel):
     opportunity_id: str = Field(..., description="Unique identifier")
     trigger_signals: List[ObservabilitySignal] = Field(..., description="Signals that triggered this")
     proposed_changes: List[ConfigurationChange] = Field(..., description="Proposed changes")
-    expected_improvement: Dict[str, float] = Field(..., description="Expected improvements")
+    expected_improvement: ImprovementMetrics = Field(..., description="Expected improvements")
     risk_assessment: str = Field(..., description="Risk level: low, medium, high")
     priority: int = Field(0, description="Priority score")
 
@@ -277,6 +276,14 @@ class PatternLibrarySummary(BaseModel):
     pattern_categories: Dict[str, int] = Field(default_factory=dict)
 
 
+class ImprovementRecord(BaseModel):
+    """Record of a specific improvement."""
+
+    improvement_description: str = Field(..., description="What was improved")
+    performance_gain: float = Field(..., description="Performance gain %")
+    impact_score: float = Field(..., description="Overall impact score")
+
+
 class ServiceImprovementReport(BaseModel):
     """Comprehensive service improvement report."""
 
@@ -299,7 +306,7 @@ class ServiceImprovementReport(BaseModel):
     peak_variance: float = Field(0.0, description="Peak variance in period")
 
     # Top improvements
-    top_improvements: List[Dict[str, Union[str, float]]] = Field(default_factory=list)
+    top_improvements: List[ImprovementRecord] = Field(default_factory=list, description="Top improvement records")
 
     # Recommendations
     recommendations: List[str] = Field(default_factory=list, description="Future recommendations")
@@ -370,7 +377,6 @@ __all__ = [
     "CycleEventData",
     "ObservationStatus",
     "ReviewOutcome",
-    "AgentIdentityRoot",
     "ConfigurationChange",
     "ChangeApprovalResult",
     "RollbackResult",

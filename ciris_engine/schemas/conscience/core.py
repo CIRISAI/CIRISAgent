@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class ConscienceStatus(str, Enum):
     """Status of a conscience check"""
@@ -64,23 +66,12 @@ class EpistemicHumilityResult(BaseModel):
 
 
 class EpistemicData(BaseModel):
-    """Epistemic safety metadata"""
+    """Epistemic safety metadata - core epistemic metrics only"""
 
     entropy_level: float = Field(ge=0.0, le=1.0, description="Current entropy level")
     coherence_level: float = Field(ge=0.0, le=1.0, description="Current coherence level")
     uncertainty_acknowledged: bool = Field(description="Whether uncertainty was acknowledged")
     reasoning_transparency: float = Field(ge=0.0, le=1.0, description="Transparency of reasoning")
-
-    # Optional replacement action for conscience checks that override the selected action
-    # Used by ThoughtDepthGuardrail and UpdatedStatusConscience
-    replacement_action: Optional[Dict[str, Any]] = Field(
-        default=None, description="Replacement action when conscience overrides"
-    )
-
-    # Optional observation content for UpdatedStatusConscience
-    CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(
-        default=None, description="New observation that arrived during processing"
-    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -112,6 +103,26 @@ class ConscienceCheckResult(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc), description="When check was performed"
     )
     processing_time_ms: Optional[float] = Field(default=None, ge=0.0, description="Processing time in milliseconds")
+
+    # Optional replacement action for conscience checks that override the selected action
+    # Used by ThoughtDepthGuardrail and UpdatedStatusConscience
+    replacement_action: Optional[JSONDict] = Field(
+        default=None, description="Replacement action when conscience overrides"
+    )
+
+    # Optional observation content for UpdatedStatusConscience
+    CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(
+        default=None, description="New observation that arrived during processing"
+    )
+    original_action: Optional[JSONDict] = Field(
+        default=None, description="Original action payload evaluated by conscience"
+    )
+    thought_depth_triggered: Optional[bool] = Field(
+        default=None, description="Whether the thought depth guardrail triggered"
+    )
+    updated_status_detected: Optional[bool] = Field(
+        default=None, description="Whether the updated status conscience detected changes"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

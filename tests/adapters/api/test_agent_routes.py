@@ -76,6 +76,7 @@ def app():
 
     # Mock runtime properties - fix cognitive state structure
     app.state.runtime.agent_processor = MagicMock()
+    app.state.runtime.agent_processor._is_paused = False  # Ensure processor is not paused
     app.state.runtime.agent_processor.state_manager = MagicMock(current_state="WORK")
     identity_mock = MagicMock()
     identity_mock.agent_id = "test_agent"
@@ -501,7 +502,7 @@ class TestStatusEndpoint:
     @pytest.mark.asyncio
     async def test_status_with_current_task(self, app, auth_context_observer):
         """Test status with current task."""
-        app.state.task_scheduler.get_current_task = AsyncMock(return_value="Processing user request")
+        app.state.task_scheduler.get_current_task = MagicMock(return_value="Processing user request")
 
         # Mock auth dependency
         app.dependency_overrides[require_observer] = lambda: auth_context_observer

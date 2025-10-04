@@ -1,7 +1,7 @@
 """
 Schemas for identity variance and behavioral pattern tracking.
 
-Replaces Dict[str, Any] in identity_variance_monitor.py and configuration_feedback_loop.py.
+Provides typed schemas in identity_variance_monitor.py and configuration_feedback_loop.py.
 """
 
 from datetime import datetime

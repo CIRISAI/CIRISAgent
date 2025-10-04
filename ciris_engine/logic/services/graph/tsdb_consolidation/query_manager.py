@@ -14,7 +14,12 @@ from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.logic.services.graph.tsdb_consolidation.data_converter import TSDBDataConverter
-from ciris_engine.schemas.services.graph.consolidation import TaskCorrelationData
+from ciris_engine.schemas.services.graph.consolidation import (
+    MetricCorrelationData,
+    ServiceInteractionData,
+    TaskCorrelationData,
+    TraceSpanData,
+)
 from ciris_engine.schemas.services.graph.query_results import ServiceCorrelationQueryResult, TSDBNodeQueryResult
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
@@ -198,10 +203,10 @@ class QueryManager:
         Returns:
             ServiceCorrelationQueryResult with typed correlation data
         """
-        service_interactions = []
-        metric_correlations = []
-        trace_spans = []
-        task_correlations = []
+        service_interactions: List[ServiceInteractionData] = []
+        metric_correlations: List[MetricCorrelationData] = []
+        trace_spans: List[TraceSpanData] = []
+        task_correlations: List[TaskCorrelationData] = []
 
         try:
             with get_db_connection(db_path=self._db_path) as conn:
@@ -284,17 +289,17 @@ class QueryManager:
                     correlation_type = row["correlation_type"]
 
                     if correlation_type == "service_interaction":
-                        converted = TSDBDataConverter.convert_service_interaction(raw_correlation)
-                        if converted:
-                            service_interactions.append(converted)
+                        converted_interaction = TSDBDataConverter.convert_service_interaction(raw_correlation)
+                        if converted_interaction:
+                            service_interactions.append(converted_interaction)
                     elif correlation_type == "metric_datapoint":
-                        converted = TSDBDataConverter.convert_metric_correlation(raw_correlation)
-                        if converted:
-                            metric_correlations.append(converted)
+                        converted_metric = TSDBDataConverter.convert_metric_correlation(raw_correlation)
+                        if converted_metric:
+                            metric_correlations.append(converted_metric)
                     elif correlation_type == "trace_span":
-                        converted = TSDBDataConverter.convert_trace_span(raw_correlation)
-                        if converted:
-                            trace_spans.append(converted)
+                        converted_trace = TSDBDataConverter.convert_trace_span(raw_correlation)
+                        if converted_trace:
+                            trace_spans.append(converted_trace)
                     elif correlation_type == "task_correlation":
                         # For task correlations, we'll query the tasks separately
                         pass

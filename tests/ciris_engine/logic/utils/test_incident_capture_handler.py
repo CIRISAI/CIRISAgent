@@ -159,7 +159,15 @@ class TestIncidentCaptureHandler:
     ):
         handler = IncidentCaptureHandler(log_dir=str(log_dir), time_service=mock_time_service)
 
+        # Create a mock loop that properly closes coroutines passed to create_task
         mock_loop = MagicMock()
+
+        def create_task_side_effect(coro):
+            # Close the coroutine to prevent "never awaited" warning
+            coro.close()
+            return MagicMock()
+
+        mock_loop.create_task.side_effect = create_task_side_effect
         mock_get_loop.return_value = mock_loop
 
         # Manually add pending incidents (as the code doesn't do this itself)

@@ -6,7 +6,7 @@ overrides the action to DEFER, ensuring proper escalation to humans.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.conscience.interface import ConscienceInterface
@@ -44,7 +44,7 @@ class ThoughtDepthGuardrail(ConscienceInterface):
     async def check(
         self,
         action: ActionSelectionDMAResult,
-        context: dict,
+        context: Dict[str, Any],
     ) -> ConscienceCheckResult:
         """Check if thought depth exceeds maximum allowed."""
         start_time = self._time_service.now()

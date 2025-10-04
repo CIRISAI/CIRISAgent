@@ -630,7 +630,7 @@ def get_channel_last_activity(
     return last_activity
 
 
-def _row_to_service_correlation(row) -> ServiceCorrelation:
+def _row_to_service_correlation(row: Any) -> ServiceCorrelation:
     """
     Convert a database row to a ServiceCorrelation object.
 

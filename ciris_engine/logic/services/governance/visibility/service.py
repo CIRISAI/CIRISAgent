@@ -411,7 +411,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                     # Return the most recent correlations
                     correlations = telemetry_service._recent_correlations[-limit:]
                     logger.debug(f"Retrieved {len(correlations)} traces from telemetry service")
-                    return correlations
+                    return list(correlations)
                 else:
                     logger.warning("Telemetry service found but _recent_correlations not available")
             else:
@@ -436,7 +436,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                 correlations = get_recent_correlations(limit=limit)
                 # The correlations are already ServiceCorrelation objects from the database
                 logger.debug(f"Retrieved {len(correlations)} traces from database")
-                return correlations
+                return list(correlations)
             except Exception as e:
                 # Log the error loudly
                 logger.error(f"Failed to get traces from database: {e}", exc_info=True)

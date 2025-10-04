@@ -26,7 +26,7 @@ You are a Common Sense Evaluation agent. Your task is to assess a given "thought
 """
 
 
-class CSDMAEvaluator(BaseDMA, CSDMAProtocol):
+class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
     """
     Evaluates a thought for common-sense plausibility using an LLM
     and returns a structured CSDMAResult using the 'instructor' library.

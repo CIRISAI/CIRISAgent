@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import yaml
 from pydantic import BaseModel
@@ -108,7 +108,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         return service
 
     async def call_llm_structured(
-        self, messages: list, response_model: type, max_tokens: int = 1024, temperature: float = 0.0
+        self, messages: List[Dict[str, Any]], response_model: type, max_tokens: int = 1024, temperature: float = 0.0
     ) -> Tuple[Any, ...]:
         """Call LLM via sink for centralized failover, round-robin, and circuit breaker protection.
 
@@ -146,9 +146,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         return result
 
-    async def apply_faculties(
-        self, content: str, context: Optional[Union[Dict[str, Any], "FacultyContext"]] = None
-    ) -> Dict[str, BaseModel]:
+    async def apply_faculties(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, BaseModel]:
         """Apply available epistemic faculties to content.
 
         Args:

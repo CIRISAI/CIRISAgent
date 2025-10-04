@@ -113,7 +113,7 @@ def get_db_connection_with_retry(db_path: str | None = None, busy_timeout: int =
         conn.execute("PRAGMA journal_mode=WAL")
         # Set busy timeout to wait before failing
         conn.execute(f"PRAGMA busy_timeout={busy_timeout}")
-        yield conn
+        yield conn  # type: ignore[misc]
     finally:
         conn.close()
 
@@ -146,7 +146,7 @@ def execute_with_retry(
         task_id = execute_with_retry(insert_task)
     """
 
-    @with_retry(max_retries=max_retries, base_delay=base_delay)
+    @with_retry(max_retries=max_retries, base_delay=base_delay)  # type: ignore[misc,arg-type]
     def _execute() -> T:
         with get_db_connection_with_retry(db_path) as conn:
             return operation(conn)

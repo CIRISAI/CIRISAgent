@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from ciris_engine.logic.config.env_utils import get_env_var
 from ciris_engine.logic.secrets.service import SecretsService
@@ -125,7 +125,7 @@ class ContextBuilder:
             time_service=self.time_service,
         )
 
-    async def _build_secrets_snapshot(self) -> dict:
+    async def _build_secrets_snapshot(self) -> Dict[str, Any]:
         """Build secrets information for SystemSnapshot."""
         if self.secrets_service is None:
             # Return empty snapshot if no secrets service

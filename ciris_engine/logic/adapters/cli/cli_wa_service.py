@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.services.lifecycle.time import TimeService
@@ -22,7 +22,7 @@ class CLIWiseAuthorityService(WiseAuthorityService):
     def __init__(self, time_service: Optional[TimeService] = None) -> None:
         super().__init__()
         self.time_service = time_service or TimeService()
-        self.deferral_log: List[dict] = []
+        self.deferral_log: List[Dict[str, Any]] = []
 
     async def start(self) -> None:
         """Start the CLI wise authority service."""

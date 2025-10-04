@@ -110,7 +110,7 @@ async def build_system_snapshot(
     try:
         from version import __version__ as code_hash
     except ImportError:
-        code_hash = None
+        code_hash = ""  # Empty string instead of None
 
     context_data = {
         "current_task_details": current_task_summary,

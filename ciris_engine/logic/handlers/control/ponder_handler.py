@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies, BaseActionHandler
@@ -81,7 +81,7 @@ class PonderHandler(BaseActionHandler):
         return follow_up_id
 
     def _generate_ponder_follow_up_content(
-        self, task_context: str, questions_list: list, thought_depth: int, thought: Thought
+        self, task_context: str, questions_list: List[str], thought_depth: int, thought: Thought
     ) -> str:
         """Generate dynamic follow-up content based on ponder count and previous failures."""
 

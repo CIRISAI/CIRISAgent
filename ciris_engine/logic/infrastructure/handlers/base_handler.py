@@ -54,7 +54,7 @@ class ActionHandlerDependencies:
         self.secrets_service = secrets_service
         self.shutdown_callback = shutdown_callback
         self._shutdown_requested = False
-        self._shutdown_task: Optional[asyncio.Task] = None
+        self._shutdown_task: Optional[asyncio.Task[Any]] = None
 
     def request_graceful_shutdown(self, reason: str = "Handler requested shutdown") -> None:
         """Request a graceful shutdown of the agent runtime."""
@@ -216,7 +216,7 @@ class BaseActionHandler(ABC):
             },
         )
         self.logger.debug(f"[AUDIT DEBUG] Successfully logged audit event with entry_id={audit_result.entry_id}")
-        return audit_result
+        return audit_result  # type: ignore[no-any-return]
 
     async def _handle_error(
         self, action_type: HandlerActionType, dispatch_context: DispatchContext, thought_id: str, error: Exception

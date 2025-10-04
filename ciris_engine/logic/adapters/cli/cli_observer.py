@@ -2,7 +2,7 @@ import asyncio
 import logging
 import select
 import sys
-from typing import Any, Awaitable, Callable, List, Optional, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.buses import BusManager
@@ -23,7 +23,7 @@ class CLIObserver(BaseObserver[IncomingMessage]):
 
     def __init__(
         self,
-        on_observe: Callable[[dict], Awaitable[None]],
+        on_observe: Callable[[Dict[str, Any]], Awaitable[None]],
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         bus_manager: Optional[BusManager] = None,
@@ -46,8 +46,8 @@ class CLIObserver(BaseObserver[IncomingMessage]):
         )
         self.interactive = interactive
         self.config = config
-        self._input_task: Optional[asyncio.Task] = None
-        self._buffered_input_task: Optional[asyncio.Task] = None
+        self._input_task: Optional[asyncio.Task[Any]] = None
+        self._buffered_input_task: Optional[asyncio.Task[Any]] = None
         self._stop_event = asyncio.Event()
         self._buffered_input: List[str] = []
         self._input_ready = asyncio.Event()

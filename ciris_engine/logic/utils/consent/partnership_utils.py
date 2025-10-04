@@ -168,5 +168,5 @@ class PartnershipRequestHandler:
     def _extract_reason_from_params(self, params: Any, default: str) -> str:
         """Extract reason from action params safely."""
         if isinstance(params, dict):
-            return params.get("reason", default)
+            return str(params.get("reason", default))
         return default

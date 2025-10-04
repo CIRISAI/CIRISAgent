@@ -139,7 +139,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         self._credit_log_cache: Dict[str, float] = {}
 
         # Initialize document parser for all adapters
-        self._document_parser = DocumentParser()  # type: ignore[no-untyped-call]
+        self._document_parser = DocumentParser()
         if self._document_parser.is_available():
             logger.info(f"Document parser initialized for {origin_service} adapter - PDF/DOCX processing enabled")
         else:

@@ -120,7 +120,7 @@ class RetryConnection:
         """Execute SQL script with retry."""
         # Scripts may contain multiple operations, so always retry
         if not self._enable_retry:
-            return self._conn.executescript(*args, **kwargs)  # type: ignore[no-any-return]
+            return self._conn.executescript(*args, **kwargs)
         return self._retry_execute("executescript", *args, **kwargs)  # type: ignore[no-any-return]
 
     def __getattr__(self, name: str) -> Any:

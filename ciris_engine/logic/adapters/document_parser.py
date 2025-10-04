@@ -286,7 +286,7 @@ class DocumentParser:
             return "DOCX parsing not available"
 
         try:
-            import docx2txt  # type: ignore[import-untyped]
+            import docx2txt
 
             # Use temporary file for security (auto-cleaned up)
             with tempfile.NamedTemporaryFile(suffix=".docx") as temp_file:
@@ -294,10 +294,10 @@ class DocumentParser:
                 temp_file.flush()
 
                 # Extract text
-                text = docx2txt.process(temp_file.name)  # type: ignore[no-untyped-call]
+                text = docx2txt.process(temp_file.name)
 
                 if text and text.strip():
-                    return text.strip()
+                    return str(text.strip())
                 else:
                     return "No text found in DOCX"
 

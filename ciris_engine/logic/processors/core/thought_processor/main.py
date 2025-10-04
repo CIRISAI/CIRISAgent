@@ -738,7 +738,10 @@ class ThoughtProcessor(
     ) -> ConscienceApplicationResult:
         """Create the final ConscienceApplicationResult."""
         # epistemic_data is REQUIRED - use EMPTY marker if not provided
-        epistemic_data = conscience_result.get("epistemic_data") or {"status": "NONE", "reason": "No epistemic data from conscience checks"}
+        epistemic_data = conscience_result.get("epistemic_data") or {
+            "status": "NONE",
+            "reason": "No epistemic data from conscience checks",
+        }
 
         result = ConscienceApplicationResult(
             original_action=action_result,

@@ -69,7 +69,9 @@ def mock_conscience_result_passed():
     final_action_mock = Mock()
     final_action_mock.selected_action = "SPEAK"
 
-    result = Mock(spec=["overridden", "final_action", "selected_action", "override_reason", "epistemic_data", "__str__"])
+    result = Mock(
+        spec=["overridden", "final_action", "selected_action", "override_reason", "epistemic_data", "__str__"]
+    )
     result.overridden = False
     result.final_action = final_action_mock
     result.selected_action = "SPEAK"
@@ -82,22 +84,13 @@ def mock_conscience_result_passed():
 @pytest.fixture
 def mock_action_result():
     """Mock action execution result - ActionResponse with audit data."""
-    from ciris_engine.schemas.services.runtime_control import ActionResponse
     from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+    from ciris_engine.schemas.services.runtime_control import ActionResponse
 
-    audit_data = AuditEntryResult(
-        entry_id="test_123",
-        sequence_number=1,
-        entry_hash="hash_123",
-        signature="sig_123"
-    )
+    audit_data = AuditEntryResult(entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123")
     # For tests that need ActionResponse
     result = ActionResponse(
-        action_type="SPEAK",
-        success=True,
-        handler="TestHandler",
-        audit_data=audit_data,
-        execution_time_ms=125.0
+        action_type="SPEAK", success=True, handler="TestHandler", audit_data=audit_data, execution_time_ms=125.0
     )
     return result
 
@@ -633,22 +626,14 @@ class TestIntegrationRefactoredFunctions:
 
     def test_create_action_complete_data_integration_dict(self, base_step_data):
         """Test _create_action_complete_data expects ActionResponse, not dict."""
-        from ciris_engine.schemas.services.runtime_control import ActionResponse
         from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+        from ciris_engine.schemas.services.runtime_control import ActionResponse
 
         # Create ActionResponse with audit data
         audit_data = AuditEntryResult(
-            entry_id="test_123",
-            sequence_number=1,
-            entry_hash="hash_123",
-            signature="sig_123"
+            entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123"
         )
-        result = ActionResponse(
-            action_type="SPEAK",
-            success=True,
-            handler="speak_handler",
-            audit_data=audit_data
-        )
+        result = ActionResponse(action_type="SPEAK", success=True, handler="speak_handler", audit_data=audit_data)
 
         step_data = _create_action_complete_data(base_step_data, result)
 

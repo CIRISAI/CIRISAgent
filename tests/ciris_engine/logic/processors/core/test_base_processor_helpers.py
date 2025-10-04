@@ -8,8 +8,8 @@ import pytest
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
-from ciris_engine.schemas.services.runtime_control import ActionResponse
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+from ciris_engine.schemas.services.runtime_control import ActionResponse
 
 
 class ConcreteProcessor(BaseProcessor):
@@ -156,16 +156,10 @@ class TestExtractActionName:
         """Test extracting action name from ActionResponse dispatch result."""
         # Create mock audit data
         mock_audit = AuditEntryResult(
-            entry_id="test_123",
-            sequence_number=1,
-            entry_hash="hash_123",
-            signature="sig_123"
+            entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123"
         )
         dispatch_result = ActionResponse(
-            success=True,
-            handler="TestHandler",
-            action_type="SPEAK",
-            audit_data=mock_audit
+            success=True, handler="TestHandler", action_type="SPEAK", audit_data=mock_audit
         )
         action_selection_result = Mock()
 
@@ -288,16 +282,10 @@ class TestDispatchActionIntegration:
         """Test successful dispatch_action flow using all helper methods."""
         # Create ActionResponse for dispatcher to return
         mock_audit = AuditEntryResult(
-            entry_id="test_123",
-            sequence_number=1,
-            entry_hash="hash_123",
-            signature="sig_123"
+            entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123"
         )
         action_response = ActionResponse(
-            success=True,
-            handler="TestHandler",
-            action_type="SPEAK",
-            audit_data=mock_audit
+            success=True, handler="TestHandler", action_type="SPEAK", audit_data=mock_audit
         )
         base_processor.action_dispatcher.dispatch = AsyncMock(return_value=action_response)
 
@@ -320,16 +308,10 @@ class TestDispatchActionIntegration:
         """Test dispatch_action with minimal ActionResponse."""
         # Create minimal ActionResponse
         mock_audit = AuditEntryResult(
-            entry_id="test_123",
-            sequence_number=1,
-            entry_hash="hash_123",
-            signature="sig_123"
+            entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123"
         )
         action_response = ActionResponse(
-            success=True,
-            handler="TestHandler",
-            action_type="SPEAK",
-            audit_data=mock_audit
+            success=True, handler="TestHandler", action_type="SPEAK", audit_data=mock_audit
         )
         base_processor.action_dispatcher.dispatch = AsyncMock(return_value=action_response)
 

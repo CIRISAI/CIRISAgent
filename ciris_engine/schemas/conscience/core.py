@@ -82,13 +82,19 @@ class ConscienceCheckResult(BaseModel):
     status: ConscienceStatus = Field(description="Overall check status")
     passed: bool = Field(description="Whether all checks passed")
     reason: Optional[str] = Field(default=None, description="Reason for failure/warning")
-    epistemic_data: Optional[EpistemicData] = Field(default=None, description="Epistemic safety metadata (provided by epistemic consciences)")
+    epistemic_data: Optional[EpistemicData] = Field(
+        default=None, description="Epistemic safety metadata (provided by epistemic consciences)"
+    )
 
     # Detailed check results (each conscience provides its own check)
     entropy_check: Optional[EntropyCheckResult] = Field(default=None, description="Entropy check result")
     coherence_check: Optional[CoherenceCheckResult] = Field(default=None, description="Coherence check result")
-    optimization_veto_check: Optional[OptimizationVetoResult] = Field(default=None, description="Optimization veto result")
-    epistemic_humility_check: Optional[EpistemicHumilityResult] = Field(default=None, description="Humility check result")
+    optimization_veto_check: Optional[OptimizationVetoResult] = Field(
+        default=None, description="Optimization veto result"
+    )
+    epistemic_humility_check: Optional[EpistemicHumilityResult] = Field(
+        default=None, description="Humility check result"
+    )
 
     # Metrics
     entropy_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Overall entropy score")

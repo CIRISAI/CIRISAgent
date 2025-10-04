@@ -456,7 +456,9 @@ def _build_conscience_result_from_check(
     )
 
 
-def _create_conscience_execution_data(base_data: BaseStepData, result: Any, args: Tuple[Any, ...]) -> ConscienceExecutionStepData:
+def _create_conscience_execution_data(
+    base_data: BaseStepData, result: Any, args: Tuple[Any, ...]
+) -> ConscienceExecutionStepData:
     """Add CONSCIENCE_EXECUTION specific data with full transparency."""
     # Validate result structure using helper
     _validate_conscience_execution_result(result)

@@ -152,7 +152,10 @@ class ActionDispatcher:
                     thought_id=thought.thought_id,
                     task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
                     handler_name=handler_instance.__class__.__name__,
-                    parameters={"error": "Service registry not ready", "timeout": getattr(dispatch_context, "registry_timeout", 30.0)},
+                    parameters={
+                        "error": "Service registry not ready",
+                        "timeout": getattr(dispatch_context, "registry_timeout", 30.0),
+                    },
                 )
                 audit_result = await self.audit_service.log_action(
                     action_type=action_type, context=audit_context, outcome="error:RegistryNotReady"

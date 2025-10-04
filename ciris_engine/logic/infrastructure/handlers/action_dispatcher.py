@@ -186,6 +186,9 @@ class ActionDispatcher:
             dispatch_context.model_dump() if hasattr(dispatch_context, "model_dump") else {},
         )
 
+        # Capture start time for execution timing
+        start_time = self._time_service.now()
+
         try:
             # Record handler invocation as HOT PATH
             if self.telemetry_service:
@@ -212,6 +215,10 @@ class ActionDispatcher:
             # The handler's `handle` method will take care of everything.
             # Pass the final_action_result (ActionSelectionDMAResult) to the handler
             follow_up_thought_id = await handler_instance.handle(final_action_result, thought, dispatch_context)
+
+            # Calculate execution time in milliseconds
+            end_time = self._time_service.now()
+            execution_time_ms = (end_time - start_time).total_seconds() * 1000.0
 
             # Create centralized audit entry for this action completion (REQUIRED)
             from ciris_engine.schemas.runtime.audit import AuditActionContext
@@ -240,7 +247,7 @@ class ActionDispatcher:
                 handler=handler_instance.__class__.__name__,
                 action_type=action_type.value,
                 follow_up_thought_id=follow_up_thought_id,
-                execution_time_ms=0.0,  # TODO: Calculate from dispatch timing
+                execution_time_ms=execution_time_ms,
                 audit_data=audit_result,
             )
             await self._action_complete_step(thought_item, dispatch_result)
@@ -263,6 +270,10 @@ class ActionDispatcher:
             return dispatch_result
 
         except Exception as e:
+            # Calculate execution time even for errors
+            end_time = self._time_service.now()
+            execution_time_ms = (end_time - start_time).total_seconds() * 1000.0
+
             logger.exception(
                 f"Error executing handler {handler_instance.__class__.__name__} for action {action_type.value} on thought {thought.thought_id}: {e}"
             )
@@ -294,7 +305,7 @@ class ActionDispatcher:
                 handler=handler_instance.__class__.__name__,
                 action_type=action_type.value,
                 follow_up_thought_id=None,
-                execution_time_ms=0.0,  # TODO: Calculate from dispatch timing
+                execution_time_ms=execution_time_ms,
                 audit_data=audit_result,
             )
             await self._action_complete_step(thought_item, dispatch_result)

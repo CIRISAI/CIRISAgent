@@ -1197,7 +1197,7 @@ async def _get_traces_from_audit_service(
         start_time=start_time,
         end_time=end_time,
         event_type="handler_action_ponder",
-        limit=limit * 10  # Get more to group
+        limit=limit * 10,  # Get more to group
     )
     entries = await audit_service.query_audit_trail(query)
 
@@ -1371,11 +1371,7 @@ async def _get_logs_from_audit_service(
     try:
         from ciris_engine.schemas.services.graph.audit import AuditQuery
 
-        audit_query = AuditQuery(
-            start_time=start_time,
-            end_time=end_time,
-            limit=limit * 2  # Get extra for filtering
-        )
+        audit_query = AuditQuery(start_time=start_time, end_time=end_time, limit=limit * 2)  # Get extra for filtering
         entries = await audit_service.query_audit_trail(audit_query)
 
         for entry in entries:
@@ -1390,8 +1386,8 @@ async def _get_logs_from_audit_service(
 
             if len(logs) >= limit:
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to get logs from audit service: {e}")
 
     return logs
 
@@ -1542,11 +1538,7 @@ async def _query_logs(audit_service: Any, query: TelemetryQuery) -> List[QueryRe
 
     from ciris_engine.schemas.services.graph.audit import AuditQuery
 
-    audit_query = AuditQuery(
-        start_time=query.start_time,
-        end_time=query.end_time,
-        limit=query.limit
-    )
+    audit_query = AuditQuery(start_time=query.start_time, end_time=query.end_time, limit=query.limit)
     log_entries = await audit_service.query_audit_trail(audit_query)
 
     for entry in log_entries:
@@ -1562,7 +1554,7 @@ async def _query_logs(audit_service: Any, query: TelemetryQuery) -> List[QueryRe
                     "timestamp": entry.timestamp.isoformat(),
                     "service": entry.actor,
                     "action": entry.action,
-                    "context": entry.context.model_dump() if hasattr(entry.context, 'model_dump') else entry.context,
+                    "context": entry.context.model_dump() if hasattr(entry.context, "model_dump") else entry.context,
                 },
             )
         )

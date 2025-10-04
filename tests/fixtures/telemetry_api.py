@@ -150,8 +150,13 @@ def mock_api_visibility_service():
 @pytest.fixture
 def mock_api_incident_service():
     """Create a fully-configured incident management service for API tests."""
-    from ciris_engine.schemas.services.graph.incident import IncidentNode, IncidentInsightNode, IncidentSeverity, IncidentStatus
-    from ciris_engine.schemas.services.graph_core import NodeType, GraphScope
+    from ciris_engine.schemas.services.graph.incident import (
+        IncidentInsightNode,
+        IncidentNode,
+        IncidentSeverity,
+        IncidentStatus,
+    )
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 
     mock = AsyncMock()
     now = datetime.now(timezone.utc)

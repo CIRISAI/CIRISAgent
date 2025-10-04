@@ -360,8 +360,8 @@ def full_app(complete_api_telemetry_setup):
     # app.state.visibility_service = visibility_service  # Using centralized fixture instead
 
     # Audit service with PROPER AuditEntry objects
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
     from ciris_engine.schemas.services.nodes import AuditEntry, AuditEntryContext
-    from ciris_engine.schemas.services.graph_core import NodeType, GraphScope
 
     audit_service = MagicMock()
     now = datetime.now(timezone.utc)
@@ -382,7 +382,7 @@ def full_app(complete_api_telemetry_setup):
                 context=AuditEntryContext(
                     service_name="telemetry",
                     correlation_id="trace_1",
-                    additional_data={"description": "Critical system error"}
+                    additional_data={"description": "Critical system error"},
                 ),
             ),
             AuditEntry(
@@ -396,7 +396,7 @@ def full_app(complete_api_telemetry_setup):
                 context=AuditEntryContext(
                     service_name="memory",
                     correlation_id="trace_2",
-                    additional_data={"description": "Memory usage high"}
+                    additional_data={"description": "Memory usage high"},
                 ),
             ),
             AuditEntry(
@@ -410,7 +410,7 @@ def full_app(complete_api_telemetry_setup):
                 context=AuditEntryContext(
                     service_name="llm",
                     correlation_id="trace_3",
-                    additional_data={"description": "LLM service unavailable"}
+                    additional_data={"description": "LLM service unavailable"},
                 ),
             ),
             # For traces endpoint - PONDER actions (reasoning traces)
@@ -431,7 +431,7 @@ def full_app(complete_api_telemetry_setup):
                         "depth": 2,
                         "action": "analyze",
                         "confidence": 0.85,
-                    }
+                    },
                 ),
             ),
             AuditEntry(
@@ -442,15 +442,12 @@ def full_app(complete_api_telemetry_setup):
                 action="debug_log",
                 actor="audit.service",
                 timestamp=now - timedelta(minutes=4),
-                context=AuditEntryContext(
-                    service_name="audit",
-                    additional_data={"description": "Debug information"}
-                ),
+                context=AuditEntryContext(service_name="audit", additional_data={"description": "Debug information"}),
             ),
         ]
 
         # Filter by event_type if specified (singular field)
-        if hasattr(query, 'event_type') and query.event_type:
+        if hasattr(query, "event_type") and query.event_type:
             entries = [e for e in entries if e.action == query.event_type]
 
         return entries
@@ -958,7 +955,7 @@ class TestQueryEndpointExtended:
 
         data = response.json()["data"]
         print(f"DEBUG: Query results count: {len(data.get('results', []))}")
-        if len(data.get('results', [])) > 0:
+        if len(data.get("results", [])) > 0:
             print(f"DEBUG: First result: {data['results'][0]}")
         assert "results" in data
         # Should find inc-00 incidents which are high severity and investigating

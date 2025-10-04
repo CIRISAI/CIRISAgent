@@ -207,7 +207,9 @@ class TestUnifiedEndpoint:
         client = TestClient(fully_initialized_app)
         response = client.get("/telemetry/unified?format=json")
         if response.status_code != 200:
-            print(f"ERROR Response: {response.json() if response.headers.get('content-type') == 'application/json' else response.text[:200]}")
+            print(
+                f"ERROR Response: {response.json() if response.headers.get('content-type') == 'application/json' else response.text[:200]}"
+            )
         assert response.status_code == 200
 
         data = response.json()

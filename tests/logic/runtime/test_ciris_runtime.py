@@ -757,15 +757,15 @@ class TestAgentProcessorInitialization:
         runtime = runtime_with_mocked_bus_manager
 
         # Mock asyncio.create_task to verify bus manager task creation
-        # We need to actually create tasks to avoid "coroutine never awaited" warnings
-        created_tasks = []
-        original_create_task = asyncio.create_task
+        # Track coroutines to properly clean them up and prevent warnings
+        created_coroutines = []
 
         def mock_create_task_impl(coro, **kwargs):
-            """Create real tasks to consume coroutines using the original function."""
-            task = original_create_task(coro, **kwargs)
-            created_tasks.append(task)
-            return task
+            """Mock create_task that tracks coroutines for cleanup."""
+            created_coroutines.append(coro)
+            # Create a mock task to return
+            mock_task = AsyncMock()
+            return mock_task
 
         with patch("asyncio.create_task", side_effect=mock_create_task_impl) as mock_create_task:
             await runtime._create_agent_processor_when_ready()
@@ -775,14 +775,9 @@ class TestAgentProcessorInitialization:
             # Verify bus manager start was called
             runtime.service_initializer.bus_manager.start.assert_called_once()
 
-            # Clean up created tasks
-            for task in created_tasks:
-                if not task.done():
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
+            # Clean up any unawaited coroutines to prevent RuntimeWarning during gc.collect()
+            for coro in created_coroutines:
+                coro.close()
 
     @pytest.mark.asyncio
     async def test_create_agent_processor_when_ready_without_bus_manager(self, runtime_without_bus_manager):

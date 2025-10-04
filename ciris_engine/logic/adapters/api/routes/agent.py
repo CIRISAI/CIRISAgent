@@ -1007,9 +1007,16 @@ async def _get_history_from_communication_service(
 
 def _get_current_task_info(request: Request) -> Optional[str]:
     """Get current task information from task scheduler."""
+    import inspect
+
     task_scheduler = getattr(request.app.state, "task_scheduler", None)
     if task_scheduler and hasattr(task_scheduler, "get_current_task"):
         task = task_scheduler.get_current_task()
+        # If the result is a coroutine (from AsyncMock in tests), close it and ignore
+        # since the real TaskSchedulerService doesn't have this method
+        if inspect.iscoroutine(task):
+            task.close()  # Properly close the coroutine to avoid warning
+            return None
         return str(task) if task is not None else None
     return None
 

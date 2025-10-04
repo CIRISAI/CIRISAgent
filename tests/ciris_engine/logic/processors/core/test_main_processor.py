@@ -596,6 +596,7 @@ class TestAgentProcessor:
         # Create a proper async mock for _process_pending_thoughts_async
         async def mock_process_thoughts():
             return 0
+
         main_processor._process_pending_thoughts_async = mock_process_thoughts
 
         # Start processing loop with limited rounds

@@ -57,18 +57,20 @@ async def runtime_with_mocked_agent_processor(real_runtime_with_mock):
     runtime = real_runtime_with_mock
 
     # Mock the agent processor with spec to prevent auto-creation of AsyncMock attributes
-    mock_agent_processor = Mock(spec_set=['start_processing', '_processing_task', '_stop_event', 'shutdown_processor', 'state_manager'])
+    mock_agent_processor = Mock(
+        spec_set=["start_processing", "_processing_task", "_stop_event", "shutdown_processor", "state_manager"]
+    )
     mock_agent_processor.start_processing = AsyncMock()
 
     # Set _processing_task to None (no active processing initially)
     mock_agent_processor._processing_task = None
 
     # Mock _stop_event
-    mock_agent_processor._stop_event = Mock(spec_set=['set'])
+    mock_agent_processor._stop_event = Mock(spec_set=["set"])
     mock_agent_processor._stop_event.set = Mock()
 
     # Mock shutdown processor with proper spec
-    shutdown_processor = Mock(spec_set=['process', 'shutdown_complete', 'shutdown_result'])
+    shutdown_processor = Mock(spec_set=["process", "shutdown_complete", "shutdown_result"])
     shutdown_processor.process = AsyncMock()
     shutdown_processor.shutdown_complete = False
     shutdown_processor.shutdown_result = None

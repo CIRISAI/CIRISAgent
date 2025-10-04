@@ -357,6 +357,12 @@ class TestIncidentServiceMetrics(BaseMetricsTest):
         bus = AsyncMock()
         bus.memorize = AsyncMock()
         bus.search = AsyncMock(return_value=[])
+
+        # Mock service_registry to avoid accessing real memory services
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type = MagicMock(return_value=[])
+        bus.service_registry = mock_registry
+
         return bus
 
     @pytest_asyncio.fixture

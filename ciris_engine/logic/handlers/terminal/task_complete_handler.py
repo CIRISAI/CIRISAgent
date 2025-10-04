@@ -20,11 +20,7 @@ class TaskCompleteHandler(BaseActionHandler):
         thought_id = thought.thought_id
         parent_task_id = thought.source_task_id
 
-        await self._audit_log(
-            HandlerActionType.TASK_COMPLETE,
-            dispatch_context.model_copy(update={"thought_id": thought_id}),
-            outcome="start",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         final_thought_status = ThoughtStatus.COMPLETED
 
@@ -76,11 +72,7 @@ class TaskCompleteHandler(BaseActionHandler):
                         status=ThoughtStatus.FAILED,
                         final_action=ponder_result_dict,
                     )
-                    await self._audit_log(
-                        HandlerActionType.TASK_COMPLETE,
-                        dispatch_context.model_copy(update={"thought_id": thought_id}),
-                        outcome="blocked_override_to_ponder",
-                    )
+                    # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
                     return None
 
         persistence.update_thought_status(
@@ -103,11 +95,7 @@ class TaskCompleteHandler(BaseActionHandler):
             if positive_moment:
                 await self._memorize_positive_moment(positive_moment, parent_task_id, dispatch_context)
 
-        await self._audit_log(
-            HandlerActionType.TASK_COMPLETE,
-            dispatch_context.model_copy(update={"thought_id": thought_id}),
-            outcome="success",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         if parent_task_id:
             if parent_task_id in PERSISTENT_TASK_IDS:

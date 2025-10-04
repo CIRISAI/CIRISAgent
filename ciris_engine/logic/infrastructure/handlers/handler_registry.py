@@ -28,6 +28,7 @@ def build_action_dispatcher(
     shutdown_callback: Optional[Callable[[], None]] = None,
     telemetry_service: Optional[Any] = None,
     secrets_service: Optional[Any] = None,
+    audit_service: Optional[Any] = None,
 ) -> ActionDispatcher:
     """
     Instantiates all handlers and returns a ready-to-use ActionDispatcher.
@@ -51,6 +52,8 @@ def build_action_dispatcher(
         HandlerActionType.FORGET: ForgetHandler(deps),
         HandlerActionType.PONDER: PonderHandler(deps, max_rounds=max_rounds),
     }
-    dispatcher = ActionDispatcher(handlers, telemetry_service=telemetry_service, time_service=time_service)
+    dispatcher = ActionDispatcher(
+        handlers, telemetry_service=telemetry_service, time_service=time_service, audit_service=audit_service
+    )
 
     return dispatcher

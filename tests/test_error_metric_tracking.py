@@ -119,18 +119,14 @@ async def test_handle_error_continues_on_metric_failure(handler_setup):
 
     test_error = RuntimeError("Test runtime error")
 
-    # Mock audit log
-    with patch.object(handler, "_audit_log", new_callable=AsyncMock) as mock_audit:
-        # Should not raise despite metric failure
-        await handler._handle_error(
-            action_type=HandlerActionType.TOOL,
-            dispatch_context=dispatch_context,
-            thought_id="test_thought_456",
-            error=test_error,
-        )
-
-        # Audit log should still be called
-        mock_audit.assert_called_once()
+    # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+    # Should not raise despite metric failure
+    await handler._handle_error(
+        action_type=HandlerActionType.TOOL,
+        dispatch_context=dispatch_context,
+        thought_id="test_thought_456",
+        error=test_error,
+    )
 
 
 @pytest.mark.asyncio
@@ -146,21 +142,17 @@ async def test_handle_error_without_memory_bus(handler_setup):
 
     test_error = TypeError("Test type error")
 
-    # Mock audit log
-    with patch.object(handler, "_audit_log", new_callable=AsyncMock) as mock_audit:
-        # Should work without memory bus
-        await handler._handle_error(
-            action_type=HandlerActionType.MEMORIZE,
-            dispatch_context=dispatch_context,
-            thought_id="test_thought_789",
-            error=test_error,
-        )
+    # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+    # Should work without memory bus
+    await handler._handle_error(
+        action_type=HandlerActionType.MEMORIZE,
+        dispatch_context=dispatch_context,
+        thought_id="test_thought_789",
+        error=test_error,
+    )
 
-        # Audit log should still be called
-        mock_audit.assert_called_once()
-
-        # Memory bus method should not have been called (it was removed)
-        # No assertion needed since the bus was deleted
+    # Memory bus method should not have been called (it was removed)
+    # No assertion needed since the bus was deleted
 
 
 @pytest.mark.asyncio

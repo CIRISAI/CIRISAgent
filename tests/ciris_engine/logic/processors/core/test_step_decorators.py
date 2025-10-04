@@ -565,7 +565,7 @@ class TestStepDataExtraction:
 
     @pytest.mark.asyncio
     async def test_step_specific_data_fail_fast_missing_action_type(self):
-        """Test ACTION_COMPLETE fails fast when dict missing action_type."""
+        """Test ACTION_COMPLETE fails fast when result is not ActionResponse."""
 
         with patch(
             "ciris_engine.logic.processors.core.step_decorators._broadcast_step_result"
@@ -573,11 +573,11 @@ class TestStepDataExtraction:
 
             @streaming_step(StepPoint.ACTION_COMPLETE)
             async def action_complete_step(self, thought_item):
-                # Return dict missing action_type
+                # Return dict instead of ActionResponse - should fail fast
                 return {
                     "success": True,
                     "handler": "SomeHandler",
-                    # Missing "action_type" - should fail fast
+                    "action_type": "SPEAK",
                 }
 
             mock_processor = Mock()
@@ -588,8 +588,8 @@ class TestStepDataExtraction:
             mock_thought.thought_id = "test-123"
             mock_thought.source_task_id = "task-456"
 
-            # Should fail fast with KeyError
-            with pytest.raises(KeyError, match="ACTION_COMPLETE dispatch_result missing 'action_type'"):
+            # Should fail fast with TypeError - requires ActionResponse not dict
+            with pytest.raises(TypeError, match="ACTION_COMPLETE expects ActionResponse"):
                 await action_complete_step(mock_processor, mock_thought)
 
     @pytest.mark.asyncio

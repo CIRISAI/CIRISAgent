@@ -5,6 +5,33 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 1.2.2
+
+### Fixed
+- **🐛 SSE Streaming Bugs**: Fixed 3 critical H3ERE pipeline SSE event bugs (100% QA test pass rate)
+  - **BUG 1**: action_rationale empty - Extract from input action at CONSCIENCE_EXECUTION step, add default in mock_llm
+  - **BUG 2**: epistemic_data/updated_status_available missing - Make REQUIRED with EXEMPT markers, add to ConscienceResultEvent schema
+  - **BUG 3**: 4 audit fields missing - Wire ActionResponse with AuditEntryResult, make all fields REQUIRED
+- **📡 Production Timing Bug**: Fixed conscience/action selection results emitted simultaneously - ASPDMA_RESULT now correctly emitted at CONSCIENCE_EXECUTION step (before conscience validation)
+- **🔒 Type Safety**: ActionDispatcher now returns typed ActionResponse (was None), fixed missing return statements in error paths
+- **⚙️ Audit Service**: log_action now returns AuditEntryResult (was None), wired through component_builder to action_dispatcher
+- **🔁 Duplicate Audit Entries**: Fixed duplicate audit logging causing 2x entries (graph, sqlite, jsonl) for every action
+  - Removed 27 duplicate _audit_log calls from all 10 handlers
+  - Removed duplicate audit from base_handler._handle_error
+  - Centralized audit logging now ONLY in action_dispatcher (3 locations: registry timeout, success, error)
+  - Each action now audited exactly ONCE
+
+### Changed
+- **✅ REQUIRED Fields**: Made critical SSE/audit fields non-optional throughout schemas
+  - ActionSelectionDMAResult.rationale, ConscienceApplicationResult.epistemic_data
+  - AuditEntryResult: sequence_number, entry_hash, signature
+  - ConscienceExecutionStepData.action_rationale, ConscienceResultEvent.updated_status_available
+- **🎯 Fail-Fast**: Removed all fallback logic - system fails loud with detailed errors when required data missing
+
+### Added
+- **📊 Enhanced QA**: Streaming tests now detect bugs with explicit "🐛 BUG N:" prefixes for clear error reporting
+- **🔒 ActionResponse Schema**: Typed replacement for Dict[str, Any] dispatch_result with REQUIRED audit_data field
+
 ## [1.2.1] - 2025-10-04
 
 ### Fixed

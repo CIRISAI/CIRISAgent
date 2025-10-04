@@ -33,7 +33,7 @@ class MemorizeHandler(BaseActionHandler):
         thought_id = thought.thought_id
 
         # Start audit logging
-        await self._audit_log(HandlerActionType.MEMORIZE, dispatch_context, outcome="start")
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         # Validate parameters
         try:
@@ -165,11 +165,7 @@ class MemorizeHandler(BaseActionHandler):
                             f"Blocked memorize attempt on managed attribute '{attr_name}' for node '{node.id}'"
                         )
 
-                        await self._audit_log(
-                            HandlerActionType.MEMORIZE,
-                            dispatch_context,
-                            outcome="blocked_managed_attribute",
-                        )
+                        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
                         return self.complete_thought_and_create_followup(
                             thought=thought,
@@ -188,7 +184,7 @@ class MemorizeHandler(BaseActionHandler):
                 "WA authorization required for MEMORIZE to identity graph. " f"Thought {thought_id} denied."
             )
 
-            await self._audit_log(HandlerActionType.MEMORIZE, dispatch_context, outcome="failed_wa_required")
+            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
             # Use centralized method with FAILED status
             return self.complete_thought_and_create_followup(
@@ -353,9 +349,7 @@ class MemorizeHandler(BaseActionHandler):
             )
 
             # Final audit log
-            await self._audit_log(
-                HandlerActionType.MEMORIZE, dispatch_context, outcome="success" if success else "failed"
-            )
+            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
             return follow_up_id
 

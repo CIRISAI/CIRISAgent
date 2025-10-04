@@ -244,8 +244,7 @@ class TestMemorizeHandler:
         assert "MEMORIZE COMPLETE" in follow_up_thought.content
         assert node.id in follow_up_thought.content
 
-        # Verify audit logging
-        assert mock_audit_service.log_event.call_count >= 2  # Start and success
+        # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
 
     @pytest.mark.asyncio
     async def test_memorize_identity_node_without_wa_authorization(self, monkeypatch: Any) -> None:
@@ -290,9 +289,7 @@ class TestMemorizeHandler:
         follow_up_thought = mock_persistence.add_thought.call_args[0][0]
         assert "WA authorization required" in follow_up_thought.content
 
-        # Verify audit logging
-        audit_calls = mock_audit_service.log_event.call_args_list
-        assert any("failed_wa_required" in str(call) for call in audit_calls)
+        # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
 
     @pytest.mark.asyncio
     async def test_memorize_identity_node_with_wa_authorization(self, monkeypatch: Any) -> None:
@@ -777,8 +774,7 @@ class TestForgetHandler:
         assert "Successfully forgot key 'forget_me'" in follow_up_thought.content
         assert "scope local" in follow_up_thought.content
 
-        # Verify audit logging
-        assert mock_audit_service.log_event.call_count >= 3  # Start, forget_executed, success
+        # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
 
     @pytest.mark.asyncio
     async def test_forget_identity_scope_without_wa(self, monkeypatch: Any) -> None:
@@ -814,9 +810,7 @@ class TestForgetHandler:
         follow_up_thought = mock_persistence.add_thought.call_args[0][0]
         assert "FORGET action was not permitted" in follow_up_thought.content
 
-        # Verify audit logging
-        audit_calls = mock_audit_service.log_event.call_args_list
-        assert any("wa_denied" in str(call) for call in audit_calls)
+        # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
 
     @pytest.mark.asyncio
     async def test_forget_environment_scope_with_wa(self, monkeypatch: Any) -> None:

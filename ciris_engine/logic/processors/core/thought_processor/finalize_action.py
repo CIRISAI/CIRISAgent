@@ -53,6 +53,7 @@ class ActionFinalizationPhase:
                 final_action=ponder_action,
                 overridden=False,
                 override_reason=None,
+                epistemic_data={"status": "NONE", "reason": "No valid action determined - fallback to PONDER"},
             )
 
         return conscience_result  # type: ignore[no-any-return]

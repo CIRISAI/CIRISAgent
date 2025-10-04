@@ -160,6 +160,11 @@ class BaseProcessor(ABC):
 
     def _extract_action_name(self, dispatch_result: Any, result: Any) -> str:
         """Extract action name from dispatch result or action selection result."""
+        # Check for ActionResponse (typed response)
+        if hasattr(dispatch_result, "action_type"):
+            return str(dispatch_result.action_type)
+
+        # Backward compatibility: check for dict
         if isinstance(dispatch_result, dict):
             return str(dispatch_result.get("action_type", "UNKNOWN"))
 
@@ -200,12 +205,12 @@ class BaseProcessor(ABC):
             time_svc = self._get_time_service()
             dispatch_start = time_svc.now() if time_svc else None
 
-            # Dispatch can return None or a result dict
-            dispatch_result: Any = await self.action_dispatcher.dispatch(  # type: ignore[func-returns-value]
+            # Dispatch returns ActionResponse (typed)
+            from ciris_engine.schemas.services.runtime_control import ActionResponse
+
+            dispatch_result: ActionResponse = await self.action_dispatcher.dispatch(
                 action_selection_result=result, thought=thought, dispatch_context=dispatch_ctx
             )
-            if dispatch_result is None:
-                dispatch_result = {"success": True}
 
             # Calculate dispatch timing
             time_svc = self._get_time_service()
@@ -214,19 +219,8 @@ class BaseProcessor(ABC):
             dispatch_end = time_svc.now()
             dispatch_time_ms = self._calculate_dispatch_time(dispatch_start, dispatch_end)
 
-            # Extract action name for ACTION_COMPLETE event (broadcast by decorator)
-            try:
-                action_name = self._extract_action_name(dispatch_result, result)
-            except Exception as e:
-                logger.warning(f"Error extracting action name: {e}")
-                action_name = "UNKNOWN"
-
-            # Enrich dispatch_result with timing and action info for ACTION_COMPLETE event
-            # The decorated _action_complete_step method expects these fields
-            if isinstance(dispatch_result, dict):
-                dispatch_result["execution_time_ms"] = dispatch_time_ms
-                dispatch_result["action_type"] = action_name
-                dispatch_result["dispatch_end_time"] = dispatch_end.isoformat()
+            # Update ActionResponse with actual execution time
+            dispatch_result.execution_time_ms = dispatch_time_ms
 
             return True
         except Exception as e:

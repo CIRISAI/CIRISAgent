@@ -122,7 +122,9 @@ class CIRISDiscordClient(discord.Client):
                         thread_id = str(thread.id)
                         if thread_id not in observer.monitored_channel_ids:
                             observer.monitored_channel_ids.append(thread_id)
-                            logger.info(f"Added thread {thread_id} to monitored channels (parent {parent_id} is monitored)")
+                            logger.info(
+                                f"Added thread {thread_id} to monitored channels (parent {parent_id} is monitored)"
+                            )
 
                             # Thread correlation persistence would require ServiceCorrelation,
                             # not CorrelationRequestData. This needs proper implementation

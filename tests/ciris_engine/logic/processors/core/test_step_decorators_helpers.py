@@ -69,7 +69,9 @@ def mock_conscience_result_passed():
     final_action_mock = Mock()
     final_action_mock.selected_action = "SPEAK"
 
-    result = Mock()
+    result = Mock(
+        spec=["overridden", "final_action", "selected_action", "override_reason", "epistemic_data", "__str__"]
+    )
     result.overridden = False
     result.final_action = final_action_mock
     result.selected_action = "SPEAK"
@@ -81,14 +83,15 @@ def mock_conscience_result_passed():
 
 @pytest.fixture
 def mock_action_result():
-    """Mock action execution result."""
-    result = Mock()
-    result.action_type = "SPEAK"
-    result.selected_action = "SPEAK"
-    result.success = True
-    result.completed = True
-    result.has_follow_up = False
-    result.execution_time_ms = 125.0
+    """Mock action execution result - ActionResponse with audit data."""
+    from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+    from ciris_engine.schemas.services.runtime_control import ActionResponse
+
+    audit_data = AuditEntryResult(entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123")
+    # For tests that need ActionResponse
+    result = ActionResponse(
+        action_type="SPEAK", success=True, handler="TestHandler", audit_data=audit_data, execution_time_ms=125.0
+    )
     return result
 
 
@@ -610,20 +613,27 @@ class TestIntegrationRefactoredFunctions:
         assert step_data.conscience_passed is True
         assert step_data.selected_action == "SPEAK"
 
-    def test_create_perform_action_data_integration(self, base_step_data, mock_action_result):
+    def test_create_perform_action_data_integration(self, base_step_data):
         """Test _create_perform_action_data."""
-        step_data = _create_perform_action_data(base_step_data, mock_action_result, args=(), kwargs={})
+        # Create mock with selected_action for PERFORM_ACTION step
+        mock_result = Mock()
+        mock_result.selected_action = "SPEAK"
+
+        step_data = _create_perform_action_data(base_step_data, mock_result, args=(), kwargs={})
 
         assert step_data.thought_id == "thought_123"
         assert step_data.selected_action == "SPEAK"
 
     def test_create_action_complete_data_integration_dict(self, base_step_data):
-        """Test _create_action_complete_data with dict result."""
-        result = {
-            "action_type": "SPEAK",
-            "success": True,
-            "handler": "speak_handler",
-        }
+        """Test _create_action_complete_data expects ActionResponse, not dict."""
+        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+        from ciris_engine.schemas.services.runtime_control import ActionResponse
+
+        # Create ActionResponse with audit data
+        audit_data = AuditEntryResult(
+            entry_id="test_123", sequence_number=1, entry_hash="hash_123", signature="sig_123"
+        )
+        result = ActionResponse(action_type="SPEAK", success=True, handler="speak_handler", audit_data=audit_data)
 
         step_data = _create_action_complete_data(base_step_data, result)
 

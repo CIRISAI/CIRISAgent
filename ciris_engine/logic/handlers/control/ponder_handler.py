@@ -74,9 +74,7 @@ class PonderHandler(BaseActionHandler):
             thought=thought, follow_up_content=follow_up_content, action_result=result
         )
 
-        await self._audit_log(
-            HandlerActionType.PONDER, dispatch_context, outcome="success" if follow_up_id else "failed"
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         return follow_up_id
 

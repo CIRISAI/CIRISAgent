@@ -893,8 +893,7 @@ class TestDeferralLifecycle:
         await defer_handler.handle(result, thought, dispatch_context)
 
         # Assert
-        # Verify audit trail for critical deferral
-        assert mock_audit_bus.log_event.call_count >= 2  # start and success
+        # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
 
         # Verify WA notification sent
         mock_wise_bus.send_deferral.assert_called_once()

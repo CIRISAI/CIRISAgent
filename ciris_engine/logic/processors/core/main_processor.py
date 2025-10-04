@@ -807,7 +807,7 @@ class AgentProcessor:
         self._pipeline_controller.resume_all()
 
         # Signal pause event to continue
-        if self._pause_event:
+        if self._pause_event and isinstance(self._pause_event, asyncio.Event):
             self._pause_event.set()
 
         logger.info(f"[DEBUG] Successfully resumed, final _is_paused: {self._is_paused}")
@@ -942,7 +942,7 @@ class AgentProcessor:
             return True
 
         logger.debug("Processor is paused, waiting for resume or single-step")
-        if self._pause_event:
+        if self._pause_event and isinstance(self._pause_event, asyncio.Event):
             await self._pause_event.wait()
             # Reset the event for next pause
             self._pause_event.clear()

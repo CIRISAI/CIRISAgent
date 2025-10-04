@@ -289,12 +289,15 @@ class StreamingVerificationModule:
                                     for field, field_type in required_fields.items():
                                         if field not in event:
                                             event_detail["issues"].append(f"Missing required field: {field}")
+                                            errors.append(f"🐛 BUG 1: aspdma_result missing {field}")
                                         elif not isinstance(event[field], field_type):
                                             event_detail["issues"].append(
                                                 f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
                                             )
                                         elif field_type == str and not event[field]:
                                             event_detail["issues"].append(f"Empty string for required field: {field}")
+                                            if field == "action_rationale":
+                                                errors.append(f"🐛 BUG 1: aspdma_result.action_rationale is empty string")
                                     # Optional recursive flag
                                     if "is_recursive" in event:
                                         events_with_recursive_flag += 1
@@ -314,12 +317,22 @@ class StreamingVerificationModule:
                                     for field, field_type in required_fields.items():
                                         if field not in event:
                                             event_detail["issues"].append(f"Missing required field: {field}")
+                                            if field == "epistemic_data":
+                                                errors.append(f"🐛 BUG 2: conscience_result missing epistemic_data")
                                         elif not isinstance(event[field], field_type):
                                             event_detail["issues"].append(
                                                 f"Field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
                                             )
                                         elif field_type == str and not event[field]:
                                             event_detail["issues"].append(f"Empty string for required field: {field}")
+                                        elif field == "epistemic_data" and field_type == dict and not event[field]:
+                                            errors.append(f"🐛 BUG 2: conscience_result.epistemic_data is empty dict")
+
+                                    # Check for updated_status_available field (from UpdatedStatusConscience check)
+                                    if "updated_status_available" not in event:
+                                        event_detail["issues"].append("Missing updated_status_available field")
+                                        errors.append(f"🐛 BUG 2: conscience_result missing updated_status_available flag")
+
                                     # Optional recursive flag
                                     if "is_recursive" in event:
                                         events_with_recursive_flag += 1
@@ -345,18 +358,32 @@ class StreamingVerificationModule:
                                         elif field_type == str and not event[field]:
                                             event_detail["issues"].append(f"Empty string for required field: {field}")
 
-                                    # Optional audit trail fields (all or none)
-                                    if event.get("audit_entry_id"):
+                                    # Audit trail fields - REQUIRED (not optional) - all 4 must be present and non-null
+                                    audit_fields = {
+                                        "audit_entry_id": str,
+                                        "audit_sequence_number": int,
+                                        "audit_entry_hash": str,
+                                        "audit_signature": str,
+                                    }
+                                    for field, field_type in audit_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing REQUIRED audit field: {field}")
+                                            errors.append(f"🐛 BUG 3: action_result missing REQUIRED audit field: {field}")
+                                        elif event.get(field) is None:
+                                            event_detail["issues"].append(f"REQUIRED audit field is None: {field}")
+                                            errors.append(f"🐛 BUG 3: action_result REQUIRED audit field is None: {field}")
+                                        elif not isinstance(event[field], field_type):
+                                            event_detail["issues"].append(
+                                                f"Audit field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                            )
+                                        elif field_type == str and not event[field]:
+                                            event_detail["issues"].append(f"REQUIRED audit field is empty string: {field}")
+                                            errors.append(f"🐛 BUG 3: action_result REQUIRED audit field is empty: {field}")
+
+                                    # Track if all audit data is present
+                                    if all(event.get(f) for f in audit_fields.keys()):
                                         events_with_audit_data += 1
                                         event_detail["has_audit_trail"] = True
-                                        if not event.get("audit_sequence_number"):
-                                            event_detail["issues"].append(
-                                                "Has audit_entry_id but missing audit_sequence_number"
-                                            )
-                                        if not event.get("audit_entry_hash"):
-                                            event_detail["issues"].append(
-                                                "Has audit_entry_id but missing audit_entry_hash"
-                                            )
 
                                 # Check for unexpected extra fields (exhaustive validation)
                                 expected_common_fields = {"event_type", "thought_id", "task_id", "timestamp"}
@@ -383,6 +410,7 @@ class StreamingVerificationModule:
                                         "is_recursive",
                                         "conscience_override_reason",
                                         "action_was_overridden",
+                                        "updated_status_available",
                                     },
                                     "action_result": {
                                         "action_executed",

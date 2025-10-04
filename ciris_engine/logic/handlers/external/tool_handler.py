@@ -21,7 +21,7 @@ class ToolHandler(BaseActionHandler):
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> Optional[str]:
         thought_id = thought.thought_id
-        await self._audit_log(HandlerActionType.TOOL, dispatch_context, outcome="start")
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
         final_thought_status = ThoughtStatus.COMPLETED
         follow_up_content_key_info = f"TOOL action for thought {thought_id}"
         action_performed_successfully = False
@@ -113,9 +113,7 @@ class ToolHandler(BaseActionHandler):
                 thought=thought, follow_up_content=follow_up_text, action_result=result
             )
 
-        await self._audit_log(
-            HandlerActionType.TOOL, dispatch_context, outcome="success" if action_performed_successfully else "failed"
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         if not follow_up_id:
             raise FollowUpCreationError("Failed to create follow-up thought")

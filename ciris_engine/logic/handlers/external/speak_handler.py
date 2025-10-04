@@ -112,11 +112,7 @@ class SpeakHandler(BaseActionHandler):
             raise ValueError(f"Channel ID is required for SPEAK action - none found in params or thought {thought_id}")
 
         event_summary = params.content
-        await self._audit_log(
-            HandlerActionType.SPEAK,
-            dispatch_context.model_copy(update={"thought_id": thought_id, "event_summary": event_summary}),
-            outcome="start",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         # Extract string from GraphNode for notification
         content_str = (
@@ -198,11 +194,7 @@ class SpeakHandler(BaseActionHandler):
             )
             raise FollowUpCreationError("Failed to create follow-up thought")
 
-        await self._audit_log(
-            HandlerActionType.SPEAK,
-            dispatch_context.model_copy(update={"thought_id": thought_id, "event_summary": event_summary}),
-            outcome="success" if success else "failed",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         # Update trace correlation with success
         self._update_trace_correlation(success, f"Message {'sent' if success else 'failed'} to channel {channel_id}")

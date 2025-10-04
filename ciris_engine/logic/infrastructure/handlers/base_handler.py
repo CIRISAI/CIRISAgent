@@ -244,7 +244,7 @@ class BaseActionHandler(ABC):
             except Exception as metric_error:
                 self.logger.debug(f"Failed to track error metric: {metric_error}")
 
-        await self._audit_log(action_type, dispatch_context, outcome=f"error:{type(error).__name__}")
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
     def _format_validation_errors(self, e: ValidationError, param_class: Type[T]) -> str:
         """Format validation errors into a readable summary."""

@@ -21,9 +21,7 @@ class ForgetHandler(BaseActionHandler):
     ) -> Optional[str]:
         raw_params = result.action_parameters
         thought_id = thought.thought_id
-        await self._audit_log(
-            HandlerActionType.FORGET, dispatch_context.model_copy(update={"thought_id": thought_id}), outcome="start"
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
         params = raw_params
         if not isinstance(params, ForgetParams):
             try:
@@ -45,11 +43,7 @@ class ForgetHandler(BaseActionHandler):
                     status=ThoughtStatus.FAILED,
                 )
 
-                await self._audit_log(
-                    HandlerActionType.FORGET,
-                    dispatch_context.model_copy(update={"thought_id": thought_id}),
-                    outcome="failed",
-                )
+                # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
                 return follow_up_id
         if not self._can_forget(params, dispatch_context):
             logger.info("ForgetHandler: Permission denied or WA required for forget operation. Creating deferral.")
@@ -60,11 +54,7 @@ class ForgetHandler(BaseActionHandler):
                 thought=thought, follow_up_content=follow_up_content, action_result=result, status=ThoughtStatus.FAILED
             )
 
-            await self._audit_log(
-                HandlerActionType.FORGET,
-                dispatch_context.model_copy(update={"thought_id": thought_id}),
-                outcome="wa_denied",
-            )
+            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
             return follow_up_id
         # Memory operations will use the memory bus
 
@@ -80,11 +70,7 @@ class ForgetHandler(BaseActionHandler):
                 thought=thought, follow_up_content=follow_up_content, action_result=result, status=ThoughtStatus.FAILED
             )
 
-            await self._audit_log(
-                HandlerActionType.FORGET,
-                dispatch_context,
-                outcome="wa_denied",
-            )
+            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
             return follow_up_id
 
         forget_result = await self.bus_manager.memory.forget(node=node, handler_name=self.__class__.__name__)
@@ -104,11 +90,7 @@ class ForgetHandler(BaseActionHandler):
             status=ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED,
         )
 
-        await self._audit_log(
-            HandlerActionType.FORGET,
-            dispatch_context.model_copy(update={"thought_id": thought_id}),
-            outcome="success" if success else "failed",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         return follow_up_id
 
@@ -133,6 +115,4 @@ class ForgetHandler(BaseActionHandler):
             "thought_id": getattr(dispatch_context, "thought_id", None),
         }
 
-        await self._audit_log(
-            HandlerActionType.FORGET, dispatch_context.model_copy(update=audit_data), outcome="forget_executed"
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging

@@ -67,11 +67,7 @@ class ObserveHandler(BaseActionHandler):
         logger.debug(f"ObserveHandler: Parameters: {raw_params}")
         logger.debug(f"ObserveHandler: Dispatch context fields: {list(dispatch_context.__class__.model_fields.keys())}")
 
-        await self._audit_log(
-            HandlerActionType.OBSERVE,
-            dispatch_context,
-            outcome="start",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         final_status = ThoughtStatus.COMPLETED
         action_performed = False
@@ -152,11 +148,7 @@ class ObserveHandler(BaseActionHandler):
 
         if not follow_up_id:
             logger.critical(f"Failed to create follow-up for {thought_id}")
-            await self._audit_log(
-                HandlerActionType.OBSERVE,
-                dispatch_context,
-                outcome="failed_followup",
-            )
+            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
             raise FollowUpCreationError("Failed to create follow-up thought")
 
         return follow_up_id

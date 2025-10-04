@@ -138,16 +138,6 @@ class ReviewOutcome(BaseModel):
 # ========== New Schemas for Enhanced Protocol ==========
 
 
-class AgentIdentityRoot(BaseModel):
-    """Root identity configuration for baseline establishment."""
-
-    identity_id: str = Field(..., description="Unique identity identifier")
-    core_values: List[str] = Field(..., description="Core ethical values")
-    capabilities: List[str] = Field(..., description="Core capabilities")
-    behavioral_constraints: List[str] = Field(..., description="Behavioral boundaries")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
 class ConfigurationChange(BaseModel):
     """A proposed or applied configuration change."""
 

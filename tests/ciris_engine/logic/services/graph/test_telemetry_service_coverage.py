@@ -433,11 +433,16 @@ class TestTelemetryServiceCoverage:
     def test_collect_from_registry_services(self, telemetry_aggregator, mock_service_registry):
         """Test collect_from_registry_services full workflow."""
         # Mock asyncio.create_task to avoid event loop issues in sync test
-        with patch("asyncio.create_task") as mock_create_task:
-            # Make create_task return a mock task
-            mock_task = Mock()
-            mock_create_task.return_value = mock_task
+        # Must close coroutines to prevent "was never awaited" warnings
+        created_coroutines = []
 
+        def mock_create_task_impl(coro):
+            # Store coroutine for cleanup
+            created_coroutines.append(coro)
+            # Return a mock task
+            return Mock()
+
+        with patch("asyncio.create_task", side_effect=mock_create_task_impl):
             result = telemetry_aggregator.collect_from_registry_services()
 
             assert "tasks" in result
@@ -453,6 +458,10 @@ class TestTelemetryServiceCoverage:
 
             assert len(tool_services) > 0
             assert len(comm_services) > 0
+
+        # Clean up coroutines to prevent warnings
+        for coro in created_coroutines:
+            coro.close()
 
     def test_collect_from_registry_services_no_registry(self, telemetry_aggregator):
         """Test collect_from_registry_services when no registry available."""
@@ -545,8 +554,7 @@ class TestTelemetryServiceCoverage:
         # All names should be unique due to instance ID suffixes
         assert len(set(generated_names)) == len(generated_names)
 
-    @pytest.mark.asyncio
-    async def test_registry_collection_with_production_llm_redundancy(self, telemetry_aggregator):
+    def test_registry_collection_with_production_llm_redundancy(self, telemetry_aggregator):
         """Test registry collection handling redundant LLM services in production."""
         # Mock service registry with multiple LLM instances
         telemetry_aggregator.service_registry.get_provider_info = Mock(
@@ -563,20 +571,32 @@ class TestTelemetryServiceCoverage:
             }
         )
 
-        result = telemetry_aggregator.collect_from_registry_services()
+        # Mock asyncio.create_task to avoid event loop issues and properly cleanup coroutines
+        created_coroutines = []
 
-        # Should have tasks for non-core services only (MockLLM is core, others are dynamic)
-        assert len(result["tasks"]) == 4  # All except MockLLM
-        assert len(result["info"]) == 4
+        def mock_create_task_impl(coro):
+            created_coroutines.append(coro)
+            return Mock()
 
-        # Verify semantic names are properly generated
-        service_names = [info[1] for info in result["info"]]
-        llm_names = [name for name in service_names if name.startswith("LLM_")]
-        assert len(llm_names) == 4
+        with patch("asyncio.create_task", side_effect=mock_create_task_impl):
+            result = telemetry_aggregator.collect_from_registry_services()
 
-        # Should have proper provider type identification
-        openai_services = [name for name in llm_names if "openai" in name]
-        anthropic_services = [name for name in llm_names if "anthropic" in name]
+            # Should have tasks for non-core services only (MockLLM is core, others are dynamic)
+            assert len(result["tasks"]) == 4  # All except MockLLM
+            assert len(result["info"]) == 4
 
-        assert len(openai_services) == 3  # 2 compatible + 1 provider
-        assert len(anthropic_services) == 1
+            # Verify semantic names are properly generated
+            service_names = [info[1] for info in result["info"]]
+            llm_names = [name for name in service_names if name.startswith("LLM_")]
+            assert len(llm_names) == 4
+
+            # Should have proper provider type identification
+            openai_services = [name for name in llm_names if "openai" in name]
+            anthropic_services = [name for name in llm_names if "anthropic" in name]
+
+            assert len(openai_services) == 3  # 2 compatible + 1 provider
+            assert len(anthropic_services) == 1
+
+        # Clean up coroutines to prevent warnings
+        for coro in created_coroutines:
+            coro.close()

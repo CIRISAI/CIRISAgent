@@ -8,7 +8,7 @@ The API interfaces may change without notice.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -231,7 +231,7 @@ class AgentResource:
         Returns:
             ConversationHistory with messages and metadata
         """
-        params = {"limit": limit}
+        params: Dict[str, Union[int, str]] = {"limit": limit}
         if before:
             params["before"] = before.isoformat()
 
@@ -274,7 +274,7 @@ class AgentResource:
 
         return AgentIdentity(**result)
 
-    async def stream(self, websocket_url: Optional[str] = None):
+    async def stream(self, websocket_url: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
         WebSocket streaming interface (placeholder).
 
@@ -283,6 +283,7 @@ class AgentResource:
         """
         # This is a placeholder - actual WebSocket implementation would go here
         raise NotImplementedError("WebSocket streaming not yet implemented in SDK")
+        yield  # Make this an async generator (unreachable but satisfies type checker)
 
     # Convenience methods for common patterns
 

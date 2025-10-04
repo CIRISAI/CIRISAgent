@@ -84,7 +84,7 @@ class TelemetryResourcesHistory(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "TelemetryResourcesHistory":
+    def from_api_response(cls, data: Dict[str, Any]) -> "TelemetryResourcesHistory":
         """Convert API response to model."""
         # Handle SuccessResponse wrapper
         if "data" in data and isinstance(data["data"], dict):
@@ -154,7 +154,7 @@ class TelemetryResourcesHistory(BaseModel):
 
 
 class TelemetryResource:
-    def __init__(self, transport: Transport):
+    def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
     async def get_overview(self) -> TelemetryOverviewResponse:
@@ -183,7 +183,7 @@ class TelemetryResource:
 
         Returns reasoning traces showing agent thought processes and decision-making.
         """
-        params = {"limit": str(limit)}
+        params: Dict[str, str] = {"limit": str(limit)}
         if start_time:
             params["start_time"] = start_time.isoformat()
         if end_time:
@@ -205,7 +205,7 @@ class TelemetryResource:
 
         Returns system logs from all services with filtering capabilities.
         """
-        params = {"limit": str(limit)}
+        params: Dict[str, str] = {"limit": str(limit)}
         if start_time:
             params["start_time"] = start_time.isoformat()
         if end_time:
@@ -234,14 +234,14 @@ class TelemetryResource:
         Requires ADMIN role.
         """
         # Convert filters to dict format for API
-        filters_dict = {}
+        filters_dict: Dict[str, Any] = {}
         if filters:
             filters_dict = {
                 "filters": [{"field": f.field, "operator": f.operator, "value": f.value} for f in filters.filters],
                 "logic": filters.logic,
             }
 
-        payload = {"query_type": query_type, "filters": filters_dict, "limit": limit}
+        payload: Dict[str, Any] = {"query_type": query_type, "filters": filters_dict, "limit": limit}
 
         if aggregations:
             payload["aggregations"] = aggregations
@@ -389,34 +389,34 @@ class TelemetryResource:
 
     # Additional telemetry endpoints for comprehensive monitoring
 
-    async def get_service_registry(self) -> dict:
+    async def get_service_registry(self) -> Dict[str, Any]:
         """
         Get service registry details including providers, circuit breakers, and capabilities.
 
         Returns detailed information about all registered services.
         """
         data = await self._transport.request("GET", "/v1/telemetry/service-registry")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_llm_usage(self) -> dict:
+    async def get_llm_usage(self) -> Dict[str, Any]:
         """
         Get LLM usage metrics including tokens, costs, and provider statistics.
 
         Returns comprehensive LLM usage data by model and provider.
         """
         data = await self._transport.request("GET", "/v1/telemetry/llm/usage")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_circuit_breakers(self) -> dict:
+    async def get_circuit_breakers(self) -> Dict[str, Any]:
         """
         Get circuit breaker status for all services.
 
         Returns state, failure counts, and recovery information.
         """
         data = await self._transport.request("GET", "/v1/telemetry/circuit-breakers")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_security_incidents(self, hours: int = 24) -> dict:
+    async def get_security_incidents(self, hours: int = 24) -> Dict[str, Any]:
         """
         Get security incidents from the last N hours.
 
@@ -425,20 +425,20 @@ class TelemetryResource:
 
         Returns security incidents and threat analysis.
         """
-        params = {"hours": str(hours)}
+        params: Dict[str, str] = {"hours": str(hours)}
         data = await self._transport.request("GET", "/v1/telemetry/security/incidents", params=params)
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_handlers(self) -> dict:
+    async def get_handlers(self) -> Dict[str, Any]:
         """
         Get handler metrics including invocations, durations, and errors.
 
         Returns performance metrics for all message handlers.
         """
         data = await self._transport.request("GET", "/v1/telemetry/handlers")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_errors(self, hours: int = 1) -> dict:
+    async def get_errors(self, hours: int = 1) -> Dict[str, Any]:
         """
         Get recent errors with stack traces and resolution status.
 
@@ -447,11 +447,11 @@ class TelemetryResource:
 
         Returns error details and diagnostics.
         """
-        params = {"hours": str(hours)}
+        params: Dict[str, str] = {"hours": str(hours)}
         data = await self._transport.request("GET", "/v1/telemetry/errors", params=params)
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_trace(self, trace_id: str) -> dict:
+    async def get_trace(self, trace_id: str) -> Dict[str, Any]:
         """
         Get detailed trace information for a specific trace ID.
 
@@ -461,36 +461,36 @@ class TelemetryResource:
         Returns complete trace with all spans and timings.
         """
         data = await self._transport.request("GET", f"/v1/telemetry/traces/{trace_id}")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_rate_limits(self) -> dict:
+    async def get_rate_limits(self) -> Dict[str, Any]:
         """
         Get current rate limit status and quotas.
 
         Returns rate limits, current usage, and reset times.
         """
         data = await self._transport.request("GET", "/v1/telemetry/rate-limits")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_tsdb_status(self) -> dict:
+    async def get_tsdb_status(self) -> Dict[str, Any]:
         """
         Get time-series database consolidation status.
 
         Returns consolidation schedule, compression ratios, and storage metrics.
         """
         data = await self._transport.request("GET", "/v1/telemetry/tsdb/status")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_discord_status(self) -> dict:
+    async def get_discord_status(self) -> Dict[str, Any]:
         """
         Get Discord connection status and metrics.
 
         Returns connection health, latency, and message processing stats.
         """
         data = await self._transport.request("GET", "/v1/telemetry/discord/status")
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_aggregates_hourly(self, hours: int = 24) -> dict:
+    async def get_aggregates_hourly(self, hours: int = 24) -> Dict[str, Any]:
         """
         Get hourly aggregated metrics for the last N hours.
 
@@ -499,22 +499,22 @@ class TelemetryResource:
 
         Returns hourly summaries of all key metrics.
         """
-        params = {"hours": str(hours)}
+        params: Dict[str, str] = {"hours": str(hours)}
         data = await self._transport.request("GET", "/v1/telemetry/aggregates/hourly", params=params)
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_summary_daily(self) -> dict:
+    async def get_summary_daily(self) -> Dict[str, Any]:
         """
         Get daily summary of system metrics and performance.
 
         Returns comprehensive daily statistics.
         """
         data = await self._transport.request("GET", "/v1/telemetry/summary/daily")
-        return data
+        return data  # type: ignore[return-value]
 
     async def export_telemetry(
         self, format: str = "json", start: Optional[datetime] = None, end: Optional[datetime] = None
-    ) -> Union[dict, str]:
+    ) -> Union[Dict[str, Any], str]:
         """
         Export telemetry data in specified format.
 
@@ -525,16 +525,16 @@ class TelemetryResource:
 
         Returns exported data in requested format.
         """
-        params = {"format": format}
+        params: Dict[str, str] = {"format": format}
         if start:
             params["start"] = start.isoformat()
         if end:
             params["end"] = end.isoformat()
 
         data = await self._transport.request("GET", "/v1/telemetry/export", params=params)
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_telemetry_history(self, days: int = 7, metric: str = "llm_requests") -> dict:
+    async def get_telemetry_history(self, days: int = 7, metric: str = "llm_requests") -> Dict[str, Any]:
         """
         Get historical telemetry data for specific metrics.
 
@@ -544,18 +544,18 @@ class TelemetryResource:
 
         Returns historical data points for the specified metric.
         """
-        params = {"days": str(days), "metric": metric}
+        params: Dict[str, str] = {"days": str(days), "metric": metric}
         data = await self._transport.request("GET", "/v1/telemetry/history", params=params)
-        return data
+        return data  # type: ignore[return-value]
 
-    async def get_backups(self) -> dict:
+    async def get_backups(self) -> Dict[str, Any]:
         """
         Get telemetry backup status and history.
 
         Returns backup schedule, last backup time, and restoration points.
         """
         data = await self._transport.request("GET", "/v1/telemetry/backups")
-        return data
+        return data  # type: ignore[return-value]
 
     async def get_prometheus_metrics(self) -> str:
         """
@@ -570,7 +570,7 @@ class TelemetryResource:
 
     async def get_unified_telemetry(
         self, view: str = "summary", category: Optional[str] = None, format: str = "json", live: bool = False
-    ) -> Union[dict, str]:
+    ) -> Union[Dict[str, Any], str]:
         """
         Get ALL system metrics through the unified telemetry endpoint.
 
@@ -633,7 +633,7 @@ class TelemetryResource:
                 format="prometheus"
             )
         """
-        params = {"view": view, "format": format, "live": str(live).lower()}
+        params: Dict[str, str] = {"view": view, "format": format, "live": str(live).lower()}
         if category:
             params["category"] = category
 
@@ -645,7 +645,7 @@ class TelemetryResource:
         data = await self._transport.request("GET", "/v1/telemetry/unified", params=params)
         return data
 
-    async def get_all_metrics(self) -> dict:
+    async def get_all_metrics(self) -> Dict[str, Any]:
         """
         Convenience method to get ALL metrics in detailed view.
 
@@ -701,7 +701,7 @@ class TelemetryResource:
 
         return current
 
-    async def check_system_health(self) -> dict:
+    async def check_system_health(self) -> Dict[str, Any]:
         """
         Quick health check of the entire system.
 

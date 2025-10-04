@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import httpx
 
@@ -39,7 +39,7 @@ class Transport:
         self.rate_limiter = AdaptiveRateLimiter() if rate_limit else None
 
         # Try to load stored auth if no API key provided
-        if use_auth_store and not api_key:
+        if use_auth_store and not api_key and self.auth_store:
             stored_key = self.auth_store.get_api_key(self.base_url)
             if stored_key:
                 self.api_key = stored_key
@@ -64,12 +64,12 @@ class Transport:
         self._client = httpx.AsyncClient(timeout=self.timeout)
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if self._client:
             await self._client.aclose()
             self._client = None
 
-    async def request(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
+    async def request(self, method: str, path: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         if not self._client:
             raise RuntimeError("Transport not started")
 
@@ -139,7 +139,7 @@ class Transport:
         except Exception as e:
             raise CIRISAPIError(resp.status_code, f"Failed to parse response: {e}")
 
-    def _log_response_headers(self, headers: dict):
+    def _log_response_headers(self, headers: Dict[str, Any]) -> None:
         """Log important response headers."""
         # Update rate limiter from server headers
         if self.rate_limiter:

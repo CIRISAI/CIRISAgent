@@ -52,11 +52,19 @@ async def real_runtime_with_mock():
 @pytest_asyncio.fixture
 async def runtime_with_mocked_agent_processor(real_runtime_with_mock):
     """Provide a runtime with a fully mocked agent processor for testing."""
+    from ciris_engine.schemas.processors.states import AgentState
+
     runtime = real_runtime_with_mock
 
     # Mock the agent processor
     mock_agent_processor = AsyncMock()
     mock_agent_processor.start_processing = AsyncMock()
+
+    # Mock state_manager with proper return values (not coroutines)
+    mock_state_manager = MagicMock()
+    mock_state_manager.get_state = MagicMock(return_value=AgentState.SHUTDOWN)
+    mock_agent_processor.state_manager = mock_state_manager
+
     runtime.agent_processor = mock_agent_processor
 
     # Mock critical services wait
@@ -121,11 +129,19 @@ async def runtime_with_adapter_mocks(real_runtime_with_mock):
 @pytest_asyncio.fixture
 async def runtime_with_full_initialization_mocks(real_runtime_with_mock):
     """Provide a runtime with full initialization chain mocked for integration testing."""
+    from ciris_engine.schemas.processors.states import AgentState
+
     runtime = real_runtime_with_mock
 
     # Mock the agent processor
     mock_agent_processor = AsyncMock()
     mock_agent_processor.start_processing = AsyncMock()
+
+    # Mock state_manager with proper return values (not coroutines)
+    mock_state_manager = MagicMock()
+    mock_state_manager.get_state = MagicMock(return_value=AgentState.SHUTDOWN)
+    mock_agent_processor.state_manager = mock_state_manager
+
     runtime.agent_processor = mock_agent_processor
 
     # Mock adapters with lifecycle support

@@ -5,13 +5,21 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.1] - 2025-10-03
+## [1.2.1] - 2025-10-04
 
 ### Fixed
 - **🧪 Test Compatibility**: Fixed `test_check_pause_state_paused_with_event` to use real `asyncio.Event` instead of `AsyncMock` for isinstance() guard compatibility
 - **📦 Dependency Upgrade**: Upgraded instructor from 1.3.3 to 1.11.3, eliminating 34 DeprecationWarning about FUNCTIONS mode
 - **⚠️ Warning Reduction**: Reduced test warnings by 68% (50 → 16 warnings, all non-critical pytest internals)
 - **🔧 Code Quality**: Removed unused `consent_service` variable in graph.py (SonarCloud code smell)
+- **📋 Schema Conflicts**: Removed duplicate AgentIdentityRoot from self_observation.py __all__ exports
+- **🐛 Identity Variance Monitor**: Fixed multiple implementation bugs in identity_variance_monitor.py
+  - Fixed system_state type mismatch (expects Dict[str, str] not string)
+  - Fixed identity_root serialization (expects dict not AgentIdentityRoot object)
+  - Fixed MemoryOpStatus comparison (use enum not string value)
+  - Fixed None time_service handling in __init__
+  - Fixed VarianceCheckMetadata previous_check validation (expects datetime not string)
+  - Created 48 comprehensive tests (100% passing)
 
 ### Added
 - **🔍 Guidance Observation Auditing**: Added audit logging for WA guidance observations
@@ -99,6 +107,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replaced with semantic type aliases: `NodeAttributes`, `JSONDict`, `JSONValue`
   - All internal schemas now use typed structures
   - Only external interfaces (OTLP, GraphQL, OAuth) retain `Dict[str, Any]` with NOQA markers
+- **📉 Reduced Cognitive Complexity**: Refactored DiscordPlatform.__init__ method
+  - Cognitive complexity reduced from 120 → ~8 (46% below 15 threshold)
+  - Extracted CIRISDiscordClient to separate file (ciris_discord_client.py, 157 lines)
+  - Created 4 helper methods: _initialize_config(), _initialize_discord_client(), _initialize_discord_adapter(), _configure_monitored_channels()
+  - Reduced __init__ from ~250 lines to 19 lines (92% reduction)
+  - adapter.py: 810 → 711 lines (-99 lines)
+  - All 458 Discord tests passing (zero functionality changes)
+  - Improved maintainability and testability
 
 ### Fixed
 - **🎯 H3ERE SSE Streaming - 100% Schema Validation**: Complete concrete type enforcement for all 6 reasoning events

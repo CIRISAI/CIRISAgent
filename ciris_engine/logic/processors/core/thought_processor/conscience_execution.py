@@ -58,15 +58,19 @@ class ConscienceExecutionPhase:
             return action_result  # type: ignore[no-any-return]
 
         # Check if this is a conscience retry
-        is_conscience_retry = (
-            processing_context is not None
-            and hasattr(processing_context, "is_conscience_retry")
-            and processing_context.is_conscience_retry
-        )
+        is_conscience_retry = False
+        if processing_context is not None:
+            if isinstance(processing_context, dict):
+                is_conscience_retry = processing_context.get("is_conscience_retry", False)
+            elif hasattr(processing_context, "is_conscience_retry"):
+                is_conscience_retry = processing_context.is_conscience_retry
 
         # If this is a conscience retry, unset the flag to prevent loops
         if is_conscience_retry and processing_context is not None:
-            processing_context.is_conscience_retry = False
+            if isinstance(processing_context, dict):
+                processing_context["is_conscience_retry"] = False
+            elif hasattr(processing_context, "is_conscience_retry"):
+                processing_context.is_conscience_retry = False
 
         # Exempt actions that shouldn't be overridden
         exempt_actions = {

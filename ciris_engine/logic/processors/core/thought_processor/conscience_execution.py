@@ -178,14 +178,37 @@ class ConscienceExecutionPhase:
                 overridden = True
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
 
-        # epistemic_data is REQUIRED - populate with EXEMPT if no checks ran
+        # epistemic_data is REQUIRED - fail if missing for non-exempt actions
         if not epistemic_data:
-            # If no epistemic data from any conscience, mark as exempt (e.g., exempt actions)
+            # This should only happen for exempt actions (which return early above)
+            # If we reach here with empty epistemic_data, it's a bug in conscience implementation
+            logger.error(
+                f"CONSCIENCE BUG: No epistemic data for non-exempt action {action_result.selected_action.value}. "
+                f"All consciences must provide epistemic_data for non-exempt actions."
+            )
+            # Fail-fast: override to PONDER to prevent undefined behavior
             epistemic_data = {
-                "status": "EXEMPT",
+                "status": "ERROR",
                 "action": action_result.selected_action.value,
-                "reason": "No epistemic checks provided data",
+                "reason": "CONSCIENCE BUG: No epistemic checks provided data for non-exempt action",
             }
+            overridden = True
+            override_reason = "Missing epistemic data - forcing PONDER for safety"
+            final_action = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    questions=[
+                        "Conscience checks did not provide epistemic data",
+                        "This indicates a bug in conscience implementation",
+                        "What should I do?",
+                    ]
+                ),
+                rationale="No epistemic data from conscience - safety override",
+                raw_llm_response=None,
+                reasoning=None,
+                evaluation_time_ms=None,
+                resource_usage=None,
+            )
 
         result = ConscienceApplicationResult(
             original_action=action_result,

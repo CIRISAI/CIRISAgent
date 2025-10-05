@@ -624,7 +624,7 @@ class TSDBConsolidationService(BaseGraphService):
         correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
         tasks: List[TaskCorrelationData],
         period_start: datetime,
-    ) -> List:
+    ) -> List[Any]:
         """
         Get edges from the appropriate consolidator based on summary type.
 
@@ -1347,6 +1347,9 @@ class TSDBConsolidationService(BaseGraphService):
                         if len(day_summaries) == 0:
                             continue
 
+                        # Convert date to datetime for helpers
+                        day_datetime = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+
                         # Generate daily node ID
                         daily_node_id = f"{summary_type}_daily_{day.strftime('%Y%m%d')}"
 
@@ -1366,7 +1369,7 @@ class TSDBConsolidationService(BaseGraphService):
                         # Create daily summary attributes using helper
                         daily_attrs = create_daily_summary_attributes(
                             summary_type,
-                            day,
+                            day_datetime,
                             day_summaries,
                             daily_metrics,
                             daily_resources,
@@ -1374,7 +1377,7 @@ class TSDBConsolidationService(BaseGraphService):
                         )
 
                         # Create daily summary node using helper
-                        daily_summary = create_daily_summary_node(summary_type, day, daily_attrs, now)
+                        daily_summary = create_daily_summary_node(summary_type, day_datetime, daily_attrs, now)
 
                         # Store in memory
                         if self._memory_bus:

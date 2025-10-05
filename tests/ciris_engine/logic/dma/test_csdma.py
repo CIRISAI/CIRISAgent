@@ -149,7 +149,9 @@ class TestCSDMAEvaluator:
         assert result.plausibility_score == 0.5
 
     @pytest.mark.asyncio
-    async def test_csdma_handles_incomplete_identity_gracefully(self, mock_service_registry, mock_prompt_loader, valid_thought):
+    async def test_csdma_handles_incomplete_identity_gracefully(
+        self, mock_service_registry, mock_prompt_loader, valid_thought
+    ):
         """Test that CSDMA handles incomplete identity gracefully (uses defaults)."""
         # Create system snapshot with incomplete identity (missing role)
         incomplete_snapshot = SystemSnapshot(

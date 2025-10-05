@@ -113,7 +113,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         # Use context parameter like PDMA does
         system_snapshot_context_str = ""
         user_profile_context_str = ""
-        context_summary = "CIRIS AI Agent operating via Discord, API, or CLI - Digital/virtual interactions are normal and expected."
+        context_summary = (
+            "CIRIS AI Agent operating via Discord, API, or CLI - Digital/virtual interactions are normal and expected."
+        )
 
         if context and hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_context_str = format_system_snapshot(context.system_snapshot)
@@ -145,11 +147,15 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 system_snapshot = thought_item.initial_context.get("system_snapshot")
                 if system_snapshot:
                     system_snapshot_block = format_system_snapshot(system_snapshot)
-                    user_profiles_data = system_snapshot.get("user_profiles") if isinstance(system_snapshot, dict) else None
+                    user_profiles_data = (
+                        system_snapshot.get("user_profiles") if isinstance(system_snapshot, dict) else None
+                    )
                     user_profiles_block = format_user_profiles(user_profiles_data) if user_profiles_data else ""
 
                     # Build identity block
-                    agent_identity = system_snapshot.get("agent_identity") if isinstance(system_snapshot, dict) else None
+                    agent_identity = (
+                        system_snapshot.get("agent_identity") if isinstance(system_snapshot, dict) else None
+                    )
                     if agent_identity:
                         agent_id = agent_identity.get("agent_id", "Unknown")
                         description = agent_identity.get("description", "")

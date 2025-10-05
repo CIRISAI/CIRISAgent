@@ -184,6 +184,7 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
     def get_status(self) -> ServiceStatus:
         """Return current service status."""
         import time
+
         uptime = time.time() - self._start_time_float if self._start_time_float else 0.0
         return ServiceStatus(
             service_name="MockLLMService",

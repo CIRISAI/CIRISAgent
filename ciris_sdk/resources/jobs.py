@@ -48,9 +48,7 @@ class JobInfo(BaseModel):
     job_type: JobType = Field(..., description="Type of job")
     status: JobStatus = Field(..., description="Current job status")
     created_at: datetime = Field(..., description="When job was created")
-    started_at: Optional[datetime] = Field(
-        None, description="When job started processing"
-    )
+    started_at: Optional[datetime] = Field(None, description="When job started processing")
     completed_at: Optional[datetime] = Field(None, description="When job completed")
     progress: int = Field(0, ge=0, le=100, description="Progress percentage (0-100)")
     message: Optional[str] = Field(None, description="Current status message")
@@ -72,9 +70,7 @@ class JobCreateResponse(BaseModel):
 
     job_id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Initial job status")
-    estimated_duration_seconds: Optional[int] = Field(
-        None, description="Estimated time to complete"
-    )
+    estimated_duration_seconds: Optional[int] = Field(None, description="Estimated time to complete")
     queue_position: Optional[int] = Field(None, description="Position in job queue")
 
 
@@ -137,13 +133,9 @@ class JobsResource:
         Returns:
             JobCreateResponse with job ID and initial status
         """
-        request = JobCreateRequest(
-            job_type=job_type, parameters=parameters, priority=priority
-        )
+        request = JobCreateRequest(job_type=job_type, parameters=parameters, priority=priority)
 
-        result = await self._transport.request(
-            "POST", "/v1/jobs", json=request.model_dump()
-        )
+        result = await self._transport.request("POST", "/v1/jobs", json=request.model_dump())
 
         assert result is not None, "Expected non-None result from create job"
         return JobCreateResponse(**result)
@@ -246,9 +238,7 @@ class JobsResource:
         """
         return await self.create(JobType.MEMORY_QUERY, query_params)
 
-    async def create_memory_bulk_import(
-        self, nodes: List[Dict[str, Any]], batch_size: int = 100
-    ) -> JobCreateResponse:
+    async def create_memory_bulk_import(self, nodes: List[Dict[str, Any]], batch_size: int = 100) -> JobCreateResponse:
         """
         Create a bulk memory import job.
 
@@ -259,9 +249,7 @@ class JobsResource:
         Returns:
             JobCreateResponse with job ID
         """
-        return await self.create(
-            JobType.MEMORY_BULK_IMPORT, {"nodes": nodes, "batch_size": batch_size}
-        )
+        return await self.create(JobType.MEMORY_BULK_IMPORT, {"nodes": nodes, "batch_size": batch_size})
 
     async def create_audit_export(
         self,
@@ -356,8 +344,6 @@ class JobsResource:
             if timeout:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 if elapsed > timeout:
-                    raise asyncio.TimeoutError(
-                        f"Job {job_id} did not complete within {timeout}s"
-                    )
+                    raise asyncio.TimeoutError(f"Job {job_id} did not complete within {timeout}s")
 
             await asyncio.sleep(poll_interval)

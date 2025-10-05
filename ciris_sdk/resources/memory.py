@@ -351,9 +351,7 @@ class MemoryResource:
         # Remove None values
         params = {k: v for k, v in params.items() if v is not None}
 
-        return PageIterator(
-            fetch_func=self.query, initial_params=params, item_class=GraphNode
-        )
+        return PageIterator(fetch_func=self.query, initial_params=params, item_class=GraphNode)
 
     async def forget(self, node_id: str) -> MemoryStoreResponse:
         """

@@ -9,7 +9,7 @@ emergency shutdown even if the main API auth is compromised or unavailable.
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -26,7 +26,7 @@ try:
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
-    Ed25519PrivateKey = None  # Define for type annotations
+    Ed25519PrivateKey = type(None)  # type: ignore[misc,assignment]  # Define for type annotations when crypto unavailable
 
 
 class EmergencyCommandType(str, Enum):
@@ -162,6 +162,7 @@ class EmergencyResource:
         # Send to emergency endpoint (note: NOT under /v1/)
         result = await self._transport.request("POST", "/emergency/shutdown", json=command.model_dump())
 
+        assert result is not None, "Emergency shutdown request returned no data"
         return EmergencyShutdownResponse(**result)
 
     def _sign_command(self, command: WASignedCommand, private_key: Ed25519PrivateKey) -> str:

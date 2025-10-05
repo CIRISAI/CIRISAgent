@@ -48,7 +48,9 @@ class JobInfo(BaseModel):
     job_type: JobType = Field(..., description="Type of job")
     status: JobStatus = Field(..., description="Current job status")
     created_at: datetime = Field(..., description="When job was created")
-    started_at: Optional[datetime] = Field(None, description="When job started processing")
+    started_at: Optional[datetime] = Field(
+        None, description="When job started processing"
+    )
     completed_at: Optional[datetime] = Field(None, description="When job completed")
     progress: int = Field(0, ge=0, le=100, description="Progress percentage (0-100)")
     message: Optional[str] = Field(None, description="Current status message")
@@ -70,7 +72,9 @@ class JobCreateResponse(BaseModel):
 
     job_id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Initial job status")
-    estimated_duration_seconds: Optional[int] = Field(None, description="Estimated time to complete")
+    estimated_duration_seconds: Optional[int] = Field(
+        None, description="Estimated time to complete"
+    )
     queue_position: Optional[int] = Field(None, description="Position in job queue")
 
 
@@ -133,10 +137,15 @@ class JobsResource:
         Returns:
             JobCreateResponse with job ID and initial status
         """
-        request = JobCreateRequest(job_type=job_type, parameters=parameters, priority=priority)
+        request = JobCreateRequest(
+            job_type=job_type, parameters=parameters, priority=priority
+        )
 
-        result = await self._transport.request("POST", "/v1/jobs", json=request.model_dump())
+        result = await self._transport.request(
+            "POST", "/v1/jobs", json=request.model_dump()
+        )
 
+        assert result is not None, "Expected non-None result from create job"
         return JobCreateResponse(**result)
 
     async def get_status(self, job_id: str) -> JobInfo:
@@ -151,9 +160,10 @@ class JobsResource:
         """
         result = await self._transport.request("GET", f"/v1/jobs/{job_id}/status")
 
+        assert result is not None, "Expected non-None result from get status"
         return JobInfo(**result)
 
-    async def get_result(self, job_id: str) -> JobResult:
+    async def get_result(self, job_id: str) -> JobResult[Any]:
         """
         Get results from a completed job.
 
@@ -168,6 +178,7 @@ class JobsResource:
         """
         result = await self._transport.request("GET", f"/v1/jobs/{job_id}/result")
 
+        assert result is not None, "Expected non-None result from get result"
         return JobResult(**result)
 
     async def cancel(self, job_id: str) -> JobInfo:
@@ -182,6 +193,7 @@ class JobsResource:
         """
         result = await self._transport.request("POST", f"/v1/jobs/{job_id}/cancel")
 
+        assert result is not None, "Expected non-None result from cancel job"
         return JobInfo(**result)
 
     async def list_jobs(
@@ -203,7 +215,7 @@ class JobsResource:
         Returns:
             Dict with jobs list and pagination info
         """
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
 
         if status:
             params["status"] = status.value
@@ -214,11 +226,12 @@ class JobsResource:
 
         result = await self._transport.request("GET", "/v1/jobs", params=params)
 
+        assert result is not None, "Expected non-None result from list jobs"
         return result
 
     # Convenience methods for specific job types
 
-    async def create_memory_query(self, **query_params) -> JobCreateResponse:
+    async def create_memory_query(self, **query_params: Any) -> JobCreateResponse:
         """
         Create an async memory query job.
 
@@ -233,7 +246,9 @@ class JobsResource:
         """
         return await self.create(JobType.MEMORY_QUERY, query_params)
 
-    async def create_memory_bulk_import(self, nodes: List[Dict[str, Any]], batch_size: int = 100) -> JobCreateResponse:
+    async def create_memory_bulk_import(
+        self, nodes: List[Dict[str, Any]], batch_size: int = 100
+    ) -> JobCreateResponse:
         """
         Create a bulk memory import job.
 
@@ -244,10 +259,16 @@ class JobsResource:
         Returns:
             JobCreateResponse with job ID
         """
-        return await self.create(JobType.MEMORY_BULK_IMPORT, {"nodes": nodes, "batch_size": batch_size})
+        return await self.create(
+            JobType.MEMORY_BULK_IMPORT, {"nodes": nodes, "batch_size": batch_size}
+        )
 
     async def create_audit_export(
-        self, start_date: datetime, end_date: datetime, format: str = "jsonl", **filters
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        format: str = "jsonl",
+        **filters: Any,
     ) -> JobCreateResponse:
         """
         Create an audit export job.
@@ -261,7 +282,12 @@ class JobsResource:
         Returns:
             JobCreateResponse with job ID
         """
-        params = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat(), "format": format, **filters}
+        params = {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "format": format,
+            **filters,
+        }
 
         return await self.create(JobType.AUDIT_EXPORT, params)
 
@@ -320,12 +346,18 @@ class JobsResource:
         while True:
             status = await self.get_status(job_id)
 
-            if status.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            if status.status in [
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELLED,
+            ]:
                 return status
 
             if timeout:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 if elapsed > timeout:
-                    raise asyncio.TimeoutError(f"Job {job_id} did not complete within {timeout}s")
+                    raise asyncio.TimeoutError(
+                        f"Job {job_id} did not complete within {timeout}s"
+                    )
 
             await asyncio.sleep(poll_interval)

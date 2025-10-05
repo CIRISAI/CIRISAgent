@@ -77,6 +77,9 @@ class AuthStore:
             with open(self.auth_file, "r") as f:
                 data = json.load(f)
 
+            # Ensure data is a dict (json.load returns Any)
+            assert isinstance(data, dict), "Auth data must be a dictionary"
+
             # Convert ISO strings back to datetime objects
             for key in ["token_expires_at", "api_key_created_at"]:
                 if key in data and data[key]:
@@ -143,7 +146,9 @@ class AuthStore:
         api_keys = data.get("api_keys", {})
 
         if base_url in api_keys:
-            return api_keys[base_url].get("key")
+            key = api_keys[base_url].get("key")
+            # Ensure key is a string or None
+            return str(key) if key is not None else None
 
         return None
 

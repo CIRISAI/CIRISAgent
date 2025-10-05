@@ -39,7 +39,7 @@ class MemoryAttributes(BaseAttributes):
 class ConfigAttributes(BaseAttributes):
     """Attributes for configuration nodes."""
 
-    value: Union[str, int, float, bool, list, dict] = Field(..., description="Config value")
+    value: Union[str, int, float, bool, List[Any], Dict[str, Any]] = Field(..., description="Config value")
     description: Optional[str] = Field(None, description="Config description")
     sensitive: bool = Field(default=False, description="Whether value is sensitive")
     validator: Optional[str] = Field(None, description="Validation rule")
@@ -71,7 +71,7 @@ class ConfigParam(BaseModel):
     """Individual configuration parameter."""
 
     name: str = Field(..., description="Parameter name")
-    value: Union[str, int, float, bool, list] = Field(..., description="Parameter value")
+    value: Union[str, int, float, bool, List[Any]] = Field(..., description="Parameter value")
     type: str = Field(..., description="Value type")
     required: bool = Field(default=False, description="Whether required")
 
@@ -200,7 +200,7 @@ class AuditContext(BaseContext):
     user_agent: Optional[str] = Field(None, description="User agent string")
     result: Optional[str] = Field(None, description="Operation result")
     error: Optional[str] = Field(None, description="Error message if failed")
-    metadata: Optional[dict] = Field(None, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 # Verification Models

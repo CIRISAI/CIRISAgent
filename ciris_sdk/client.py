@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .exceptions import CIRISConnectionError
 from .resources.agent import AgentIdentity, AgentResource, AgentStatus, ConversationHistory, InteractResponse
@@ -93,7 +93,7 @@ class CIRISClient:
         await self._transport.__aenter__()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         await self._transport.__aexit__(exc_type, exc, tb)
 
     def set_api_key(self, api_key: Optional[str], persist: bool = True) -> None:
@@ -112,7 +112,7 @@ class CIRISClient:
         if self.use_auth_store and self._transport.auth_store:
             self._transport.auth_store.clear_auth(self.base_url)
 
-    async def _request_with_retry(self, method: str, path: str, **kwargs) -> Any:
+    async def _request_with_retry(self, method: str, path: str, **kwargs: Any) -> Any:
         for attempt in range(self.max_retries):
             try:
                 return await self._transport.request(method, path, **kwargs)

@@ -190,6 +190,7 @@ class AgentResource:
         request_data = request.model_dump()
 
         result = await self._transport.request("POST", "/v1/agent/message", json=request_data)
+        assert result is not None
 
         return MessageSubmissionResponse(**result)
 
@@ -218,6 +219,7 @@ class AgentResource:
         request_data = request.model_dump()
 
         result = await self._transport.request("POST", "/v1/agent/interact", json=request_data)
+        assert result is not None
 
         return InteractResponse(**result)
 
@@ -236,6 +238,7 @@ class AgentResource:
             params["before"] = before.isoformat()
 
         result = await self._transport.request("GET", "/v1/agent/history", params=params)
+        assert result is not None
 
         # Parse timestamps in messages
         for msg in result["messages"]:
@@ -250,6 +253,7 @@ class AgentResource:
             AgentStatus with comprehensive state information
         """
         result = await self._transport.request("GET", "/v1/agent/status")
+        assert result is not None
 
         # Parse timestamp if present
         if result.get("last_activity"):
@@ -264,6 +268,7 @@ class AgentResource:
             AgentIdentity with comprehensive identity information
         """
         result = await self._transport.request("GET", "/v1/agent/identity")
+        assert result is not None
 
         # Parse timestamp
         result["created_at"] = datetime.fromisoformat(result["created_at"])

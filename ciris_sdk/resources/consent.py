@@ -130,6 +130,7 @@ class ConsentResource:
 
         if isinstance(result, dict) and "data" in result:
             return ConsentResponse(**result["data"])
+        assert isinstance(result, dict), "Expected dict response from transport"
         return ConsentResponse(**result)
 
     async def revoke(self, user_id: str) -> ConsentResponse:
@@ -153,6 +154,7 @@ class ConsentResource:
 
         if isinstance(result, dict) and "data" in result:
             return ConsentResponse(**result["data"])
+        assert isinstance(result, dict), "Expected dict response from transport"
         return ConsentResponse(**result)
 
     async def query(
@@ -191,6 +193,7 @@ class ConsentResource:
 
         if isinstance(result, dict) and "data" in result:
             return ConsentQueryResponse(**result["data"])
+        assert isinstance(result, dict), "Expected dict response from transport"
         return ConsentQueryResponse(**result)
 
     async def check(self, user_id: str) -> bool:

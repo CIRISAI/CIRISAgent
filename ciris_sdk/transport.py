@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, cast
 
 import httpx
 
@@ -131,26 +131,29 @@ class Transport:
                 # Log metadata if in debug mode
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(f"Request {data.get('request_id')} took {data.get('duration_ms')}ms")
-                return data["data"]
+                return cast(Optional[Dict[str, Any]], data["data"])
 
             # For backward compatibility or non-standard endpoints
-            return data
+            return cast(Optional[Dict[str, Any]], data)
 
         except Exception as e:
             raise CIRISAPIError(resp.status_code, f"Failed to parse response: {e}")
 
-    def _log_response_headers(self, headers: Dict[str, Any]) -> None:
+    def _log_response_headers(self, headers: Union[Dict[str, Any], httpx.Headers]) -> None:
         """Log important response headers."""
+        # Convert headers to dict if needed
+        headers_dict = dict(headers) if isinstance(headers, httpx.Headers) else headers
+
         # Update rate limiter from server headers
         if self.rate_limiter:
-            self.rate_limiter.update_from_headers(headers)
+            self.rate_limiter.update_from_headers(headers_dict)
 
         # Rate limiting headers
-        if "X-RateLimit-Limit" in headers:
-            remaining = headers.get("X-RateLimit-Remaining", "?")
-            limit = headers.get("X-RateLimit-Limit", "?")
-            reset = headers.get("X-RateLimit-Reset", "?")
-            window = headers.get("X-RateLimit-Window", "?")
+        if "X-RateLimit-Limit" in headers_dict:
+            remaining = headers_dict.get("X-RateLimit-Remaining", "?")
+            limit = headers_dict.get("X-RateLimit-Limit", "?")
+            reset = headers_dict.get("X-RateLimit-Reset", "?")
+            window = headers_dict.get("X-RateLimit-Window", "?")
 
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"Rate limit: {remaining}/{limit} remaining, " f"resets at {reset} ({window} window)")
@@ -163,12 +166,12 @@ class Transport:
                 pass
 
         # API version header
-        if "X-API-Version" in headers:
-            version = headers["X-API-Version"]
+        if "X-API-Version" in headers_dict:
+            version = headers_dict["X-API-Version"]
             if not hasattr(self, "_logged_version"):
                 logger.info(f"Connected to CIRIS API version: {version}")
                 self._logged_version = True
 
         # Deprecation warnings
-        if "X-API-Deprecated" in headers:
-            logger.warning(f"API deprecation warning: {headers['X-API-Deprecated']}")
+        if "X-API-Deprecated" in headers_dict:
+            logger.warning(f"API deprecation warning: {headers_dict['X-API-Deprecated']}")

@@ -189,6 +189,7 @@ class SystemResource:
         Requires: OBSERVER role
         """
         result = await self._transport.request("GET", "/v1/system/health")
+        assert result is not None, "Health endpoint returned None"
         return SystemHealthResponse(**result)
 
     async def time(self) -> SystemTimeResponse:
@@ -200,6 +201,7 @@ class SystemResource:
         Requires: OBSERVER role
         """
         result = await self._transport.request("GET", "/v1/system/time")
+        assert result is not None, "Time endpoint returned None"
         return SystemTimeResponse(**result)
 
     async def resources(self) -> ResourceUsageResponse:
@@ -210,6 +212,7 @@ class SystemResource:
         Requires: OBSERVER role
         """
         result = await self._transport.request("GET", "/v1/system/resources")
+        assert result is not None, "Resources endpoint returned None"
 
         # Handle limits conversion
         if "limits" in result and isinstance(result["limits"], dict):
@@ -240,6 +243,7 @@ class SystemResource:
         """
         body = {"reason": reason} if reason else {}
         result = await self._transport.request("POST", f"/v1/system/runtime/{action}", json=body)
+        assert result is not None, "Runtime control endpoint returned None"
         return RuntimeControlResponse(**result)
 
     async def services(self) -> ServicesStatusResponse:
@@ -250,6 +254,7 @@ class SystemResource:
         Requires: OBSERVER role
         """
         result = await self._transport.request("GET", "/v1/system/services")
+        assert result is not None, "Services endpoint returned None"
         return ServicesStatusResponse(**result)
 
     async def shutdown(self, reason: str, grace_period_seconds: int = 30, force: bool = False) -> ShutdownResponse:
@@ -271,6 +276,7 @@ class SystemResource:
             "/v1/system/shutdown",
             json={"reason": reason, "grace_period_seconds": grace_period_seconds, "force": force},
         )
+        assert result is not None, "Shutdown endpoint returned None"
         return ShutdownResponse(**result)
 
     # Convenience methods
@@ -297,6 +303,7 @@ class SystemResource:
         """
         params = {"include_details": str(include_details).lower()}
         result = await self._transport.request("POST", "/v1/system/runtime/step", params=params)
+        assert result is not None, "Single step endpoint returned None"
 
         # Handle different response formats
         if "data" in result:

@@ -135,11 +135,11 @@ class WebSocketResource:
 
         self.state = WebSocketState.DISCONNECTED
         self.ws: Optional["WebSocketClientProtocol"] = None
-        self._message_queue: asyncio.Queue = asyncio.Queue(maxsize=message_buffer_size)
+        self._message_queue: asyncio.Queue[WebSocketMessage] = asyncio.Queue(maxsize=message_buffer_size)
         self._reconnect_attempts = 0
         self._last_sequence = 0
         self._subscriptions: Dict[str, ChannelFilter] = {}
-        self._tasks: List[asyncio.Task] = []
+        self._tasks: List[asyncio.Task[Any]] = []
 
     async def __aenter__(self) -> "WebSocketResource":
         await self.connect()
@@ -222,7 +222,7 @@ class WebSocketResource:
             else:
                 channel_filters[channel] = {}
 
-        request = SubscribeRequest(channels=channel_filters)  # type: ignore[arg-type]
+        request = SubscribeRequest(channels=channel_filters)
 
         # Send subscription
         if self.ws:

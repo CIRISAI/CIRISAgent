@@ -54,6 +54,7 @@ class ConfigResource:
             return configs
         else:
             # Assume it's already a list
+            assert data is not None, "Response data should not be None"
             configs = []
             for item in data:
                 configs.append(ConfigItem(**item))
@@ -77,9 +78,11 @@ class ConfigResource:
         """
         data = await self._transport.request("GET", f"/v1/config/{key}")
         # Handle SuccessResponse wrapper
+        assert data is not None, "Response data should not be None"
         if "data" in data:
             data = data["data"]
         # Return ConfigValue with the right fields
+        assert data is not None, "Response data['data'] should not be None"
         return ConfigValue(
             key=data.get("key", key),
             value=data.get("value"),
@@ -130,6 +133,7 @@ class ConfigResource:
         data = await self._transport.request("PUT", f"/v1/config/{key}", json=payload)
 
         # Convert ConfigItemResponse to ConfigOperationResponse
+        assert data is not None, "Response data should not be None"
         if "key" in data and "value" in data:
             # This is a ConfigItemResponse, convert it
             return ConfigOperationResponse(
@@ -158,6 +162,7 @@ class ConfigResource:
             Some system configurations may be protected from deletion.
         """
         data = await self._transport.request("DELETE", f"/v1/config/{key}")
+        assert data is not None, "Response data should not be None"
         return ConfigOperationResponse(**data)
 
     async def update_config(self, key: str, value: Any, description: Optional[str] = None) -> ConfigOperationResponse:
@@ -212,6 +217,7 @@ class ConfigResource:
             )
         """
         headers = {}
+        payload: Any
         if patch_format == "json-patch":
             headers["Content-Type"] = "application/json-patch+json"
             payload = patches
@@ -220,6 +226,7 @@ class ConfigResource:
             payload = patches[0] if len(patches) == 1 else {"patches": patches}
 
         data = await self._transport.request("PATCH", f"/v1/config/{key}", json=payload, headers=headers)
+        assert data is not None, "Response data should not be None"
         return ConfigOperationResponse(**data)
 
     async def bulk_set(self, configs: Dict[str, Any]) -> Dict[str, ConfigOperationResponse]:
@@ -241,7 +248,13 @@ class ConfigResource:
                 results[key] = await self.set_config(key, value)
             except CIRISAPIError as e:
                 # Create error response for failed operations
-                results[key] = ConfigOperationResponse(success=False, message=str(e), key=key)
+                results[key] = ConfigOperationResponse(
+                    success=False,
+                    operation="set",
+                    timestamp=datetime.now().isoformat(),
+                    message=str(e),
+                    key=key,
+                )
         return results
 
     async def search_configs(self, pattern: str) -> List[ConfigItem]:

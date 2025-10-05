@@ -7,7 +7,7 @@ Provides standardized cursor-based pagination for all list endpoints.
 import base64
 import json
 import logging
-from typing import Any, AsyncIterator, Callable, Dict, Generic, List, Optional, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,7 +47,12 @@ class PageIterator(Generic[T]):
     Automatically fetches pages as needed for seamless iteration.
     """
 
-    def __init__(self, fetch_func: Callable, initial_params: Dict[str, Any], item_class: type[T]):
+    def __init__(
+        self,
+        fetch_func: Callable[..., Awaitable[Any]],
+        initial_params: Dict[str, Any],
+        item_class: type[T],
+    ):
         """
         Initialize page iterator.
 
@@ -93,7 +98,9 @@ class PageIterator(Generic[T]):
 
             # Parse response
             if isinstance(response, dict):
-                self._current_page = PaginatedResponse[self.item_class](**response)
+                # Type assertion: we know item_class is bound to T
+                assert isinstance(self.item_class, type)
+                self._current_page = PaginatedResponse[T](**response)
             else:
                 self._current_page = response
 
@@ -178,7 +185,10 @@ class QueryParams(PaginationParams):
 
 
 async def paginate_all(
-    fetch_func: Callable, params: Dict[str, Any], item_class: type[T], max_items: Optional[int] = None
+    fetch_func: Callable[..., Awaitable[Any]],
+    params: Dict[str, Any],
+    item_class: type[T],
+    max_items: Optional[int] = None,
 ) -> List[T]:
     """
     Fetch all pages of a paginated endpoint.

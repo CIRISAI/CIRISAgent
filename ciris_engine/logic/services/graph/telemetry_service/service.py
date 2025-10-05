@@ -859,6 +859,103 @@ class TelemetryAggregator:
             custom_metrics=custom_metrics,
         )
 
+    def _create_empty_telemetry(self, adapter_id: str, error_msg: Optional[str] = None) -> ServiceTelemetryData:
+        """Create empty telemetry data for failed/unavailable adapter."""
+        custom_metrics = {"adapter_id": adapter_id}
+        if error_msg:
+            custom_metrics["error"] = error_msg
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0,
+                custom_metrics=custom_metrics
+            )
+        return ServiceTelemetryData(
+            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0,
+            custom_metrics=custom_metrics
+        )
+
+    def _create_running_telemetry(self, adapter_info: Any) -> ServiceTelemetryData:
+        """Create telemetry for running adapter without metrics."""
+        uptime = 0.0
+        if hasattr(adapter_info, "started_at") and adapter_info.started_at:
+            uptime = (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
+
+        return ServiceTelemetryData(
+            healthy=True,
+            uptime_seconds=uptime,
+            error_count=0,
+            requests_handled=0,
+            error_rate=0.0,
+            custom_metrics={
+                "adapter_id": adapter_info.adapter_id,
+                "adapter_type": adapter_info.adapter_type,
+            },
+        )
+
+    async def _collect_from_adapter_with_metrics(
+        self, adapter_instance: Any, adapter_info: Any, adapter_id: str
+    ) -> ServiceTelemetryData:
+        """Collect metrics from a single adapter instance."""
+        try:
+            metrics = await self._get_adapter_metrics(adapter_instance)
+            if metrics:
+                return self._create_telemetry_data(metrics, adapter_info, adapter_id, healthy=True)
+            else:
+                return self._create_empty_telemetry(adapter_id)
+        except Exception as e:
+            logger.error(f"Error getting metrics from {adapter_id}: {e}")
+            return self._create_empty_telemetry(adapter_id, str(e))
+
+    async def _collect_from_control_service(
+        self, adapter_type: str
+    ) -> Optional[Dict[str, ServiceTelemetryData]]:
+        """Try to collect adapter metrics via control service."""
+        if not self.runtime:
+            return None
+
+        try:
+            control_service = await self._get_control_service()
+            if not control_service or not hasattr(control_service, "list_adapters"):
+                return None
+
+            all_adapters = await control_service.list_adapters()
+            adapter_metrics = {}
+
+            for adapter_info in all_adapters:
+                if adapter_info.adapter_type != adapter_type or not self._is_adapter_running(adapter_info):
+                    continue
+
+                adapter_instance = self._find_adapter_instance(adapter_type)
+                if adapter_instance:
+                    adapter_metrics[adapter_info.adapter_id] = await self._collect_from_adapter_with_metrics(
+                        adapter_instance, adapter_info, adapter_info.adapter_id
+                    )
+                else:
+                    adapter_metrics[adapter_info.adapter_id] = self._create_running_telemetry(adapter_info)
+
+            return adapter_metrics
+
+        except Exception as e:
+            logger.error(f"Failed to get adapter list from control service: {e}")
+            return None
+
+    async def _collect_from_bootstrap_adapters(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
+        """Fallback: collect from bootstrap adapters directly."""
+        adapter_metrics = {}
+
+        if not self.runtime or not hasattr(self.runtime, "adapters"):
+            return adapter_metrics
+
+        for adapter in self.runtime.adapters:
+            if adapter_type not in adapter.__class__.__name__.lower():
+                continue
+
+            adapter_id = f"{adapter_type}_bootstrap"
+            adapter_metrics[adapter_id] = await self._collect_from_adapter_with_metrics(
+                adapter, None, adapter_id
+            )
+
+        return adapter_metrics
+
     async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
         """
         Collect telemetry from ALL active adapter instances of a given type.
@@ -866,96 +963,13 @@ class TelemetryAggregator:
         Returns a dict mapping adapter_id to telemetry data.
         Multiple instances of the same adapter type can be running simultaneously.
         """
-        adapter_metrics = {}
+        # Try control service first
+        adapter_metrics = await self._collect_from_control_service(adapter_type)
+        if adapter_metrics is not None:
+            return adapter_metrics
 
-        # Try to get adapters from runtime control service if available
-        if self.runtime:
-            try:
-                control_service = await self._get_control_service()
-                if control_service and hasattr(control_service, "list_adapters"):
-                    all_adapters = await control_service.list_adapters()
-
-                    for adapter_info in all_adapters:
-                        if adapter_info.adapter_type == adapter_type and self._is_adapter_running(adapter_info):
-                            adapter_instance = self._find_adapter_instance(adapter_type)
-
-                            if adapter_instance:
-                                try:
-                                    metrics = await self._get_adapter_metrics(adapter_instance)
-                                    if metrics:
-                                        adapter_metrics[adapter_info.adapter_id] = self._create_telemetry_data(
-                                            metrics, adapter_info, adapter_info.adapter_id, healthy=True
-                                        )
-                                    else:
-                                        adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                            healthy=False,
-                                            uptime_seconds=0.0,
-                                            error_count=0,
-                                            requests_handled=0,
-                                            error_rate=0.0,
-                                            custom_metrics={"adapter_id": adapter_info.adapter_id},
-                                        )
-                                except Exception as e:
-                                    logger.error(f"Error getting metrics from {adapter_info.adapter_id}: {e}")
-                                    adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                        healthy=False,
-                                        uptime_seconds=0.0,
-                                        error_count=1,
-                                        requests_handled=0,
-                                        error_rate=1.0,
-                                        custom_metrics={"error": str(e), "adapter_id": adapter_info.adapter_id},
-                                    )
-                            else:
-                                # Adapter is running but no metrics available
-                                uptime = 0
-                                if hasattr(adapter_info, "started_at") and adapter_info.started_at:
-                                    uptime = (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
-
-                                adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                    healthy=True,
-                                    uptime_seconds=uptime,
-                                    error_count=0,
-                                    requests_handled=0,
-                                    error_rate=0.0,
-                                    custom_metrics={
-                                        "adapter_id": adapter_info.adapter_id,
-                                        "adapter_type": adapter_info.adapter_type,
-                                    },
-                                )
-
-                    return adapter_metrics
-
-            except Exception as e:
-                logger.error(f"Failed to get adapter list from control service: {e}")
-
-        # Fallback: Check bootstrap adapters directly
-        if self.runtime and hasattr(self.runtime, "adapters"):
-            for adapter in self.runtime.adapters:
-                if adapter_type in adapter.__class__.__name__.lower():
-                    adapter_id = f"{adapter_type}_bootstrap"
-
-                    try:
-                        metrics = await self._get_adapter_metrics(adapter)
-                        if metrics:
-                            adapter_metrics[adapter_id] = self._create_telemetry_data(
-                                metrics, None, adapter_id, healthy=True
-                            )
-                        else:
-                            adapter_metrics[adapter_id] = ServiceTelemetryData(
-                                healthy=False,
-                                uptime_seconds=0.0,
-                                error_count=0,
-                                requests_handled=0,
-                                error_rate=0.0,
-                                custom_metrics={"adapter_id": adapter_id},
-                            )
-                    except Exception as e:
-                        logger.error(f"Error getting metrics from {adapter_id}: {e}")
-                        adapter_metrics[adapter_id] = ServiceTelemetryData(
-                            healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0
-                        )
-
-        return adapter_metrics
+        # Fallback to bootstrap adapters
+        return await self._collect_from_bootstrap_adapters(adapter_type)
 
     def get_fallback_metrics(self, _service_name: Optional[str] = None, _healthy: bool = False) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.

@@ -174,9 +174,7 @@ def aggregate_action_counts(summaries: List[Dict[str, Any]]) -> Dict[str, int]:
     return dict(action_totals)
 
 
-def group_summaries_by_day(
-    summaries: List[Tuple[str, str, str]]
-) -> Dict[date, List[Tuple[str, str]]]:
+def group_summaries_by_day(summaries: List[Tuple[str, str, str]]) -> Dict[date, List[Tuple[str, str]]]:
     """
     Group summaries by day based on period_start timestamp.
 
@@ -214,9 +212,7 @@ def group_summaries_by_day(
     return dict(summaries_by_day)
 
 
-def group_summaries_by_month(
-    summaries: List[Tuple[str, str, str]]
-) -> Dict[Tuple[int, int], List[Tuple[str, str]]]:
+def group_summaries_by_month(summaries: List[Tuple[str, str, str]]) -> Dict[Tuple[int, int], List[Tuple[str, str]]]:
     """
     Group summaries by month based on period_start timestamp.
 

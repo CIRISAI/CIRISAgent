@@ -11,6 +11,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Validation error messages
+ERR_TIMEZONE_AWARE = "period_start and period_end must be timezone-aware"
+ERR_PERIOD_ORDER = "period_start must be before period_end"
+
 
 def query_summaries_in_period(
     cursor: Cursor,
@@ -44,10 +48,10 @@ def query_summaries_in_period(
         raise ValueError("summary_type cannot be empty")
 
     if period_start.tzinfo is None or period_end.tzinfo is None:
-        raise ValueError("period_start and period_end must be timezone-aware")
+        raise ValueError(ERR_TIMEZONE_AWARE)
 
     if period_start >= period_end:
-        raise ValueError("period_start must be before period_end")
+        raise ValueError(ERR_PERIOD_ORDER)
 
     # Query summaries with specified consolidation level
     cursor.execute(
@@ -91,10 +95,10 @@ def query_all_summary_types_in_period(
         >>> all_summaries.keys()  # ['tsdb_summary', 'audit_summary', ...]
     """
     if period_start.tzinfo is None or period_end.tzinfo is None:
-        raise ValueError("period_start and period_end must be timezone-aware")
+        raise ValueError(ERR_TIMEZONE_AWARE)
 
     if period_start >= period_end:
-        raise ValueError("period_start must be before period_end")
+        raise ValueError(ERR_PERIOD_ORDER)
 
     summary_types = [
         "tsdb_summary",
@@ -216,10 +220,10 @@ def count_nodes_in_period(cursor: Cursor, node_type: str, period_start: datetime
         raise ValueError("node_type cannot be empty")
 
     if period_start.tzinfo is None or period_end.tzinfo is None:
-        raise ValueError("period_start and period_end must be timezone-aware")
+        raise ValueError(ERR_TIMEZONE_AWARE)
 
     if period_start >= period_end:
-        raise ValueError("period_start must be before period_end")
+        raise ValueError(ERR_PERIOD_ORDER)
 
     cursor.execute(
         """

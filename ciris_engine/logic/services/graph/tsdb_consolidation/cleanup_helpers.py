@@ -175,7 +175,7 @@ def parse_summary_period(attrs_json: Optional[str]) -> Tuple[Optional[str], Opti
         period_end = attrs.get("period_end")
         return period_start, period_end
     except json.JSONDecodeError:
-        logger.warning(f"Failed to parse summary attributes JSON")
+        logger.warning("Failed to parse summary attributes JSON")
         return None, None
 
 

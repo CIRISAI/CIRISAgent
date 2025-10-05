@@ -5,18 +5,19 @@ Ensures 80%+ coverage for all aggregation logic.
 """
 
 import json
-import pytest
 from datetime import date, datetime, timezone
+
+import pytest
 
 from ciris_engine.logic.services.graph.tsdb_consolidation.aggregation_helpers import (
     MetricStats,
     ResourceTotals,
+    aggregate_action_counts,
     aggregate_metric_stats,
     aggregate_resource_usage,
-    aggregate_action_counts,
+    create_aggregated_summary_attributes,
     group_summaries_by_day,
     group_summaries_by_month,
-    create_aggregated_summary_attributes,
     parse_summary_attributes,
 )
 
@@ -252,9 +253,9 @@ class TestGroupSummariesByDay:
     def test_groups_by_day_correctly(self):
         """Should group summaries by date."""
         summaries = [
-            ("node1", '{}', "2023-10-01T00:00:00Z"),
-            ("node2", '{}', "2023-10-01T06:00:00Z"),
-            ("node3", '{}', "2023-10-02T00:00:00Z"),
+            ("node1", "{}", "2023-10-01T00:00:00Z"),
+            ("node2", "{}", "2023-10-01T06:00:00Z"),
+            ("node3", "{}", "2023-10-02T00:00:00Z"),
         ]
 
         grouped = group_summaries_by_day(summaries)
@@ -266,7 +267,7 @@ class TestGroupSummariesByDay:
     def test_handles_utc_offset_format(self):
         """Should handle +00:00 format."""
         summaries = [
-            ("node1", '{}', "2023-10-01T12:00:00+00:00"),
+            ("node1", "{}", "2023-10-01T12:00:00+00:00"),
         ]
 
         grouped = group_summaries_by_day(summaries)
@@ -275,8 +276,8 @@ class TestGroupSummariesByDay:
     def test_skips_entries_without_period_start(self):
         """Should skip entries with None period_start."""
         summaries = [
-            ("node1", '{}', "2023-10-01T00:00:00Z"),
-            ("node2", '{}', None),
+            ("node1", "{}", "2023-10-01T00:00:00Z"),
+            ("node2", "{}", None),
         ]
 
         grouped = group_summaries_by_day(summaries)
@@ -294,9 +295,9 @@ class TestGroupSummariesByMonth:
     def test_groups_by_month_correctly(self):
         """Should group summaries by month."""
         summaries = [
-            ("node1", '{}', "2023-10-01T00:00:00Z"),
-            ("node2", '{}', "2023-10-15T00:00:00Z"),
-            ("node3", '{}', "2023-11-01T00:00:00Z"),
+            ("node1", "{}", "2023-10-01T00:00:00Z"),
+            ("node2", "{}", "2023-10-15T00:00:00Z"),
+            ("node3", "{}", "2023-11-01T00:00:00Z"),
         ]
 
         grouped = group_summaries_by_month(summaries)
@@ -307,8 +308,8 @@ class TestGroupSummariesByMonth:
     def test_handles_year_boundary(self):
         """Should handle year boundaries correctly."""
         summaries = [
-            ("node1", '{}', "2023-12-31T23:59:00Z"),
-            ("node2", '{}', "2024-01-01T00:00:00Z"),
+            ("node1", "{}", "2023-12-31T23:59:00Z"),
+            ("node2", "{}", "2024-01-01T00:00:00Z"),
         ]
 
         grouped = group_summaries_by_month(summaries)
@@ -394,9 +395,7 @@ class TestCreateAggregatedSummaryAttributes:
         start = datetime(2023, 10, 1, 0, 0, tzinfo=timezone.utc)
         end = datetime(2023, 10, 1, 23, 59, 59, tzinfo=timezone.utc)
 
-        attrs = create_aggregated_summary_attributes(
-            "tsdb_summary", start, end, "daily", {}, {}, {}, []
-        )
+        attrs = create_aggregated_summary_attributes("tsdb_summary", start, end, "daily", {}, {}, {}, [])
 
         assert attrs["period_start"] == "2023-10-01T00:00:00+00:00"
         assert attrs["period_end"] == "2023-10-01T23:59:59+00:00"
@@ -421,9 +420,9 @@ class TestParseSummaryAttributes:
     def test_handles_empty_json(self):
         """Should handle empty/null JSON."""
         summaries = [
-            ("node1", '{}'),
+            ("node1", "{}"),
             ("node2", None),
-            ("node3", ''),
+            ("node3", ""),
         ]
 
         attrs = parse_summary_attributes(summaries)
@@ -437,7 +436,7 @@ class TestParseSummaryAttributes:
         """Should skip entries with invalid JSON."""
         summaries = [
             ("node1", '{"valid": true}'),
-            ("node2", 'not-valid-json'),
+            ("node2", "not-valid-json"),
             ("node3", '{"also": "valid"}'),
         ]
 

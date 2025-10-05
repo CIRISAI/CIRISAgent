@@ -7,7 +7,7 @@ These models provide type-safe alternatives for various contexts and metadata.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -23,7 +23,7 @@ class BaseAttributes(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @field_serializer("created_at", "updated_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -39,7 +39,7 @@ class MemoryAttributes(BaseAttributes):
 class ConfigAttributes(BaseAttributes):
     """Attributes for configuration nodes."""
 
-    value: Union[str, int, float, bool, list, dict] = Field(..., description="Config value")
+    value: Union[str, int, float, bool, List[Any], Dict[str, Any]] = Field(..., description="Config value")
     description: Optional[str] = Field(None, description="Config description")
     sensitive: bool = Field(default=False, description="Whether value is sensitive")
     validator: Optional[str] = Field(None, description="Validation rule")
@@ -71,7 +71,7 @@ class ConfigParam(BaseModel):
     """Individual configuration parameter."""
 
     name: str = Field(..., description="Parameter name")
-    value: Union[str, int, float, bool, list] = Field(..., description="Parameter value")
+    value: Union[str, int, float, bool, List[Any]] = Field(..., description="Parameter value")
     type: str = Field(..., description="Value type")
     required: bool = Field(default=False, description="Whether required")
 
@@ -101,7 +101,7 @@ class LineageInfo(BaseModel):
     features: List[str] = Field(default_factory=list, description="Enabled features")
 
     @field_serializer("build_date")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -116,7 +116,7 @@ class CognitiveStateInfo(BaseModel):
     transition_reason: Optional[str] = Field(None, description="Reason for transition")
 
     @field_serializer("entered_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -157,7 +157,7 @@ class ServiceMetadata(BaseModel):
     average_response_ms: Optional[float] = Field(None, description="Average response time")
 
     @field_serializer("last_restart")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -172,7 +172,7 @@ class BaseContext(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @field_serializer("timestamp")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -200,7 +200,7 @@ class AuditContext(BaseContext):
     user_agent: Optional[str] = Field(None, description="User agent string")
     result: Optional[str] = Field(None, description="Operation result")
     error: Optional[str] = Field(None, description="Error message if failed")
-    metadata: Optional[dict] = Field(None, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 # Verification Models
@@ -234,7 +234,7 @@ class VerificationResult(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @field_serializer("verified_at")
-    def serialize_datetime(self, dt: Union[str, datetime, None], _info):
+    def serialize_datetime(self, dt: Union[str, datetime, None], _info: Any) -> Optional[str]:
         if isinstance(dt, datetime):
             return dt.isoformat()
         return dt
@@ -254,5 +254,5 @@ class ThoughtContent(BaseModel):
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
     @field_serializer("created_at", "completed_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None

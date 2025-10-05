@@ -29,7 +29,15 @@ from .models import (  # Legacy models; Telemetry models; Other models
     TelemetryReasoningTrace,
     TelemetrySystemOverview,
 )
-from .resources.agent import AgentIdentity, AgentStatus, ConversationHistory, ConversationMessage, InteractResponse
+from .resources.agent import (
+    AgentIdentity,
+    AgentStatus,
+    ConversationHistory,
+    ConversationMessage,
+    InteractResponse,
+    MessageRequest,
+    MessageSubmissionResponse,
+)
 from .resources.consent import (
     ConsentAction,
     ConsentRecord,
@@ -56,6 +64,8 @@ __all__ = [
     "EventChannel",
     # Agent interaction types
     "InteractResponse",
+    "MessageRequest",
+    "MessageSubmissionResponse",
     "AgentStatus",
     "AgentIdentity",
     "ConversationHistory",

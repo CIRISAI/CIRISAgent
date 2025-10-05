@@ -26,6 +26,7 @@ from ciris_engine.schemas.services.authority_core import (
     WisdomAdvice,
 )
 from ciris_engine.schemas.services.context import GuidanceContext
+from ciris_engine.schemas.services.core import ServiceCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class WeatherWisdomAdapter(WiseAuthorityService):
     respect their usage guidelines.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the weather wisdom adapter."""
         # NOAA API is free but requires a User-Agent
         self.base_url = "https://api.weather.gov"
@@ -54,22 +55,20 @@ class WeatherWisdomAdapter(WiseAuthorityService):
         self.owm_base_url = "https://api.openweathermap.org/data/2.5"
 
         # Cache for grid points (NOAA uses a grid system)
-        self._grid_cache: Dict[tuple, Dict] = {}
+        self._grid_cache: Dict[tuple[float, float], Dict[str, Any]] = {}
 
         logger.info(f"WeatherWisdomAdapter initialized with NOAA API")
         if self.owm_api_key:
             logger.info("OpenWeatherMap backup available")
 
-    def get_capabilities(self) -> SimpleNamespace:
+    def get_capabilities(self) -> ServiceCapabilities:
         """Return adapter capabilities."""
-        return SimpleNamespace(
+        return ServiceCapabilities(
+            service_name="weather_wisdom",
             actions=["get_guidance", "fetch_guidance"],
-            capabilities=[
-                "domain:weather",
-                "modality:sensor:atmospheric",
-                "domain:weather:forecast",
-                "domain:weather:alerts",
-            ],
+            version="1.0.0",
+            dependencies=[],
+            metadata={"domain": "weather", "modality": "sensor:atmospheric", "capabilities": ["forecast", "alerts"]},
         )
 
     async def _get_grid_point(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
@@ -101,7 +100,7 @@ class WeatherWisdomAdapter(WiseAuthorityService):
 
         return None
 
-    async def _get_noaa_forecast(self, grid_data: Dict) -> Optional[Dict[str, Any]]:
+    async def _get_noaa_forecast(self, grid_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get forecast from NOAA."""
         headers = {"User-Agent": self.user_agent}
 
@@ -221,7 +220,9 @@ class WeatherWisdomAdapter(WiseAuthorityService):
         index = round(degrees / 22.5) % 16
         return directions[index]
 
-    def _assess_weather_safety(self, weather_data: Dict, alerts: List[Dict]) -> tuple[str, float, str]:
+    def _assess_weather_safety(
+        self, weather_data: Dict[str, Any], alerts: List[Dict[str, Any]]
+    ) -> tuple[str, float, str]:
         """Assess safety of weather conditions."""
         risk_level = "low"
         confidence = 0.85
@@ -277,13 +278,16 @@ class WeatherWisdomAdapter(WiseAuthorityService):
 
         # Extract location from inputs
         inputs = request.inputs or {}
-        lat = inputs.get("latitude")
-        lon = inputs.get("longitude")
+        lat_str = inputs.get("latitude")
+        lon_str = inputs.get("longitude")
         location = inputs.get("location")
 
         # If we have a location name but no coordinates, we'd need geocoding
         # For now, require coordinates or use a default
-        if not lat or not lon:
+        lat: float
+        lon: float
+
+        if not lat_str or not lon_str:
             if location:
                 # In production, we'd geocode this location
                 # For demo, use a default location (San Francisco)
@@ -296,11 +300,19 @@ class WeatherWisdomAdapter(WiseAuthorityService):
                     wa_id="weather_wisdom",
                     signature="weather_sig",
                 )
+        else:
+            try:
+                lat = float(lat_str)
+                lon = float(lon_str)
+            except (ValueError, TypeError) as e:
+                return GuidanceResponse(
+                    custom_guidance=f"Invalid coordinates: {e}",
+                    reasoning="Coordinate conversion error",
+                    wa_id="weather_wisdom",
+                    signature="weather_sig",
+                )
 
         try:
-            lat = float(lat)
-            lon = float(lon)
-
             # Try NOAA first (US only)
             weather_data = None
             alerts = []
@@ -400,19 +412,15 @@ class WeatherWisdomAdapter(WiseAuthorityService):
 
     async def fetch_guidance(self, context: GuidanceContext) -> Optional[str]:
         """Legacy compatibility method."""
-        request = GuidanceRequest(context=context.question, options=context.options, urgency="normal")
+        request = GuidanceRequest(context=context.question, options={}, urgency="normal")
 
         response = await self.get_guidance(request)
         return response.custom_guidance or response.reasoning
 
-    async def send_deferral(self, request: DeferralRequest) -> DeferralResponse:
+    async def send_deferral(self, request: DeferralRequest) -> str:
         """Weather services don't handle deferrals."""
-        return DeferralResponse(
-            approved=False,
-            reason="Weather services do not handle deferrals",
-            wa_id="weather_wisdom",
-            signature="weather_sig",
-        )
+        # Protocol expects str return type
+        return "weather_wisdom_not_supported"
 
 
 # Example usage:

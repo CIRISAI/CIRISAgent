@@ -209,7 +209,9 @@ class TestSearchNodes:
         await search_nodes(memory_service, limit=10, offset=20)
 
         db_path, query, params = mock_execute.call_args[0]
-        assert "LIMIT 10 OFFSET 20" in query
+        assert "LIMIT ? OFFSET ?" in query
+        assert 10 in params
+        assert 20 in params
 
     @patch("ciris_engine.logic.adapters.api.routes.memory_query_helpers.DatabaseExecutor.execute_query")
     async def test_search_with_all_filters(self, mock_execute):

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.conscience.results import ConscienceResult
 from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
@@ -738,6 +739,7 @@ class ConscienceExecutionStepData(BaseStepData):
     """Step data for CONSCIENCE_EXECUTION step."""
 
     selected_action: str = Field(..., description="Final action after conscience check")
+    action_rationale: str = Field(..., description="Rationale for the final action (REQUIRED)")
     conscience_passed: bool = Field(..., description="Whether conscience validation passed")
     action_result: str = Field(..., description="Complete action result")
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
@@ -767,6 +769,9 @@ class FinalizeActionStepData(BaseStepData):
     epistemic_data: EpistemicData = Field(
         default_factory=dict, description="Rich conscience evaluation data from all checks"
     )
+    updated_status_detected: Optional[bool] = Field(
+        None, description="Whether UpdatedStatusConscience detected new information during task processing"
+    )
 
 
 class PerformActionStepData(BaseStepData):
@@ -786,10 +791,23 @@ class ActionCompleteStepData(BaseStepData):
     follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
     follow_up_thought_id: Optional[str] = Field(None, description="ID of follow-up thought if created")
     execution_time_ms: float = Field(0.0, description="Action execution time")
-    audit_entry_id: Optional[str] = Field(None, description="ID of audit entry created for this action")
-    audit_sequence_number: Optional[int] = Field(None, description="Sequence number in audit hash chain")
-    audit_entry_hash: Optional[str] = Field(None, description="Hash of audit entry (tamper-evident)")
-    audit_signature: Optional[str] = Field(None, description="Cryptographic signature of audit entry")
+    audit_entry_id: str = Field(..., description="ID of audit entry created for this action (REQUIRED)")
+    audit_sequence_number: int = Field(..., description="Sequence number in audit hash chain (REQUIRED)")
+    audit_entry_hash: str = Field(..., description="Hash of audit entry - tamper-evident (REQUIRED)")
+    audit_signature: str = Field(..., description="Cryptographic signature of audit entry (REQUIRED)")
+
+
+class ActionResponse(BaseModel):
+    """Typed response from action dispatch - replaces Dict[str, Any] dispatch_result."""
+
+    success: bool = Field(..., description="Whether action dispatch succeeded")
+    handler: str = Field(..., description="Handler that executed the action")
+    action_type: str = Field(..., description="Type of action executed")
+    follow_up_thought_id: Optional[str] = Field(None, description="ID of follow-up thought if created")
+    execution_time_ms: float = Field(0.0, description="Action execution time in milliseconds")
+
+    # Audit trail data (REQUIRED) from AuditEntryResult
+    audit_data: AuditEntryResult = Field(..., description="Audit entry with hash chain data (REQUIRED)")
 
 
 class RoundCompleteStepData(BaseStepData):
@@ -938,6 +956,11 @@ class ConscienceResultEvent(BaseModel):
     # Final action
     final_action: str = Field(..., description="Final action after conscience evaluation")
     action_was_overridden: bool = Field(..., description="Whether conscience changed the action")
+
+    # UpdatedStatusConscience detection
+    updated_status_available: Optional[bool] = Field(
+        None, description="Whether UpdatedStatusConscience detected new information during task processing"
+    )
 
 
 class ActionResultEvent(BaseModel):

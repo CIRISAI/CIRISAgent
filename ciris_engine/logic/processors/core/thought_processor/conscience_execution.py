@@ -76,8 +76,13 @@ class ConscienceExecutionPhase:
         }
 
         if action_result.selected_action in exempt_actions:
+            # Exempt actions bypass conscience checks - return immediately with EXEMPT marker
             return ConscienceApplicationResult(
-                original_action=action_result, final_action=action_result, overridden=False, override_reason=None
+                original_action=action_result,
+                final_action=action_result,
+                overridden=False,
+                override_reason=None,
+                epistemic_data={"status": "EXEMPT", "action": action_result.selected_action.value},
             )
 
         context = {"thought": thought or thought_item, "dma_results": dma_results or {}}
@@ -173,14 +178,22 @@ class ConscienceExecutionPhase:
                 overridden = True
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
 
+        # epistemic_data is REQUIRED - populate with EXEMPT if no checks ran
+        if not epistemic_data:
+            # If no epistemic data from any conscience, mark as exempt (e.g., exempt actions)
+            epistemic_data = {
+                "status": "EXEMPT",
+                "action": action_result.selected_action.value,
+                "reason": "No epistemic checks provided data",
+            }
+
         result = ConscienceApplicationResult(
             original_action=action_result,
             final_action=final_action,
             overridden=overridden,
             override_reason=override_reason,
+            epistemic_data=epistemic_data,
         )
-        if epistemic_data:
-            result.epistemic_data = epistemic_data
         if thought_depth_triggered is not None:
             result.thought_depth_triggered = thought_depth_triggered
         if updated_status_detected is not None:

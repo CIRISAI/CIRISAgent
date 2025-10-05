@@ -105,7 +105,7 @@ class QueryBuilder:
             user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
         """
         query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, "WHERE 1=1"]
-        params = []
+        params: List[Any] = []
 
         if node_type:
             query_parts.append("AND node_type = ?")
@@ -137,7 +137,8 @@ class QueryBuilder:
             QueryBuilder._add_user_filter(query_parts, params, user_filter_ids)
 
         query_parts.append(QueryBuilder.SQL_ORDER_BY)
-        query_parts.append(f"LIMIT {limit} OFFSET {offset}")
+        query_parts.append("LIMIT ? OFFSET ?")
+        params.extend([limit, offset])
 
         return " ".join(query_parts), params
 

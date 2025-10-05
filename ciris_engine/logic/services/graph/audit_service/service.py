@@ -234,42 +234,56 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
     async def log_action(
         self, action_type: HandlerActionType, context: AuditActionContext, outcome: Optional[str] = None
-    ) -> None:
-        """Log an action by storing it in the graph."""
-        try:
-            # Create audit entry
-            entry = AuditRequest(
-                entry_id=str(uuid4()),
-                timestamp=self._time_service.now() if self._time_service else datetime.now(),
-                entity_id=context.thought_id,
-                event_type=action_type.value,
-                actor=context.handler_name or "system",
-                details={
-                    "action_type": action_type.value,
-                    "thought_id": context.thought_id,
-                    "task_id": context.task_id,
-                    "handler_name": context.handler_name,
-                    "metadata": str(getattr(context, "metadata", {})),
-                },
-                outcome=outcome,
+    ) -> AuditEntryResult:
+        """Log an action and return audit entry with hash chain data (REQUIRED)."""
+        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+
+        # Create audit entry
+        entry = AuditRequest(
+            entry_id=str(uuid4()),
+            timestamp=self._time_service.now() if self._time_service else datetime.now(),
+            entity_id=context.thought_id,
+            event_type=action_type.value,
+            actor=context.handler_name or "system",
+            details={
+                "action_type": action_type.value,
+                "thought_id": context.thought_id,
+                "task_id": context.task_id,
+                "handler_name": context.handler_name,
+                "metadata": str(getattr(context, "metadata", {})),
+            },
+            outcome=outcome,
+        )
+
+        # Store in graph
+        await self._store_entry_in_graph(entry, action_type)
+
+        # Add to hash chain (REQUIRED in production)
+        hash_chain_data = await self._add_to_hash_chain(entry)
+
+        if not hash_chain_data:
+            raise RuntimeError(
+                f"Hash chain data not generated for action {action_type.value}. "
+                f"enable_hash_chain={self.enable_hash_chain}. "
+                f"This is a critical audit trail failure."
             )
 
-            # Store in graph
-            await self._store_entry_in_graph(entry, action_type)
+        # Cache for quick access
+        self._cache_entry(entry)
 
-            # Add to hash chain if enabled
-            if self.enable_hash_chain:
-                await self._add_to_hash_chain(entry)
+        # Queue for export if configured
+        if self.export_path:
+            self._export_buffer.append(entry)
 
-            # Cache for quick access
-            self._cache_entry(entry)
-
-            # Queue for export if configured
-            if self.export_path:
-                self._export_buffer.append(entry)
-
-        except Exception as e:
-            logger.error(f"Failed to log action {action_type}: {e}")
+        # Return audit entry result with REQUIRED fields
+        return AuditEntryResult(
+            entry_id=entry.entry_id,
+            sequence_number=hash_chain_data["sequence_number"],
+            entry_hash=hash_chain_data["entry_hash"],
+            previous_hash=hash_chain_data.get("previous_hash"),
+            signature=hash_chain_data["signature"],
+            signing_key_id=hash_chain_data.get("signing_key_id"),
+        )
 
     async def log_event(self, event_type: str, event_data: "EventPayload", **kwargs: object) -> AuditEntryResult:
         """Log a general event.
@@ -382,8 +396,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         except Exception as e:
             logger.error(f"Failed to log event {event_type}: {e}")
-            # Return entry with just entry_id on error
-            return AuditEntryResult(entry_id=entry.entry_id if "entry" in locals() else "error")
+            # Fail fast - audit failures are critical
+            raise RuntimeError(f"Failed to create audit entry for event {event_type}: {e}") from e
 
     async def log_conscience_event(
         self, thought_id: str, decision: str, reasoning: str, metadata: Optional["EventPayload"] = None

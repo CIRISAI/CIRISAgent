@@ -22,8 +22,12 @@ class AuditServiceProtocol(GraphServiceProtocol, Protocol):
     @abstractmethod
     async def log_action(
         self, action_type: HandlerActionType, context: AuditActionContext, outcome: Optional[str] = None
-    ) -> None:
-        """Log an action to the audit trail."""
+    ) -> "AuditEntryResult":
+        """Log an action to the audit trail.
+
+        Returns:
+            AuditEntryResult with entry_id and hash chain data (REQUIRED)
+        """
         ...
 
     @abstractmethod

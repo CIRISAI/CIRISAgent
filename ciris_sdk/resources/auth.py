@@ -12,7 +12,7 @@ Provides clean session management with the 4-role model:
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..transport import Transport
 
@@ -28,7 +28,7 @@ class LoginRequest:
 class LoginResponse:
     """Response after successful login."""
 
-    def __init__(self, data: dict):
+    def __init__(self, data: Dict[str, Any]):
         self.access_token: str = data["access_token"]
         self.token_type: str = data["token_type"]
         self.expires_in: int = data["expires_in"]
@@ -46,7 +46,7 @@ class TokenRefreshRequest:
 class UserInfo:
     """Current user information with permissions."""
 
-    def __init__(self, data: dict):
+    def __init__(self, data: Dict[str, Any]):
         self.user_id: str = data["user_id"]
         self.username: str = data["username"]
         self.role: str = data["role"]
@@ -91,6 +91,7 @@ class AuthResource:
         request_data = {"username": username, "password": password}
 
         response = await self._transport.request("POST", "/v1/auth/login", json=request_data)
+        assert response is not None
 
         return LoginResponse(response)
 
@@ -120,6 +121,7 @@ class AuthResource:
             HTTPException: If not authenticated
         """
         response = await self._transport.request("GET", "/v1/auth/me")
+        assert response is not None
 
         return UserInfo(response)
 
@@ -143,6 +145,7 @@ class AuthResource:
         request_data = {"refresh_token": refresh_token or "current_token"}
 
         response = await self._transport.request("POST", "/v1/auth/refresh", json=request_data)
+        assert response is not None
 
         return LoginResponse(response)
 

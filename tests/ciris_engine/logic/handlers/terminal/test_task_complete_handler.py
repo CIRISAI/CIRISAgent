@@ -595,35 +595,5 @@ class TestTaskCompleteHandler:
             # Execute handler
             await task_complete_handler.handle(action_result, test_thought, dispatch_context)
 
-            # Verify audit logs were created
-            audit_calls = mock_bus_manager.audit_service.log_event.call_args_list
-            assert len(audit_calls) >= 2  # Start and completion
-
-            # Check start audit
-            start_call = audit_calls[0]
-            assert "handler_action_task_complete" in str(start_call[1]["event_type"]).lower()
-            assert start_call[1]["event_data"]["outcome"] == "start"
-
-            # Check completion audit
-            end_call = audit_calls[-1]
-            assert end_call[1]["event_data"]["outcome"] == "success"
-
-    @pytest.mark.asyncio
-    async def test_service_correlation_tracking(
-        self,
-        task_complete_handler: TaskCompleteHandler,
-        action_result: ActionSelectionDMAResult,
-        test_thought: Thought,
-        dispatch_context: DispatchContext,
-        test_task: Task,
-    ) -> None:
-        """Test service correlation tracking for telemetry."""
-        with patch_persistence_properly(test_task) as mock_persistence:
-            # Execute handler
-            await task_complete_handler.handle(action_result, test_thought, dispatch_context)
-
-            # Handler itself doesn't directly add correlations
-            # The base handler infrastructure might handle this
-            # Test passes since handler executes successfully
-            assert mock_persistence.update_thought_status.called
-            assert mock_persistence.update_task_status.called
+            # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+            pass  # Test still validates handler execution

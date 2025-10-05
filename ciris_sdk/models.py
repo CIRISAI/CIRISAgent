@@ -40,7 +40,7 @@ class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
     type: str = Field(..., description="Type of node")
     scope: str = Field(..., description="Scope of the node")
-    attributes: Union[BaseAttributes, MemoryAttributes, ConfigAttributes, TelemetryAttributes, dict] = Field(
+    attributes: Union[BaseAttributes, MemoryAttributes, ConfigAttributes, TelemetryAttributes, Dict[str, Any]] = Field(
         ..., description="Node attributes"
     )
     version: int = Field(default=1, ge=1, description="Version number")
@@ -50,7 +50,7 @@ class GraphNode(BaseModel):
     model_config = ConfigDict()
 
     @field_serializer("updated_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 

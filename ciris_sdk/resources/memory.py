@@ -168,7 +168,9 @@ class MemoryResource:
             )
 
         # Last resort - try direct mapping
-        return MemoryStoreResponse(**result)
+        if isinstance(result, dict):
+            return MemoryStoreResponse(**result)
+        raise ValueError(f"Unexpected result format from API")
 
     async def query(
         self,
@@ -292,8 +294,10 @@ class MemoryResource:
             response = MemoryQueryResponse(
                 nodes=[GraphNode(**node) for node in result], cursor=None, has_more=False, total_matches=len(result)
             )
-        else:
+        elif isinstance(result, dict):
             response = MemoryQueryResponse(**result)
+        else:
+            raise ValueError(f"Unexpected result format from API")
 
         # For backward compatibility, if called with positional query arg, return just the nodes
         if query is not None:
@@ -313,7 +317,7 @@ class MemoryResource:
         limit: int = 50,
         include_edges: bool = False,
         depth: int = 1,
-    ) -> PageIterator[Dict[str, Any]]:
+    ) -> PageIterator[GraphNode]:
         """
         Iterate over all query results with automatic pagination.
 
@@ -331,7 +335,7 @@ class MemoryResource:
             async for node in client.memory.query_iter(type="CONCEPT"):
                 print(f"Found: {node['id']}")
         """
-        params = {
+        params: Dict[str, Any] = {
             "type": type,
             "tags": tags,
             "since": since.isoformat() if since else None,
@@ -347,9 +351,7 @@ class MemoryResource:
         # Remove None values
         params = {k: v for k, v in params.items() if v is not None}
 
-        return PageIterator(
-            fetch_func=self.query, initial_params=params, item_class=dict  # Using dict since GraphNode is just a dict
-        )
+        return PageIterator(fetch_func=self.query, initial_params=params, item_class=GraphNode)
 
     async def forget(self, node_id: str) -> MemoryStoreResponse:
         """
@@ -364,7 +366,9 @@ class MemoryResource:
             MemoryStoreResponse with success status
         """
         result = await self._transport.request("DELETE", f"/v1/memory/{node_id}")
-        return MemoryStoreResponse(**result)
+        if isinstance(result, dict):
+            return MemoryStoreResponse(**result)
+        raise ValueError(f"Unexpected result format from API")
 
     async def get_node(self, node_id: str) -> GraphNode:
         """
@@ -380,7 +384,9 @@ class MemoryResource:
             GraphNode object
         """
         result = await self._transport.request("GET", f"/v1/memory/{node_id}")
-        return GraphNode(**result)
+        if isinstance(result, dict):
+            return GraphNode(**result)
+        raise ValueError(f"Unexpected result format from API")
 
     async def recall(self, node_id: str) -> GraphNode:
         """
@@ -428,7 +434,7 @@ class MemoryResource:
             for bucket in timeline.buckets:
                 print(f"{bucket['time']}: {bucket['count']} memories")
         """
-        params = {"hours": str(hours), "bucket_size": bucket_size}
+        params: Dict[str, str] = {"hours": str(hours), "bucket_size": bucket_size}
         if scope:
             params["scope"] = scope
         if type:
@@ -437,7 +443,9 @@ class MemoryResource:
             params["limit"] = str(limit)
 
         result = await self._transport.request("GET", "/v1/memory/timeline", params=params)
-        return TimelineResponse(**result)
+        if isinstance(result, dict):
+            return TimelineResponse(**result)
+        raise ValueError(f"Unexpected result format from API")
 
     async def timeline(self, hours: int = 24, limit: int = 20) -> TimelineResponse:
         """
@@ -468,6 +476,8 @@ class MemoryResource:
             List of GraphNode objects
         """
         response = await self.query(type=node_type, limit=limit)
+        if isinstance(response, list):
+            return response
         return response.nodes
 
     async def query_by_tags(self, tags: List[str], limit: int = 20) -> List[GraphNode]:
@@ -484,6 +494,8 @@ class MemoryResource:
             List of GraphNode objects
         """
         response = await self.query(tags=tags, limit=limit)
+        if isinstance(response, list):
+            return response
         return response.nodes
 
     async def query_recent(self, hours: int = 24, type: Optional[str] = None) -> List[GraphNode]:
@@ -501,6 +513,8 @@ class MemoryResource:
         """
         since = datetime.now() - timedelta(hours=hours)
         response = await self.query(type=type, since=since, limit=100)
+        if isinstance(response, list):
+            return response
         return response.nodes
 
     async def find_related(self, node_id: str, depth: int = 2) -> List[GraphNode]:
@@ -515,6 +529,8 @@ class MemoryResource:
             List of related GraphNode objects
         """
         response = await self.query(related_to=node_id, depth=depth, include_edges=True)
+        if isinstance(response, list):
+            return response
         return response.nodes
 
     async def visualize(
@@ -559,7 +575,7 @@ class MemoryResource:
                 layout="hierarchy"
             )
         """
-        params = {"hours": hours, "layout": layout, "width": width, "height": height}
+        params: Dict[str, Union[str, int]] = {"hours": hours, "layout": layout, "width": width, "height": height}
 
         if scope:
             params["scope"] = scope
@@ -574,4 +590,6 @@ class MemoryResource:
         # If transport returns bytes, decode to string
         if isinstance(result, bytes):
             return result.decode("utf-8")
-        return result
+        if isinstance(result, str):
+            return result
+        raise ValueError(f"Unexpected result format from API")

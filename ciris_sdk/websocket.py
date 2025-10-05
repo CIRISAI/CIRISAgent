@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 import backoff
 import websockets
+from websockets.asyncio.client import ClientConnection
 from websockets.exceptions import WebSocketException
 
 from .auth_store import AuthStore
@@ -123,16 +124,16 @@ class WebSocketClient:
         self.reconnect = reconnect
         self.heartbeat_interval = heartbeat_interval
 
-        self._websocket = None
+        self._websocket: Optional[ClientConnection] = None
         self._state = ConnectionState.DISCONNECTED
-        self._event_handlers: Dict[str, List[Callable]] = {}
+        self._event_handlers: Dict[str, List[Callable[..., Any]]] = {}
         self._running = False
-        self._tasks: Set[asyncio.Task] = set()
+        self._tasks: Set[asyncio.Task[Any]] = set()
 
         # Connection stats
-        self._connected_at = None
+        self._connected_at: Optional[datetime] = None
         self._reconnect_count = 0
-        self._last_heartbeat = None
+        self._last_heartbeat: Optional[datetime] = None
 
     @property
     def state(self) -> ConnectionState:
@@ -144,7 +145,7 @@ class WebSocketClient:
         """Check if currently connected."""
         return self._state == ConnectionState.CONNECTED
 
-    def on(self, event: str, handler: Callable) -> None:
+    def on(self, event: str, handler: Callable[..., Any]) -> None:
         """
         Register event handler.
 
@@ -156,7 +157,7 @@ class WebSocketClient:
             self._event_handlers[event] = []
         self._event_handlers[event].append(handler)
 
-    def off(self, event: str, handler: Callable) -> None:
+    def off(self, event: str, handler: Callable[..., Any]) -> None:
         """
         Unregister event handler.
 
@@ -167,7 +168,7 @@ class WebSocketClient:
         if event in self._event_handlers:
             self._event_handlers[event].remove(handler)
 
-    async def _emit(self, event: str, *args, **kwargs) -> None:
+    async def _emit(self, event: str, *args: Any, **kwargs: Any) -> None:
         """Emit event to all registered handlers."""
         for handler in self._event_handlers.get(event, []):
             try:
@@ -229,6 +230,10 @@ class WebSocketClient:
 
     async def _receive_loop(self) -> None:
         """Main message receive loop."""
+        if not self._websocket:
+            logger.error("Cannot start receive loop: WebSocket not connected")
+            return
+
         try:
             async for message in self._websocket:
                 try:
@@ -329,7 +334,7 @@ class WebSocketClient:
         Args:
             data: Message data to send
         """
-        if not self.is_connected:
+        if not self.is_connected or not self._websocket:
             raise CIRISConnectionError("WebSocket not connected")
 
         message = json.dumps(data)

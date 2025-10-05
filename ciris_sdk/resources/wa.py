@@ -53,13 +53,14 @@ class WiseAuthorityResource:
         Returns:
             Dict containing deferrals list, cursor, and pagination info
         """
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
         if status:
             params["status"] = status
         if cursor:
             params["cursor"] = cursor
 
         data = await self._transport.request("GET", "/v1/wa/deferrals", params=params)
+        assert data is not None
         return data
 
     async def resolve_deferral(
@@ -76,13 +77,14 @@ class WiseAuthorityResource:
         Returns:
             Dict containing the resolved deferral details
         """
-        payload = {"resolution": resolution}
+        payload: Dict[str, Any] = {"resolution": resolution}
         if guidance:
             payload["guidance"] = guidance
         if reasoning:
             payload["reasoning"] = reasoning
 
         data = await self._transport.request("POST", f"/v1/wa/deferrals/{deferral_id}/resolve", json=payload)
+        assert data is not None
         return data
 
     async def get_permissions(
@@ -98,13 +100,14 @@ class WiseAuthorityResource:
         Returns:
             Dict containing permissions list
         """
-        params = {"active_only": active_only}
+        params: Dict[str, Any] = {"active_only": active_only}
         if resource_type:
             params["resource_type"] = resource_type
         if permission_type:
             params["permission_type"] = permission_type
 
         data = await self._transport.request("GET", "/v1/wa/permissions", params=params)
+        assert data is not None
         return data
 
     # Helper methods for common operations
@@ -112,7 +115,8 @@ class WiseAuthorityResource:
     async def get_pending_deferrals(self) -> List[Dict[str, Any]]:
         """Get all pending deferrals."""
         result = await self.get_deferrals(status="pending")
-        return result.get("deferrals", [])
+        deferrals: List[Dict[str, Any]] = result.get("deferrals", [])
+        return deferrals
 
     async def approve_deferral(self, deferral_id: str, guidance: Optional[str] = None) -> Dict[str, Any]:
         """Approve a deferral with optional guidance."""
@@ -132,13 +136,15 @@ class WiseAuthorityResource:
     async def status(self) -> WAStatus:
         """Get WA service status."""
         data = await self._transport.request("GET", "/v1/wa/status")
+        assert data is not None
         return WAStatus(**data)
 
     async def guidance(self, topic: str, context: Optional[str] = None) -> WAGuidance:
         """Request guidance from WA."""
-        payload = {"topic": topic}
+        payload: Dict[str, Any] = {"topic": topic}
         if context:
             payload["context"] = context
 
         data = await self._transport.request("POST", "/v1/wa/guidance", json=payload)
+        assert data is not None
         return WAGuidance(**data)

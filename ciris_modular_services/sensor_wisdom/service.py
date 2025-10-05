@@ -26,6 +26,7 @@ from ciris_engine.schemas.services.authority_core import (
     WisdomAdvice,
 )
 from ciris_engine.schemas.services.context import GuidanceContext
+from ciris_engine.schemas.services.core import ServiceCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class SensorWisdomAdapter(WiseAuthorityService):
         "symptom",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the sensor wisdom adapter."""
         # Home Assistant configuration from environment
         self.ha_url = os.getenv("CIRIS_HOMEASSISTANT_URL", "http://homeassistant.local:8123")
@@ -72,28 +73,33 @@ class SensorWisdomAdapter(WiseAuthorityService):
         self.ha_url = self.ha_url.rstrip("/")
 
         # Cache for entity states
-        self._entity_cache: Dict[str, Dict] = {}
+        self._entity_cache: Dict[str, Dict[str, Any]] = {}
         self._cache_timestamp: Optional[datetime] = None
         self._cache_ttl = 30  # seconds
 
         logger.info(f"SensorWisdomAdapter initialized for {self.ha_url}")
 
-    def get_capabilities(self) -> SimpleNamespace:
+    def get_capabilities(self) -> ServiceCapabilities:
         """Return adapter capabilities."""
-        return SimpleNamespace(
+        return ServiceCapabilities(
+            service_name="sensor_wisdom",
             actions=["get_guidance", "fetch_guidance"],
-            capabilities=[
-                "modality:sensor:environmental",
-                "modality:sensor:motion",
-                "modality:sensor:temperature",
-                "modality:sensor:humidity",
-                "modality:sensor:air_quality",
-                "modality:sensor:energy",
-                "domain:home_automation",
-            ],
+            version="1.0.0",
+            dependencies=[],
+            metadata={
+                "capabilities": [
+                    "modality:sensor:environmental",
+                    "modality:sensor:motion",
+                    "modality:sensor:temperature",
+                    "modality:sensor:humidity",
+                    "modality:sensor:air_quality",
+                    "modality:sensor:energy",
+                    "domain:home_automation",
+                ]
+            },
         )
 
-    def _is_medical_sensor(self, sensor_type: str, entity_id: str, attributes: Dict) -> bool:
+    def _is_medical_sensor(self, sensor_type: str, entity_id: str, attributes: Dict[str, Any]) -> bool:  # noqa: ARG002
         """Check if a sensor might be medical/health related."""
         # Check entity ID
         entity_lower = entity_id.lower()
@@ -115,7 +121,7 @@ class SensorWisdomAdapter(WiseAuthorityService):
 
         return False
 
-    async def _get_ha_entities(self) -> Optional[List[Dict]]:
+    async def _get_ha_entities(self) -> Optional[List[Dict[str, Any]]]:
         """Get all entities from Home Assistant."""
         if not self.ha_token:
             return None
@@ -158,13 +164,13 @@ class SensorWisdomAdapter(WiseAuthorityService):
 
         return None
 
-    async def _get_sensor_data(self, sensor_type: Optional[str] = None) -> Dict[str, Any]:
+    async def _get_sensor_data(self, sensor_type: Optional[str] = None) -> Dict[str, Any]:  # noqa: ARG002
         """Get sensor data by type."""
         entities = await self._get_ha_entities()
         if not entities:
             return {}
 
-        sensor_data = {
+        sensor_data: Dict[str, Any] = {
             "temperature": [],
             "humidity": [],
             "motion": [],
@@ -433,19 +439,15 @@ class SensorWisdomAdapter(WiseAuthorityService):
 
     async def fetch_guidance(self, context: GuidanceContext) -> Optional[str]:
         """Legacy compatibility method."""
-        request = GuidanceRequest(context=context.question, options=context.options, urgency="normal")
+        request = GuidanceRequest(context=context.question, options={}, urgency="normal")
 
         response = await self.get_guidance(request)
         return response.custom_guidance or response.reasoning
 
-    async def send_deferral(self, request: DeferralRequest) -> DeferralResponse:
+    async def send_deferral(self, request: DeferralRequest) -> str:
         """Sensor services don't handle deferrals."""
-        return DeferralResponse(
-            approved=False,
-            reason="Sensor services do not handle deferrals",
-            wa_id="sensor_wisdom",
-            signature="sensor_sig",
-        )
+        # Protocol expects str return type
+        return "sensor_wisdom_not_supported"
 
     async def trigger_automation(self, entity_id: str, action: str) -> bool:
         """

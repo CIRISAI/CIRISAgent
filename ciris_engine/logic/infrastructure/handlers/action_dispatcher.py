@@ -85,7 +85,7 @@ class ActionDispatcher:
         dispatch_context: DispatchContext,  # Context from the caller (e.g., channel_id, author_name, services)
         # Services are now expected to be part of ActionHandlerDependencies,
         # but dispatch_context can still carry event-specific data.
-    ) -> None:
+    ) -> "ActionResponse":  # type: ignore[name-defined]
         """
         Dispatches the selected action to its registered handler.
         The handler is responsible for executing the action, updating thought status,
@@ -113,35 +113,21 @@ class ActionDispatcher:
                 if inspect.iscoroutine(should_skip):
                     should_skip = await should_skip
                 if should_skip:
-                    logger.info(
-                        f"ActionDispatcher: action {action_type.value} for thought {thought.thought_id} skipped by filter"
+                    raise RuntimeError(
+                        f"Action {action_type.value} for thought {thought.thought_id} was filtered. "
+                        f"This should not happen - action_filter configuration error."
                     )
-                    return
             except Exception as filter_ex:
                 logger.error(f"Action filter error for action {action_type.value}: {filter_ex}")
 
         handler_instance = self.handlers.get(action_type)
 
         if not handler_instance:
-            logger.error(
-                f"No handler registered for action type: {action_type.value}. Thought ID: {thought.thought_id}"
+            raise RuntimeError(
+                f"No handler registered for action type: {action_type.value}. "
+                f"This is a critical configuration error - all 10 HandlerActionType values MUST have handlers. "
+                f"Registered handlers: {list(self.handlers.keys())}"
             )
-            # Fallback: Mark thought as FAILED
-            try:
-                persistence.update_thought_status(
-                    thought_id=thought.thought_id,
-                    status=ThoughtStatus.FAILED,
-                    final_action={
-                        "error": f"No handler for action {action_type.value}",
-                        "original_result": action_selection_result,
-                    },
-                )
-                # Consider creating a follow-up error thought here if handlers normally do
-            except Exception as e_persist:
-                logger.error(
-                    f"Failed to update thought {thought.thought_id} to FAILED after no handler found: {e_persist}"
-                )
-            return
 
         logger.info(
             f"Dispatching action {action_type.value} for thought {thought.thought_id} to handler {handler_instance.__class__.__name__}"
@@ -152,10 +138,41 @@ class ActionDispatcher:
         if dependencies and hasattr(dependencies, "wait_registry_ready"):
             ready = await dependencies.wait_registry_ready(timeout=getattr(dispatch_context, "registry_timeout", 30.0))
             if not ready:
-                logger.error(
-                    f"Service registry not ready for handler {handler_instance.__class__.__name__}; action aborted"
+                # Service registry not ready - create failure audit and response
+                from ciris_engine.schemas.runtime.audit import AuditActionContext
+                from ciris_engine.schemas.services.runtime_control import ActionResponse
+
+                if not self.audit_service:
+                    raise RuntimeError(
+                        f"Audit service not available for registry timeout on action {action_type.value}. "
+                        f"All actions MUST be audited for production integrity."
+                    )
+
+                audit_context = AuditActionContext(
+                    thought_id=thought.thought_id,
+                    task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
+                    handler_name=handler_instance.__class__.__name__,
+                    parameters={
+                        "error": "Service registry not ready",
+                        "timeout": getattr(dispatch_context, "registry_timeout", 30.0),
+                    },
                 )
-                return
+                audit_result = await self.audit_service.log_action(
+                    action_type=action_type, context=audit_context, outcome="error:RegistryNotReady"
+                )
+                logger.error(
+                    f"Service registry not ready for handler {handler_instance.__class__.__name__}; action aborted. "
+                    f"Created audit entry {audit_result.entry_id}"
+                )
+
+                return ActionResponse(
+                    success=False,
+                    handler=handler_instance.__class__.__name__,
+                    action_type=action_type.value,
+                    follow_up_thought_id=None,
+                    execution_time_ms=0.0,
+                    audit_data=audit_result,
+                )
         # Logging handled by logger.info above
 
         # Create a ProcessingQueueItem for step streaming
@@ -168,6 +185,9 @@ class ActionDispatcher:
             action_selection_result,
             dispatch_context.model_dump() if hasattr(dispatch_context, "model_dump") else {},
         )
+
+        # Capture start time for execution timing
+        start_time = self._time_service.now()
 
         try:
             # Record handler invocation as HOT PATH
@@ -196,38 +216,40 @@ class ActionDispatcher:
             # Pass the final_action_result (ActionSelectionDMAResult) to the handler
             follow_up_thought_id = await handler_instance.handle(final_action_result, thought, dispatch_context)
 
-            # Create centralized audit entry for this action completion
-            audit_result = None
-            if self.audit_service:
-                try:
-                    from ciris_engine.schemas.audit.core import AuditEventType
+            # Calculate execution time in milliseconds
+            end_time = self._time_service.now()
+            execution_time_ms = (end_time - start_time).total_seconds() * 1000.0
 
-                    audit_result = await self.audit_service.log_event(
-                        event_type=str(AuditEventType(f"handler_action_{action_type.value}")),
-                        event_data={
-                            "handler_name": handler_instance.__class__.__name__,
-                            "thought_id": thought.thought_id,
-                            "task_id": dispatch_context.task_id if hasattr(dispatch_context, "task_id") else None,
-                            "action": action_type.value,
-                            "outcome": "success",
-                            "follow_up_thought_id": follow_up_thought_id,
-                        },
-                    )
-                    logger.info(f"Created audit entry {audit_result.entry_id} for action {action_type.value}")
-                except Exception as audit_error:
-                    logger.error(f"Failed to create audit entry for action {action_type.value}: {audit_error}")
+            # Create centralized audit entry for this action completion (REQUIRED)
+            from ciris_engine.schemas.runtime.audit import AuditActionContext
+            from ciris_engine.schemas.services.runtime_control import ActionResponse
 
-            # Step 10: ACTION_COMPLETE - Signal that action execution is complete
-            dispatch_result = {
-                "follow_up_thought_id": follow_up_thought_id,
-                "action_type": action_type.value,
-                "handler": handler_instance.__class__.__name__,
-                "success": True,
-                "audit_entry_id": audit_result.entry_id if audit_result else None,
-                "audit_sequence_number": audit_result.sequence_number if audit_result else None,
-                "audit_entry_hash": audit_result.entry_hash if audit_result else None,
-                "audit_signature": audit_result.signature if audit_result else None,
-            }
+            if not self.audit_service:
+                raise RuntimeError(
+                    f"Audit service not available for action {action_type.value}. "
+                    f"All actions MUST be audited for production integrity."
+                )
+
+            audit_context = AuditActionContext(
+                thought_id=thought.thought_id,
+                task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
+                handler_name=handler_instance.__class__.__name__,
+                parameters={"follow_up_thought_id": follow_up_thought_id} if follow_up_thought_id else {},
+            )
+            audit_result = await self.audit_service.log_action(
+                action_type=action_type, context=audit_context, outcome="success"
+            )
+            logger.info(f"Created audit entry {audit_result.entry_id} for action {action_type.value}")
+
+            # Step 10: ACTION_COMPLETE - Create typed ActionResponse
+            dispatch_result = ActionResponse(
+                success=True,
+                handler=handler_instance.__class__.__name__,
+                action_type=action_type.value,
+                follow_up_thought_id=follow_up_thought_id,
+                execution_time_ms=execution_time_ms,
+                audit_data=audit_result,
+            )
             await self._action_complete_step(thought_item, dispatch_result)
 
             # Log completion with follow-up thought ID if available
@@ -243,44 +265,49 @@ class ActionDispatcher:
             if self.telemetry_service:
                 await self.telemetry_service.record_metric(f"handler_completed_{action_type.value}")
                 await self.telemetry_service.record_metric("handler_completed_total")
+
+            # Return the success ActionResponse
+            return dispatch_result
+
         except Exception as e:
+            # Calculate execution time even for errors
+            end_time = self._time_service.now()
+            execution_time_ms = (end_time - start_time).total_seconds() * 1000.0
+
             logger.exception(
                 f"Error executing handler {handler_instance.__class__.__name__} for action {action_type.value} on thought {thought.thought_id}: {e}"
             )
 
-            # Create centralized audit entry for failed action
-            audit_result = None
-            if self.audit_service:
-                try:
-                    from ciris_engine.schemas.audit.core import AuditEventType
+            # Create centralized audit entry for failed action (REQUIRED)
+            from ciris_engine.schemas.runtime.audit import AuditActionContext
+            from ciris_engine.schemas.services.runtime_control import ActionResponse
 
-                    audit_result = await self.audit_service.log_event(
-                        event_type=str(AuditEventType(f"handler_action_{action_type.value}")),
-                        event_data={
-                            "handler_name": handler_instance.__class__.__name__,
-                            "thought_id": thought.thought_id,
-                            "task_id": dispatch_context.task_id if hasattr(dispatch_context, "task_id") else None,
-                            "action": action_type.value,
-                            "outcome": f"error:{type(e).__name__}",
-                            "error": str(e),
-                        },
-                    )
-                    logger.info(f"Created audit entry {audit_result.entry_id} for failed action {action_type.value}")
-                except Exception as audit_error:
-                    logger.error(f"Failed to create audit entry for failed action {action_type.value}: {audit_error}")
+            if not self.audit_service:
+                raise RuntimeError(
+                    f"Audit service not available for failed action {action_type.value}. "
+                    f"All actions MUST be audited, especially failures."
+                )
 
-            # Step 10: ACTION_COMPLETE - Signal that action execution failed
-            dispatch_result = {
-                "follow_up_thought_id": None,
-                "action_type": action_type.value,
-                "handler": handler_instance.__class__.__name__,
-                "success": False,
-                "error": str(e),
-                "audit_entry_id": audit_result.entry_id if audit_result else None,
-                "audit_sequence_number": audit_result.sequence_number if audit_result else None,
-                "audit_entry_hash": audit_result.entry_hash if audit_result else None,
-                "audit_signature": audit_result.signature if audit_result else None,
-            }
+            audit_context = AuditActionContext(
+                thought_id=thought.thought_id,
+                task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
+                handler_name=handler_instance.__class__.__name__,
+                parameters={"error": str(e), "error_type": type(e).__name__},
+            )
+            audit_result = await self.audit_service.log_action(
+                action_type=action_type, context=audit_context, outcome=f"error:{type(e).__name__}"
+            )
+            logger.info(f"Created audit entry {audit_result.entry_id} for failed action {action_type.value}")
+
+            # Step 10: ACTION_COMPLETE - Create typed ActionResponse for failure
+            dispatch_result = ActionResponse(
+                success=False,
+                handler=handler_instance.__class__.__name__,
+                action_type=action_type.value,
+                follow_up_thought_id=None,
+                execution_time_ms=execution_time_ms,
+                audit_data=audit_result,
+            )
             await self._action_complete_step(thought_item, dispatch_result)
 
             # Record handler error
@@ -300,3 +327,6 @@ class ActionDispatcher:
                 logger.error(
                     f"Failed to update thought {thought.thought_id} to FAILED after handler exception: {e_persist}"
                 )
+
+            # Return the failure ActionResponse
+            return dispatch_result

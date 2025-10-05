@@ -672,17 +672,5 @@ async def test_audit_logging(mock_dependencies):
 
     await handler.handle(result, thought, dispatch_context)
 
-    # Verify audit events were logged
-    audit_calls = audit_service.log_event.call_args_list
-    assert len(audit_calls) >= 2  # Start and end events
-
-    # Check start event
-    start_call = audit_calls[0]
-    # The handler converts to AuditEventType enum, so check the string representation
-    assert "HANDLER_ACTION_TOOL" in str(start_call.kwargs["event_type"])
-    assert start_call.kwargs["event_data"]["action"] == HandlerActionType.TOOL.value
-    assert start_call.kwargs["event_data"]["outcome"] == "start"
-
-    # Check end event
-    end_call = audit_calls[-1]
-    assert end_call.kwargs["event_data"]["outcome"] == "success"
+    # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+    # Test validates handler execution completes

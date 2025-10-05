@@ -32,7 +32,7 @@ class RateLimiter:
             requests_per_minute: Sustained request rate (default: 60)
             burst_size: Maximum burst size (default: same as rate)
         """
-        self.rate = requests_per_minute
+        self.rate: float = float(requests_per_minute)
         self.burst_size = burst_size or requests_per_minute
         self.tokens = float(self.burst_size)
         self.last_update = time.monotonic()
@@ -89,6 +89,10 @@ class RateLimiter:
         if not all([limit, remaining]):
             return
 
+        # Type narrowing - we know limit and remaining are not None
+        assert limit is not None
+        assert remaining is not None
+
         try:
             limit_val = int(limit)
             remaining_val = int(remaining)
@@ -140,7 +144,7 @@ class AdaptiveRateLimiter(RateLimiter):
         # Adaptation parameters
         self.success_count = 0
         self.error_count = 0
-        self.last_429 = None
+        self.last_429: Optional[datetime] = None
         self.increase_threshold = 100  # Successes before increasing
         self.decrease_factor = 0.5  # Reduce by 50% on 429
         self.increase_factor = 1.1  # Increase by 10% on success

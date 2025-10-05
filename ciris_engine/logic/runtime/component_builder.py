@@ -304,4 +304,5 @@ class ComponentBuilder:
             max_rounds=10,  # Default max rounds, can be configured via limits
             telemetry_service=self.runtime.telemetry_service,
             secrets_service=dependencies.secrets_service,
+            audit_service=self.runtime.audit_service,
         )

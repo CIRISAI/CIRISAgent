@@ -60,7 +60,7 @@ def set_mock_config(**kwargs: Any) -> None:
             setattr(_mock_config, key, value)
 
 
-def extract_context_from_messages(messages: List[dict]) -> List[str]:
+def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     """Extract context information from messages using regex patterns."""
     context_items = []
 
@@ -200,7 +200,7 @@ def extract_context_from_messages(messages: List[dict]) -> List[str]:
     return context_items
 
 
-def _attach_extras(obj: Any):
+def _attach_extras(obj: Any) -> Any:
     """Mimic instructor extra attributes expected on responses.
 
     For structured responses, we return the object directly as instructor
@@ -217,7 +217,7 @@ def _attach_extras(obj: Any):
     try:
         if isinstance(obj, SimpleNamespace):
             # Convert SimpleNamespace to dict recursively
-            def namespace_to_dict(ns):
+            def namespace_to_dict(ns: Any) -> Any:
                 if isinstance(ns, SimpleNamespace):
                     return {k: namespace_to_dict(v) for k, v in ns.__dict__.items()}
                 elif isinstance(ns, list):
@@ -398,7 +398,7 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
 }
 
 
-def create_response(response_model: Any, messages: Optional[List[dict]] = None, **kwargs: Any):
+def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> Any:
     """Create a mock LLM response with context analysis."""
     messages = messages or []
     # Extract context from messages

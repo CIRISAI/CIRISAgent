@@ -35,9 +35,7 @@ class DeferHandler(BaseActionHandler):
     ) -> Optional[str]:
         raw_params = result.action_parameters
         thought_id = thought.thought_id
-        await self._audit_log(
-            HandlerActionType.DEFER, dispatch_context.model_copy(update={"thought_id": thought_id}), outcome="start"
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         final_thought_status = ThoughtStatus.DEFERRED
         action_performed_successfully = False
@@ -173,9 +171,7 @@ class DeferHandler(BaseActionHandler):
         self.logger.info(
             f"Updated original thought {thought_id} to status {final_thought_status.value} for DEFER action. Info: {follow_up_content_key_info}"
         )
-        await self._audit_log(
-            HandlerActionType.DEFER, dispatch_context.model_copy(update={"thought_id": thought_id}), outcome="success"
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         parent_task_id = thought.source_task_id
         # Update task status to deferred - "no kings" principle

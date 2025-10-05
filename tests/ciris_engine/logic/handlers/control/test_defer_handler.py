@@ -533,23 +533,14 @@ class TestDeferHandler:
         mock_bus_manager: Mock,
         test_task: Task,
     ) -> None:
-        """Test audit logging for DEFER actions."""
+        """Test that DEFER actions complete successfully (audit logging now in action_dispatcher)."""
         with patch_persistence_properly(test_task) as mock_persistence:
             # Execute handler
             await defer_handler.handle(action_result, test_thought, dispatch_context)
 
-            # Verify audit logs were created
-            audit_calls = mock_bus_manager.audit_service.log_event.call_args_list
-            assert len(audit_calls) >= 2  # Start and completion
-
-            # Check start audit
-            start_call = audit_calls[0]
-            assert "handler_action_defer" in str(start_call[1]["event_type"]).lower()
-            assert start_call[1]["event_data"]["outcome"] == "start"
-
-            # Check completion audit
-            end_call = audit_calls[-1]
-            assert end_call[1]["event_data"]["outcome"] == "success"
+            # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
+            # Verify handler completed successfully by checking thought status update
+            assert mock_persistence.update_thought_status.called
 
     @pytest.mark.asyncio
     async def test_service_correlation_tracking(

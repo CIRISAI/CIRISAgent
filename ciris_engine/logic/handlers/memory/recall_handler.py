@@ -21,7 +21,7 @@ class RecallHandler(BaseActionHandler):
     ) -> Optional[str]:
         raw_params = result.action_parameters
         thought_id = thought.thought_id
-        await self._audit_log(HandlerActionType.RECALL, dispatch_context, outcome="start")
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
         try:
             params: RecallParams = self._validate_and_convert_params(raw_params, RecallParams)
         except Exception as e:
@@ -187,9 +187,5 @@ class RecallHandler(BaseActionHandler):
             thought=thought, follow_up_content=follow_up_content, action_result=result
         )
 
-        await self._audit_log(
-            HandlerActionType.RECALL,
-            dispatch_context,
-            outcome="success" if success else "failed",
-        )
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
         return follow_up_id

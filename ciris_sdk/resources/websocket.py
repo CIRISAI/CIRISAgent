@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Optio
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from typing import Any as WebSocketClientProtocol
+    from websockets.asyncio.client import ClientConnection as WebSocketClientProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -135,11 +135,11 @@ class WebSocketResource:
 
         self.state = WebSocketState.DISCONNECTED
         self.ws: Optional["WebSocketClientProtocol"] = None
-        self._message_queue: asyncio.Queue = asyncio.Queue(maxsize=message_buffer_size)
+        self._message_queue: asyncio.Queue[WebSocketMessage] = asyncio.Queue(maxsize=message_buffer_size)
         self._reconnect_attempts = 0
         self._last_sequence = 0
         self._subscriptions: Dict[str, ChannelFilter] = {}
-        self._tasks: List[asyncio.Task] = []
+        self._tasks: List[asyncio.Task[Any]] = []
 
     async def __aenter__(self) -> "WebSocketResource":
         await self.connect()
@@ -222,7 +222,7 @@ class WebSocketResource:
             else:
                 channel_filters[channel] = {}
 
-        request = SubscribeRequest(channels=channel_filters)  # type: ignore[arg-type]
+        request = SubscribeRequest(channels=channel_filters)
 
         # Send subscription
         if self.ws:
@@ -293,7 +293,12 @@ class WebSocketResource:
             if self.ws:
                 async for message in self.ws:
                     try:
-                        data = json.loads(message)
+                        # Decode bytes if necessary
+                        if isinstance(message, bytes):
+                            message_str = message.decode("utf-8")
+                        else:
+                            message_str = message
+                        data = json.loads(message_str)
 
                         # Handle different message types
                         if data.get("type") == "error":
@@ -328,7 +333,9 @@ class WebSocketResource:
                                 pass
 
                     except json.JSONDecodeError:
-                        logger.error(f"Invalid JSON received: {message}")
+                        # Use message_str (already decoded) instead of message (might be bytes)
+                        msg_preview = message_str[:100] if len(message_str) > 100 else message_str
+                        logger.error(f"Invalid JSON received: {msg_preview}")
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
 

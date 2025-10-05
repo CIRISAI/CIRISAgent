@@ -20,7 +20,7 @@ class RejectHandler(BaseActionHandler):
         raw_params = result.action_parameters
         thought_id = thought.thought_id
         parent_task_id = thought.source_task_id
-        await self._audit_log(HandlerActionType.REJECT, dispatch_context, outcome="start")
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
         original_event_channel_id = extract_channel_id(dispatch_context.channel_context)
 
         final_thought_status = ThoughtStatus.FAILED
@@ -31,7 +31,7 @@ class RejectHandler(BaseActionHandler):
             params: RejectParams = self._validate_and_convert_params(raw_params, RejectParams)
         except Exception as e:
             await self._handle_error(HandlerActionType.REJECT, dispatch_context, thought_id, e)
-            await self._audit_log(HandlerActionType.REJECT, dispatch_context, outcome="failed")
+            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
             persistence.update_thought_status(
                 thought_id=thought_id,
                 status=final_thought_status,
@@ -63,7 +63,7 @@ class RejectHandler(BaseActionHandler):
 
         # REJECT is a terminal action - no follow-up thoughts should be created
         self.logger.info(f"REJECT action completed for thought {thought_id}. This is a terminal action.")
-        await self._audit_log(HandlerActionType.REJECT, dispatch_context, outcome="success")
+        # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         return None
 

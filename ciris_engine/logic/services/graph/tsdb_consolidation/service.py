@@ -617,6 +617,95 @@ class TSDBConsolidationService(BaseGraphService):
 
         return summaries_created
 
+    def _get_consolidator_edges_for_summary(
+        self,
+        summary: GraphNode,
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+        tasks: List[TaskCorrelationData],
+        period_start: datetime,
+    ) -> List[Any]:
+        """
+        Get edges from the appropriate consolidator based on summary type.
+
+        Args:
+            summary: Summary node
+            nodes_by_type: All nodes in the period by type
+            correlations: All correlations in the period by type
+            tasks: All tasks in the period
+            period_start: Start of the period
+
+        Returns:
+            List of edges from the consolidator
+        """
+        if summary.type == NodeType.TSDB_SUMMARY:
+            tsdb_nodes = nodes_by_type.get(
+                "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
+            ).nodes
+            metric_correlations_raw = correlations.get("metric_datapoint", [])
+            metric_correlations = [c for c in metric_correlations_raw if isinstance(c, MetricCorrelationData)]
+            return self._metrics_consolidator.get_edges(summary, tsdb_nodes, metric_correlations)
+
+        elif summary.type == NodeType.CONVERSATION_SUMMARY:
+            service_interactions_raw = correlations.get("service_interaction", [])
+            service_interactions = [c for c in service_interactions_raw if isinstance(c, ServiceInteractionData)]
+            return self._conversation_consolidator.get_edges(summary, service_interactions)
+
+        elif summary.type == NodeType.TRACE_SUMMARY:
+            trace_spans_raw = correlations.get("trace_span", [])
+            trace_spans = [c for c in trace_spans_raw if isinstance(c, TraceSpanData)]
+            return self._trace_consolidator.get_edges(summary, trace_spans)
+
+        elif summary.type == NodeType.AUDIT_SUMMARY:
+            audit_nodes = nodes_by_type.get(
+                "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
+            ).nodes
+            return self._audit_consolidator.get_edges(summary, audit_nodes)
+
+        elif summary.type == NodeType.TASK_SUMMARY:
+            return self._task_consolidator.get_edges(summary, tasks)
+
+        return []
+
+    async def _create_daily_summary_edges(
+        self,
+        summaries: List[GraphNode],
+        day: datetime,
+    ) -> None:
+        """
+        Create edges between daily summaries for the same day.
+
+        This method creates:
+        1. Cross-type edges (e.g., TSDB->Audit, Task->Trace) within the same day
+        2. Temporal edges to previous day's summaries
+
+        Args:
+            summaries: List of daily summary nodes
+            day: The date for these summaries
+        """
+        if not summaries:
+            return
+
+        # Create cross-summary edges for same day
+        if len(summaries) > 1:
+            edges_created = self._edge_manager.create_cross_summary_edges(summaries, day)
+            logger.info(f"Created {edges_created} same-day edges for {day.date()}")
+
+        # Create temporal edges to previous day for each summary
+        for summary in summaries:
+            # Extract summary type from ID (e.g., "tsdb_summary_daily_20250715" -> "tsdb_summary")
+            parts = summary.id.split("_")
+            if len(parts) >= 3 and parts[2] == "daily":
+                summary_type = f"{parts[0]}_{parts[1]}"
+                # Previous day
+                previous_day = day - timedelta(days=1)
+                previous_id = f"{summary_type}_daily_{previous_day.strftime('%Y%m%d')}"
+
+                # Create temporal edges
+                created = self._edge_manager.create_temporal_edges(summary, previous_id)
+                if created:
+                    logger.debug(f"Created {created} temporal edges from {summary.id} to {previous_id}")
+
     async def _create_all_edges(
         self,
         summaries: List[GraphNode],
@@ -647,45 +736,8 @@ class TSDBConsolidationService(BaseGraphService):
 
         # Collect edges from each consolidator based on summary type
         for summary in summaries:
-            if summary.type == NodeType.TSDB_SUMMARY:
-                # Get edges from metrics consolidator
-                tsdb_nodes = nodes_by_type.get(
-                    "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
-                ).nodes
-                metric_correlations_raw = correlations.get("metric_datapoint", [])
-                # Cast to correct type
-                metric_correlations = [c for c in metric_correlations_raw if isinstance(c, MetricCorrelationData)]
-                edges = self._metrics_consolidator.get_edges(summary, tsdb_nodes, metric_correlations)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.CONVERSATION_SUMMARY:
-                # Get edges from conversation consolidator
-                service_interactions_raw = correlations.get("service_interaction", [])
-                # Cast to correct type
-                service_interactions = [c for c in service_interactions_raw if isinstance(c, ServiceInteractionData)]
-                edges = self._conversation_consolidator.get_edges(summary, service_interactions)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.TRACE_SUMMARY:
-                # Get edges from trace consolidator
-                trace_spans_raw = correlations.get("trace_span", [])
-                # Cast to correct type
-                trace_spans = [c for c in trace_spans_raw if isinstance(c, TraceSpanData)]
-                edges = self._trace_consolidator.get_edges(summary, trace_spans)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.AUDIT_SUMMARY:
-                # Get edges from audit consolidator
-                audit_nodes = nodes_by_type.get(
-                    "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
-                ).nodes
-                edges = self._audit_consolidator.get_edges(summary, audit_nodes)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.TASK_SUMMARY:
-                # Get edges from task consolidator
-                edges = self._task_consolidator.get_edges(summary, tasks)
-                all_edges.extend(edges)
+            edges = self._get_consolidator_edges_for_summary(summary, nodes_by_type, correlations, tasks, period_start)
+            all_edges.extend(edges)
 
         # Get memory edges (links from summaries to memory nodes)
         # Convert TSDBNodeQueryResult back to dict format for memory consolidator
@@ -801,138 +853,46 @@ class TSDBConsolidationService(BaseGraphService):
         Only graph node representations are cleaned up.
         """
         try:
-            import json
             import sqlite3
+
+            from ciris_engine.logic.config import get_sqlite_db_full_path
+            from ciris_engine.logic.services.graph.tsdb_consolidation.cleanup_helpers import (
+                cleanup_audit_summary,
+                cleanup_trace_summary,
+                cleanup_tsdb_summary,
+            )
+            from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
+                get_retention_cutoff_date,
+            )
+            from ciris_engine.logic.services.graph.tsdb_consolidation.db_query_helpers import (
+                query_expired_summaries,
+            )
 
             logger.info("Starting cleanup of consolidated graph data (audit_log untouched)")
 
             # Connect to database
-            from ciris_engine.logic.config import get_sqlite_db_full_path
-
             db_path = self.db_path or get_sqlite_db_full_path()
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
-            # Find all summaries that represent periods older than the retention period
-            retention_cutoff = self._now() - self._raw_retention
+            # Find all summaries older than retention period
+            retention_cutoff = get_retention_cutoff_date(self._now(), int(self._raw_retention.total_seconds() / 3600))
+            summaries = query_expired_summaries(cursor, retention_cutoff)
 
-            cursor.execute(
-                """
-                SELECT node_id, node_type, attributes_json
-                FROM graph_nodes
-                WHERE node_type LIKE '%_summary'
-                  AND json_extract(attributes_json, '$.period_end') < ?
-                ORDER BY json_extract(attributes_json, '$.period_end')
-            """,
-                (retention_cutoff.isoformat(),),
-            )
-
-            summaries = cursor.fetchall()
             total_deleted = 0
 
+            # Process each expired summary
             for node_id, node_type, attrs_json in summaries:
-                attrs = json.loads(attrs_json) if attrs_json else {}
-                period_start = attrs.get("period_start")
-                period_end = attrs.get("period_end")
+                deleted = 0
 
-                if not period_start or not period_end:
-                    continue
-
-                # Validate and delete based on node type
                 if node_type == "tsdb_summary":
-                    claimed_count = attrs.get("source_node_count", 0)
-
-                    # Count actual nodes
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) FROM graph_nodes
-                        WHERE node_type = 'tsdb_data'
-                          AND datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) < datetime(?)
-                    """,
-                        (period_start, period_end),
-                    )
-                    actual_count = cursor.fetchone()[0]
-
-                    if claimed_count == actual_count and actual_count > 0:
-                        # Delete the nodes
-                        cursor.execute(
-                            """
-                            DELETE FROM graph_nodes
-                            WHERE node_type = 'tsdb_data'
-                              AND datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) < datetime(?)
-                        """,
-                            (period_start, period_end),
-                        )
-                        deleted = cursor.rowcount
-                        if deleted > 0:
-                            logger.info(f"Deleted {deleted} tsdb_data nodes for period {node_id}")
-                            total_deleted += deleted
-
+                    deleted = cleanup_tsdb_summary(cursor, node_id, attrs_json)
                 elif node_type == "audit_summary":
-                    # Graph audit nodes can be cleaned up after consolidation
-                    # The SQLite audit_log table is what's preserved forever
-                    claimed_count = attrs.get("source_node_count", 0)
-
-                    # Count actual audit_entry nodes
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) FROM graph_nodes
-                        WHERE node_type = 'audit_entry'
-                          AND datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) < datetime(?)
-                    """,
-                        (period_start, period_end),
-                    )
-                    actual_count = cursor.fetchone()[0]
-
-                    if claimed_count == actual_count and actual_count > 0:
-                        # Delete the graph nodes (NOT the audit_log table!)
-                        cursor.execute(
-                            """
-                            DELETE FROM graph_nodes
-                            WHERE node_type = 'audit_entry'
-                              AND datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) < datetime(?)
-                        """,
-                            (period_start, period_end),
-                        )
-                        deleted = cursor.rowcount
-                        if deleted > 0:
-                            logger.info(
-                                f"Deleted {deleted} audit_entry graph nodes for period {node_id} (audit_log table preserved)"
-                            )
-                            total_deleted += deleted
-
+                    deleted = cleanup_audit_summary(cursor, node_id, attrs_json)
                 elif node_type == "trace_summary":
-                    claimed_count = attrs.get("source_correlation_count", 0)
+                    deleted = cleanup_trace_summary(cursor, node_id, attrs_json)
 
-                    # Count actual correlations
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) FROM service_correlations
-                        WHERE datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) < datetime(?)
-                    """,
-                        (period_start, period_end),
-                    )
-                    actual_count = cursor.fetchone()[0]
-
-                    # Only delete if counts match exactly
-                    if claimed_count == actual_count and actual_count > 0:
-                        cursor.execute(
-                            """
-                            DELETE FROM service_correlations
-                            WHERE datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) < datetime(?)
-                        """,
-                            (period_start, period_end),
-                        )
-                        deleted = cursor.rowcount
-                        if deleted > 0:
-                            logger.info(f"Deleted {deleted} correlations for period {node_id}")
-                            total_deleted += deleted
+                total_deleted += deleted
 
             # Commit changes
             if total_deleted > 0:
@@ -1315,6 +1275,26 @@ class TSDBConsolidationService(BaseGraphService):
         This reduces data volume by creating daily summaries (4 basic summaries → 1 daily summary).
         Creates 7 daily summaries for each node type.
         """
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.services.graph.tsdb_consolidation.aggregation_helpers import (
+            aggregate_action_counts,
+            aggregate_metric_stats,
+            aggregate_resource_usage,
+            group_summaries_by_day,
+            parse_summary_attributes,
+        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
+            calculate_week_period,
+        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation.extensive_helpers import (
+            check_daily_summary_exists,
+            create_daily_summary_attributes,
+            create_daily_summary_node,
+            maintain_temporal_chain_to_daily,
+            query_basic_summaries_in_period,
+        )
+        from ciris_engine.schemas.services.operations import MemoryOpStatus
+
         consolidation_start = self._now()
         total_basic_summaries = 0
         daily_summaries_created = 0
@@ -1325,31 +1305,17 @@ class TSDBConsolidationService(BaseGraphService):
             logger.info(f"Started at: {consolidation_start.isoformat()}")
 
             now = self._now()
-            # Calculate the previous Monday-Sunday period
-            # If today is Monday, we want last Monday to yesterday (Sunday)
-            days_since_monday = now.weekday()  # Monday = 0, Sunday = 6
-            if days_since_monday == 0:
-                # It's Monday, so we want last week
-                week_start = now.date() - timedelta(days=7)
-                week_end = now.date() - timedelta(days=1)
-            else:
-                # Any other day, find the most recent Monday
-                week_start = now.date() - timedelta(days=days_since_monday)
-                week_end = week_start + timedelta(days=6)
 
-            # Convert to datetime at start/end of day
-            period_start = datetime.combine(week_start, datetime.min.time(), tzinfo=timezone.utc)
-            period_end = datetime.combine(week_end, datetime.max.time(), tzinfo=timezone.utc)
+            # Calculate the previous week period using helper
+            period_start, period_end = calculate_week_period(now)
+
+            week_start = period_start.date()
+            week_end = period_end.date()
 
             logger.info(f"Consolidating week: {week_start} to {week_end}")
             logger.info(f"Period: {period_start.isoformat()} to {period_end.isoformat()}")
 
-            # Query all basic summaries from the past week
-            import json
-            from collections import defaultdict
-
-            from ciris_engine.logic.persistence.db.core import get_db_connection
-
+            # Process summaries
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
@@ -1362,26 +1328,9 @@ class TSDBConsolidationService(BaseGraphService):
                     "task_summary",
                 ]
 
-                daily_summaries_created = 0
-
                 for summary_type in summary_types:
-                    # Get all summaries of this type from the calendar week
-                    cursor.execute(
-                        """
-                        SELECT node_id, attributes_json,
-                               json_extract(attributes_json, '$.period_start') as period_start
-                        FROM graph_nodes
-                        WHERE node_type = ?
-                          AND datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) <= datetime(?)
-                          AND (json_extract(attributes_json, '$.consolidation_level') IS NULL
-                               OR json_extract(attributes_json, '$.consolidation_level') = 'basic')
-                        ORDER BY period_start
-                    """,
-                        (summary_type, period_start.isoformat(), period_end.isoformat()),
-                    )
-
-                    summaries = cursor.fetchall()
+                    # Query basic summaries using helper
+                    summaries = query_basic_summaries_in_period(cursor, summary_type, period_start, period_end)
 
                     if not summaries:
                         logger.info(f"No {summary_type} summaries found for consolidation")
@@ -1390,153 +1339,45 @@ class TSDBConsolidationService(BaseGraphService):
                     logger.info(f"Found {len(summaries)} {summary_type} summaries to consolidate")
                     total_basic_summaries += len(summaries)
 
-                    # Group summaries by day
-                    summaries_by_day = defaultdict(list)
-                    for node_id, attrs_json, period_start_str in summaries:
-                        if period_start_str:
-                            period_dt = datetime.fromisoformat(period_start_str.replace("Z", UTC_TIMEZONE_SUFFIX))
-                            day_key = period_dt.date()
-                            summaries_by_day[day_key].append((node_id, attrs_json))
+                    # Group summaries by day using helper
+                    summaries_by_day = group_summaries_by_day(summaries)
 
                     # Create daily summary for each day
                     for day, day_summaries in summaries_by_day.items():
                         if len(day_summaries) == 0:
                             continue
 
-                        # Aggregate metrics for this day
-                        daily_metrics = {}
-                        daily_tokens = 0
-                        daily_cost_cents = 0
-                        daily_carbon_grams = 0
-                        daily_energy_kwh = 0
-                        daily_action_counts = {}
-                        daily_error_count = 0
-                        source_summary_ids = []
+                        # Convert date to datetime for helpers
+                        day_datetime = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
 
-                        for node_id, attrs_json in day_summaries:
-                            attrs = json.loads(attrs_json) if attrs_json else {}
-                            source_summary_ids.append(node_id)
-
-                            # Aggregate based on summary type
-                            if summary_type == "tsdb_summary":
-                                # Aggregate metrics
-                                for metric, stats in attrs.get("metrics", {}).items():
-                                    if metric not in daily_metrics:
-                                        daily_metrics[metric] = {
-                                            "count": 0,
-                                            "sum": 0,
-                                            "min": float("inf"),
-                                            "max": float("-inf"),
-                                        }
-
-                                    # Handle both old format (single value) and new format (stats dict)
-                                    if isinstance(stats, dict):
-                                        daily_metrics[metric]["count"] += stats.get("count", 1)
-                                        daily_metrics[metric]["sum"] += stats.get("sum", 0)
-                                        daily_metrics[metric]["min"] = min(
-                                            daily_metrics[metric]["min"], stats.get("min", float("inf"))
-                                        )
-                                        daily_metrics[metric]["max"] = max(
-                                            daily_metrics[metric]["max"], stats.get("max", float("-inf"))
-                                        )
-                                    else:
-                                        # Old format - single value
-                                        daily_metrics[metric]["count"] += 1
-                                        daily_metrics[metric]["sum"] += stats
-                                        daily_metrics[metric]["min"] = min(daily_metrics[metric]["min"], stats)
-                                        daily_metrics[metric]["max"] = max(daily_metrics[metric]["max"], stats)
-
-                                # Aggregate resource usage
-                                daily_tokens += attrs.get("total_tokens", 0)
-                                daily_cost_cents += attrs.get("total_cost_cents", 0)
-                                daily_carbon_grams += attrs.get("total_carbon_grams", 0)
-                                daily_energy_kwh += attrs.get("total_energy_kwh", 0)
-                                daily_error_count += attrs.get("error_count", 0)
-
-                                # Aggregate action counts
-                                for action, count in attrs.get("action_counts", {}).items():
-                                    if action not in daily_action_counts:
-                                        daily_action_counts[action] = 0
-                                    daily_action_counts[action] += count
-
-                        # Calculate averages for metrics
-                        for metric, stats in daily_metrics.items():
-                            if stats["count"] > 0:
-                                stats["avg"] = stats["sum"] / stats["count"]
-                            else:
-                                stats["avg"] = 0
-                            # Clean up infinity values
-                            if stats["min"] == float("inf"):
-                                stats["min"] = 0
-                            if stats["max"] == float("-inf"):
-                                stats["max"] = 0
-
-                        # Check if daily summary already exists
+                        # Generate daily node ID
                         daily_node_id = f"{summary_type}_daily_{day.strftime('%Y%m%d')}"
-                        cursor.execute(
-                            """
-                            SELECT node_id FROM graph_nodes
-                            WHERE node_id = ?
-                        """,
-                            (daily_node_id,),
-                        )
 
-                        if cursor.fetchone():
+                        # Check if already exists using helper
+                        if check_daily_summary_exists(cursor, daily_node_id):
                             logger.debug(f"Daily summary {daily_node_id} already exists, skipping")
                             continue
 
-                        # Create daily summary node
-                        day_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
-                        day_end = datetime.combine(day, datetime.max.time(), tzinfo=timezone.utc)
+                        # Parse summary attributes using helper
+                        summary_attrs_list = parse_summary_attributes(day_summaries)
 
-                        daily_attrs = {
-                            "summary_type": summary_type,
-                            "consolidation_level": "extensive",
-                            "period_start": day_start.isoformat(),
-                            "period_end": day_end.isoformat(),
-                            "period_label": day.strftime("%Y-%m-%d"),
-                            "source_summary_count": len(day_summaries),
-                            "source_summary_ids": source_summary_ids[:10],  # Keep first 10 for reference
-                        }
+                        # Aggregate metrics, resources, and actions using helpers
+                        daily_metrics = aggregate_metric_stats(summary_attrs_list)
+                        daily_resources = aggregate_resource_usage(summary_attrs_list)
+                        daily_action_counts = aggregate_action_counts(summary_attrs_list)
 
-                        # Add type-specific attributes
-                        if summary_type == "tsdb_summary":
-                            daily_attrs.update(
-                                {
-                                    "metrics": daily_metrics,
-                                    "total_tokens": daily_tokens,
-                                    "total_cost_cents": daily_cost_cents,
-                                    "total_carbon_grams": daily_carbon_grams,
-                                    "total_energy_kwh": daily_energy_kwh,
-                                    "action_counts": daily_action_counts,
-                                    "error_count": daily_error_count,
-                                    "success_rate": (
-                                        1.0 - (daily_error_count / sum(daily_action_counts.values()))
-                                        if sum(daily_action_counts.values()) > 0
-                                        else 1.0
-                                    ),
-                                }
-                            )
-
-                        # Create the node
-                        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
-
-                        node_type_map = {
-                            "tsdb_summary": NodeType.TSDB_SUMMARY,
-                            "audit_summary": NodeType.AUDIT_SUMMARY,
-                            "trace_summary": NodeType.TRACE_SUMMARY,
-                            "conversation_summary": NodeType.CONVERSATION_SUMMARY,
-                            "task_summary": NodeType.TASK_SUMMARY,
-                        }
-
-                        daily_summary = GraphNode(
-                            id=daily_node_id,
-                            type=node_type_map[summary_type],
-                            scope=GraphScope.LOCAL,
-                            attributes=daily_attrs,
-                            updated_at=now,
-                            updated_by="tsdb_consolidation_extensive",
+                        # Create daily summary attributes using helper
+                        daily_attrs = create_daily_summary_attributes(
+                            summary_type,
+                            day_datetime,
+                            day_summaries,
+                            daily_metrics,
+                            daily_resources,
+                            daily_action_counts,
                         )
+
+                        # Create daily summary node using helper
+                        daily_summary = create_daily_summary_node(summary_type, day_datetime, daily_attrs, now)
 
                         # Store in memory
                         if self._memory_bus:
@@ -1546,9 +1387,6 @@ class TSDBConsolidationService(BaseGraphService):
                                 logger.info(
                                     f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries"
                                 )
-
-                                # Don't create edges to source summaries - they'll be deleted!
-                                # We'll create edges after all daily summaries are created
 
                 # Final summary
                 total_duration = (self._now() - consolidation_start).total_seconds()
@@ -1560,196 +1398,14 @@ class TSDBConsolidationService(BaseGraphService):
                     logger.info(f"  - Compression ratio: {compression_ratio:.1f}:1")
                 logger.info("=" * 60)
 
-                # CRITICAL: Maintain temporal chain between 6-hour and daily summaries
-                # Find the last 6-hour summary before the first daily summary
-                if daily_summaries_created > 0 and self._memory_bus:
-                    # Get the first daily summary we created
-                    first_day = period_start
-
-                    # Find last 6-hour summary before the daily summaries start
-                    last_6h_before = first_day - timedelta(hours=6)
-                    last_6h_id = f"tsdb_summary_{last_6h_before.strftime('%Y%m%d_%H')}"
-
-                    # Check if it exists
-                    cursor.execute(
-                        """
-                        SELECT node_id FROM graph_nodes
-                        WHERE node_id = ? AND node_type = 'tsdb_summary'
-                        AND json_extract(attributes_json, '$.consolidation_level') = 'basic'
-                    """,
-                        (last_6h_id,),
-                    )
-
-                    if cursor.fetchone():
-                        # Update its TEMPORAL_NEXT to point to first daily summary
-                        first_daily_id = f"tsdb_summary_daily_{first_day.strftime('%Y%m%d')}"
-
-                        # Delete self-referencing edge
-                        cursor.execute(
-                            """
-                            DELETE FROM graph_edges
-                            WHERE source_node_id = ? AND target_node_id = ?
-                            AND relationship = 'TEMPORAL_NEXT'
-                        """,
-                            (last_6h_id, last_6h_id),
-                        )
-
-                        # Create new edge to daily summary
-                        cursor.execute(
-                            """
-                            INSERT INTO graph_edges
-                            (edge_id, source_node_id, target_node_id, scope,
-                             relationship, weight, attributes_json, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                            (
-                                f"edge_{uuid4().hex[:8]}",
-                                last_6h_id,
-                                first_daily_id,
-                                "local",
-                                "TEMPORAL_NEXT",
-                                1.0,
-                                json.dumps({"context": "6-hour to daily transition"}),
-                                datetime.now(timezone.utc).isoformat(),
-                            ),
-                        )
-
-                        # Also create backward edge from daily to 6-hour
-                        cursor.execute(
-                            """
-                            INSERT INTO graph_edges
-                            (edge_id, source_node_id, target_node_id, scope,
-                             relationship, weight, attributes_json, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                            (
-                                f"edge_{uuid4().hex[:8]}",
-                                first_daily_id,
-                                last_6h_id,
-                                "local",
-                                "TEMPORAL_PREV",
-                                1.0,
-                                json.dumps({"context": "Daily to 6-hour backward link"}),
-                                datetime.now(timezone.utc).isoformat(),
-                            ),
-                        )
-
-                        logger.info(f"Linked 6-hour summary {last_6h_id} to daily summary {first_daily_id}")
-
-                # Now create edges between daily summaries for the whole week
-                # We'll need to query all the daily summaries we just created
+                # Maintain temporal chain using helper
                 if daily_summaries_created > 0:
-                    cursor.execute(
-                        """
-                        SELECT node_id, node_type,
-                               json_extract(attributes_json, '$.period_start') as period_start
-                        FROM graph_nodes
-                        WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-                          AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-                          AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-                        ORDER BY period_start
-                    """,
-                        (period_start.isoformat(), period_end.isoformat()),
-                    )
-
-                    all_daily_summaries = cursor.fetchall()
-
-                    # Group by date and create edges
-                    from collections import defaultdict
-                    from datetime import date as DateType
-                    from typing import DefaultDict, Dict, List
-
-                    summaries_by_date: DefaultDict[DateType, List[GraphNode]] = defaultdict(list)
-
-                    for node_id, node_type, period_start_str in all_daily_summaries:
-                        if period_start_str:
-                            period_dt = datetime.fromisoformat(period_start_str.replace("Z", UTC_TIMEZONE_SUFFIX))
-                            date_key = period_dt.date()
-
-                            # Create a minimal GraphNode for edge creation
-                            node = GraphNode(
-                                id=node_id,
-                                type=node_type_map.get(node_type, NodeType.TSDB_SUMMARY),
-                                scope=GraphScope.LOCAL,
-                                attributes={},
-                                updated_at=datetime.now(timezone.utc),
-                                updated_by="tsdb_consolidation",
-                            )
-                            summaries_by_date[date_key].append(node)
-
-                    # Create edges for each day
-                    for date_key, daily_summary_nodes in summaries_by_date.items():
-                        summaries_for_day: List[GraphNode] = daily_summary_nodes
-                        if len(summaries_for_day) > 1:
-                            await self._create_daily_summary_edges(
-                                summaries_for_day, datetime.combine(date_key, datetime.min.time(), tzinfo=timezone.utc)
-                            )
-
-            self._last_extensive_consolidation = now
+                    edges_created = maintain_temporal_chain_to_daily(cursor, period_start)
+                    if edges_created > 0:
+                        logger.info(f"Created {edges_created} temporal chain edges")
 
         except Exception as e:
             logger.error(f"Extensive consolidation failed: {e}", exc_info=True)
-
-    async def _create_daily_summary_edges(self, summaries: List[GraphNode], date: datetime) -> None:
-        """
-        Create edges between daily summaries:
-        - Previous/next day edges for temporal navigation
-        - Cross-type edges for same day (e.g., tsdb_daily → audit_daily)
-
-        Args:
-            summaries: List of daily summary nodes
-            date: The date these summaries represent
-        """
-        try:
-            # Create same-day edges using EdgeManager
-            edges_created = self._edge_manager.create_cross_summary_edges(summaries, date)
-            logger.info(f"Created {edges_created} same-day edges for {date}")
-
-            # Create temporal edges to previous day's summaries
-            for summary in summaries:
-                # Extract summary type from ID (e.g., "tsdb_summary" from "tsdb_summary_daily_20250714")
-                parts = summary.id.split("_")
-                if len(parts) >= 4 and parts[2] == "daily":
-                    # For daily summaries: "tsdb_summary_daily_20250714"
-                    summary_type = f"{parts[0]}_{parts[1]}_daily"
-                    previous_date = date - timedelta(days=1)
-
-                    # Check if previous day's summary exists - use correct ID format
-                    previous_id = self._edge_manager.get_previous_summary_id(
-                        summary_type, previous_date.strftime("%Y%m%d")
-                    )
-
-                    if previous_id:
-                        temporal_edges = self._edge_manager.create_temporal_edges(summary, previous_id)
-                        logger.info(f"Created {temporal_edges} temporal edges for {summary.id} -> {previous_id}")
-                    else:
-                        # This is the first daily summary of its type, create self-referencing edge
-                        temporal_edges = self._edge_manager.create_temporal_edges(summary, None)
-                        logger.info(f"Created self-referencing edge for first daily summary {summary.id}")
-
-            # Additional check: ensure all daily summaries have temporal edges
-            from ciris_engine.logic.persistence.db.core import get_db_connection
-
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-
-                for summary in summaries:
-                    # Check if this summary has any temporal edges
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) as count FROM graph_edges
-                        WHERE source_node_id = ? AND relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
-                    """,
-                        (summary.id,),
-                    )
-
-                    edge_count = cursor.fetchone()["count"]
-                    if edge_count == 0:
-                        logger.warning(f"Daily summary {summary.id} has no temporal edges, creating self-reference")
-                        self._edge_manager.create_temporal_edges(summary, None)
-
-        except Exception as e:
-            logger.error(f"Failed to create daily summary edges: {e}", exc_info=True)
 
     async def get_metrics(self) -> Dict[str, float]:
         """Get TSDB consolidation service metrics.
@@ -1790,6 +1446,19 @@ class TSDBConsolidationService(BaseGraphService):
         This process compresses daily summaries to meet storage targets without
         creating new nodes. Future versions will handle multimedia compression.
         """
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
+            calculate_month_period,
+        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation.profound_helpers import (
+            calculate_storage_metrics,
+            cleanup_old_basic_summaries,
+            compress_and_update_summaries,
+            query_extensive_summaries_in_month,
+        )
+
+        from .compressor import SummaryCompressor
+
         consolidation_start = self._now()
         total_daily_summaries = 0
         summaries_compressed = 0
@@ -1802,54 +1471,19 @@ class TSDBConsolidationService(BaseGraphService):
             logger.info(f"Started at: {consolidation_start.isoformat()}")
 
             now = self._now()
-            # Calculate the previous month period
-            if now.month == 1:
-                # January, so previous month is December of last year
-                month_start = datetime(now.year - 1, 12, 1, tzinfo=timezone.utc)
-                month_end = datetime(now.year - 1, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-            else:
-                # Any other month
-                month_start = datetime(now.year, now.month - 1, 1, tzinfo=timezone.utc)
-                # Last day of previous month
-                if now.month - 1 in [1, 3, 5, 7, 8, 10, 12]:
-                    last_day = 31
-                elif now.month - 1 == 2:
-                    # February - check for leap year
-                    if now.year % 4 == 0 and (now.year % 100 != 0 or now.year % 400 == 0):
-                        last_day = 29
-                    else:
-                        last_day = 28
-                else:
-                    last_day = 30
-                month_end = datetime(now.year, now.month - 1, last_day, 23, 59, 59, tzinfo=timezone.utc)
+
+            # Calculate the previous month period using helper
+            month_start, month_end = calculate_month_period(now)
 
             # Initialize compressor
-            from .compressor import SummaryCompressor
-
             compressor = SummaryCompressor(self._profound_target_mb_per_day)
 
-            # Query all extensive (daily) summaries from the past month
-            import json
-
-            from ciris_engine.logic.persistence.db.core import get_db_connection
-
+            # Query and process summaries
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
-                # Get all extensive summaries from the calendar month
-                cursor.execute(
-                    """
-                    SELECT node_id, node_type, attributes_json, version
-                    FROM graph_nodes
-                    WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-                      AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-                      AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-                    ORDER BY node_type, json_extract(attributes_json, '$.period_start')
-                """,
-                    (month_start.isoformat(), month_end.isoformat()),
-                )
-
-                summaries = cursor.fetchall()
+                # Query all extensive summaries from the month using helper
+                summaries = query_extensive_summaries_in_month(cursor, month_start, month_end)
                 total_daily_summaries = len(summaries)
 
                 if len(summaries) < 7:  # Less than a week's worth
@@ -1860,30 +1494,11 @@ class TSDBConsolidationService(BaseGraphService):
 
                 logger.info(f"Found {total_daily_summaries} daily summaries to compress")
 
-                # Calculate current storage usage
+                # Calculate current storage using helper
                 days_in_period = (month_end - month_start).days + 1
-                summary_attrs_list = []
-                for _, _, attrs_json, _ in summaries:
-                    attrs_dict = json.loads(attrs_json) if attrs_json else {}
-                    # Convert dict to SummaryAttributes object
-                    try:
-                        attrs = SummaryAttributes(**attrs_dict)
-                        summary_attrs_list.append(attrs)
-                    except Exception as e:
-                        logger.warning(f"Failed to convert summary attributes to SummaryAttributes model: {e}")
-                        # Create minimal SummaryAttributes for compatibility
-                        attrs = SummaryAttributes(
-                            period_start=datetime.fromisoformat(
-                                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            period_end=datetime.fromisoformat(
-                                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
-                        )
-                        summary_attrs_list.append(attrs)
-
-                current_daily_mb = compressor.estimate_daily_size(summary_attrs_list, days_in_period)
+                current_daily_mb, summary_attrs_list = calculate_storage_metrics(
+                    cursor, month_start, month_end, compressor
+                )
                 storage_before_mb = float(current_daily_mb * days_in_period)
                 logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
                 logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
@@ -1893,99 +1508,14 @@ class TSDBConsolidationService(BaseGraphService):
                     logger.info("Daily summaries already meet storage target, skipping compression")
                     return
 
-                # Compress each summary in-place
-                compressed_count = 0
-                total_reduction = 0.0
-
-                for node_id, node_type, attrs_json, version in summaries:
-                    attrs_dict = json.loads(attrs_json) if attrs_json else {}
-
-                    # Convert dict to SummaryAttributes object
-                    try:
-                        attrs = SummaryAttributes(**attrs_dict)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to convert summary attributes to SummaryAttributes model for {node_id}: {e}"
-                        )
-                        # Create minimal SummaryAttributes for compatibility
-                        attrs = SummaryAttributes(
-                            period_start=datetime.fromisoformat(
-                                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            period_end=datetime.fromisoformat(
-                                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
-                        )
-
-                    # Compress the attributes
-                    compression_result = compressor.compress_summary(attrs)
-                    compressed_attrs = compression_result.compressed_attributes
-                    reduction_ratio = compression_result.reduction_ratio
-
-                    # Convert back to dict and add compression metadata
-                    compressed_attrs_dict = compressed_attrs.model_dump(mode="json")
-                    compressed_attrs_dict["profound_compressed"] = True
-                    compressed_attrs_dict["compression_date"] = now.isoformat()
-                    compressed_attrs_dict["compression_ratio"] = reduction_ratio
-
-                    # Update the node in-place
-                    cursor.execute(
-                        """
-                        UPDATE graph_nodes
-                        SET attributes_json = ?,
-                            version = ?,
-                            updated_by = 'tsdb_profound_consolidation',
-                            updated_at = ?
-                        WHERE node_id = ?
-                    """,
-                        (json.dumps(compressed_attrs_dict), version + 1, now.isoformat(), node_id),
-                    )
-
-                    if cursor.rowcount > 0:
-                        compressed_count += 1
-                        summaries_compressed += 1
-                        total_reduction += reduction_ratio
-                        logger.debug(f"Compressed {node_id} by {reduction_ratio:.1%}")
+                # Compress summaries using helper
+                compressed_count, total_reduction = compress_and_update_summaries(cursor, summaries, compressor, now)
+                summaries_compressed = compressed_count
 
                 conn.commit()
 
-                # Calculate new storage usage
-                compressed_attrs_list = []
-                cursor.execute(
-                    """
-                    SELECT attributes_json
-                    FROM graph_nodes
-                    WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-                      AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-                      AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-                """,
-                    (month_start.isoformat(), month_end.isoformat()),
-                )
-
-                for row in cursor.fetchall():
-                    attrs_dict = json.loads(row[0]) if row[0] else {}
-                    # Convert dict to SummaryAttributes object
-                    try:
-                        attrs = SummaryAttributes(**attrs_dict)
-                        compressed_attrs_list.append(attrs)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to convert compressed summary attributes to SummaryAttributes model: {e}"
-                        )
-                        # Create minimal SummaryAttributes for compatibility
-                        attrs = SummaryAttributes(
-                            period_start=datetime.fromisoformat(
-                                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            period_end=datetime.fromisoformat(
-                                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
-                        )
-                        compressed_attrs_list.append(attrs)
-
-                new_daily_mb = compressor.estimate_daily_size(compressed_attrs_list, days_in_period)
+                # Calculate new storage using helper
+                new_daily_mb, _ = calculate_storage_metrics(cursor, month_start, month_end, compressor)
                 storage_after_mb = new_daily_mb * days_in_period
                 avg_reduction = total_reduction / compressed_count if compressed_count > 0 else 0
 
@@ -1999,23 +1529,17 @@ class TSDBConsolidationService(BaseGraphService):
                     f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
                 )
                 logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
-                logger.info(
-                    f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
-                )
+                if storage_before_mb > 0:
+                    logger.info(
+                        f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
+                    )
 
-                # Clean up old basic summaries (> 30 days old)
+                # Clean up old basic summaries using helper
                 cleanup_cutoff = now - timedelta(days=30)
-                cursor.execute(
-                    """
-                    DELETE FROM graph_nodes
-                    WHERE json_extract(attributes_json, '$.consolidation_level') = 'basic'
-                      AND datetime(json_extract(attributes_json, '$.period_start')) < datetime(?)
-                """,
-                    (cleanup_cutoff.isoformat(),),
-                )
+                deleted = cleanup_old_basic_summaries(cursor, cleanup_cutoff)
 
-                if cursor.rowcount > 0:
-                    logger.info(f"Cleaned up {cursor.rowcount} old basic summaries")
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} old basic summaries")
                     conn.commit()
 
             self._last_profound_consolidation = now

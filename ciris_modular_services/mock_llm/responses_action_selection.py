@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.schemas.actions import (
     DeferParams,
@@ -36,7 +36,7 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttribu
 
 
 def action_selection(
-    context: Optional[List[Any]] = None, messages: Optional[List[dict]] = None
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
 ) -> ActionSelectionDMAResult:
     """Mock ActionSelectionDMAResult with passing values and protocol-compliant types."""
     context = context or []
@@ -109,6 +109,9 @@ def action_selection(
         if item.startswith("custom_rationale:"):
             custom_rationale = item.split(":", 1)[1]
             break
+
+    # Initialize rationale with default - should be overridden by specific logic paths
+    rationale = "[MOCK LLM] Action selection (no specific rationale provided)"
 
     # Check for help request
     show_help = False
@@ -213,7 +216,7 @@ def action_selection(
                                     id=node_id,
                                     type=getattr(NodeType, node_type.upper()),
                                     scope=getattr(GraphScope, scope.upper()),
-                                    attributes=GraphNodeAttributes(created_by="mock_llm"),
+                                    attributes={"created_by": "mock_llm"},
                                 )
                             )
                     else:
@@ -235,12 +238,12 @@ def action_selection(
                     else:
                         # Multiple parameters - parse as node_id, type, scope
                         node_id = parts[0]
-                        node_type = parts[1] if len(parts) > 1 else None
+                        recall_type: str = parts[1] if len(parts) > 1 else "general"
                         scope_str = parts[2] if len(parts) > 2 else None
 
                         params = RecallParams(
                             node_id=node_id,
-                            node_type=node_type,
+                            node_type=recall_type,
                             scope=getattr(GraphScope, scope_str.upper()) if scope_str else None,
                             limit=10,
                         )
@@ -334,7 +337,7 @@ def action_selection(
                                 id=node_id,
                                 type=NodeType.CONCEPT,
                                 scope=GraphScope.LOCAL,
-                                attributes=GraphNodeAttributes(created_by="mock_llm"),
+                                attributes={"created_by": "mock_llm"},
                             ),
                             reason=reason,
                         )
@@ -483,9 +486,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                     id=node_id,
                     type=NodeType.CONCEPT,
                     scope=GraphScope.LOCAL,
-                    attributes=GraphNodeAttributes(
-                        created_by="mock_llm", tags=[f"content:{content[:50]}", "source:mock_llm"]
-                    ),
+                    attributes={"created_by": "mock_llm", "tags": [f"content:{content[:50]}", "source:mock_llm"]},
                 )
             )
             action = HandlerActionType.MEMORIZE
@@ -561,7 +562,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                         id=node_id,
                         type=NodeType.CONCEPT,  # Default type for forget
                         scope=GraphScope.LOCAL,
-                        attributes=GraphNodeAttributes(created_by="mock_llm"),
+                        attributes={"created_by": "mock_llm"},
                     ),
                     reason=reason,
                 )
@@ -741,9 +742,11 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                     id=node_id,
                                     type=NodeType.CONCEPT,
                                     scope=GraphScope.LOCAL,
-                                    attributes=GraphNodeAttributes(
-                                        created_by="mock_llm", content=content, description=f"Memory: {content}"
-                                    ),
+                                    attributes={
+                                        "created_by": "mock_llm",
+                                        "content": content,
+                                        "description": f"Memory: {content}",
+                                    },
                                 )
                             )
                             action = HandlerActionType.MEMORIZE
@@ -827,7 +830,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                     id=node_id,
                                     type=NodeType.CONCEPT,
                                     scope=GraphScope.LOCAL,
-                                    attributes=GraphNodeAttributes(created_by="mock_llm"),
+                                    attributes={"created_by": "mock_llm"},
                                 ),
                                 reason=f"Forgetting memory about: {search_term}",
                             )
@@ -896,11 +899,11 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                                 id=node_id,
                                                 type=NodeType.CONCEPT,
                                                 scope=GraphScope.LOCAL,
-                                                attributes=GraphNodeAttributes(
-                                                    created_by="mock_llm",
-                                                    content=content,
-                                                    description=f"Memory: {content}",
-                                                ),
+                                                attributes={
+                                                    "created_by": "mock_llm",
+                                                    "content": content,
+                                                    "description": f"Memory: {content}",
+                                                },
                                             )
                                         )
                                         action = HandlerActionType.MEMORIZE

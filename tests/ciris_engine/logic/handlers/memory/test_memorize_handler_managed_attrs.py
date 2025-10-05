@@ -27,7 +27,7 @@ async def test_managed_user_attributes_blocked():
     dependencies.time_service.now = MagicMock(return_value=datetime.now())
 
     handler = MemorizeHandler(dependencies)
-    handler._audit_log = AsyncMock()
+    # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
     handler.complete_thought_and_create_followup = MagicMock(return_value="followup_id")
 
     # Create a thought
@@ -108,14 +108,11 @@ async def test_managed_user_attributes_blocked():
         assert f"managed user attribute '{attr_name}'" in call_args.kwargs["follow_up_content"]
         assert "Wise Authority assistance" in call_args.kwargs["follow_up_content"]
 
-        # Verify audit log was called with blocked outcome
-        audit_calls = [call for call in handler._audit_log.call_args_list if "blocked_managed_attribute" in str(call)]
-        assert len(audit_calls) > 0
+        # NOTE: Audit logging removed from handlers - action_dispatcher handles centralized audit logging
 
         print(f"✓ {attr_name} properly blocked")
 
         # Reset mocks for next iteration
         handler.complete_thought_and_create_followup.reset_mock()
-        handler._audit_log.reset_mock()
 
     print("\n✅ All managed user attributes are properly protected!")

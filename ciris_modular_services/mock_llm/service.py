@@ -7,8 +7,10 @@ from pydantic import BaseModel
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as MockLLMServiceProtocol
+from ciris_engine.protocols.services.runtime.llm import MessageDict
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
+from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 
 from .responses import create_response
 
@@ -22,7 +24,7 @@ class MockInstructorClient:
         self.base_client = base_client
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
-    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any):
+    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any) -> Any:
         # This is the instructor-patched version that should always receive response_model
         if response_model is None:
             # This should NOT happen - instructor always passes response_model
@@ -41,7 +43,7 @@ class MockPatchedClient:
         self.mode = mode
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._patched_create))
 
-    async def _patched_create(self, *args: Any, **kwargs: Any):
+    async def _patched_create(self, *args: Any, **kwargs: Any) -> Any:
         """Intercept instructor-patched calls and route to our mock."""
         logger.debug(f"Patched client _create called with kwargs: {list(kwargs.keys())}")
 
@@ -70,7 +72,7 @@ class MockLLMClient:
         instructor.patch = lambda *args, **kwargs: MockLLMClient._mock_instructor_patch(*args, **kwargs)
 
     @staticmethod
-    def _mock_instructor_patch(*args: Any, **kwargs: Any):
+    def _mock_instructor_patch(*args: Any, **kwargs: Any) -> Any:
         """Override instructor.patch to return our mock patched client."""
         # Extract client from args if provided
         client = args[0] if args else kwargs.get("client")
@@ -94,7 +96,7 @@ class MockLLMClient:
             # If no client provided, call original with args and kwargs
             return instance._original_instructor_patch(*args, **kwargs)
 
-    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any):
+    async def _create(self, *args: Any, response_model: Optional[Type[BaseModel]] = None, **kwargs: Any) -> Any:
         """
         Create method that instructor.patch() will call.
         Must return responses in OpenAI API format for instructor to parse correctly.
@@ -114,7 +116,7 @@ class MockLLMClient:
         logger.debug(f"Generated response type: {type(response)}")
         return response
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         """Support dynamic attribute access for instructor compatibility."""
         if name in ["_acreate"]:
             return self._create
@@ -130,8 +132,8 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
         self._client: Optional[MockLLMClient] = None
         self.model_name = "mock-model"
 
-        # Metrics tracking for get_metrics
-        self._start_time = None
+        # Metrics tracking for get_metrics (use float for time.time())
+        self._start_time_float: Optional[float] = None
         self._total_requests = 0
         self._total_errors = 0
         self._total_input_tokens = 0
@@ -165,29 +167,31 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
         self._client = MockLLMClient()
         import time
 
-        self._start_time = time.time()
+        self._start_time_float = time.time()
 
     async def stop(self) -> None:
         self._client = None
         await super().stop()
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> ServiceCapabilities:
         """Return service capabilities."""
-        return {
-            "service_name": "MockLLMService",
-            "capabilities": ["call_llm_structured"],
-            "version": "1.0.0",
-            "model": self.model_name,
-        }
+        return ServiceCapabilities(
+            service_name="MockLLMService",
+            actions=["call_llm_structured"],
+            version="1.0.0",
+        )
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> ServiceStatus:
         """Return current service status."""
-        return {
-            "healthy": self._client is not None,
-            "service_name": "MockLLMService",
-            "status": "running" if self._client else "stopped",
-            "details": {"model": self.model_name, "mock": True},
-        }
+        import time
+
+        uptime = time.time() - self._start_time_float if self._start_time_float else 0.0
+        return ServiceStatus(
+            service_name="MockLLMService",
+            service_type="llm",
+            is_healthy=self._client is not None,
+            uptime_seconds=uptime,
+        )
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""
@@ -200,7 +204,7 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
         """
         import time
 
-        uptime = time.time() - self._start_time if self._start_time else 0.0
+        uptime = time.time() - self._start_time_float if self._start_time_float else 0.0
 
         # Return v1.4.3 compliant LLM metrics
         return {
@@ -226,7 +230,7 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
 
     async def call_llm_structured(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[MessageDict],
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,

@@ -111,7 +111,6 @@ class SpeakHandler(BaseActionHandler):
             logger.error(f"CRITICAL: No channel_id found in params or thought {thought_id} context")
             raise ValueError(f"Channel ID is required for SPEAK action - none found in params or thought {thought_id}")
 
-        event_summary = params.content
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         # Extract string from GraphNode for notification

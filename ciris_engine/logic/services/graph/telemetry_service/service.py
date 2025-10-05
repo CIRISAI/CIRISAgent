@@ -582,64 +582,69 @@ class TelemetryAggregator:
         logger.debug(f"Service {service_name} not found in {len(all_services)} services")
         return None
 
-    async def _try_collect_metrics(self, service: Any) -> Optional[ServiceTelemetryData]:
-        """Try different methods to collect metrics from service."""
-        if not service:
-            logger.debug("[TELEMETRY] Service is None, cannot collect metrics")
+    def _convert_dict_to_telemetry(self, metrics: Dict[str, Any], service_name: str) -> ServiceTelemetryData:
+        """Convert dict metrics to ServiceTelemetryData with proper uptime detection."""
+        # Look for various uptime keys
+        uptime = (
+            metrics.get("uptime_seconds")
+            or metrics.get("incident_uptime_seconds")
+            or metrics.get("tsdb_uptime_seconds")
+            or metrics.get("auth_uptime_seconds")
+            or metrics.get("scheduler_uptime_seconds")
+            or 0.0
+        )
+
+        # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
+        healthy = metrics.get("healthy", uptime > 0)
+
+        logger.debug(f"Converting dict metrics to ServiceTelemetryData for {service_name}: healthy={healthy}, uptime={uptime}")
+
+        return ServiceTelemetryData(
+            healthy=healthy,
+            uptime_seconds=uptime,
+            error_count=metrics.get("error_count", 0),
+            requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
+            error_rate=metrics.get("error_rate", 0.0),
+            memory_mb=metrics.get("memory_mb"),
+            custom_metrics=metrics,  # Pass the whole dict as custom_metrics
+        )
+
+    async def _try_get_metrics_method(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try to collect metrics via get_metrics() method."""
+        if not hasattr(service, "get_metrics"):
+            logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
             return None
 
-        # Try get_metrics first
-        if hasattr(service, "get_metrics"):
-            logger.debug(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
-            try:
-                # Check if get_metrics is async or sync
-                if asyncio.iscoroutinefunction(service.get_metrics):
-                    metrics = await service.get_metrics()
-                else:
-                    metrics = service.get_metrics()
-                logger.debug(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
-                if isinstance(metrics, ServiceTelemetryData):
-                    return metrics
-                elif isinstance(metrics, dict):
-                    # Convert dict to ServiceTelemetryData
-                    # Look for various uptime keys
-                    uptime = (
-                        metrics.get("uptime_seconds")
-                        or metrics.get("incident_uptime_seconds")
-                        or metrics.get("tsdb_uptime_seconds")
-                        or metrics.get("auth_uptime_seconds")
-                        or metrics.get("scheduler_uptime_seconds")
-                        or 0.0
-                    )
+        logger.debug(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
+        try:
+            # Check if get_metrics is async or sync
+            if asyncio.iscoroutinefunction(service.get_metrics):
+                metrics = await service.get_metrics()
+            else:
+                metrics = service.get_metrics()
 
-                    # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
-                    healthy = metrics.get("healthy", uptime > 0)
+            logger.debug(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
 
-                    logger.debug(
-                        f"Converting dict metrics to ServiceTelemetryData for {type(service).__name__}: healthy={healthy}, uptime={uptime}"
-                    )
-                    return ServiceTelemetryData(
-                        healthy=healthy,
-                        uptime_seconds=uptime,
-                        error_count=metrics.get("error_count", 0),
-                        requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
-                        error_rate=metrics.get("error_rate", 0.0),
-                        memory_mb=metrics.get("memory_mb"),
-                        custom_metrics=metrics,  # Pass the whole dict as custom_metrics
-                    )
-            except Exception as e:
-                logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
-                # Don't return None here - continue to try other methods
-        else:
-            logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
+            if isinstance(metrics, ServiceTelemetryData):
+                return metrics
+            elif isinstance(metrics, dict):
+                return self._convert_dict_to_telemetry(metrics, type(service).__name__)
 
-        # Try _collect_metrics
-        if hasattr(service, "_collect_metrics"):
+            return None
+        except Exception as e:
+            logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
+            return None
+
+    def _try_collect_metrics_method(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try to collect metrics via _collect_metrics() method."""
+        if not hasattr(service, "_collect_metrics"):
+            return None
+
+        try:
             metrics = service._collect_metrics()
             if isinstance(metrics, ServiceTelemetryData):
                 return metrics
             elif isinstance(metrics, dict):
-                # Convert dict to ServiceTelemetryData
                 return ServiceTelemetryData(
                     healthy=metrics.get("healthy", False),
                     uptime_seconds=metrics.get("uptime_seconds"),
@@ -649,18 +654,45 @@ class TelemetryAggregator:
                     memory_mb=metrics.get("memory_mb"),
                     custom_metrics=metrics.get("custom_metrics"),
                 )
+        except Exception as e:
+            logger.error(f"Error calling _collect_metrics on {type(service).__name__}: {e}")
+
+        return None
+
+    async def _try_get_status_method(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try to collect metrics via get_status() method."""
+        if not hasattr(service, "get_status"):
             return None
 
-        # Try get_status
-        if hasattr(service, "get_status"):
+        try:
             status = service.get_status()
             if asyncio.iscoroutine(status):
                 status = await status
             # status_to_telemetry returns dict, not ServiceTelemetryData
             # Return None as we can't convert properly here
             return None
+        except Exception as e:
+            logger.error(f"Error calling get_status on {type(service).__name__}: {e}")
+            return None
 
-        return None
+    async def _try_collect_metrics(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try different methods to collect metrics from service."""
+        if not service:
+            logger.debug("[TELEMETRY] Service is None, cannot collect metrics")
+            return None
+
+        # Try get_metrics first (most common)
+        result = await self._try_get_metrics_method(service)
+        if result:
+            return result
+
+        # Try _collect_metrics (fallback)
+        result = self._try_collect_metrics_method(service)
+        if result:
+            return result
+
+        # Try get_status (last resort)
+        return await self._try_get_status_method(service)
 
     async def collect_from_bus(self, bus_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a message bus."""

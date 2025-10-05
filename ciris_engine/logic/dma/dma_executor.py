@@ -207,6 +207,7 @@ async def run_pdma(
 async def run_csdma(
     evaluator: CSDMAEvaluator,
     thought: ProcessingQueueItem,
+    context: Optional[ThoughtState] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> CSDMAResult:
     """Run the CSDMA for the given thought."""
@@ -260,7 +261,27 @@ async def run_csdma(
         persistence.add_correlation(correlation, time_service)
 
     try:
-        result = await evaluator.evaluate_thought(thought)
+        # Resolve context - same pattern as run_pdma
+        ctx = context
+        if ctx is None:
+            context_data = getattr(thought, "context", None)
+            if context_data is None:
+                context_data = getattr(thought, "initial_context", None)
+
+            if context_data is None:
+                raise DMAFailure(f"No context available for thought {thought.thought_id}")
+
+            if isinstance(context_data, ThoughtState):
+                ctx = context_data
+            elif isinstance(context_data, dict):
+                try:
+                    ctx = ThoughtState.model_validate(context_data)
+                except Exception as e:  # noqa: BLE001
+                    raise DMAFailure(f"Invalid context for thought {thought.thought_id}: {e}") from e
+            else:
+                raise DMAFailure(f"Unsupported context type {type(context_data)} for thought {thought.thought_id}")
+
+        result = await evaluator.evaluate(thought, context=ctx)
 
         # Update correlation with success
         if time_service:

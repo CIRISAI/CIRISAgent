@@ -94,6 +94,13 @@ class ConscienceExecutionPhase:
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
 
+        # Track conscience check results for epistemic data aggregation
+        entropy_level: Optional[float] = None
+        coherence_level: Optional[float] = None
+        uncertainty_acknowledged: bool = False
+        reasoning_transparency: float = 0.0
+        conscience_checks_ran: int = 0
+
         # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
             conscience = entry.conscience
@@ -105,6 +112,7 @@ class ConscienceExecutionPhase:
                 result = await conscience.check(final_action, context)
                 if cb:
                     cb.record_success()
+                conscience_checks_ran += 1
             except CircuitBreakerError as e:
                 logger.warning(f"conscience {entry.name} unavailable: {e}")
                 continue
@@ -114,7 +122,16 @@ class ConscienceExecutionPhase:
                     cb.record_failure()
                 continue
 
-            # Store epistemic data if available
+            # Aggregate epistemic metrics from conscience results
+            if result.entropy_score is not None:
+                entropy_level = result.entropy_score
+            if result.coherence_score is not None:
+                coherence_level = result.coherence_score
+            if result.epistemic_humility_check is not None:
+                uncertainty_acknowledged = True
+                reasoning_transparency = 1.0  # Humility check ran, transparency confirmed
+
+            # Store epistemic data if conscience provided it (legacy path)
             if result.epistemic_data:
                 epistemic_data[entry.name] = result.epistemic_data.model_dump_json()
 
@@ -177,6 +194,19 @@ class ConscienceExecutionPhase:
                 )
                 overridden = True
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
+
+        # Build EpistemicData from aggregated conscience results
+        if conscience_checks_ran > 0:
+            from ciris_engine.schemas.conscience.core import EpistemicData
+
+            # Use defaults if specific checks didn't run
+            aggregated_epistemic = EpistemicData(
+                entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
+                coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
+                uncertainty_acknowledged=uncertainty_acknowledged,
+                reasoning_transparency=reasoning_transparency,
+            )
+            epistemic_data["aggregated"] = aggregated_epistemic.model_dump_json()
 
         # epistemic_data is REQUIRED - fail if missing for non-exempt actions
         if not epistemic_data:

@@ -8,13 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 1.2.3
 
 ### Added
-- TBD
+- **📊 Telemetry Service Refactoring**: Eliminated all SonarCloud complexity violations
+  - Created 23 new focused helper functions (15 in helpers.py, 8 extracted methods)
+  - Average 69% complexity reduction across all 4 high-CC methods
+  - Zero functions over CC 15 threshold (was 4)
+  - All 4,950 tests passing with zero regressions
 
 ### Fixed
 - TBD
 
 ### Changed
-- TBD
+- **⚡ Telemetry Service Complexity Reduction**: Comprehensive refactoring of high-complexity methods
+  - `query_metrics`: CC 22 → 9 (59% reduction) - Extracted 5 filtering/conversion helpers
+  - `_generate_semantic_service_name`: CC 16 → 8 (50% reduction) - Used dispatch table pattern
+  - `collect_from_adapter_instances`: CC 19 → 2 (89% reduction) - Extracted 5 collection helpers
+  - `_try_collect_metrics`: CC 19 → 4 (79% reduction) - Extracted 4 method-specific helpers
+  - All helper functions maintain full type safety with Pydantic schemas
+  - No new Dict[str, Any] introduced
+  - Full mypy compliance maintained
 
 ## [1.2.2] - 2025-10-04
 

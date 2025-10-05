@@ -1338,18 +1338,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             MemoryBusUnavailableError,
             MetricCollectionError,
         )
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
+            calculate_query_time_window,
+            convert_to_metric_record,
+            filter_by_metric_name,
+            filter_by_tags,
+            filter_by_time_range,
+        )
         from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
         if not self._memory_bus:
             raise MemoryBusUnavailableError("Memory bus not available for metric queries")
 
         try:
-            # Calculate hours from time range
-            hours = 24  # Default
-            if start_time and end_time:
-                hours = int((end_time - start_time).total_seconds() / 3600)
-            elif start_time:
-                hours = int((self._now() - start_time).total_seconds() / 3600)
+            # Calculate hours from time range using helper
+            hours = calculate_query_time_window(start_time, end_time, self._now())
 
             # Recall time series data from memory
             timeseries_data = await self._memory_bus.recall_timeseries(
@@ -1360,38 +1363,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 handler_name="telemetry_service",
             )
 
-            # Convert to typed MetricRecord objects
+            # Filter and convert to typed MetricRecord objects using helpers
             results: List[MetricRecord] = []
             for data in timeseries_data:
-                # Filter by metric name
-                if data.metric_name != metric_name:
+                # Apply filters using helper functions
+                if not filter_by_metric_name(data, metric_name):
+                    continue
+                if not filter_by_tags(data, tags):
+                    continue
+                if not filter_by_time_range(data, start_time, end_time):
                     continue
 
-                # Filter by tags if specified
-                if tags:
-                    data_tags = data.tags or {}
-                    if not all(data_tags.get(k) == v for k, v in tags.items()):
-                        continue
-
-                # Filter by time range
-                if data.timestamp:
-                    ts = data.timestamp
-                    if ts is not None:
-                        if start_time and ts < start_time:
-                            continue
-                        if end_time and ts > end_time:
-                            continue
-
-                # Create typed MetricRecord (validation happens here)
-                if data.metric_name and data.value is not None and data.timestamp:
-                    results.append(
-                        MetricRecord(
-                            metric_name=data.metric_name,
-                            value=data.value,
-                            timestamp=data.timestamp,
-                            tags=data.tags or {},
-                        )
-                    )
+                # Convert to MetricRecord using helper
+                record = convert_to_metric_record(data)
+                if record:
+                    results.append(record)
 
             return results
 

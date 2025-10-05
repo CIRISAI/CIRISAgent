@@ -801,138 +801,46 @@ class TSDBConsolidationService(BaseGraphService):
         Only graph node representations are cleaned up.
         """
         try:
-            import json
             import sqlite3
+
+            from ciris_engine.logic.config import get_sqlite_db_full_path
+            from ciris_engine.logic.services.graph.tsdb_consolidation.cleanup_helpers import (
+                cleanup_audit_summary,
+                cleanup_trace_summary,
+                cleanup_tsdb_summary,
+            )
+            from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
+                get_retention_cutoff_date,
+            )
+            from ciris_engine.logic.services.graph.tsdb_consolidation.db_query_helpers import (
+                query_expired_summaries,
+            )
 
             logger.info("Starting cleanup of consolidated graph data (audit_log untouched)")
 
             # Connect to database
-            from ciris_engine.logic.config import get_sqlite_db_full_path
-
             db_path = self.db_path or get_sqlite_db_full_path()
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
-            # Find all summaries that represent periods older than the retention period
-            retention_cutoff = self._now() - self._raw_retention
+            # Find all summaries older than retention period
+            retention_cutoff = get_retention_cutoff_date(self._now(), int(self._raw_retention.total_seconds() / 3600))
+            summaries = query_expired_summaries(cursor, retention_cutoff)
 
-            cursor.execute(
-                """
-                SELECT node_id, node_type, attributes_json
-                FROM graph_nodes
-                WHERE node_type LIKE '%_summary'
-                  AND json_extract(attributes_json, '$.period_end') < ?
-                ORDER BY json_extract(attributes_json, '$.period_end')
-            """,
-                (retention_cutoff.isoformat(),),
-            )
-
-            summaries = cursor.fetchall()
             total_deleted = 0
 
+            # Process each expired summary
             for node_id, node_type, attrs_json in summaries:
-                attrs = json.loads(attrs_json) if attrs_json else {}
-                period_start = attrs.get("period_start")
-                period_end = attrs.get("period_end")
+                deleted = 0
 
-                if not period_start or not period_end:
-                    continue
-
-                # Validate and delete based on node type
                 if node_type == "tsdb_summary":
-                    claimed_count = attrs.get("source_node_count", 0)
-
-                    # Count actual nodes
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) FROM graph_nodes
-                        WHERE node_type = 'tsdb_data'
-                          AND datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) < datetime(?)
-                    """,
-                        (period_start, period_end),
-                    )
-                    actual_count = cursor.fetchone()[0]
-
-                    if claimed_count == actual_count and actual_count > 0:
-                        # Delete the nodes
-                        cursor.execute(
-                            """
-                            DELETE FROM graph_nodes
-                            WHERE node_type = 'tsdb_data'
-                              AND datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) < datetime(?)
-                        """,
-                            (period_start, period_end),
-                        )
-                        deleted = cursor.rowcount
-                        if deleted > 0:
-                            logger.info(f"Deleted {deleted} tsdb_data nodes for period {node_id}")
-                            total_deleted += deleted
-
+                    deleted = cleanup_tsdb_summary(cursor, node_id, attrs_json)
                 elif node_type == "audit_summary":
-                    # Graph audit nodes can be cleaned up after consolidation
-                    # The SQLite audit_log table is what's preserved forever
-                    claimed_count = attrs.get("source_node_count", 0)
-
-                    # Count actual audit_entry nodes
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) FROM graph_nodes
-                        WHERE node_type = 'audit_entry'
-                          AND datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) < datetime(?)
-                    """,
-                        (period_start, period_end),
-                    )
-                    actual_count = cursor.fetchone()[0]
-
-                    if claimed_count == actual_count and actual_count > 0:
-                        # Delete the graph nodes (NOT the audit_log table!)
-                        cursor.execute(
-                            """
-                            DELETE FROM graph_nodes
-                            WHERE node_type = 'audit_entry'
-                              AND datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) < datetime(?)
-                        """,
-                            (period_start, period_end),
-                        )
-                        deleted = cursor.rowcount
-                        if deleted > 0:
-                            logger.info(
-                                f"Deleted {deleted} audit_entry graph nodes for period {node_id} (audit_log table preserved)"
-                            )
-                            total_deleted += deleted
-
+                    deleted = cleanup_audit_summary(cursor, node_id, attrs_json)
                 elif node_type == "trace_summary":
-                    claimed_count = attrs.get("source_correlation_count", 0)
+                    deleted = cleanup_trace_summary(cursor, node_id, attrs_json)
 
-                    # Count actual correlations
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) FROM service_correlations
-                        WHERE datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) < datetime(?)
-                    """,
-                        (period_start, period_end),
-                    )
-                    actual_count = cursor.fetchone()[0]
-
-                    # Only delete if counts match exactly
-                    if claimed_count == actual_count and actual_count > 0:
-                        cursor.execute(
-                            """
-                            DELETE FROM service_correlations
-                            WHERE datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) < datetime(?)
-                        """,
-                            (period_start, period_end),
-                        )
-                        deleted = cursor.rowcount
-                        if deleted > 0:
-                            logger.info(f"Deleted {deleted} correlations for period {node_id}")
-                            total_deleted += deleted
+                total_deleted += deleted
 
             # Commit changes
             if total_deleted > 0:

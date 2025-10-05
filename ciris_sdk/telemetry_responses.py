@@ -7,7 +7,7 @@ These models provide type-safe alternatives to Dict[str, Any] return types.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -86,7 +86,7 @@ class ReasoningTrace(BaseModel):
     outcome: Optional[str] = Field(None, description="Trace outcome")
 
     @field_serializer("start_time")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -111,7 +111,7 @@ class LogEntry(BaseModel):
     context: Dict[str, str] = Field(default_factory=dict, description="Additional context")
 
     @field_serializer("timestamp")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -167,7 +167,7 @@ class IncidentData(BaseModel):
     resolved_at: Optional[datetime] = Field(None, description="Resolution time")
 
     @field_serializer("timestamp", "resolved_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -189,7 +189,7 @@ class InsightData(BaseModel):
     severity: str = Field(..., description="Severity: info|warning|critical")
 
     @field_serializer("timestamp")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 

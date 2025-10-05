@@ -8,7 +8,7 @@ in telemetry operations.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -63,7 +63,7 @@ class ResourceHistoryPoint(BaseModel):
     unit: Optional[str] = Field(None, description="Unit of measurement")
 
     @field_serializer("timestamp")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -79,7 +79,7 @@ class MetricData(BaseModel):
     service: Optional[str] = Field(None, description="Service that produced metric")
 
     @field_serializer("timestamp")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -138,7 +138,7 @@ class ThoughtData(BaseModel):
     result: Optional[str] = Field(None, description="Processing result")
 
     @field_serializer("created_at", "completed_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -155,7 +155,7 @@ class LineageInfo(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @field_serializer("build_date")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -174,7 +174,7 @@ class ProcessorStateData(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @field_serializer("last_activity")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -204,7 +204,7 @@ class ServiceMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     @field_serializer("last_restart")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
 
@@ -253,5 +253,5 @@ class VerificationResult(BaseModel):
     details: Dict[str, str] = Field(default_factory=dict, description="Verification details")
 
     @field_serializer("verified_at")
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    def serialize_datetime(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None

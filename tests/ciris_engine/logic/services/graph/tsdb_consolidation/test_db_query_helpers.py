@@ -5,16 +5,17 @@ Ensures 80%+ coverage with mocked database cursors.
 """
 
 import json
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import Mock, MagicMock
 
 from ciris_engine.logic.services.graph.tsdb_consolidation.db_query_helpers import (
-    query_summaries_in_period,
+    count_nodes_in_period,
     query_all_summary_types_in_period,
     query_expired_summaries,
+    query_summaries_in_period,
     update_summary_consolidation_level,
-    count_nodes_in_period,
 )
 
 
@@ -91,10 +92,10 @@ class TestQueryAllSummaryTypesInPeriod:
         cursor = Mock()
         # Return different results for each summary type
         cursor.fetchall.side_effect = [
-            [("tsdb_1", '{}', "2023-10-01T00:00:00+00:00")],  # tsdb_summary
-            [("audit_1", '{}', "2023-10-01T00:00:00+00:00")],  # audit_summary
+            [("tsdb_1", "{}", "2023-10-01T00:00:00+00:00")],  # tsdb_summary
+            [("audit_1", "{}", "2023-10-01T00:00:00+00:00")],  # audit_summary
             [],  # trace_summary (empty)
-            [("conv_1", '{}', "2023-10-01T00:00:00+00:00")],  # conversation_summary
+            [("conv_1", "{}", "2023-10-01T00:00:00+00:00")],  # conversation_summary
             [],  # task_summary (empty)
         ]
 

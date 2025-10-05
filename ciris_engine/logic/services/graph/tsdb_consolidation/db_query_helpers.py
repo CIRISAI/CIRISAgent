@@ -6,8 +6,8 @@ Centralizes common SQL query patterns for querying summaries and nodes.
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
 from sqlite3 import Cursor
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +107,7 @@ def query_all_summary_types_in_period(
     result: Dict[str, List[Tuple[str, str, str]]] = {}
 
     for summary_type in summary_types:
-        summaries = query_summaries_in_period(
-            cursor, summary_type, period_start, period_end, consolidation_level
-        )
+        summaries = query_summaries_in_period(cursor, summary_type, period_start, period_end, consolidation_level)
         if summaries:
             result[summary_type] = summaries
             logger.debug(f"Found {len(summaries)} {summary_type} summaries in period")
@@ -117,9 +115,7 @@ def query_all_summary_types_in_period(
     return result
 
 
-def query_expired_summaries(
-    cursor: Cursor, cutoff_date: datetime
-) -> List[Tuple[str, str, str]]:
+def query_expired_summaries(cursor: Cursor, cutoff_date: datetime) -> List[Tuple[str, str, str]]:
     """
     Query summaries with period_end older than cutoff date.
 
@@ -155,9 +151,7 @@ def query_expired_summaries(
     return cursor.fetchall()
 
 
-def update_summary_consolidation_level(
-    cursor: Cursor, node_id: str, new_level: str
-) -> None:
+def update_summary_consolidation_level(cursor: Cursor, node_id: str, new_level: str) -> None:
     """
     Update the consolidation_level field in a summary node's attributes.
 
@@ -199,9 +193,7 @@ def update_summary_consolidation_level(
     logger.debug(f"Updated {node_id} consolidation_level to '{new_level}'")
 
 
-def count_nodes_in_period(
-    cursor: Cursor, node_type: str, period_start: datetime, period_end: datetime
-) -> int:
+def count_nodes_in_period(cursor: Cursor, node_type: str, period_start: datetime, period_end: datetime) -> int:
     """
     Count nodes of a specific type within a time period.
 

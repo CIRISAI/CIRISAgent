@@ -108,7 +108,11 @@ class DiscordAuditLogger:
         pass
 
     async def log_guidance_request(
-        self, channel_id: str, requester_id: str, context: Dict[str, Any], guidance_received: Optional[str] = None  # noqa: ARG002
+        self,
+        channel_id: str,
+        requester_id: str,
+        context: Dict[str, Any],
+        guidance_received: Optional[str] = None,  # noqa: ARG002
     ) -> None:
         """DEPRECATED: Guidance requests are already audited via defer handler action.
 
@@ -117,7 +121,12 @@ class DiscordAuditLogger:
         pass
 
     async def log_approval_request(
-        self, channel_id: str, requester_id: str, action: str, approval_status: str, approver_id: Optional[str] = None  # noqa: ARG002
+        self,
+        channel_id: str,
+        requester_id: str,
+        action: str,
+        approval_status: str,
+        approver_id: Optional[str] = None,  # noqa: ARG002
     ) -> None:
         """DEPRECATED: Approval requests are already audited via handler actions.
 

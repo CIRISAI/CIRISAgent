@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Optio
 
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from websockets.asyncio.client import ClientConnection as WebSocketClientProtocol
+
 logger = logging.getLogger(__name__)
 
 
@@ -290,7 +293,12 @@ class WebSocketResource:
             if self.ws:
                 async for message in self.ws:
                     try:
-                        data = json.loads(message)
+                        # Decode bytes if necessary
+                        if isinstance(message, bytes):
+                            message_str = message.decode("utf-8")
+                        else:
+                            message_str = message
+                        data = json.loads(message_str)
 
                         # Handle different message types
                         if data.get("type") == "error":
@@ -325,7 +333,9 @@ class WebSocketResource:
                                 pass
 
                     except json.JSONDecodeError:
-                        logger.error(f"Invalid JSON received: {message}")
+                        # Use message_str (already decoded) instead of message (might be bytes)
+                        msg_preview = message_str[:100] if len(message_str) > 100 else message_str
+                        logger.error(f"Invalid JSON received: {msg_preview}")
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
 

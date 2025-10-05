@@ -238,12 +238,12 @@ def action_selection(
                     else:
                         # Multiple parameters - parse as node_id, type, scope
                         node_id = parts[0]
-                        node_type: str = parts[1] if len(parts) > 1 else "general"
+                        recall_type: str = parts[1] if len(parts) > 1 else "general"
                         scope_str = parts[2] if len(parts) > 2 else None
 
                         params = RecallParams(
                             node_id=node_id,
-                            node_type=node_type,
+                            node_type=recall_type,
                             scope=getattr(GraphScope, scope_str.upper()) if scope_str else None,
                             limit=10,
                         )

@@ -200,7 +200,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     return context_items
 
 
-def _attach_extras(obj: Any) -> None:
+def _attach_extras(obj: Any) -> Any:
     """Mimic instructor extra attributes expected on responses.
 
     For structured responses, we return the object directly as instructor
@@ -398,7 +398,7 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
 }
 
 
-def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]] = None, **kwargs: Any):
+def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> Any:
     """Create a mock LLM response with context analysis."""
     messages = messages or []
     # Extract context from messages

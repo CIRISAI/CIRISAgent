@@ -283,9 +283,7 @@ def cleanup_audit_summary(
     if should_cleanup_summary(claimed_count, actual_count):
         deleted = delete_nodes_in_period(cursor, "audit_entry", period_start, period_end)
         if deleted > 0:
-            logger.info(
-                f"Deleted {deleted} audit_entry graph nodes for period {node_id} (audit_log table preserved)"
-            )
+            logger.info(f"Deleted {deleted} audit_entry graph nodes for period {node_id} (audit_log table preserved)")
         return deleted
 
     return 0

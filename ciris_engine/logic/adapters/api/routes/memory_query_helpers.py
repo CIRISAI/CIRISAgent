@@ -137,7 +137,8 @@ class QueryBuilder:
             QueryBuilder._add_user_filter(query_parts, params, user_filter_ids)
 
         query_parts.append(QueryBuilder.SQL_ORDER_BY)
-        query_parts.append(f"LIMIT {limit} OFFSET {offset}")
+        query_parts.append("LIMIT ? OFFSET ?")
+        params.extend([limit, offset])
 
         return " ".join(query_parts), params
 

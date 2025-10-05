@@ -85,9 +85,7 @@ class TestCreateDailySummaryAttributes:
         resources = {"total_tokens": 1000, "total_cost_cents": 5.0}
         action_counts = {"speak": 10, "observe": 5}
 
-        attrs = create_daily_summary_attributes(
-            "tsdb_summary", day, day_summaries, metrics, resources, action_counts
-        )
+        attrs = create_daily_summary_attributes("tsdb_summary", day, day_summaries, metrics, resources, action_counts)
 
         assert attrs["consolidation_level"] == "extensive"
         assert attrs["source_summary_count"] == 2
@@ -108,9 +106,7 @@ class TestCreateDailySummaryAttributes:
         }
         action_counts = {"speak": 10, "observe": 5}
 
-        attrs = create_daily_summary_attributes(
-            "tsdb_summary", day, day_summaries, metrics, resources, action_counts
-        )
+        attrs = create_daily_summary_attributes("tsdb_summary", day, day_summaries, metrics, resources, action_counts)
 
         assert attrs["metrics"] == metrics
         assert attrs["total_tokens"] == 1000
@@ -127,9 +123,7 @@ class TestCreateDailySummaryAttributes:
         resources = {"error_count": 2}
         action_counts = {"speak": 8, "observe": 2}  # Total 10, 2 errors = 80% success
 
-        attrs = create_daily_summary_attributes(
-            "tsdb_summary", day, day_summaries, metrics, resources, action_counts
-        )
+        attrs = create_daily_summary_attributes("tsdb_summary", day, day_summaries, metrics, resources, action_counts)
 
         assert attrs["success_rate"] == pytest.approx(0.8)
 
@@ -141,9 +135,7 @@ class TestCreateDailySummaryAttributes:
         resources = {"error_count": 0}
         action_counts = {}  # No actions
 
-        attrs = create_daily_summary_attributes(
-            "tsdb_summary", day, day_summaries, metrics, resources, action_counts
-        )
+        attrs = create_daily_summary_attributes("tsdb_summary", day, day_summaries, metrics, resources, action_counts)
 
         assert attrs["success_rate"] == 1.0
 
@@ -155,9 +147,7 @@ class TestCreateDailySummaryAttributes:
         resources = {}
         action_counts = {}
 
-        attrs = create_daily_summary_attributes(
-            "tsdb_summary", day, day_summaries, metrics, resources, action_counts
-        )
+        attrs = create_daily_summary_attributes("tsdb_summary", day, day_summaries, metrics, resources, action_counts)
 
         assert len(attrs["source_summary_ids"]) == 10
         assert attrs["source_summary_count"] == 15  # Count should still be 15

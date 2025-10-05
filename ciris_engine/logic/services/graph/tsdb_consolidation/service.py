@@ -1384,7 +1384,9 @@ class TSDBConsolidationService(BaseGraphService):
                             result = await self._memory_bus.memorize(daily_summary, handler_name="tsdb_consolidation")
                             if result.status == MemoryOpStatus.OK:
                                 daily_summaries_created += 1
-                                logger.info(f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries")
+                                logger.info(
+                                    f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries"
+                                )
 
                 # Final summary
                 total_duration = (self._now() - consolidation_start).total_seconds()

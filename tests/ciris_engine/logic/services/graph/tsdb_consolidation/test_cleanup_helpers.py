@@ -5,19 +5,20 @@ Ensures 80%+ coverage for all cleanup logic.
 """
 
 import json
-import pytest
 from unittest.mock import Mock
 
+import pytest
+
 from ciris_engine.logic.services.graph.tsdb_consolidation.cleanup_helpers import (
-    validate_and_count_nodes,
-    validate_and_count_correlations,
-    delete_nodes_in_period,
-    delete_correlations_in_period,
-    parse_summary_period,
-    should_cleanup_summary,
-    cleanup_tsdb_summary,
     cleanup_audit_summary,
     cleanup_trace_summary,
+    cleanup_tsdb_summary,
+    delete_correlations_in_period,
+    delete_nodes_in_period,
+    parse_summary_period,
+    should_cleanup_summary,
+    validate_and_count_correlations,
+    validate_and_count_nodes,
 )
 
 
@@ -29,9 +30,7 @@ class TestValidateAndCountNodes:
         cursor = Mock()
         cursor.fetchone.return_value = (42,)
 
-        count = validate_and_count_nodes(
-            cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        count = validate_and_count_nodes(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert count == 42
         cursor.execute.assert_called_once()
@@ -41,9 +40,7 @@ class TestValidateAndCountNodes:
         cursor = Mock()
         cursor.fetchone.return_value = (0,)
 
-        count = validate_and_count_nodes(
-            cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        count = validate_and_count_nodes(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert count == 0
 
@@ -52,9 +49,7 @@ class TestValidateAndCountNodes:
         cursor = Mock()
         cursor.fetchone.return_value = None
 
-        count = validate_and_count_nodes(
-            cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        count = validate_and_count_nodes(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert count == 0
 
@@ -67,9 +62,7 @@ class TestValidateAndCountCorrelations:
         cursor = Mock()
         cursor.fetchone.return_value = (15,)
 
-        count = validate_and_count_correlations(
-            cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        count = validate_and_count_correlations(cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert count == 15
 
@@ -78,9 +71,7 @@ class TestValidateAndCountCorrelations:
         cursor = Mock()
         cursor.fetchone.return_value = None
 
-        count = validate_and_count_correlations(
-            cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        count = validate_and_count_correlations(cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert count == 0
 
@@ -93,9 +84,7 @@ class TestDeleteNodesInPeriod:
         cursor = Mock()
         cursor.rowcount = 10
 
-        deleted = delete_nodes_in_period(
-            cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        deleted = delete_nodes_in_period(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert deleted == 10
         cursor.execute.assert_called_once()
@@ -105,9 +94,7 @@ class TestDeleteNodesInPeriod:
         cursor = Mock()
         cursor.rowcount = 0
 
-        deleted = delete_nodes_in_period(
-            cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        deleted = delete_nodes_in_period(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert deleted == 0
 
@@ -120,9 +107,7 @@ class TestDeleteCorrelationsInPeriod:
         cursor = Mock()
         cursor.rowcount = 5
 
-        deleted = delete_correlations_in_period(
-            cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        deleted = delete_correlations_in_period(cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert deleted == 5
 
@@ -131,9 +116,7 @@ class TestDeleteCorrelationsInPeriod:
         cursor = Mock()
         cursor.rowcount = 0
 
-        deleted = delete_correlations_in_period(
-            cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00"
-        )
+        deleted = delete_correlations_in_period(cursor, "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert deleted == 0
 
@@ -143,10 +126,12 @@ class TestParseSummaryPeriod:
 
     def test_parses_valid_json(self):
         """Should parse valid JSON with period fields."""
-        attrs_json = json.dumps({
-            "period_start": "2023-10-01T00:00:00+00:00",
-            "period_end": "2023-10-02T00:00:00+00:00",
-        })
+        attrs_json = json.dumps(
+            {
+                "period_start": "2023-10-01T00:00:00+00:00",
+                "period_end": "2023-10-02T00:00:00+00:00",
+            }
+        )
 
         start, end = parse_summary_period(attrs_json)
 

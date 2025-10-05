@@ -124,33 +124,33 @@ class TestCSDMAEvaluator:
         assert all(isinstance(m.get("content"), str) for m in messages)
 
     @pytest.mark.asyncio
-    async def test_csdma_fails_without_identity(self, mock_service_registry, mock_prompt_loader, valid_thought):
-        """Test that CSDMA fails fast when agent identity is missing."""
+    async def test_csdma_works_without_context(self, mock_service_registry, mock_prompt_loader, valid_thought):
+        """Test that CSDMA works even without context (uses defaults)."""
         # Create queue item WITHOUT system snapshot
         content = ThoughtContent(text="Test thought", metadata={})
         queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
 
-        # No initial_context means no identity
+        # No initial_context
         queue_item.initial_context = {}
 
         evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
 
-        # Mock the sink to avoid the sink error - we want to test identity validation
-        from unittest.mock import Mock
+        # Mock the LLM call to return a result
+        mock_result = CSDMAResult(
+            plausibility_score=0.5,
+            flags=[],
+            reasoning="Evaluated without specific identity context",
+        )
+        evaluator.call_llm_structured = AsyncMock(return_value=(mock_result, None))
 
-        evaluator.sink = Mock()
-        evaluator.sink.llm = Mock()
-
-        # Should raise ValueError about missing identity
-        with pytest.raises(ValueError) as exc_info:
-            await evaluator.evaluate_thought(queue_item)
-
-        assert "CRITICAL" in str(exc_info.value)
-        assert "No system_snapshot" in str(exc_info.value)
+        # Should succeed with default context
+        result = await evaluator.evaluate_thought(queue_item)
+        assert isinstance(result, CSDMAResult)
+        assert result.plausibility_score == 0.5
 
     @pytest.mark.asyncio
-    async def test_csdma_fails_with_incomplete_identity(self, mock_service_registry, mock_prompt_loader, valid_thought):
-        """Test that CSDMA fails when identity is missing required fields."""
+    async def test_csdma_handles_incomplete_identity_gracefully(self, mock_service_registry, mock_prompt_loader, valid_thought):
+        """Test that CSDMA handles incomplete identity gracefully (uses defaults)."""
         # Create system snapshot with incomplete identity (missing role)
         incomplete_snapshot = SystemSnapshot(
             agent_identity={
@@ -166,17 +166,18 @@ class TestCSDMAEvaluator:
 
         evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
 
-        # Mock the sink to avoid the sink error
-        from unittest.mock import Mock
+        # Mock the LLM call
+        mock_result = CSDMAResult(
+            plausibility_score=0.6,
+            flags=[],
+            reasoning="Evaluated with partial identity",
+        )
+        evaluator.call_llm_structured = AsyncMock(return_value=(mock_result, None))
 
-        evaluator.sink = Mock()
-        evaluator.sink.llm = Mock()
-
-        with pytest.raises(ValueError) as exc_info:
-            await evaluator.evaluate_thought(queue_item)
-
-        assert "CRITICAL" in str(exc_info.value)
-        assert "role is missing" in str(exc_info.value)
+        # Should succeed even with incomplete identity
+        result = await evaluator.evaluate_thought(queue_item)
+        assert isinstance(result, CSDMAResult)
+        assert result.plausibility_score == 0.6
 
     @pytest.mark.asyncio
     async def test_csdma_handles_llm_failure(self, mock_service_registry, mock_prompt_loader, valid_queue_item):

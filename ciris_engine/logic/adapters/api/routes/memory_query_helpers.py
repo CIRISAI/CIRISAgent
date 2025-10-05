@@ -105,7 +105,7 @@ class QueryBuilder:
             user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
         """
         query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, "WHERE 1=1"]
-        params = []
+        params: List[Any] = []
 
         if node_type:
             query_parts.append("AND node_type = ?")

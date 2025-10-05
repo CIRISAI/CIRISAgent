@@ -10,13 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **🎯 100% Type Safety**: Complete mypy cleanup across all three codebases
   - ciris_sdk: 0 errors (was 194 errors across 23 files)
-  - ciris_engine: 0 errors (547 files)
+  - ciris_engine: 0 errors (553 files)
   - ciris_modular_services: 0 errors (14 files)
   - Total: 204 errors fixed using parallel Task workers
 - **✅ 100% QA Test Coverage**: All 131 tests passing across 14 modules
   - Individual modules: 79/79 tests (auth, agent, memory, telemetry, system, audit, tools, guidance, handlers, filters, sdk, streaming)
   - Comprehensive suites: 52/52 tests (extended_api, api_full)
   - Perfect system reliability validation with no critical incidents
+- **📊 TSDB Consolidation Helpers**: Extracted 38 helper functions into 6 focused modules
+  - date_calculation_helpers.py (5 functions)
+  - db_query_helpers.py (5 functions)
+  - aggregation_helpers.py (8 functions + 2 classes)
+  - cleanup_helpers.py (9 functions)
+  - profound_helpers.py (5 functions)
+  - extensive_helpers.py (6 functions)
+  - 135 tests with 96.4%+ coverage on all modules
 
 ### Fixed
 - **🔧 SDK Type Safety** (194 errors fixed):
@@ -31,6 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added return type annotations to response generators
   - Fixed variable name collisions (node_type redefinition)
   - Renamed _start_time to _start_time_float to avoid type conflict
+- **🔒 SQL Injection Vulnerability** (CodeQL py/sql-injection):
+  - Changed LIMIT/OFFSET from f-string interpolation to parameterized queries
+  - Before: `f"LIMIT {limit} OFFSET {offset}"`
+  - After: `"LIMIT ? OFFSET ?"` with `params.extend([limit, offset])`
+  - Added explicit `List[Any]` type annotation for params list
+- **🔒 Weak Cryptographic Hashing** (CodeQL py/weak-sensitive-data-hashing):
+  - Replaced SHA256 with bcrypt for API key hashing (12 rounds)
+  - Added `_verify_key()` method using bcrypt.checkpw()
+  - Updated storage to use key_id instead of hash as dictionary key
+  - Protects against rainbow table and brute-force attacks
+  - All 86 authentication tests passing
+- **📦 Dependency Update**: Updated websockets from >=12.0,<13.0 to >=14.0
+  - SDK uses `websockets.asyncio.client` which requires version 13.0+
+  - Fixed 6 CI test failures related to websockets import
 
 ### Changed
 - **📊 PDMA Prompt Enhancement**: Updated ethical evaluation prompt
@@ -42,6 +64,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Generic type parameters for all collections
   - Explicit type annotations for kwargs and **params
   - Type narrowing with isinstance() and assert statements
+- **⚡ TSDB Consolidation Complexity Reduction**: service.py from 2,024 → 1,491 lines (26.3% reduction)
+  - `_cleanup_old_data`: CC 19 → 9 (52.6% reduction)
+  - `_run_profound_consolidation`: CC 22 → 7 (68.2% reduction)
+  - `_run_extensive_consolidation`: CC 34 → 13 (61.8% reduction)
+  - `_create_all_edges`: CC 18 → 13 (27.8% reduction)
+  - All functions now meet CC ≤ 15 SonarCloud threshold
+- **🧹 Code Quality**: Fixed SonarCloud issues in TSDB helpers
+  - Extracted duplicate error message strings to constants
+  - Removed unnecessary f-string in cleanup_helpers.py
 
 ## [1.2.2] - 2025-10-04
 

@@ -21,17 +21,16 @@ system_guidance_header: |
   3. Identifying which of the 10 handler actions would be ethically appropriate.
   4. Explaining why those actions align with CIRIS principles.
 
-  Your response must be structured as follows:
-  {{
-    "alignment_check": "Detailed ethical analysis addressing each CIRIS principle",
-    "decision": "A sentence identifying which of the 10 handler actions (observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete) could be ethical actions to take and why. Note that inaction is also an action.",
-    "reasoning": "Justification for the identified actions referencing your analysis"
-  }}
+response_format: |
+  Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
+  - "alignment_check": A detailed ethical analysis addressing each CIRIS principle (Do Good, Avoid Harm, Honor Autonomy, Ensure Fairness).
+  - "decision": A sentence identifying which of the 10 handler actions (observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete) could be ethical actions to take and why. Note that inaction is also an action.
+  - "reasoning": Justification for the identified actions referencing your alignment analysis. This field is MANDATORY.
 
   Do not include extra fields or PDMA step names.
 
 context_integration: |
-  System Thought to Evaluate: '{{original_thought_content}}'
-  {{full_context_str}}
+  Context: {{full_context_str}}
+  Thought to Evaluate: {{original_thought_content}}
 
 covenant_header: true  # Use COVENANT_TEXT as system message

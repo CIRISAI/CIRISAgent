@@ -1698,6 +1698,19 @@ class TSDBConsolidationService(BaseGraphService):
         This process compresses daily summaries to meet storage targets without
         creating new nodes. Future versions will handle multimedia compression.
         """
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
+            calculate_month_period,
+        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation.profound_helpers import (
+            calculate_storage_metrics,
+            cleanup_old_basic_summaries,
+            compress_and_update_summaries,
+            query_extensive_summaries_in_month,
+        )
+
+        from .compressor import SummaryCompressor
+
         consolidation_start = self._now()
         total_daily_summaries = 0
         summaries_compressed = 0
@@ -1710,54 +1723,19 @@ class TSDBConsolidationService(BaseGraphService):
             logger.info(f"Started at: {consolidation_start.isoformat()}")
 
             now = self._now()
-            # Calculate the previous month period
-            if now.month == 1:
-                # January, so previous month is December of last year
-                month_start = datetime(now.year - 1, 12, 1, tzinfo=timezone.utc)
-                month_end = datetime(now.year - 1, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-            else:
-                # Any other month
-                month_start = datetime(now.year, now.month - 1, 1, tzinfo=timezone.utc)
-                # Last day of previous month
-                if now.month - 1 in [1, 3, 5, 7, 8, 10, 12]:
-                    last_day = 31
-                elif now.month - 1 == 2:
-                    # February - check for leap year
-                    if now.year % 4 == 0 and (now.year % 100 != 0 or now.year % 400 == 0):
-                        last_day = 29
-                    else:
-                        last_day = 28
-                else:
-                    last_day = 30
-                month_end = datetime(now.year, now.month - 1, last_day, 23, 59, 59, tzinfo=timezone.utc)
+
+            # Calculate the previous month period using helper
+            month_start, month_end = calculate_month_period(now)
 
             # Initialize compressor
-            from .compressor import SummaryCompressor
-
             compressor = SummaryCompressor(self._profound_target_mb_per_day)
 
-            # Query all extensive (daily) summaries from the past month
-            import json
-
-            from ciris_engine.logic.persistence.db.core import get_db_connection
-
+            # Query and process summaries
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
-                # Get all extensive summaries from the calendar month
-                cursor.execute(
-                    """
-                    SELECT node_id, node_type, attributes_json, version
-                    FROM graph_nodes
-                    WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-                      AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-                      AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-                    ORDER BY node_type, json_extract(attributes_json, '$.period_start')
-                """,
-                    (month_start.isoformat(), month_end.isoformat()),
-                )
-
-                summaries = cursor.fetchall()
+                # Query all extensive summaries from the month using helper
+                summaries = query_extensive_summaries_in_month(cursor, month_start, month_end)
                 total_daily_summaries = len(summaries)
 
                 if len(summaries) < 7:  # Less than a week's worth
@@ -1768,30 +1746,11 @@ class TSDBConsolidationService(BaseGraphService):
 
                 logger.info(f"Found {total_daily_summaries} daily summaries to compress")
 
-                # Calculate current storage usage
+                # Calculate current storage using helper
                 days_in_period = (month_end - month_start).days + 1
-                summary_attrs_list = []
-                for _, _, attrs_json, _ in summaries:
-                    attrs_dict = json.loads(attrs_json) if attrs_json else {}
-                    # Convert dict to SummaryAttributes object
-                    try:
-                        attrs = SummaryAttributes(**attrs_dict)
-                        summary_attrs_list.append(attrs)
-                    except Exception as e:
-                        logger.warning(f"Failed to convert summary attributes to SummaryAttributes model: {e}")
-                        # Create minimal SummaryAttributes for compatibility
-                        attrs = SummaryAttributes(
-                            period_start=datetime.fromisoformat(
-                                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            period_end=datetime.fromisoformat(
-                                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
-                        )
-                        summary_attrs_list.append(attrs)
-
-                current_daily_mb = compressor.estimate_daily_size(summary_attrs_list, days_in_period)
+                current_daily_mb, summary_attrs_list = calculate_storage_metrics(
+                    cursor, month_start, month_end, compressor
+                )
                 storage_before_mb = float(current_daily_mb * days_in_period)
                 logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
                 logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
@@ -1801,99 +1760,14 @@ class TSDBConsolidationService(BaseGraphService):
                     logger.info("Daily summaries already meet storage target, skipping compression")
                     return
 
-                # Compress each summary in-place
-                compressed_count = 0
-                total_reduction = 0.0
-
-                for node_id, node_type, attrs_json, version in summaries:
-                    attrs_dict = json.loads(attrs_json) if attrs_json else {}
-
-                    # Convert dict to SummaryAttributes object
-                    try:
-                        attrs = SummaryAttributes(**attrs_dict)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to convert summary attributes to SummaryAttributes model for {node_id}: {e}"
-                        )
-                        # Create minimal SummaryAttributes for compatibility
-                        attrs = SummaryAttributes(
-                            period_start=datetime.fromisoformat(
-                                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            period_end=datetime.fromisoformat(
-                                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
-                        )
-
-                    # Compress the attributes
-                    compression_result = compressor.compress_summary(attrs)
-                    compressed_attrs = compression_result.compressed_attributes
-                    reduction_ratio = compression_result.reduction_ratio
-
-                    # Convert back to dict and add compression metadata
-                    compressed_attrs_dict = compressed_attrs.model_dump(mode="json")
-                    compressed_attrs_dict["profound_compressed"] = True
-                    compressed_attrs_dict["compression_date"] = now.isoformat()
-                    compressed_attrs_dict["compression_ratio"] = reduction_ratio
-
-                    # Update the node in-place
-                    cursor.execute(
-                        """
-                        UPDATE graph_nodes
-                        SET attributes_json = ?,
-                            version = ?,
-                            updated_by = 'tsdb_profound_consolidation',
-                            updated_at = ?
-                        WHERE node_id = ?
-                    """,
-                        (json.dumps(compressed_attrs_dict), version + 1, now.isoformat(), node_id),
-                    )
-
-                    if cursor.rowcount > 0:
-                        compressed_count += 1
-                        summaries_compressed += 1
-                        total_reduction += reduction_ratio
-                        logger.debug(f"Compressed {node_id} by {reduction_ratio:.1%}")
+                # Compress summaries using helper
+                compressed_count, total_reduction = compress_and_update_summaries(cursor, summaries, compressor, now)
+                summaries_compressed = compressed_count
 
                 conn.commit()
 
-                # Calculate new storage usage
-                compressed_attrs_list = []
-                cursor.execute(
-                    """
-                    SELECT attributes_json
-                    FROM graph_nodes
-                    WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-                      AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-                      AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-                """,
-                    (month_start.isoformat(), month_end.isoformat()),
-                )
-
-                for row in cursor.fetchall():
-                    attrs_dict = json.loads(row[0]) if row[0] else {}
-                    # Convert dict to SummaryAttributes object
-                    try:
-                        attrs = SummaryAttributes(**attrs_dict)
-                        compressed_attrs_list.append(attrs)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to convert compressed summary attributes to SummaryAttributes model: {e}"
-                        )
-                        # Create minimal SummaryAttributes for compatibility
-                        attrs = SummaryAttributes(
-                            period_start=datetime.fromisoformat(
-                                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            period_end=datetime.fromisoformat(
-                                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-                            ),
-                            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
-                        )
-                        compressed_attrs_list.append(attrs)
-
-                new_daily_mb = compressor.estimate_daily_size(compressed_attrs_list, days_in_period)
+                # Calculate new storage using helper
+                new_daily_mb, _ = calculate_storage_metrics(cursor, month_start, month_end, compressor)
                 storage_after_mb = new_daily_mb * days_in_period
                 avg_reduction = total_reduction / compressed_count if compressed_count > 0 else 0
 
@@ -1907,23 +1781,17 @@ class TSDBConsolidationService(BaseGraphService):
                     f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
                 )
                 logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
-                logger.info(
-                    f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
-                )
+                if storage_before_mb > 0:
+                    logger.info(
+                        f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
+                    )
 
-                # Clean up old basic summaries (> 30 days old)
+                # Clean up old basic summaries using helper
                 cleanup_cutoff = now - timedelta(days=30)
-                cursor.execute(
-                    """
-                    DELETE FROM graph_nodes
-                    WHERE json_extract(attributes_json, '$.consolidation_level') = 'basic'
-                      AND datetime(json_extract(attributes_json, '$.period_start')) < datetime(?)
-                """,
-                    (cleanup_cutoff.isoformat(),),
-                )
+                deleted = cleanup_old_basic_summaries(cursor, cleanup_cutoff)
 
-                if cursor.rowcount > 0:
-                    logger.info(f"Cleaned up {cursor.rowcount} old basic summaries")
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} old basic summaries")
                     conn.commit()
 
             self._last_profound_consolidation = now

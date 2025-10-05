@@ -17,9 +17,6 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Optio
 
 from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from typing import Any as WebSocketClientProtocol
-
 logger = logging.getLogger(__name__)
 
 

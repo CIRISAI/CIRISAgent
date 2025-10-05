@@ -20,7 +20,7 @@ class MockLLMProtocol(LLMService, Protocol):
     """
 
     # Mock-specific methods
-    def set_response_delay(self, delay_ms: int) -> None:
+    def set_response_delay(self, delay_ms: int) -> None:  # noqa: ARG002
         """Set simulated response delay."""
         ...
 

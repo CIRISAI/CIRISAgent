@@ -279,7 +279,7 @@ class AgentResource:
 
         return AgentIdentity(**result)
 
-    async def stream(self, websocket_url: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def stream(self, websocket_url: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:  # noqa: ARG002
         """
         WebSocket streaming interface (placeholder).
 
@@ -288,7 +288,7 @@ class AgentResource:
         """
         # This is a placeholder - actual WebSocket implementation would go here
         raise NotImplementedError("WebSocket streaming not yet implemented in SDK")
-        yield  # Make this an async generator (unreachable but satisfies type checker)
+        yield  # Make this an async generator (unreachable but satisfies type checker)  # noqa: RET503
 
     # Convenience methods for common patterns
 
@@ -315,7 +315,7 @@ class AgentResource:
         channel_id: str = "api_default",
         author_id: str = "api_user",
         author_name: str = "API User",
-        reference_message_id: Optional[str] = None,
+        reference_message_id: Optional[str] = None,  # noqa: ARG002
     ) -> Dict[str, Any]:
         """[DEPRECATED] Use interact() instead.
 
@@ -332,7 +332,7 @@ class AgentResource:
         return {"message_id": response.message_id, "status": "sent"}
 
     async def get_messages(
-        self, channel_id: str, limit: int = 100, after_message_id: Optional[str] = None
+        self, channel_id: str, limit: int = 100, after_message_id: Optional[str] = None  # noqa: ARG002
     ) -> Dict[str, Any]:
         """[DEPRECATED] Use get_history() instead.
 

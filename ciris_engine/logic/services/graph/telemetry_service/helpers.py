@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union
 
 from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
-    InvalidTimestampError,
     MemoryBusUnavailableError,
     MetricCollectionError,
     NoThoughtDataError,

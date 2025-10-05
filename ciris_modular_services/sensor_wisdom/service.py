@@ -99,7 +99,7 @@ class SensorWisdomAdapter(WiseAuthorityService):
             },
         )
 
-    def _is_medical_sensor(self, sensor_type: str, entity_id: str, attributes: Dict[str, Any]) -> bool:
+    def _is_medical_sensor(self, sensor_type: str, entity_id: str, attributes: Dict[str, Any]) -> bool:  # noqa: ARG002
         """Check if a sensor might be medical/health related."""
         # Check entity ID
         entity_lower = entity_id.lower()
@@ -164,7 +164,7 @@ class SensorWisdomAdapter(WiseAuthorityService):
 
         return None
 
-    async def _get_sensor_data(self, sensor_type: Optional[str] = None) -> Dict[str, Any]:
+    async def _get_sensor_data(self, sensor_type: Optional[str] = None) -> Dict[str, Any]:  # noqa: ARG002
         """Get sensor data by type."""
         entities = await self._get_ha_entities()
         if not entities:

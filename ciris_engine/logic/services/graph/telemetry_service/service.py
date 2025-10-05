@@ -201,47 +201,57 @@ class TelemetryAggregator:
         For LLM providers: {service_type}_{provider_type}_{instance_id}
         For others: {service_type}_{provider_name_cleaned}
         """
-        # Clean up the provider name
-        provider_cleaned = provider_name.replace("Service", "").replace("Adapter", "")
 
-        # Handle adapter services (API-COMM, CLI-TOOL, etc.)
+        def _extract_adapter_suffix(adapter_id: str, separator: str = "_") -> str:
+            """Extract suffix from adapter ID."""
+            if adapter_id and separator in adapter_id:
+                return adapter_id.split(separator)[-1][:8]
+            return str(id(provider_name))[-6:]
+
+        def _get_instance_id() -> str:
+            """Get short instance ID."""
+            return str(id(provider_name))[-6:]
+
+        # Dispatch table for known provider patterns
         if "APICommunication" in provider_name:
             adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
-            suffix = adapter_id.split("_")[-1][:8] if adapter_id else str(id(provider_name))[-6:]
+            suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_api_{suffix}"
-        elif "CLIAdapter" in provider_name:
+
+        if "CLIAdapter" in provider_name:
             adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
-            suffix = adapter_id.split("@")[-1][:8] if adapter_id and "@" in adapter_id else str(id(provider_name))[-6:]
+            suffix = _extract_adapter_suffix(adapter_id, "@") if "@" in adapter_id else _get_instance_id()
             return f"{service_type}_cli_{suffix}"
-        elif "DiscordAdapter" in provider_name or "Discord" in provider_name:
+
+        if "DiscordAdapter" in provider_name or "Discord" in provider_name:
             adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
-            suffix = adapter_id.split("_")[-1][:8] if adapter_id else str(id(provider_name))[-6:]
+            suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_discord_{suffix}"
-        elif "APITool" in provider_name:
-            return f"{service_type}_api_tool"
-        elif "APIRuntime" in provider_name:
-            return f"{service_type}_api_runtime"
-        elif "SecretsToolService" in provider_name:
-            return f"{service_type}_secrets"
-        elif "MockLLM" in provider_name:
-            return f"{service_type}_mock"
-        elif "OpenAI" in provider_name or "Anthropic" in provider_name:
-            # For LLM providers, include provider type and instance
+
+        # Simple pattern matches (no complex logic)
+        simple_patterns = {
+            "APITool": "api_tool",
+            "APIRuntime": "api_runtime",
+            "SecretsToolService": "secrets",
+            "MockLLM": "mock",
+            "LocalGraphMemory": "local_graph",
+            "GraphConfig": "graph",
+            "TimeService": "time",
+            "WiseAuthority": "wise_authority",
+        }
+
+        for pattern, suffix in simple_patterns.items():
+            if pattern in provider_name:
+                return f"{service_type}_{suffix}"
+
+        # LLM providers
+        if "OpenAI" in provider_name or "Anthropic" in provider_name:
             provider_type = "openai" if "OpenAI" in provider_name else "anthropic"
-            instance_id = str(id(provider_name))[-6:]
-            return f"{service_type}_{provider_type}_{instance_id}"
-        elif "LocalGraphMemory" in provider_name:
-            return f"{service_type}_local_graph"
-        elif "GraphConfig" in provider_name:
-            return f"{service_type}_graph"
-        elif "TimeService" in provider_name:
-            return f"{service_type}_time"
-        elif "WiseAuthority" in provider_name:
-            return f"{service_type}_wise_authority"
-        else:
-            # Default: use cleaned provider name with a short ID
-            short_id = str(id(provider_name))[-6:]
-            return f"{service_type}_{provider_cleaned.lower()}_{short_id}"
+            return f"{service_type}_{provider_type}_{_get_instance_id()}"
+
+        # Default fallback
+        provider_cleaned = provider_name.replace("Service", "").replace("Adapter", "")
+        return f"{service_type}_{provider_cleaned.lower()}_{_get_instance_id()}"
 
     def collect_from_registry_services(self) -> Dict[str, List[Any]]:
         """

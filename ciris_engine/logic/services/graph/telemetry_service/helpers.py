@@ -629,7 +629,7 @@ def calculate_retry_delay(attempt: int, base_delay: float = 0.1) -> float:
     Returns:
         Delay in seconds
     """
-    return base_delay * (2**attempt)
+    return float(base_delay * (2**attempt))
 
 
 def validate_collected_metrics(metrics: object) -> bool:
@@ -694,7 +694,7 @@ def is_adapter_healthy(adapter: object) -> bool:
     if hasattr(adapter, "status"):
         status = adapter.status
         if hasattr(status, "value"):
-            return status.value == "running"
+            return bool(status.value == "running")
         return str(status).lower() == "running"
 
     # If no status, assume healthy
@@ -741,7 +741,7 @@ def aggregate_adapter_metrics(collected_metrics: List[Dict[str, float]]) -> Dict
                 aggregated[key] = value
             elif isinstance(value, (int, float)) and isinstance(aggregated[key], (int, float)):
                 # Sum numeric values
-                aggregated[key] = aggregated[key] + value  # type: ignore[assignment]
+                aggregated[key] = aggregated[key] + value
 
     return aggregated
 

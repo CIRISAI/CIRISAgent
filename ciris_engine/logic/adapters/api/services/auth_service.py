@@ -250,14 +250,24 @@ class APIAuthService:
         return role_map.get(wa_role, APIRole.OBSERVER)
 
     def _hash_key(self, api_key: str) -> str:
-        """Hash an API key for storage."""
-        return hashlib.sha256(api_key.encode()).hexdigest()
+        """Hash an API key for storage using bcrypt."""
+        # Use bcrypt for secure key hashing (same as passwords)
+        salt = bcrypt.gensalt(rounds=12)
+        hashed = bcrypt.hashpw(api_key.encode("utf-8"), salt)
+        return hashed.decode("utf-8")
+
+    def _verify_key(self, api_key: str, key_hash: str) -> bool:
+        """Verify an API key against its hash."""
+        try:
+            return bcrypt.checkpw(api_key.encode("utf-8"), key_hash.encode("utf-8"))
+        except Exception:
+            return False
 
     def _get_key_id(self, api_key: str) -> str:
         """Extract key ID from full API key."""
         # Key format: ciris_role_randomstring
-        # Key ID is first 8 chars of the hash
-        return self._hash_key(api_key)[:8]
+        # Key ID is first 8 chars of SHA256 hash (for display purposes only)
+        return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     def store_api_key(
         self,
@@ -284,14 +294,20 @@ class APIAuthService:
             last_used=None,
             is_active=True,
         )
-        self._api_keys[key_hash] = stored_key
+        # Store by key_id instead of hash (bcrypt hashes are unique per call)
+        self._api_keys[key_id] = stored_key
 
     def validate_api_key(self, api_key: str) -> Optional[StoredAPIKey]:
         """Validate an API key and return its info."""
-        key_hash = self._hash_key(api_key)
-        stored_key = self._api_keys.get(key_hash)
+        # Get the key_id for fast lookup
+        key_id = self._get_key_id(api_key)
+        stored_key = self._api_keys.get(key_id)
 
+        # Verify the key using bcrypt
         if not stored_key or not stored_key.is_active:
+            return None
+
+        if not self._verify_key(api_key, stored_key.key_hash):
             return None
 
         # Check expiration
@@ -320,11 +336,10 @@ class APIAuthService:
 
     def revoke_api_key(self, key_id: str) -> None:
         """Revoke an API key."""
-        # Find key by partial hash
-        for key_hash, stored_key in self._api_keys.items():
-            if key_hash.startswith(key_id):
-                stored_key.is_active = False
-                return
+        # Lookup by key_id directly
+        stored_key = self._api_keys.get(key_id)
+        if stored_key:
+            stored_key.is_active = False
 
     def create_oauth_user(
         self, provider: str, external_id: str, email: Optional[str], name: Optional[str], role: UserRole

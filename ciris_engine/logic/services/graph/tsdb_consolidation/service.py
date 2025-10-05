@@ -667,6 +667,45 @@ class TSDBConsolidationService(BaseGraphService):
 
         return []
 
+    async def _create_daily_summary_edges(
+        self,
+        summaries: List[GraphNode],
+        day: datetime,
+    ) -> None:
+        """
+        Create edges between daily summaries for the same day.
+
+        This method creates:
+        1. Cross-type edges (e.g., TSDB->Audit, Task->Trace) within the same day
+        2. Temporal edges to previous day's summaries
+
+        Args:
+            summaries: List of daily summary nodes
+            day: The date for these summaries
+        """
+        if not summaries:
+            return
+
+        # Create cross-summary edges for same day
+        if len(summaries) > 1:
+            edges_created = self._edge_manager.create_cross_summary_edges(summaries, day)
+            logger.info(f"Created {edges_created} same-day edges for {day.date()}")
+
+        # Create temporal edges to previous day for each summary
+        for summary in summaries:
+            # Extract summary type from ID (e.g., "tsdb_summary_daily_20250715" -> "tsdb_summary")
+            parts = summary.id.split("_")
+            if len(parts) >= 3 and parts[2] == "daily":
+                summary_type = f"{parts[0]}_{parts[1]}"
+                # Previous day
+                previous_day = day - timedelta(days=1)
+                previous_id = f"{summary_type}_daily_{previous_day.strftime('%Y%m%d')}"
+
+                # Create temporal edges
+                created = self._edge_manager.create_temporal_edges(summary, previous_id)
+                if created:
+                    logger.debug(f"Created {created} temporal edges from {summary.id} to {previous_id}")
+
     async def _create_all_edges(
         self,
         summaries: List[GraphNode],
@@ -1254,7 +1293,7 @@ class TSDBConsolidationService(BaseGraphService):
             maintain_temporal_chain_to_daily,
             query_basic_summaries_in_period,
         )
-        from ciris_engine.schemas.memory_ops import MemoryOpStatus
+        from ciris_engine.schemas.services.operations import MemoryOpStatus
 
         consolidation_start = self._now()
         total_basic_summaries = 0

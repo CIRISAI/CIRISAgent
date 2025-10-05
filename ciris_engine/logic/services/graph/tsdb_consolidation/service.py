@@ -617,6 +617,56 @@ class TSDBConsolidationService(BaseGraphService):
 
         return summaries_created
 
+    def _get_consolidator_edges_for_summary(
+        self,
+        summary: GraphNode,
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+        tasks: List[TaskCorrelationData],
+        period_start: datetime,
+    ) -> List:
+        """
+        Get edges from the appropriate consolidator based on summary type.
+
+        Args:
+            summary: Summary node
+            nodes_by_type: All nodes in the period by type
+            correlations: All correlations in the period by type
+            tasks: All tasks in the period
+            period_start: Start of the period
+
+        Returns:
+            List of edges from the consolidator
+        """
+        if summary.type == NodeType.TSDB_SUMMARY:
+            tsdb_nodes = nodes_by_type.get(
+                "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
+            ).nodes
+            metric_correlations_raw = correlations.get("metric_datapoint", [])
+            metric_correlations = [c for c in metric_correlations_raw if isinstance(c, MetricCorrelationData)]
+            return self._metrics_consolidator.get_edges(summary, tsdb_nodes, metric_correlations)
+
+        elif summary.type == NodeType.CONVERSATION_SUMMARY:
+            service_interactions_raw = correlations.get("service_interaction", [])
+            service_interactions = [c for c in service_interactions_raw if isinstance(c, ServiceInteractionData)]
+            return self._conversation_consolidator.get_edges(summary, service_interactions)
+
+        elif summary.type == NodeType.TRACE_SUMMARY:
+            trace_spans_raw = correlations.get("trace_span", [])
+            trace_spans = [c for c in trace_spans_raw if isinstance(c, TraceSpanData)]
+            return self._trace_consolidator.get_edges(summary, trace_spans)
+
+        elif summary.type == NodeType.AUDIT_SUMMARY:
+            audit_nodes = nodes_by_type.get(
+                "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
+            ).nodes
+            return self._audit_consolidator.get_edges(summary, audit_nodes)
+
+        elif summary.type == NodeType.TASK_SUMMARY:
+            return self._task_consolidator.get_edges(summary, tasks)
+
+        return []
+
     async def _create_all_edges(
         self,
         summaries: List[GraphNode],
@@ -647,45 +697,8 @@ class TSDBConsolidationService(BaseGraphService):
 
         # Collect edges from each consolidator based on summary type
         for summary in summaries:
-            if summary.type == NodeType.TSDB_SUMMARY:
-                # Get edges from metrics consolidator
-                tsdb_nodes = nodes_by_type.get(
-                    "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
-                ).nodes
-                metric_correlations_raw = correlations.get("metric_datapoint", [])
-                # Cast to correct type
-                metric_correlations = [c for c in metric_correlations_raw if isinstance(c, MetricCorrelationData)]
-                edges = self._metrics_consolidator.get_edges(summary, tsdb_nodes, metric_correlations)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.CONVERSATION_SUMMARY:
-                # Get edges from conversation consolidator
-                service_interactions_raw = correlations.get("service_interaction", [])
-                # Cast to correct type
-                service_interactions = [c for c in service_interactions_raw if isinstance(c, ServiceInteractionData)]
-                edges = self._conversation_consolidator.get_edges(summary, service_interactions)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.TRACE_SUMMARY:
-                # Get edges from trace consolidator
-                trace_spans_raw = correlations.get("trace_span", [])
-                # Cast to correct type
-                trace_spans = [c for c in trace_spans_raw if isinstance(c, TraceSpanData)]
-                edges = self._trace_consolidator.get_edges(summary, trace_spans)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.AUDIT_SUMMARY:
-                # Get edges from audit consolidator
-                audit_nodes = nodes_by_type.get(
-                    "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_start)
-                ).nodes
-                edges = self._audit_consolidator.get_edges(summary, audit_nodes)
-                all_edges.extend(edges)
-
-            elif summary.type == NodeType.TASK_SUMMARY:
-                # Get edges from task consolidator
-                edges = self._task_consolidator.get_edges(summary, tasks)
-                all_edges.extend(edges)
+            edges = self._get_consolidator_edges_for_summary(summary, nodes_by_type, correlations, tasks, period_start)
+            all_edges.extend(edges)
 
         # Get memory edges (links from summaries to memory nodes)
         # Convert TSDBNodeQueryResult back to dict format for memory consolidator

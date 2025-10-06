@@ -597,7 +597,9 @@ class TelemetryAggregator:
         # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
         healthy = metrics.get("healthy", uptime > 0)
 
-        logger.debug(f"Converting dict metrics to ServiceTelemetryData for {service_name}: healthy={healthy}, uptime={uptime}")
+        logger.debug(
+            f"Converting dict metrics to ServiceTelemetryData for {service_name}: healthy={healthy}, uptime={uptime}"
+        )
 
         return ServiceTelemetryData(
             healthy=healthy,
@@ -897,12 +899,20 @@ class TelemetryAggregator:
         if error_msg:
             custom_metrics["error"] = error_msg
             return ServiceTelemetryData(
-                healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0,
-                custom_metrics=custom_metrics
+                healthy=False,
+                uptime_seconds=0.0,
+                error_count=1,
+                requests_handled=0,
+                error_rate=1.0,
+                custom_metrics=custom_metrics,
             )
         return ServiceTelemetryData(
-            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0,
-            custom_metrics=custom_metrics
+            healthy=False,
+            uptime_seconds=0.0,
+            error_count=0,
+            requests_handled=0,
+            error_rate=0.0,
+            custom_metrics=custom_metrics,
         )
 
     def _create_running_telemetry(self, adapter_info: Any) -> ServiceTelemetryData:
@@ -937,9 +947,7 @@ class TelemetryAggregator:
             logger.error(f"Error getting metrics from {adapter_id}: {e}")
             return self._create_empty_telemetry(adapter_id, str(e))
 
-    async def _collect_from_control_service(
-        self, adapter_type: str
-    ) -> Optional[Dict[str, ServiceTelemetryData]]:
+    async def _collect_from_control_service(self, adapter_type: str) -> Optional[Dict[str, ServiceTelemetryData]]:
         """Try to collect adapter metrics via control service."""
         if not self.runtime:
             return None
@@ -982,9 +990,7 @@ class TelemetryAggregator:
                 continue
 
             adapter_id = f"{adapter_type}_bootstrap"
-            adapter_metrics[adapter_id] = await self._collect_from_adapter_with_metrics(
-                adapter, None, adapter_id
-            )
+            adapter_metrics[adapter_id] = await self._collect_from_adapter_with_metrics(adapter, None, adapter_id)
 
         return adapter_metrics
 

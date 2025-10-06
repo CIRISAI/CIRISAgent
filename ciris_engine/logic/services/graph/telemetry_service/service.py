@@ -972,7 +972,7 @@ class TelemetryAggregator:
 
     async def _collect_from_bootstrap_adapters(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
         """Fallback: collect from bootstrap adapters directly."""
-        adapter_metrics = {}
+        adapter_metrics: Dict[str, ServiceTelemetryData] = {}
 
         if not self.runtime or not hasattr(self.runtime, "adapters"):
             return adapter_metrics

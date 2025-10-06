@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed ~40 lines of legacy dict handling code
   - Enforces single correct path through code
   - All 42 DMA tests passing with zero regressions
+  - ciris_engine: 0 mypy errors (553 files)
 
 ## [1.2.3] - 2025-10-05
 

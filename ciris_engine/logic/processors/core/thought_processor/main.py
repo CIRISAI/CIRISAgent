@@ -17,6 +17,7 @@ from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
+from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -173,8 +174,6 @@ class ThoughtProcessor(
                 f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
             )
             # Wrap in ConscienceApplicationResult before returning
-            from ciris_engine.schemas.conscience.core import EpistemicData
-
             return ConscienceApplicationResult(
                 original_action=dma_results,
                 final_action=dma_results,

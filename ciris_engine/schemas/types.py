@@ -74,7 +74,6 @@ __all__ = [
     "EventData",
     "OAuthValue",
     "OAuthData",
-    "EpistemicData",
     "StepData",
     "SerializedModel",
     "ToolParameters",

@@ -197,7 +197,7 @@ class StreamingVerificationModule:
                                                         f"(expected one of {[t.__name__ for t in allowed_types]})"
                                                     )
 
-                                        # Warn if critical optional fields are None (production issue check)
+                                        # Warn if critical optional fields are None or empty (production issue check)
                                         if snapshot.get("continuity_summary") is None:
                                             event_detail["issues"].append(
                                                 "system_snapshot.continuity_summary is None (should be ContinuitySummary dict)"
@@ -205,6 +205,16 @@ class StreamingVerificationModule:
                                         if snapshot.get("telemetry_summary") is None:
                                             event_detail["issues"].append(
                                                 "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
+                                            )
+                                        # Check service_health - should have entries for all services
+                                        service_health = snapshot.get("service_health", {})
+                                        if not service_health or not isinstance(service_health, dict):
+                                            event_detail["issues"].append(
+                                                f"system_snapshot.service_health is empty or invalid: {service_health}"
+                                            )
+                                        elif len(service_health) < 20:  # Should have ~22+ services
+                                            event_detail["issues"].append(
+                                                f"system_snapshot.service_health only has {len(service_health)} services (expected 20+)"
                                             )
 
                                 elif event_type == "dma_results":

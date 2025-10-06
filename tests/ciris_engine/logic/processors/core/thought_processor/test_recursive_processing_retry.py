@@ -65,12 +65,19 @@ def mock_conscience_result(mock_action_result):
         resource_usage=None,
     )
 
+    from ciris_engine.schemas.conscience.core import EpistemicData
+
     return ConscienceApplicationResult(
         original_action=mock_action_result,
         final_action=override_action,
         overridden=True,
         override_reason="Action failed epistemic coherence check",
-        epistemic_data={"coherence_score": "0.3", "entropy_level": "0.8"},
+        epistemic_data=EpistemicData(
+            entropy_level=0.8,
+            coherence_level=0.3,
+            uncertainty_acknowledged=True,
+            reasoning_transparency=0.7,
+        ),
     )
 
 
@@ -210,6 +217,8 @@ class TestPerformAspdmaWithGuidanceRetryLogic:
     @pytest.mark.asyncio
     async def test_dict_conscience_result(self, processor, mock_thought):
         """Test with dict-style conscience result instead of Pydantic model."""
+        from ciris_engine.schemas.conscience.core import EpistemicData
+
         dict_conscience = {
             "override_reason": "Dict-based override",
             "epistemic_data": {"test": "data"},
@@ -228,12 +237,13 @@ class TestPerformAspdmaWithGuidanceRetryLogic:
 
         assert result == expected_result
 
-        # Verify dict data was extracted correctly
+        # Verify dict data was extracted correctly (now converts to EpistemicData)
         call_args = processor.dma_orchestrator.run_action_selection.call_args
         processing_context = call_args.kwargs["processing_context"]
         guidance = processing_context["conscience_guidance"]
         assert guidance["original_action_failed_because"] == "Dict-based override"
-        assert guidance["conscience_feedback"]["epistemic_data"] == {"test": "data"}
+        # epistemic_data is now converted to EpistemicData object (fallback path)
+        assert isinstance(guidance["conscience_feedback"]["epistemic_data"], EpistemicData)
 
     @pytest.mark.asyncio
     async def test_pydantic_thought_context(self, processor, mock_thought, mock_conscience_result):

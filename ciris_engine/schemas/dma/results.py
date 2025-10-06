@@ -35,7 +35,7 @@ class EthicalDMAResult(BaseModel):
 
     decision: str = Field(
         ...,
-        description="Sentence identifying which of the 10 handler actions (observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete) could be ethical actions to take and why. Note that inaction is also an action.",
+        description="Identify the MOST ethically appropriate action(s) from the 10 handler actions (observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete). Prefer helpful actions or inaction when ethically clear. Reserve 'defer' only for genuine ethical uncertainty requiring human wisdom, not routine observations.",
     )
     reasoning: str = Field(..., description="Ethical reasoning for the identified actions")
     alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")

@@ -163,24 +163,41 @@ class TestThoughtProcessor:
         mock_context_builder.build_thought_context = AsyncMock(return_value=Mock())
 
         # Mock conscience application - should return ConscienceApplicationResult
+        from ciris_engine.schemas.conscience.core import EpistemicData
+
         mock_conscience_result = ConscienceApplicationResult(
             original_action=mock_action_result,
             final_action=mock_action_result,  # Same as original (not overridden)
             overridden=False,
             override_reason=None,
-            epistemic_data={
-                "entropy": "TEST",
-                "coherence": "TEST",
-                "optimization_veto": "TEST",
-                "epistemic_humility": "TEST",
-            },  # REQUIRED field
+            epistemic_data=EpistemicData(
+                entropy_level=0.1,
+                coherence_level=0.9,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),  # REQUIRED field
         )
 
+        # Create mock conscience that returns epistemic data
+        mock_conscience = Mock()
+        mock_conscience_check_result = Mock()
+        mock_conscience_check_result.entropy_score = 0.1
+        mock_conscience_check_result.coherence_score = 0.9
+        mock_conscience_check_result.uncertainty_acknowledged = True
+        mock_conscience_check_result.reasoning_transparency = 1.0
+        mock_conscience_check_result.override = None  # No override
+        mock_conscience_check_result.thought_depth_triggered = False
+        mock_conscience_check_result.updated_status_detected = False
+        mock_conscience.check = AsyncMock(return_value=mock_conscience_check_result)
+
+        # Mock conscience registry entry
+        mock_entry = Mock()
+        mock_entry.conscience = mock_conscience
+        mock_entry.circuit_breaker = None
+        mock_entry.name = "test_conscience"
+
         mock_conscience_registry = Mock()
-        mock_conscience_registry.apply_consciences = AsyncMock(
-            return_value=(mock_conscience_result, [])  # Return ConscienceApplicationResult and empty overrides
-        )
-        mock_conscience_registry.get_consciences = Mock(return_value=[])  # Empty list of consciences
+        mock_conscience_registry.get_consciences = Mock(return_value=[mock_entry])
 
         mock_config = Mock(spec=ConfigAccessor)
         mock_dependencies = Mock(spec=ActionHandlerDependencies)

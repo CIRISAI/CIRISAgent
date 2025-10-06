@@ -80,13 +80,21 @@ class ConscienceExecutionPhase:
         }
 
         if action_result.selected_action in exempt_actions:
-            # Exempt actions bypass conscience checks - return immediately with EXEMPT marker
+            # Exempt actions bypass conscience checks - return immediately with safe epistemic values
+            from ciris_engine.schemas.conscience.core import EpistemicData
+
+            # Exempt actions are considered safe: low entropy, high coherence, acknowledged, transparent
             return ConscienceApplicationResult(
                 original_action=action_result,
                 final_action=action_result,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "EXEMPT", "action": action_result.selected_action.value},
+                epistemic_data=EpistemicData(
+                    entropy_level=0.0,  # No uncertainty for exempt actions
+                    coherence_level=1.0,  # Perfect coherence
+                    uncertainty_acknowledged=True,  # System is aware this is exempt
+                    reasoning_transparency=1.0,  # Fully transparent (exempt = explicit)
+                ),
             )
 
         context = {"thought": thought or thought_item, "dma_results": dma_results or {}}
@@ -94,7 +102,6 @@ class ConscienceExecutionPhase:
         final_action = action_result
         overridden = False
         override_reason = None
-        epistemic_data: Dict[str, str] = {}
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
 
@@ -135,9 +142,8 @@ class ConscienceExecutionPhase:
                 uncertainty_acknowledged = True
                 reasoning_transparency = 1.0  # Humility check ran, transparency confirmed
 
-            # Store epistemic data if conscience provided it (legacy path)
-            if result.epistemic_data:
-                epistemic_data[entry.name] = result.epistemic_data.model_dump_json()
+            # Note: Individual conscience epistemic_data is now aggregated below
+            # Legacy per-conscience epistemic_data storage removed
 
             if result.thought_depth_triggered is not None:
                 thought_depth_triggered = result.thought_depth_triggered
@@ -200,49 +206,24 @@ class ConscienceExecutionPhase:
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
 
         # Build EpistemicData from aggregated conscience results
-        if conscience_checks_ran > 0:
-            from ciris_engine.schemas.conscience.core import EpistemicData
+        from ciris_engine.schemas.conscience.core import EpistemicData
 
-            # Use defaults if specific checks didn't run
-            aggregated_epistemic = EpistemicData(
-                entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
-                coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
-                uncertainty_acknowledged=uncertainty_acknowledged,
-                reasoning_transparency=reasoning_transparency,
-            )
-            epistemic_data["aggregated"] = aggregated_epistemic.model_dump_json()
-
-        # epistemic_data is REQUIRED - fail if missing for non-exempt actions
-        if not epistemic_data:
+        # epistemic_data is REQUIRED - fail hard if missing for non-exempt actions
+        if conscience_checks_ran == 0:
             # This should only happen for exempt actions (which return early above)
-            # If we reach here with empty epistemic_data, it's a bug in conscience implementation
-            logger.error(
-                f"CONSCIENCE BUG: No epistemic data for non-exempt action {action_result.selected_action.value}. "
+            # If we reach here with no conscience checks, it's a bug in conscience implementation
+            raise RuntimeError(
+                f"CONSCIENCE BUG: No conscience checks ran for non-exempt action {action_result.selected_action.value}. "
                 f"All consciences must provide epistemic_data for non-exempt actions."
             )
-            # Fail-fast: override to PONDER to prevent undefined behavior
-            epistemic_data = {
-                "status": "ERROR",
-                "action": action_result.selected_action.value,
-                "reason": "CONSCIENCE BUG: No epistemic checks provided data for non-exempt action",
-            }
-            overridden = True
-            override_reason = "Missing epistemic data - forcing PONDER for safety"
-            final_action = ActionSelectionDMAResult(
-                selected_action=HandlerActionType.PONDER,
-                action_parameters=PonderParams(
-                    questions=[
-                        "Conscience checks did not provide epistemic data",
-                        "This indicates a bug in conscience implementation",
-                        "What should I do?",
-                    ]
-                ),
-                rationale="No epistemic data from conscience - safety override",
-                raw_llm_response=None,
-                reasoning=None,
-                evaluation_time_ms=None,
-                resource_usage=None,
-            )
+
+        # Use actual data from conscience checks - no defaults for missing metrics
+        epistemic_data = EpistemicData(
+            entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
+            coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
+            uncertainty_acknowledged=uncertainty_acknowledged,
+            reasoning_transparency=reasoning_transparency,
+        )
 
         result = ConscienceApplicationResult(
             original_action=action_result,

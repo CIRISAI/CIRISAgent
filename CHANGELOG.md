@@ -5,7 +5,42 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 1.2.3
+## [1.2.4] - 2025-10-05
+
+### Fixed
+- **🧠 PDMA Ethical Evaluation**: Reduced over-cautious deferral to Wise Authority
+  - Updated `EthicalDMAResult` schema to prefer "MOST ethically appropriate action(s)" instead of listing all actions that "could be ethical"
+  - Added guidance to "Prefer helpful actions or inaction when ethically clear"
+  - Clarified that `defer` should be reserved "only for genuine ethical uncertainty requiring human wisdom, not routine observations"
+  - Updated autonomous agent framing: "observations" instead of "requests"
+  - Aligns with CIRIS Covenant principles: "Constructed Courage" to act decisively when alignment confirmed, WBD (Wisdom-Based Deferral) for genuine uncertainty only
+- **📡 SSE Schema Cleanup**: Removed redundant `context` string field from `SnapshotAndContextResult`
+  - Eliminated duplication - `context` was 36k+ char string representation of data already in `system_snapshot`
+  - Only structured `system_snapshot` field remains (contains all context data)
+  - UI can calculate context size downstream if needed
+  - Updated QA streaming verification and tests
+- **🎯 EpistemicData Type Safety**: Replaced Dict with proper Pydantic schema
+  - Removed `EpistemicData = Dict[str, Union[...]]` type alias from types.py
+  - Now using `EpistemicData` schema with 4 concrete fields: entropy_level, coherence_level, uncertainty_acknowledged, reasoning_transparency
+  - SSE ConscienceResultEvent now returns structured object instead of JSON string in "aggregated" key
+  - Updated ConscienceApplicationResult, conscience_execution, and recursive_processing
+  - UI can now access epistemic data via attributes instead of dict keys
+  - ciris_engine: 0 mypy errors (553 files)
+
+### Changed
+- **⚡ CSDMA Complexity Reduction & Legacy Path Removal**: Refactored `evaluate_thought` method
+  - CC 33 → ~5 (~85% reduction)
+  - Removed legacy `initial_context` dict-based path - modern context parameter only
+  - Simplified from 4 helper methods to 2:
+    - `_extract_context_data`: Handles modern context objects
+    - `_build_context_summary`: Creates context summary string
+  - Main method reduced from 65 lines to 8 lines
+  - Removed ~40 lines of legacy dict handling code
+  - Enforces single correct path through code
+  - All 42 DMA tests passing with zero regressions
+  - ciris_engine: 0 mypy errors (553 files)
+
+## [1.2.3] - 2025-10-05
 
 ### Added
 - **📊 Telemetry Service Refactoring**: Eliminated all SonarCloud complexity violations

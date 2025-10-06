@@ -28,8 +28,12 @@ OAuthValue = Union[str, int, bool, List[str], None]
 OAuthData = Dict[str, OAuthValue]
 
 # Epistemic data - conscience and faculty evaluation results
-# Structured data from epistemic faculties (ethical, common sense, domain-specific)
-EpistemicData = Dict[str, Union[str, int, float, bool, List[str], None]]
+# REMOVED: Use ciris_engine.schemas.conscience.core.EpistemicData instead
+# The proper Pydantic schema provides 4 structured fields:
+#   - entropy_level: float
+#   - coherence_level: float
+#   - uncertainty_acknowledged: bool
+#   - reasoning_transparency: float
 
 # Step data - dynamic data passed between pipeline steps
 # Used for step-specific parameters that get unpacked into StepResult constructors
@@ -70,7 +74,6 @@ __all__ = [
     "EventData",
     "OAuthValue",
     "OAuthData",
-    "EpistemicData",
     "StepData",
     "SerializedModel",
     "ToolParameters",

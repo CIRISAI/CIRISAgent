@@ -415,6 +415,7 @@ class TestStepResultSchemas:
 
     def test_step_result_finalize_tasks_queue(self):
         """Test StepResultFinalizeAction schema."""
+        from ciris_engine.schemas.conscience.core import EpistemicData
         from ciris_engine.schemas.services.runtime_control import QueuedTask
 
         task = QueuedTask(
@@ -433,6 +434,12 @@ class TestStepResultSchemas:
             selected_action="speak",
             selection_reasoning="Test reasoning",
             conscience_passed=True,
+            epistemic_data=EpistemicData(
+                entropy_level=0.1,
+                coherence_level=0.9,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),
             processing_time_ms=150.0,
         )
 

@@ -17,6 +17,7 @@ from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
+from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -178,7 +179,12 @@ class ThoughtProcessor(
                 final_action=dma_results,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "BYPASS", "reason": "Exempt action - skipped conscience"},
+                epistemic_data=EpistemicData(
+                    entropy_level=0.0,  # Exempt action - no uncertainty
+                    coherence_level=1.0,  # Fully coherent
+                    uncertainty_acknowledged=True,  # System knows this is exempt
+                    reasoning_transparency=1.0,  # Fully transparent (DEFER/REJECT)
+                ),
             )
 
         # Check for critical failures
@@ -191,7 +197,12 @@ class ThoughtProcessor(
                 final_action=deferral_result,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "CRITICAL_FAILURE", "reason": "Critical DMA failure - auto defer"},
+                epistemic_data=EpistemicData(
+                    entropy_level=1.0,  # Maximum uncertainty due to failure
+                    coherence_level=0.0,  # No coherence - system failed
+                    uncertainty_acknowledged=True,  # System knows failure occurred
+                    reasoning_transparency=1.0,  # Transparent about failure
+                ),
             )
 
         # Phase 3: Action selection

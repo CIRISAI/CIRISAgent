@@ -148,15 +148,29 @@ class RecursiveProcessingPhase:
         for attempt in range(max_retries):
             try:
                 # Extract typed conscience feedback for guidance
+                from ciris_engine.schemas.conscience.core import EpistemicData
+
                 override_reason = ""
-                epistemic_feedback = {}
+                epistemic_feedback: EpistemicData
 
                 if isinstance(conscience_result, ConscienceApplicationResult):
                     override_reason = conscience_result.override_reason or "Conscience override occurred"
-                    epistemic_feedback = conscience_result.epistemic_data or {}
+                    epistemic_feedback = conscience_result.epistemic_data
                 elif isinstance(conscience_result, dict):
+                    # Legacy dict path - should not happen with typed schemas
                     override_reason = conscience_result.get("override_reason", "Conscience override occurred")
-                    epistemic_feedback = conscience_result.get("epistemic_data", {})
+                    epistemic_data_dict = conscience_result.get("epistemic_data", {})
+                    # Convert dict to EpistemicData if needed
+                    if isinstance(epistemic_data_dict, EpistemicData):
+                        epistemic_feedback = epistemic_data_dict
+                    else:
+                        # Fallback: create safe default EpistemicData
+                        epistemic_feedback = EpistemicData(
+                            entropy_level=0.5,
+                            coherence_level=0.5,
+                            uncertainty_acknowledged=False,
+                            reasoning_transparency=0.5,
+                        )
 
                 # Build guidance context with typed conscience results + retry history
                 guidance_context = {

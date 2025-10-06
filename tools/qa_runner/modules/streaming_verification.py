@@ -153,8 +153,6 @@ class StreamingVerificationModule:
                                     # Required fields per schema
                                     required_fields = {
                                         "system_snapshot": dict,
-                                        "context": str,
-                                        "context_size": int,
                                         "thought_id": str,
                                         "task_id": str,
                                         "timestamp": str,
@@ -412,7 +410,7 @@ class StreamingVerificationModule:
                                         "channel_id",
                                         "updated_info_available",
                                     },
-                                    "snapshot_and_context": {"system_snapshot", "context", "context_size"},
+                                    "snapshot_and_context": {"system_snapshot"},
                                     "dma_results": {"csdma", "dsdma", "pdma"},  # Changed from aspdma_options to pdma
                                     "aspdma_result": {"selected_action", "action_rationale", "is_recursive"},
                                     "conscience_result": {

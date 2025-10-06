@@ -488,14 +488,13 @@ def build_telemetry_summary(
         queue_saturation=queue_saturation,
     )
 
+
 # =============================================================================
 # QUERY_METRICS HELPERS (CC 22 → 6 reduction)
 # =============================================================================
 
 
-def calculate_query_time_window(
-    start_time: Optional[datetime], end_time: Optional[datetime], now: datetime
-) -> int:
+def calculate_query_time_window(start_time: Optional[datetime], end_time: Optional[datetime], now: datetime) -> int:
     """
     Calculate hours for query time window.
 
@@ -546,9 +545,7 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     return all(data_tags.get(k) == v for k, v in tags.items())
 
 
-def filter_by_time_range(
-    data: object, start_time: Optional[datetime], end_time: Optional[datetime]
-) -> bool:
+def filter_by_time_range(data: object, start_time: Optional[datetime], end_time: Optional[datetime]) -> bool:
     """
     Check if timeseries data timestamp is within the specified range.
 
@@ -586,7 +583,7 @@ def convert_to_metric_record(data: object) -> Optional[MetricRecord]:
     metric_name = getattr(data, "metric_name", None)
     value = getattr(data, "value", None)
     timestamp = getattr(data, "timestamp", None)
-    
+
     # Validate required fields
     if not (metric_name and value is not None and timestamp):
         return None

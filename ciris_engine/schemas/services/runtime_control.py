@@ -12,13 +12,14 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.conscience.results import ConscienceResult
 from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
-from ciris_engine.schemas.types import ConfigDict, ConfigValue, EpistemicData, SerializedModel
+from ciris_engine.schemas.types import ConfigDict, ConfigValue, SerializedModel
 
 # Type aliases for configuration values
 ConfigItem = Tuple[str, ConfigValue]
@@ -616,7 +617,7 @@ class StepResultFinalizeAction(BaseModel):
     selected_action: str = Field(..., description="Selected action from SUT")
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
-    epistemic_data: EpistemicData = Field(default_factory=dict, description="Rich conscience evaluation data")
+    epistemic_data: EpistemicData = Field(..., description="Rich conscience evaluation data")
     processing_time_ms: float = Field(..., description="Processing time from SUT")
 
     error: Optional[str] = Field(None)
@@ -766,9 +767,7 @@ class FinalizeActionStepData(BaseStepData):
     selected_action: str = Field(..., description="Final selected action")
     conscience_passed: bool = Field(..., description="Whether conscience checks passed")
     conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
-    epistemic_data: EpistemicData = Field(
-        default_factory=dict, description="Rich conscience evaluation data from all checks"
-    )
+    epistemic_data: EpistemicData = Field(..., description="Rich conscience evaluation data from all checks")
     updated_status_detected: Optional[bool] = Field(
         None, description="Whether UpdatedStatusConscience detected new information during task processing"
     )
@@ -894,19 +893,19 @@ class ThoughtStartEvent(BaseModel):
 
 
 class SnapshotAndContextResult(BaseModel):
-    """Event 1: System snapshot and gathered context (GATHER_CONTEXT step)."""
+    """Event 1: System snapshot (GATHER_CONTEXT step).
+
+    The system_snapshot field contains all context data in structured form.
+    The redundant context string field has been removed to eliminate duplication.
+    """
 
     event_type: ReasoningEvent = Field(ReasoningEvent.SNAPSHOT_AND_CONTEXT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
-    # System snapshot
-    system_snapshot: SystemSnapshot = Field(..., description="Current system state")
-
-    # Gathered context
-    context: str = Field(..., description="Context gathered for DMA processing")
-    context_size: int = Field(..., description="Size of context in characters")
+    # System snapshot - contains all context data
+    system_snapshot: SystemSnapshot = Field(..., description="Current system state with all context data")
 
 
 class DMAResultsEvent(BaseModel):
@@ -949,9 +948,7 @@ class ConscienceResultEvent(BaseModel):
     # Conscience evaluation
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
-    epistemic_data: EpistemicData = Field(
-        default_factory=dict, description="Rich conscience evaluation data from all checks"
-    )
+    epistemic_data: EpistemicData = Field(..., description="Rich conscience evaluation data from all checks")
 
     # Final action
     final_action: str = Field(..., description="Final action after conscience evaluation")

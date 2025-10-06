@@ -778,7 +778,7 @@ SERVICE_NAME_MAPPING: Dict[str, str] = {
 }
 
 
-def generate_semantic_service_name(service_name: str, service_type: Optional[str] = None) -> str:
+def generate_semantic_service_name(service_name: str) -> str:
     """
     Generate human-readable semantic name for a service.
 
@@ -786,7 +786,6 @@ def generate_semantic_service_name(service_name: str, service_type: Optional[str
 
     Args:
         service_name: Technical service name
-        service_type: Optional service type hint (unused, kept for compatibility)
 
     Returns:
         Human-readable service name

@@ -8,7 +8,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import EpistemicData
+from ciris_engine.schemas.conscience.core import EpistemicData
 
 from ..conscience.results import ConscienceResult
 from .enums import HandlerActionType

@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Only structured `system_snapshot` field remains (contains all context data)
   - UI can calculate context size downstream if needed
   - Updated QA streaming verification and tests
+- **🎯 EpistemicData Type Safety**: Replaced Dict with proper Pydantic schema
+  - Removed `EpistemicData = Dict[str, Union[...]]` type alias from types.py
+  - Now using `EpistemicData` schema with 4 concrete fields: entropy_level, coherence_level, uncertainty_acknowledged, reasoning_transparency
+  - SSE ConscienceResultEvent now returns structured object instead of JSON string in "aggregated" key
+  - Updated ConscienceApplicationResult, conscience_execution, and recursive_processing
+  - UI can now access epistemic data via attributes instead of dict keys
+  - ciris_engine: 0 mypy errors (553 files)
 
 ### Changed
 - **⚡ CSDMA Complexity Reduction & Legacy Path Removal**: Refactored `evaluate_thought` method

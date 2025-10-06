@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ciris_engine/logic/services: 0 mypy errors (80 files)
   - All base service tests passing (10/10)
 
+### Fixed
+- **🧠 PDMA Prompt Optimization**: Improved context clarity and reduced over-deferral
+  - Moved system snapshot context from user message to system message - eliminates redundancy
+  - User message now contains only thought content + strong anti-deferral guidance
+  - Added explicit instruction: "Do not select defer unless the only possible ethical response in this situation is deferral, most situations call for speak or task_complete"
+  - Reduces token usage and improves prompt clarity for ethical evaluation
+- **📋 System Snapshot Task Filtering**: Fixed `top_pending_tasks_summary` including non-pending tasks
+  - `get_top_tasks()` now correctly filters to PENDING status only (was including COMPLETED, DEFERRED, FAILED, REJECTED)
+  - System snapshot now accurately represents only actionable pending tasks
+  - Aligns with schema field name `top_pending_tasks_summary`
+
 ## [1.2.4] - 2025-10-05
 
 ### Fixed

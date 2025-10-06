@@ -162,8 +162,11 @@ def get_recent_completed_tasks(limit: int = 10, db_path: Optional[str] = None) -
 
 
 def get_top_tasks(limit: int = 10, db_path: Optional[str] = None) -> List[Task]:
+    """Get top pending tasks ordered by priority (highest first) then by creation date."""
     tasks_list = get_all_tasks(db_path=db_path)
-    sorted_tasks = sorted(tasks_list, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
+    # Filter to PENDING tasks only - exclude COMPLETED, DEFERRED, FAILED, REJECTED
+    pending = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.PENDING]
+    sorted_tasks = sorted(pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
 

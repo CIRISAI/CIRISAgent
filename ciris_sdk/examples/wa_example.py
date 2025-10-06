@@ -5,7 +5,7 @@ import asyncio
 from ciris_sdk import CIRISClient
 
 
-async def main():
+async def main() -> None:
     """Demonstrate WA client functionality."""
 
     # Initialize client

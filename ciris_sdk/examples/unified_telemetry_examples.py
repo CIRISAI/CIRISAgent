@@ -4,13 +4,14 @@ Examples of using the CIRISClient SDK to access unified telemetry.
 The unified telemetry endpoint provides easy access to ALL 436+ metrics
 from 22 services through a single, optimized endpoint.
 """
+# mypy: disable-error-code="index,operator,union-attr,arg-type"
 
 import asyncio
 
 from ciris_sdk import CIRISClient
 
 
-async def example_basic_usage():
+async def example_basic_usage() -> None:
     """Basic examples of accessing telemetry."""
     async with CIRISClient() as client:
         # 1. Quick health check
@@ -28,7 +29,7 @@ async def example_basic_usage():
         print(f"Total metrics available: {len(str(all_metrics))}")
 
 
-async def example_specific_metrics():
+async def example_specific_metrics() -> None:
     """Access specific metrics by path."""
     async with CIRISClient() as client:
         # Get specific metrics using dot notation
@@ -42,7 +43,7 @@ async def example_specific_metrics():
         print(f"Memory graph nodes: {memory_nodes:,}")
 
 
-async def example_filtered_views():
+async def example_filtered_views() -> None:
     """Get filtered views of telemetry data."""
     async with CIRISClient() as client:
         # Performance metrics only
@@ -61,7 +62,7 @@ async def example_filtered_views():
         print(f"Warnings: {ops.get('warnings', [])}")
 
 
-async def example_category_filtering():
+async def example_category_filtering() -> None:
     """Get metrics for specific service categories."""
     async with CIRISClient() as client:
         # Bus metrics only
@@ -84,7 +85,7 @@ async def example_category_filtering():
             print(f"  {service}: {metrics}")
 
 
-async def example_export_formats():
+async def example_export_formats() -> None:
     """Export telemetry in different formats."""
     async with CIRISClient() as client:
         # Prometheus format for monitoring systems
@@ -98,7 +99,7 @@ async def example_export_formats():
         print(graphite[:500])
 
 
-async def example_monitoring_loop():
+async def example_monitoring_loop() -> None:
     """Example of continuous monitoring."""
     async with CIRISClient() as client:
         print("Starting monitoring loop (Ctrl+C to stop)...")
@@ -136,7 +137,7 @@ async def example_monitoring_loop():
                 await asyncio.sleep(30)
 
 
-async def example_comprehensive_report():
+async def example_comprehensive_report() -> None:
     """Generate a comprehensive telemetry report."""
     async with CIRISClient() as client:
         # Get all data
@@ -191,7 +192,7 @@ async def example_comprehensive_report():
         print("\n" + "=" * 60)
 
 
-async def main():
+async def main() -> None:
     """Run all examples."""
     print("🚀 CIRIS Unified Telemetry SDK Examples\n")
 

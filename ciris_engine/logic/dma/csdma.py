@@ -106,13 +106,23 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         return messages
 
-    def _extract_context_from_modern_path(self, context: Any) -> tuple[str, str, str]:
-        """Extract context strings from modern context object."""
+    def _extract_context_data(self, context: Optional[Any]) -> tuple[str, str, str]:
+        """Extract context strings from context object.
+
+        Args:
+            context: Context object with system_snapshot and/or user_profiles
+
+        Returns:
+            Tuple of (system_snapshot_str, user_profiles_str, context_summary)
+        """
         system_snapshot_str = ""
         user_profiles_str = ""
         context_summary = (
             "CIRIS AI Agent operating via Discord, API, or CLI - Digital/virtual interactions are normal and expected."
         )
+
+        if not context:
+            return system_snapshot_str, user_profiles_str, context_summary
 
         if hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_str = format_system_snapshot(context.system_snapshot)
@@ -127,76 +137,11 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         return system_snapshot_str, user_profiles_str, context_summary
 
-    def _extract_context_from_legacy_path(self, thought_item: ProcessingQueueItem) -> tuple[str, str, str, str]:
-        """Extract context strings from legacy thought_item.initial_context."""
-        identity_block = ""
-        system_snapshot_block = ""
-        user_profiles_block = ""
-        context_summary = (
-            "CIRIS AI Agent operating via Discord, API, or CLI - Digital/virtual interactions are normal and expected."
-        )
-
-        if not hasattr(thought_item, "initial_context") or not thought_item.initial_context:
-            return identity_block, system_snapshot_block, user_profiles_block, context_summary
-
-        if not isinstance(thought_item.initial_context, dict):
-            return identity_block, system_snapshot_block, user_profiles_block, context_summary
-
-        system_snapshot = thought_item.initial_context.get("system_snapshot")
-        if not system_snapshot:
-            return identity_block, system_snapshot_block, user_profiles_block, context_summary
-
-        system_snapshot_block = format_system_snapshot(system_snapshot)
-
-        user_profiles_data = system_snapshot.get("user_profiles") if isinstance(system_snapshot, dict) else None
-        user_profiles_block = format_user_profiles(user_profiles_data) if user_profiles_data else ""
-
-        agent_identity = system_snapshot.get("agent_identity") if isinstance(system_snapshot, dict) else None
-        if agent_identity:
-            identity_block = self._build_identity_block(agent_identity)
-            context_summary = self._build_context_summary(agent_identity)
-
-        return identity_block, system_snapshot_block, user_profiles_block, context_summary
-
-    def _build_identity_block(self, agent_identity: Any) -> str:
-        """Build identity block from agent_identity data."""
-        agent_id = (
-            agent_identity.get("agent_id", "Unknown")
-            if isinstance(agent_identity, dict)
-            else getattr(agent_identity, "agent_id", "Unknown")
-        )
-        description = (
-            agent_identity.get("description", "")
-            if isinstance(agent_identity, dict)
-            else getattr(agent_identity, "description", "")
-        )
-        role = (
-            agent_identity.get("role", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "role", "")
-        )
-
-        return (
-            "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-            f"Agent: {agent_id}\n"
-            f"Description: {description}\n"
-            f"Role: {role}\n"
-            "============================================"
-        )
-
     def _build_context_summary(self, agent_identity: Any) -> str:
         """Build context summary from agent_identity data."""
-        agent_id = (
-            agent_identity.get("agent_id", "Unknown")
-            if isinstance(agent_identity, dict)
-            else getattr(agent_identity, "agent_id", "Unknown")
-        )
-        description = (
-            agent_identity.get("description", "")
-            if isinstance(agent_identity, dict)
-            else getattr(agent_identity, "description", "")
-        )
-        role = (
-            agent_identity.get("role", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "role", "")
-        )
+        agent_id = getattr(agent_identity, "agent_id", "Unknown")
+        description = getattr(agent_identity, "description", "")
+        role = getattr(agent_identity, "role", "")
 
         return (
             f"{agent_id} ({role}) - {description}. "
@@ -206,29 +151,21 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
     async def evaluate_thought(self, thought_item: ProcessingQueueItem, context: Optional[Any] = None) -> CSDMAResult:
         thought_content_str = str(thought_item.content)
 
-        # Extract context using modern or legacy path
-        if context:
-            system_snapshot_str, user_profiles_str, context_summary = self._extract_context_from_modern_path(context)
-            identity_block = ""
-            system_snapshot_block = system_snapshot_str + user_profiles_str
-            user_profiles_block = ""
-        else:
-            identity_block, system_snapshot_block, user_profiles_block, context_summary = (
-                self._extract_context_from_legacy_path(thought_item)
-            )
+        # Extract context data from context object
+        system_snapshot_str, user_profiles_str, context_summary = self._extract_context_data(context)
+
+        combined_snapshot_block = system_snapshot_str + user_profiles_str
 
         messages = self._create_csdma_messages_for_instructor(
             thought_content_str,
             context_summary,
-            identity_block,
-            system_snapshot_block,
-            user_profiles_block,
+            identity_context_block="",
+            system_snapshot_block=combined_snapshot_block,
+            user_profiles_block="",
         )
         logger.debug(
-            "CSDMA input to LLM for thought %s:\nSystem Snapshot Block: %s\nUser Profiles Block: %s\nContext Summary: %s",
+            "CSDMA input to LLM for thought %s:\nContext Summary: %s",
             thought_item.thought_id,
-            system_snapshot_block,
-            user_profiles_block,
             context_summary,
         )
 

@@ -185,8 +185,14 @@ class StreamingVerificationModule:
                                             "agent_identity": (str, type(None)),
                                             "user_profiles": (list, type(None)),
                                             "current_time_utc": (str, type(None)),
-                                            "continuity_summary": (dict, type(None)),  # ContinuitySummary - should be dict not null
-                                            "telemetry_summary": (dict, type(None)),  # TelemetrySummary - should be dict not null
+                                            "continuity_summary": (
+                                                dict,
+                                                type(None),
+                                            ),  # ContinuitySummary - should be dict not null
+                                            "telemetry_summary": (
+                                                dict,
+                                                type(None),
+                                            ),  # TelemetrySummary - should be dict not null
                                         }
 
                                         for field, allowed_types in snapshot_field_types.items():

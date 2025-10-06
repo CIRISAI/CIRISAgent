@@ -58,30 +58,6 @@ class DMAInputData(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel where thought originated")
 
     @property
-    def has_ethical_concerns(self) -> bool:
-        """Check if ethical evaluation raised concerns."""
-        if not self.ethical_pdma_result:
-            return False
-        decision = self.ethical_pdma_result.decision.lower()
-        return decision in ["reject", "defer", "caution"]
-
-    @property
-    def has_common_sense_flags(self) -> bool:
-        """Check if common sense evaluation found issues."""
-        if not self.csdma_result:
-            return False
-        return len(self.csdma_result.flags) > 0
-
-    @property
-    def should_escalate(self) -> bool:
-        """Determine if this should be escalated to human wisdom."""
-        return (
-            self.has_ethical_concerns
-            or self.has_common_sense_flags
-            or (self.conscience_failure_context is not None and not self.conscience_failure_context.passed)
-        )
-
-    @property
     def resource_usage_summary(self) -> Dict[str, float]:
         """Get resource usage from system snapshot."""
         # Use telemetry_summary for resource data

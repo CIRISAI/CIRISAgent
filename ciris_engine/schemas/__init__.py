@@ -18,7 +18,6 @@ from .actions import SpeakParams as SpeakParameters
 from .actions import TaskCompleteParams as TaskCompleteParameters
 from .actions import ToolParams as ToolParameters
 from .conscience.results import ConscienceResult
-from .dma.decisions import ActionSelectionDecision, CSDMADecision, DSDMADecision, PDMADecision
 from .handlers.contexts import (
     BaseActionContext,
     DeferContext,
@@ -98,11 +97,6 @@ __all__ = [
     "SolitudeState",
     "DreamState",
     "ShutdownState",
-    # DMA decisions
-    "PDMADecision",
-    "CSDMADecision",
-    "DSDMADecision",
-    "ActionSelectionDecision",
     # Handler schemas
     "HandlerContext",
     "HandlerResult",

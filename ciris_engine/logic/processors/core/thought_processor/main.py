@@ -483,9 +483,6 @@ class ThoughtProcessor(
         if hasattr(dma_results, "critical_failure") and dma_results.critical_failure:
             return True
 
-        if hasattr(dma_results, "should_escalate") and dma_results.should_escalate:
-            return True
-
         return False
 
     def _create_deferral_result(self, dma_results: Any, thought: Thought) -> ActionSelectionDMAResult:

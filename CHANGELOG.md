@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clarified that `defer` should be reserved "only for genuine ethical uncertainty requiring human wisdom, not routine observations"
   - Updated autonomous agent framing: "observations" instead of "requests"
   - Aligns with CIRIS Covenant principles: "Constructed Courage" to act decisively when alignment confirmed, WBD (Wisdom-Based Deferral) for genuine uncertainty only
+- **📡 SSE Schema Cleanup**: Removed redundant `context` string field from `SnapshotAndContextResult`
+  - Eliminated duplication - `context` was 36k+ char string representation of data already in `system_snapshot`
+  - Only structured `system_snapshot` field remains (contains all context data)
+  - UI can calculate context size downstream if needed
+  - Updated QA streaming verification and tests
 
 ### Changed
 - **⚡ CSDMA Complexity Reduction & Legacy Path Removal**: Refactored `evaluate_thought` method

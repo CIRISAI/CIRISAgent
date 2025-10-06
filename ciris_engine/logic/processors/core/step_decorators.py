@@ -1137,9 +1137,8 @@ def _create_snapshot_and_context_event(
     """Create SNAPSHOT_AND_CONTEXT reasoning event with full system snapshot from thought context."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
-    context = getattr(step_data, "context", "")
-
     # Extract full SystemSnapshot from thought_item.initial_context
+    # Note: context string field removed - all data is in system_snapshot
     system_snapshot = None
     if thought_item and hasattr(thought_item, "initial_context"):
         initial_context = thought_item.initial_context
@@ -1161,8 +1160,6 @@ def _create_snapshot_and_context_event(
         task_id=step_data.task_id,
         timestamp=timestamp,
         system_snapshot=system_snapshot,
-        context=context,
-        context_size=len(context),
     )
 
 

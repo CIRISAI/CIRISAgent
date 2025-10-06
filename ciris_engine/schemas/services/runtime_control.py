@@ -894,19 +894,19 @@ class ThoughtStartEvent(BaseModel):
 
 
 class SnapshotAndContextResult(BaseModel):
-    """Event 1: System snapshot and gathered context (GATHER_CONTEXT step)."""
+    """Event 1: System snapshot (GATHER_CONTEXT step).
+
+    The system_snapshot field contains all context data in structured form.
+    The redundant context string field has been removed to eliminate duplication.
+    """
 
     event_type: ReasoningEvent = Field(ReasoningEvent.SNAPSHOT_AND_CONTEXT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
-    # System snapshot
-    system_snapshot: SystemSnapshot = Field(..., description="Current system state")
-
-    # Gathered context
-    context: str = Field(..., description="Context gathered for DMA processing")
-    context_size: int = Field(..., description="Size of context in characters")
+    # System snapshot - contains all context data
+    system_snapshot: SystemSnapshot = Field(..., description="Current system state with all context data")
 
 
 class DMAResultsEvent(BaseModel):

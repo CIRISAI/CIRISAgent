@@ -321,7 +321,6 @@ class TestBroadcastEventHelpers:
         step_data = Mock()
         step_data.thought_id = "thought_123"
         step_data.task_id = "task_456"
-        step_data.context = "User asked: Hello"
 
         # Mock create_reasoning_event function
         mock_create = Mock(return_value="event_created")
@@ -334,8 +333,9 @@ class TestBroadcastEventHelpers:
         call_kwargs = mock_create.call_args[1]
         assert call_kwargs["thought_id"] == "thought_123"
         assert call_kwargs["task_id"] == "task_456"
-        assert call_kwargs["context"] == "User asked: Hello"
-        assert call_kwargs["context_size"] == len("User asked: Hello")
+        # Context field removed - only system_snapshot remains
+        assert "context" not in call_kwargs
+        assert "context_size" not in call_kwargs
         assert "system_snapshot" in call_kwargs
 
     def test_create_dma_results_event(self):

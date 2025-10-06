@@ -57,7 +57,8 @@ class TestActionSelectionPDMAEvaluator:
         """Create valid EnhancedDMAInputs with all faculty results."""
         # Create mock faculty results (properly typed!)
         pdma_result = EthicalDMAResult(
-            decision="approve",
+            stakeholders="user, system",
+            conflicts="none",
             reasoning="Action is ethically sound",
             alignment_check="Ethical analysis: Beneficence - action promotes positive outcomes. Non-maleficence - no harm identified.",
         )
@@ -159,7 +160,10 @@ class TestActionSelectionPDMAEvaluator:
         )
 
         pdma_result = EthicalDMAResult(
-            decision="approve", reasoning="OK", alignment_check="Basic ethical approval without detailed analysis."
+            stakeholders="user, system",
+            conflicts="none",
+            reasoning="OK",
+            alignment_check="Basic ethical approval without detailed analysis."
         )
 
         # Need a valid CSDMA result even for this test

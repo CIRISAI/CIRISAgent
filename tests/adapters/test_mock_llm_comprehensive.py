@@ -37,7 +37,9 @@ class TestMockLLMComprehensive:
 
         # Verify the response has expected fields
         assert hasattr(response, "alignment_check")
-        assert hasattr(response, "decision")
+        assert hasattr(response, "stakeholders")
+        assert hasattr(response, "conflicts")
+        assert hasattr(response, "reasoning")
 
     @pytest.mark.asyncio
     async def test_cs_dma_result(self, mock_client):

@@ -469,7 +469,8 @@ class TestStepResultSchemas:
 
         # Create proper DMA result objects
         ethical_result = EthicalDMAResult(
-            decision="approve",
+            stakeholders="user, system",
+            conflicts="none",
             reasoning="Action aligns with ethical principles",
             alignment_check="Benevolence and integrity principles satisfied. Action aligns with ethical guidelines.",
         )

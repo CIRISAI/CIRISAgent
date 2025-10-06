@@ -173,12 +173,19 @@ class ThoughtProcessor(
                 f"DMA step returned ActionSelectionDMAResult for thought {thought_item.thought_id}: {dma_results.selected_action}"
             )
             # Wrap in ConscienceApplicationResult before returning
+            from ciris_engine.schemas.conscience.core import EpistemicData
+
             return ConscienceApplicationResult(
                 original_action=dma_results,
                 final_action=dma_results,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "BYPASS", "reason": "Exempt action - skipped conscience"},
+                epistemic_data=EpistemicData(
+                    entropy_level=0.0,  # Exempt action - no uncertainty
+                    coherence_level=1.0,  # Fully coherent
+                    uncertainty_acknowledged=True,  # System knows this is exempt
+                    reasoning_transparency=1.0,  # Fully transparent (DEFER/REJECT)
+                ),
             )
 
         # Check for critical failures
@@ -191,7 +198,12 @@ class ThoughtProcessor(
                 final_action=deferral_result,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "CRITICAL_FAILURE", "reason": "Critical DMA failure - auto defer"},
+                epistemic_data=EpistemicData(
+                    entropy_level=1.0,  # Maximum uncertainty due to failure
+                    coherence_level=0.0,  # No coherence - system failed
+                    uncertainty_acknowledged=True,  # System knows failure occurred
+                    reasoning_transparency=1.0,  # Transparent about failure
+                ),
             )
 
         # Phase 3: Action selection

@@ -65,6 +65,8 @@ def mock_aspdma_result():
 @pytest.fixture
 def mock_conscience_result_passed():
     """Mock conscience result for passed checks."""
+    from ciris_engine.schemas.conscience.core import EpistemicData
+
     # Create nested structure for final_action
     final_action_mock = Mock()
     final_action_mock.selected_action = "SPEAK"
@@ -76,7 +78,12 @@ def mock_conscience_result_passed():
     result.final_action = final_action_mock
     result.selected_action = "SPEAK"
     result.override_reason = None
-    result.epistemic_data = {}
+    result.epistemic_data = EpistemicData(
+        entropy_level=0.1,
+        coherence_level=0.9,
+        uncertainty_acknowledged=True,
+        reasoning_transparency=1.0,
+    )
     result.__str__ = Mock(return_value="passed")
     return result
 
@@ -410,11 +417,15 @@ class TestBroadcastEventHelpers:
         from ciris_engine.logic.processors.core.step_decorators import _create_conscience_result_event
 
         step_data = Mock()
+        from ciris_engine.schemas.conscience.core import EpistemicData
+
         step_data.thought_id = "thought_123"
         step_data.task_id = "task_456"
         step_data.conscience_passed = True
         step_data.conscience_override_reason = None
-        step_data.epistemic_data = {"entropy": 0.3}
+        step_data.epistemic_data = EpistemicData(
+            entropy_level=0.3, coherence_level=0.9, uncertainty_acknowledged=True, reasoning_transparency=1.0
+        )
         step_data.selected_action = "SPEAK"
 
         mock_create = Mock(return_value="conscience_event")
@@ -430,13 +441,16 @@ class TestBroadcastEventHelpers:
     def test_create_conscience_result_event_failed(self):
         """Test creating CONSCIENCE_RESULT event when failed."""
         from ciris_engine.logic.processors.core.step_decorators import _create_conscience_result_event
+        from ciris_engine.schemas.conscience.core import EpistemicData
 
         step_data = Mock()
         step_data.thought_id = "thought_123"
         step_data.task_id = "task_456"
         step_data.conscience_passed = False
         step_data.conscience_override_reason = "Safety concern"
-        step_data.epistemic_data = {"entropy": 0.8}
+        step_data.epistemic_data = EpistemicData(
+            entropy_level=0.8, coherence_level=0.2, uncertainty_acknowledged=True, reasoning_transparency=0.9
+        )
         step_data.selected_action = "DEFER"
 
         mock_create = Mock(return_value="failed_event")

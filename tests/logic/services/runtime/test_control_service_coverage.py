@@ -60,6 +60,8 @@ def create_test_step_result_data(
     timestamp = datetime.now().isoformat()
 
     # Create step data for FINALIZE_ACTION
+    from ciris_engine.schemas.conscience.core import EpistemicData
+
     step_data = FinalizeActionStepData(
         timestamp=timestamp,
         thought_id=thought_id,
@@ -69,6 +71,15 @@ def create_test_step_result_data(
         selected_action=kwargs.get("selected_action", "test_action"),
         conscience_passed=kwargs.get("conscience_passed", True),
         conscience_override_reason=kwargs.get("conscience_override_reason", None),
+        epistemic_data=kwargs.get(
+            "epistemic_data",
+            EpistemicData(
+                entropy_level=0.1,
+                coherence_level=0.9,
+                uncertainty_acknowledged=True,
+                reasoning_transparency=1.0,
+            ),
+        ),
     )
 
     return StepResultData(

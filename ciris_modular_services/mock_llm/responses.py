@@ -263,13 +263,14 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
     is_user_question = any("echo_user_speech:" in item for item in context) or "?" in thought_content
 
     if _mock_config.inject_error:
-        decision = "defer"
+        stakeholders = "user, system, wise-authority"
+        conflicts = "uncertainty vs action requirement, individual vs system safety"
         alignment_check = "Ethical uncertainty detected. Context indicates potential conflict requiring wisdom-based deferral for proper resolution."
         rationale = "[MOCK LLM] Injected ethical uncertainty for testing purposes."
     else:
-        decision = "proceed"
-
         if is_wakeup:
+            stakeholders = "system, agent-identity, operators"
+            conflicts = "none"
             alignment_check = (
                 "Wakeup ritual aligns with all CIRIS principles: "
                 "Beneficence - promotes agent integrity and proper functioning. "
@@ -282,6 +283,8 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
             )
             rationale = "[MOCK LLM] Wakeup ritual thought aligns with CIRIS covenant principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
         elif is_user_question:
+            stakeholders = "user, agent, community"
+            conflicts = "none"
             alignment_check = (
                 "User interaction aligns with CIRIS principles: "
                 "Beneficence - provides helpful response. "
@@ -293,6 +296,8 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
             )
             rationale = "[MOCK LLM] User interaction promotes beneficial dialogue and respects human autonomy. Response will be honest, helpful, and transparent per CIRIS principles."
         else:
+            stakeholders = "user, system"
+            conflicts = "none"
             alignment_check = (
                 "General thought processing aligns with ethical guidelines: "
                 "Beneficence - action promotes positive outcomes. "
@@ -302,8 +307,9 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
             )
             rationale = "[MOCK LLM] General thought processing aligns with ethical guidelines. No contraindications to CIRIS covenant principles detected."
 
-    decision_param = str(decision)  # Ensure decision is always a string
-    result = EthicalDMAResult(alignment_check=alignment_check, decision=decision_param, reasoning=str(rationale))
+    result = EthicalDMAResult(
+        alignment_check=alignment_check, stakeholders=stakeholders, conflicts=conflicts, reasoning=str(rationale)
+    )
     return result
 
 

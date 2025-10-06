@@ -2058,10 +2058,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         # Add custom metadata using model_copy
         if capabilities.metadata is not None:
-            capabilities.metadata = capabilities.metadata.model_copy(update={
-                "description": "Runtime control and management service",
-                "features": ["processor_control", "adapter_management", "config_management", "health_monitoring"],
-            })
+            capabilities.metadata = capabilities.metadata.model_copy(
+                update={
+                    "description": "Runtime control and management service",
+                    "features": ["processor_control", "adapter_management", "config_management", "health_monitoring"],
+                }
+            )
 
         return capabilities
 

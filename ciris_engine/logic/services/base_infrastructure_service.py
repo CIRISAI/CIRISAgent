@@ -45,10 +45,7 @@ class BaseInfrastructureService(BaseService):
         """
         base_metadata = super()._get_metadata()
         # Use model_copy to create a mutable copy and update it
-        updated_metadata = base_metadata.model_copy(update={
-            "category": "infrastructure",
-            "critical": True
-        })
+        updated_metadata = base_metadata.model_copy(update={"category": "infrastructure", "critical": True})
         return updated_metadata
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

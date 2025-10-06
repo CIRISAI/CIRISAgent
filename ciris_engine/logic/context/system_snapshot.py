@@ -28,6 +28,7 @@ from .system_snapshot_helpers import (
     _extract_agent_identity,
     _extract_thought_summary,
     _extract_user_ids_from_context,
+    _get_continuity_summary,
     _get_localized_times,
     _get_recent_tasks,
     _get_secrets_data,
@@ -96,6 +97,7 @@ async def build_system_snapshot(
     resource_alerts = _collect_resource_alerts(resource_monitor)
     service_health, circuit_breaker_status = await _collect_service_health(service_registry)
     telemetry_summary = await _get_telemetry_summary(telemetry_service)
+    continuity_summary = await _get_continuity_summary(telemetry_service)
 
     # Get system data using helper functions
     adapter_channels = await _collect_adapter_channels(runtime)
@@ -151,6 +153,7 @@ async def build_system_snapshot(
         "circuit_breaker_status": circuit_breaker_status,
         "resource_alerts": resource_alerts,  # CRITICAL mission-critical alerts
         "telemetry_summary": telemetry_summary,  # Resource usage data
+        "continuity_summary": continuity_summary,  # Agent lifecycle continuity awareness
         "adapter_channels": adapter_channels,  # Available channels by adapter
         "available_tools": available_tools,  # Available tools by adapter
     }

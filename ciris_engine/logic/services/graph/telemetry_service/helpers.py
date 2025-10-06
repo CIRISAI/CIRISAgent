@@ -6,7 +6,7 @@ testable components. All functions fail fast and loud - no fallback data.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
     MemoryBusUnavailableError,
@@ -18,8 +18,11 @@ from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
     ThoughtDepthQueryError,
     UnknownMetricTypeError,
 )
-from ciris_engine.schemas.runtime.system_context import TelemetrySummary
+from ciris_engine.schemas.runtime.system_context import ContinuitySummary, TelemetrySummary
 from ciris_engine.schemas.services.graph.telemetry import MetricAggregates, MetricRecord
+
+# TypeVar for summary cache
+SummaryType = TypeVar("SummaryType", TelemetrySummary, ContinuitySummary)
 
 if TYPE_CHECKING:
     from ciris_engine.logic.buses.memory_bus import MemoryBus
@@ -391,12 +394,12 @@ def calculate_average_latencies(
 
 
 def check_summary_cache(
-    cache: Dict[str, Tuple[datetime, TelemetrySummary]],
+    cache: Dict[str, Tuple[datetime, Any]],
     cache_key: str,
     now: datetime,
     ttl_seconds: int,
-) -> Optional[TelemetrySummary]:
-    """Check if cached telemetry summary is still valid.
+) -> Optional[Any]:
+    """Check if cached summary is still valid.
 
     Args:
         cache: Summary cache dictionary
@@ -405,7 +408,7 @@ def check_summary_cache(
         ttl_seconds: Cache TTL in seconds
 
     Returns:
-        Cached TelemetrySummary if valid, None otherwise
+        Cached summary (TelemetrySummary or ContinuitySummary) if valid, None otherwise
     """
     if cache_key in cache:
         cached_time, cached_summary = cache[cache_key]
@@ -415,12 +418,12 @@ def check_summary_cache(
 
 
 def store_summary_cache(
-    cache: Dict[str, Tuple[datetime, TelemetrySummary]],
+    cache: Dict[str, Tuple[datetime, Any]],
     cache_key: str,
     now: datetime,
-    summary: TelemetrySummary,
+    summary: Any,
 ) -> None:
-    """Store telemetry summary in cache.
+    """Store summary in cache.
 
     Args:
         cache: Summary cache dictionary (mutated)
@@ -822,3 +825,132 @@ def get_service_category(service_name: str) -> str:
         return "governance"
     else:
         return "runtime"
+
+
+# ============================================================================
+# CONTINUITY SUMMARY HELPERS
+# ============================================================================
+
+
+async def build_continuity_summary_from_memory(
+    memory_service: Optional[Any], time_service: Any, start_time: Optional[datetime]
+) -> Optional[ContinuitySummary]:
+    """Build continuity summary from startup/shutdown memory nodes.
+
+    Args:
+        memory_service: Memory service to query for lifecycle events
+        time_service: Time service for current time
+        start_time: Service start time for current session
+
+    Returns:
+        ContinuitySummary if memory service available, None otherwise
+    """
+    if not memory_service:
+        return None
+
+    try:
+        # Query for all startup and shutdown nodes
+        now = time_service.now() if time_service else datetime.now(timezone.utc)
+
+        # Search for continuity_awareness nodes using search method
+        # Search returns nodes with tags
+        startup_results = await memory_service.search(
+            query="startup continuity_awareness", filters=None, handler_name="telemetry_service"
+        )
+        shutdown_results = await memory_service.search(
+            query="shutdown continuity_awareness", filters=None, handler_name="telemetry_service"
+        )
+
+        # Extract timestamps from node IDs
+        startup_timestamps = []
+        shutdown_timestamps = []
+
+        for node in startup_results.nodes if hasattr(startup_results, "nodes") else []:
+            # Node ID format: startup_YYYY-MM-DDTHH:MM:SS.ffffff+00:00
+            if hasattr(node, "id") and node.id.startswith("startup_"):
+                ts_str = node.id.replace("startup_", "")
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                    startup_timestamps.append(ts)
+                except (ValueError, TypeError):
+                    pass
+
+        for node in shutdown_results.nodes if hasattr(shutdown_results, "nodes") else []:
+            # Node ID format: shutdown_YYYY-MM-DDTHH:MM:SS.ffffff+00:00
+            if hasattr(node, "id") and node.id.startswith("shutdown_"):
+                ts_str = node.id.replace("shutdown_", "")
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                    shutdown_timestamps.append(ts)
+                except (ValueError, TypeError):
+                    pass
+
+        # Calculate continuity metrics
+        first_startup = min(startup_timestamps) if startup_timestamps else None
+        last_shutdown_ts = max(shutdown_timestamps) if shutdown_timestamps else None
+
+        # Calculate total time online/offline
+        total_time_online_seconds = 0.0
+        total_time_offline_seconds = 0.0
+
+        # Pair up startup/shutdown events to calculate session durations
+        all_events = []
+        for ts in startup_timestamps:
+            all_events.append(("startup", ts))
+        for ts in shutdown_timestamps:
+            all_events.append(("shutdown", ts))
+
+        all_events.sort(key=lambda x: x[1])
+
+        # Calculate online/offline durations
+        current_session_start_ts = None
+        for i, (event_type, ts) in enumerate(all_events):
+            if event_type == "startup":
+                current_session_start_ts = ts
+            elif event_type == "shutdown" and current_session_start_ts:
+                # Session ended
+                session_duration = (ts - current_session_start_ts).total_seconds()
+                total_time_online_seconds += session_duration
+
+                # Calculate offline time to next startup
+                if i + 1 < len(all_events) and all_events[i + 1][0] == "startup":
+                    next_startup = all_events[i + 1][1]
+                    offline_duration = (next_startup - ts).total_seconds()
+                    total_time_offline_seconds += offline_duration
+
+                current_session_start_ts = None
+
+        # Current session duration (if currently online)
+        current_session_duration_seconds = 0.0
+        if start_time:
+            current_session_duration_seconds = (now - start_time).total_seconds()
+            total_time_online_seconds += current_session_duration_seconds
+
+        # Calculate averages
+        total_shutdowns = len(shutdown_timestamps)
+        average_time_online_seconds = total_time_online_seconds / (total_shutdowns + 1) if total_shutdowns >= 0 else 0.0
+        average_time_offline_seconds = total_time_offline_seconds / total_shutdowns if total_shutdowns > 0 else 0.0
+
+        # Get last shutdown reason (would need to be stored in node attributes)
+        last_shutdown_reason = None
+
+        return ContinuitySummary(
+            first_startup=first_startup,
+            total_time_online_seconds=total_time_online_seconds,
+            total_time_offline_seconds=total_time_offline_seconds,
+            total_shutdowns=total_shutdowns,
+            average_time_online_seconds=average_time_online_seconds,
+            average_time_offline_seconds=average_time_offline_seconds,
+            current_session_start=start_time,
+            current_session_duration_seconds=current_session_duration_seconds,
+            last_shutdown=last_shutdown_ts,
+            last_shutdown_reason=last_shutdown_reason,
+        )
+
+    except Exception as e:
+        # Log but don't fail - continuity is optional context
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to build continuity summary: {e}")
+        return None

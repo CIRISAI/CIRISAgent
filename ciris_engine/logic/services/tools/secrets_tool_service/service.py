@@ -308,10 +308,9 @@ class SecretsToolService(BaseService, ToolService):
 
         # Add custom metadata using model_copy
         if capabilities.metadata:
-            capabilities.metadata = capabilities.metadata.model_copy(update={
-                "adapter": self.adapter_name,
-                "tool_count": 3
-            })
+            capabilities.metadata = capabilities.metadata.model_copy(
+                update={"adapter": self.adapter_name, "tool_count": 3}
+            )
 
         return capabilities
 

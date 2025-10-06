@@ -185,6 +185,8 @@ class StreamingVerificationModule:
                                             "agent_identity": (str, type(None)),
                                             "user_profiles": (list, type(None)),
                                             "current_time_utc": (str, type(None)),
+                                            "continuity_summary": (dict, type(None)),  # ContinuitySummary - should be dict not null
+                                            "telemetry_summary": (dict, type(None)),  # TelemetrySummary - should be dict not null
                                         }
 
                                         for field, allowed_types in snapshot_field_types.items():
@@ -194,6 +196,16 @@ class StreamingVerificationModule:
                                                         f"system_snapshot.{field} has wrong type: {type(snapshot[field]).__name__} "
                                                         f"(expected one of {[t.__name__ for t in allowed_types]})"
                                                     )
+
+                                        # Warn if critical optional fields are None (production issue check)
+                                        if snapshot.get("continuity_summary") is None:
+                                            event_detail["issues"].append(
+                                                "system_snapshot.continuity_summary is None (should be ContinuitySummary dict)"
+                                            )
+                                        if snapshot.get("telemetry_summary") is None:
+                                            event_detail["issues"].append(
+                                                "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
+                                            )
 
                                 elif event_type == "dma_results":
                                     # Required base fields

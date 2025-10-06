@@ -697,6 +697,18 @@ async def _get_telemetry_summary(telemetry_service: Optional[Any]) -> Optional[A
     return None
 
 
+async def _get_continuity_summary(telemetry_service: Optional[Any]) -> Optional[Any]:
+    """Get continuity awareness summary from lifecycle events."""
+    if telemetry_service and hasattr(telemetry_service, "get_continuity_summary"):
+        try:
+            continuity_summary = await telemetry_service.get_continuity_summary()
+            logger.debug("Successfully retrieved continuity summary")
+            return continuity_summary
+        except Exception as e:
+            logger.warning(f"Failed to get continuity summary: {e}")
+    return None
+
+
 def _validate_channel_list(channels: List[Any], adapter_name: str) -> None:
     """Validate that channel list contains ChannelContext objects."""
     if channels and not isinstance(channels[0], ChannelContext):

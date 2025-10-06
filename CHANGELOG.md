@@ -27,15 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Aligns with CIRIS Covenant principles: "Constructed Courage" to act decisively when alignment confirmed, WBD (Wisdom-Based Deferral) for genuine uncertainty only
 
 ### Changed
-- **⚡ CSDMA Complexity Reduction**: Refactored `evaluate_thought` method
-  - CC 33 → ~8 (~76% reduction)
-  - Extracted 4 focused helper methods:
-    - `_extract_context_from_modern_path`: Handles modern context objects
-    - `_extract_context_from_legacy_path`: Handles legacy thought_item.initial_context
-    - `_build_identity_block`: Creates identity block from agent_identity
+- **⚡ CSDMA Complexity Reduction & Legacy Path Removal**: Refactored `evaluate_thought` method
+  - CC 33 → ~5 (~85% reduction)
+  - Removed legacy `initial_context` dict-based path - modern context parameter only
+  - Simplified from 4 helper methods to 2:
+    - `_extract_context_data`: Handles modern context objects
     - `_build_context_summary`: Creates context summary string
-  - Main method reduced from 65 lines to 10 lines
-  - Each helper has single responsibility with early returns
+  - Main method reduced from 65 lines to 8 lines
+  - Removed ~40 lines of legacy dict handling code
+  - Enforces single correct path through code
   - All 42 DMA tests passing with zero regressions
 
 ## [1.2.3] - 2025-10-05

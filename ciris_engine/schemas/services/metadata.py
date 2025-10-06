@@ -22,4 +22,8 @@ class ServiceMetadata(BaseModel):
     trace_id: Optional[str] = Field(None, description="Distributed trace ID")
     span_id: Optional[str] = Field(None, description="Span ID within trace")
 
+    # Infrastructure-specific fields
+    category: Optional[str] = Field(None, description="Service category (e.g., 'infrastructure')")
+    critical: Optional[bool] = Field(None, description="Whether the service is critical for system operation")
+
     model_config = ConfigDict(extra="forbid")  # No arbitrary fields allowed

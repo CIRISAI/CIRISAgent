@@ -278,8 +278,8 @@ class TestInfrastructureService:
 
         # Check metadata
         caps = service.get_capabilities()
-        assert caps.metadata["category"] == "infrastructure"
-        assert caps.metadata["critical"] is True
+        assert caps.metadata.category == "infrastructure"
+        assert caps.metadata.critical is True
 
 
 class TestScheduledServiceClass:

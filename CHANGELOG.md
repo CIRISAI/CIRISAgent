@@ -15,7 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All 4,950 tests passing with zero regressions
 
 ### Fixed
-- TBD
+- **🔧 Telemetry Service Type Safety**: Fixed mypy type annotation error
+  - Added explicit `Dict[str, ServiceTelemetryData]` annotation in `_collect_from_bootstrap_adapters`
+  - ciris_engine: 0 mypy errors (553 files)
+- **🧹 Code Quality**: Removed unused parameter from helper function
+  - Removed unused `service_type` parameter from `generate_semantic_service_name()` (SonarCloud python:S1172)
+  - Improved function signature clarity and maintainability
 
 ### Changed
 - **⚡ Telemetry Service Complexity Reduction**: Comprehensive refactoring of high-complexity methods

@@ -5,7 +5,28 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 1.2.3
+## [Unreleased] - 1.2.5
+
+### Added
+- TBD
+
+### Fixed
+- TBD
+
+### Changed
+- TBD
+
+## [1.2.4] - 2025-10-05
+
+### Fixed
+- **🧠 PDMA Ethical Evaluation**: Reduced over-cautious deferral to Wise Authority
+  - Updated `EthicalDMAResult` schema to prefer "MOST ethically appropriate action(s)" instead of listing all actions that "could be ethical"
+  - Added guidance to "Prefer helpful actions or inaction when ethically clear"
+  - Clarified that `defer` should be reserved "only for genuine ethical uncertainty requiring human wisdom, not routine observations"
+  - Updated autonomous agent framing: "observations" instead of "requests"
+  - Aligns with CIRIS Covenant principles: "Constructed Courage" to act decisively when alignment confirmed, WBD (Wisdom-Based Deferral) for genuine uncertainty only
+
+## [1.2.3] - 2025-10-05
 
 ### Added
 - **📊 Telemetry Service Refactoring**: Eliminated all SonarCloud complexity violations

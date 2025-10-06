@@ -1988,7 +1988,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         cached = check_summary_cache(self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds)
         if cached:
             logger.debug("Returning cached telemetry summary")
-            return cached
+            return cached  # type: ignore[no-any-return]
 
         # Fail fast if memory bus not available
         if not self._memory_bus:
@@ -2059,12 +2059,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         now = self._now()
 
         # Check cache
-        cached = check_summary_cache(
-            self._summary_cache, "continuity_summary", now, self._summary_cache_ttl_seconds
-        )
+        cached = check_summary_cache(self._summary_cache, "continuity_summary", now, self._summary_cache_ttl_seconds)
         if cached:
             logger.debug("Returning cached continuity summary")
-            return cached
+            return cached  # type: ignore[no-any-return]
 
         # Build from memory nodes
         continuity = await build_continuity_summary_from_memory(

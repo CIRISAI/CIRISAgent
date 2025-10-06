@@ -7,14 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.5] - 2025-10-06
 
-### Added
-- TBD
-
-### Fixed
-- TBD
-
 ### Changed
-- TBD
+- **🎯 ServiceMetadata Type Safety Enforcement**: Complete metadata dict → Pydantic schema migration
+  - Merged `refactor-metadata-handling` branch - replaced `Dict[str, Any]` with typed `ServiceMetadata`
+  - Fixed all 4 services still using `metadata.update()`: LLM, SecretsToolService, Scheduler, RuntimeControl
+  - Extended `ServiceMetadata` schema with service-specific optional fields instead of arbitrary dicts
+  - Added typed fields: `model`, `adapter`, `tool_count`, `features`, `cron_support`, `description`, etc.
+  - All services now use `metadata.model_copy(update={...})` pattern for type-safe metadata updates
+  - Maintains "No Untyped Dicts" principle - `extra="forbid"` enforced on ServiceMetadata
+  - ciris_engine/logic/services: 0 mypy errors (80 files)
+  - All base service tests passing (10/10)
 
 ## [1.2.4] - 2025-10-05
 

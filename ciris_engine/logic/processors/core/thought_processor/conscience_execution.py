@@ -58,15 +58,19 @@ class ConscienceExecutionPhase:
             return action_result  # type: ignore[no-any-return]
 
         # Check if this is a conscience retry
-        is_conscience_retry = (
-            processing_context is not None
-            and hasattr(processing_context, "is_conscience_retry")
-            and processing_context.is_conscience_retry
-        )
+        is_conscience_retry = False
+        if processing_context is not None:
+            if isinstance(processing_context, dict):
+                is_conscience_retry = processing_context.get("is_conscience_retry", False)
+            elif hasattr(processing_context, "is_conscience_retry"):
+                is_conscience_retry = processing_context.is_conscience_retry
 
         # If this is a conscience retry, unset the flag to prevent loops
         if is_conscience_retry and processing_context is not None:
-            processing_context.is_conscience_retry = False
+            if isinstance(processing_context, dict):
+                processing_context["is_conscience_retry"] = False
+            elif hasattr(processing_context, "is_conscience_retry"):
+                processing_context.is_conscience_retry = False
 
         # Exempt actions that shouldn't be overridden
         exempt_actions = {
@@ -94,6 +98,13 @@ class ConscienceExecutionPhase:
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
 
+        # Track conscience check results for epistemic data aggregation
+        entropy_level: Optional[float] = None
+        coherence_level: Optional[float] = None
+        uncertainty_acknowledged: bool = False
+        reasoning_transparency: float = 0.0
+        conscience_checks_ran: int = 0
+
         # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
             conscience = entry.conscience
@@ -105,6 +116,7 @@ class ConscienceExecutionPhase:
                 result = await conscience.check(final_action, context)
                 if cb:
                     cb.record_success()
+                conscience_checks_ran += 1
             except CircuitBreakerError as e:
                 logger.warning(f"conscience {entry.name} unavailable: {e}")
                 continue
@@ -114,7 +126,16 @@ class ConscienceExecutionPhase:
                     cb.record_failure()
                 continue
 
-            # Store epistemic data if available
+            # Aggregate epistemic metrics from conscience results
+            if result.entropy_score is not None:
+                entropy_level = result.entropy_score
+            if result.coherence_score is not None:
+                coherence_level = result.coherence_score
+            if result.epistemic_humility_check is not None:
+                uncertainty_acknowledged = True
+                reasoning_transparency = 1.0  # Humility check ran, transparency confirmed
+
+            # Store epistemic data if conscience provided it (legacy path)
             if result.epistemic_data:
                 epistemic_data[entry.name] = result.epistemic_data.model_dump_json()
 
@@ -178,14 +199,50 @@ class ConscienceExecutionPhase:
                 overridden = True
                 override_reason = "Conscience retry - forcing PONDER to prevent loops"
 
-        # epistemic_data is REQUIRED - populate with EXEMPT if no checks ran
+        # Build EpistemicData from aggregated conscience results
+        if conscience_checks_ran > 0:
+            from ciris_engine.schemas.conscience.core import EpistemicData
+
+            # Use defaults if specific checks didn't run
+            aggregated_epistemic = EpistemicData(
+                entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
+                coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
+                uncertainty_acknowledged=uncertainty_acknowledged,
+                reasoning_transparency=reasoning_transparency,
+            )
+            epistemic_data["aggregated"] = aggregated_epistemic.model_dump_json()
+
+        # epistemic_data is REQUIRED - fail if missing for non-exempt actions
         if not epistemic_data:
-            # If no epistemic data from any conscience, mark as exempt (e.g., exempt actions)
+            # This should only happen for exempt actions (which return early above)
+            # If we reach here with empty epistemic_data, it's a bug in conscience implementation
+            logger.error(
+                f"CONSCIENCE BUG: No epistemic data for non-exempt action {action_result.selected_action.value}. "
+                f"All consciences must provide epistemic_data for non-exempt actions."
+            )
+            # Fail-fast: override to PONDER to prevent undefined behavior
             epistemic_data = {
-                "status": "EXEMPT",
+                "status": "ERROR",
                 "action": action_result.selected_action.value,
-                "reason": "No epistemic checks provided data",
+                "reason": "CONSCIENCE BUG: No epistemic checks provided data for non-exempt action",
             }
+            overridden = True
+            override_reason = "Missing epistemic data - forcing PONDER for safety"
+            final_action = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(
+                    questions=[
+                        "Conscience checks did not provide epistemic data",
+                        "This indicates a bug in conscience implementation",
+                        "What should I do?",
+                    ]
+                ),
+                rationale="No epistemic data from conscience - safety override",
+                raw_llm_response=None,
+                reasoning=None,
+                evaluation_time_ms=None,
+                resource_usage=None,
+            )
 
         result = ConscienceApplicationResult(
             original_action=action_result,

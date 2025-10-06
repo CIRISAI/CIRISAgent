@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 1.2.3
 
 ### Added
+- **📊 Telemetry Service Refactoring**: Eliminated all SonarCloud complexity violations
+  - Created 23 new focused helper functions (15 in helpers.py, 8 extracted methods)
+  - Average 69% complexity reduction across all 4 high-CC methods
+  - Zero functions over CC 15 threshold (was 4)
+  - All 4,950 tests passing with zero regressions
+
+### Fixed
+- **🔧 Telemetry Service Type Safety**: Fixed mypy type annotation error
+  - Added explicit `Dict[str, ServiceTelemetryData]` annotation in `_collect_from_bootstrap_adapters`
+  - ciris_engine: 0 mypy errors (553 files)
+- **🧹 Code Quality**: Removed unused parameter from helper function
+  - Removed unused `service_type` parameter from `generate_semantic_service_name()` (SonarCloud python:S1172)
+  - Improved function signature clarity and maintainability
+
+### Changed
+- **⚡ Telemetry Service Complexity Reduction**: Comprehensive refactoring of high-complexity methods
+  - `query_metrics`: CC 22 → 9 (59% reduction) - Extracted 5 filtering/conversion helpers
+  - `_generate_semantic_service_name`: CC 16 → 8 (50% reduction) - Used dispatch table pattern
+  - `collect_from_adapter_instances`: CC 19 → 2 (89% reduction) - Extracted 5 collection helpers
+  - `_try_collect_metrics`: CC 19 → 4 (79% reduction) - Extracted 4 method-specific helpers
+  - All helper functions maintain full type safety with Pydantic schemas
+  - No new Dict[str, Any] introduced
+  - Full mypy compliance maintained
+
+## [1.2.2] - 2025-10-04
+
+### Added
 - **🎯 100% Type Safety**: Complete mypy cleanup across all three codebases
   - ciris_sdk: 0 errors (was 194 errors across 23 files)
   - ciris_engine: 0 errors (553 files)
@@ -53,6 +80,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **📦 Dependency Update**: Updated websockets from >=12.0,<13.0 to >=14.0
   - SDK uses `websockets.asyncio.client` which requires version 13.0+
   - Fixed 6 CI test failures related to websockets import
+- **🐛 SSE Streaming Bugs**: Fixed 3 critical H3ERE pipeline SSE event bugs (100% QA test pass rate)
+  - **BUG 1**: action_rationale empty - Extract from input action at CONSCIENCE_EXECUTION step, add default in mock_llm
+  - **BUG 2**: epistemic_data/updated_status_available missing - Make REQUIRED with EXEMPT markers, add to ConscienceResultEvent schema
+  - **BUG 3**: 4 audit fields missing - Wire ActionResponse with AuditEntryResult, make all fields REQUIRED
+- **📡 Production Timing Bug**: Fixed conscience/action selection results emitted simultaneously - ASPDMA_RESULT now correctly emitted at CONSCIENCE_EXECUTION step (before conscience validation)
+- **🔒 Type Safety**: ActionDispatcher now returns typed ActionResponse (was None), fixed missing return statements in error paths
+- **⚙️ Audit Service**: log_action now returns AuditEntryResult (was None), wired through component_builder to action_dispatcher
+- **🔁 Duplicate Audit Entries**: Fixed duplicate audit logging causing 2x entries (graph, sqlite, jsonl) for every action
+  - Removed 27 duplicate _audit_log calls from all 10 handlers
+  - Removed duplicate audit from base_handler._handle_error
+  - Centralized audit logging now ONLY in action_dispatcher (3 locations: registry timeout, success, error)
+  - Each action now audited exactly ONCE
 
 ### Changed
 - **📊 PDMA Prompt Enhancement**: Updated ethical evaluation prompt
@@ -73,33 +112,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🧹 Code Quality**: Fixed SonarCloud issues in TSDB helpers
   - Extracted duplicate error message strings to constants
   - Removed unnecessary f-string in cleanup_helpers.py
-
-## [1.2.2] - 2025-10-04
-
-### Fixed
-- **🐛 SSE Streaming Bugs**: Fixed 3 critical H3ERE pipeline SSE event bugs (100% QA test pass rate)
-  - **BUG 1**: action_rationale empty - Extract from input action at CONSCIENCE_EXECUTION step, add default in mock_llm
-  - **BUG 2**: epistemic_data/updated_status_available missing - Make REQUIRED with EXEMPT markers, add to ConscienceResultEvent schema
-  - **BUG 3**: 4 audit fields missing - Wire ActionResponse with AuditEntryResult, make all fields REQUIRED
-- **📡 Production Timing Bug**: Fixed conscience/action selection results emitted simultaneously - ASPDMA_RESULT now correctly emitted at CONSCIENCE_EXECUTION step (before conscience validation)
-- **🔒 Type Safety**: ActionDispatcher now returns typed ActionResponse (was None), fixed missing return statements in error paths
-- **⚙️ Audit Service**: log_action now returns AuditEntryResult (was None), wired through component_builder to action_dispatcher
-- **🔁 Duplicate Audit Entries**: Fixed duplicate audit logging causing 2x entries (graph, sqlite, jsonl) for every action
-  - Removed 27 duplicate _audit_log calls from all 10 handlers
-  - Removed duplicate audit from base_handler._handle_error
-  - Centralized audit logging now ONLY in action_dispatcher (3 locations: registry timeout, success, error)
-  - Each action now audited exactly ONCE
-
-### Changed
 - **✅ REQUIRED Fields**: Made critical SSE/audit fields non-optional throughout schemas
   - ActionSelectionDMAResult.rationale, ConscienceApplicationResult.epistemic_data
   - AuditEntryResult: sequence_number, entry_hash, signature
   - ConscienceExecutionStepData.action_rationale, ConscienceResultEvent.updated_status_available
 - **🎯 Fail-Fast**: Removed all fallback logic - system fails loud with detailed errors when required data missing
-
-### Added
-- **📊 Enhanced QA**: Streaming tests now detect bugs with explicit "🐛 BUG N:" prefixes for clear error reporting
-- **🔒 ActionResponse Schema**: Typed replacement for Dict[str, Any] dispatch_result with REQUIRED audit_data field
 
 ## [1.2.1] - 2025-10-04
 

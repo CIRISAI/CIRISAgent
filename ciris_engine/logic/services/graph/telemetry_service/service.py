@@ -201,47 +201,57 @@ class TelemetryAggregator:
         For LLM providers: {service_type}_{provider_type}_{instance_id}
         For others: {service_type}_{provider_name_cleaned}
         """
-        # Clean up the provider name
-        provider_cleaned = provider_name.replace("Service", "").replace("Adapter", "")
 
-        # Handle adapter services (API-COMM, CLI-TOOL, etc.)
+        def _extract_adapter_suffix(adapter_id: str, separator: str = "_") -> str:
+            """Extract suffix from adapter ID."""
+            if adapter_id and separator in adapter_id:
+                return adapter_id.split(separator)[-1][:8]
+            return str(id(provider_name))[-6:]
+
+        def _get_instance_id() -> str:
+            """Get short instance ID."""
+            return str(id(provider_name))[-6:]
+
+        # Dispatch table for known provider patterns
         if "APICommunication" in provider_name:
             adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
-            suffix = adapter_id.split("_")[-1][:8] if adapter_id else str(id(provider_name))[-6:]
+            suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_api_{suffix}"
-        elif "CLIAdapter" in provider_name:
+
+        if "CLIAdapter" in provider_name:
             adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
-            suffix = adapter_id.split("@")[-1][:8] if adapter_id and "@" in adapter_id else str(id(provider_name))[-6:]
+            suffix = _extract_adapter_suffix(adapter_id, "@") if "@" in adapter_id else _get_instance_id()
             return f"{service_type}_cli_{suffix}"
-        elif "DiscordAdapter" in provider_name or "Discord" in provider_name:
+
+        if "DiscordAdapter" in provider_name or "Discord" in provider_name:
             adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
-            suffix = adapter_id.split("_")[-1][:8] if adapter_id else str(id(provider_name))[-6:]
+            suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_discord_{suffix}"
-        elif "APITool" in provider_name:
-            return f"{service_type}_api_tool"
-        elif "APIRuntime" in provider_name:
-            return f"{service_type}_api_runtime"
-        elif "SecretsToolService" in provider_name:
-            return f"{service_type}_secrets"
-        elif "MockLLM" in provider_name:
-            return f"{service_type}_mock"
-        elif "OpenAI" in provider_name or "Anthropic" in provider_name:
-            # For LLM providers, include provider type and instance
+
+        # Simple pattern matches (no complex logic)
+        simple_patterns = {
+            "APITool": "api_tool",
+            "APIRuntime": "api_runtime",
+            "SecretsToolService": "secrets",
+            "MockLLM": "mock",
+            "LocalGraphMemory": "local_graph",
+            "GraphConfig": "graph",
+            "TimeService": "time",
+            "WiseAuthority": "wise_authority",
+        }
+
+        for pattern, suffix in simple_patterns.items():
+            if pattern in provider_name:
+                return f"{service_type}_{suffix}"
+
+        # LLM providers
+        if "OpenAI" in provider_name or "Anthropic" in provider_name:
             provider_type = "openai" if "OpenAI" in provider_name else "anthropic"
-            instance_id = str(id(provider_name))[-6:]
-            return f"{service_type}_{provider_type}_{instance_id}"
-        elif "LocalGraphMemory" in provider_name:
-            return f"{service_type}_local_graph"
-        elif "GraphConfig" in provider_name:
-            return f"{service_type}_graph"
-        elif "TimeService" in provider_name:
-            return f"{service_type}_time"
-        elif "WiseAuthority" in provider_name:
-            return f"{service_type}_wise_authority"
-        else:
-            # Default: use cleaned provider name with a short ID
-            short_id = str(id(provider_name))[-6:]
-            return f"{service_type}_{provider_cleaned.lower()}_{short_id}"
+            return f"{service_type}_{provider_type}_{_get_instance_id()}"
+
+        # Default fallback
+        provider_cleaned = provider_name.replace("Service", "").replace("Adapter", "")
+        return f"{service_type}_{provider_cleaned.lower()}_{_get_instance_id()}"
 
     def collect_from_registry_services(self) -> Dict[str, List[Any]]:
         """
@@ -572,64 +582,69 @@ class TelemetryAggregator:
         logger.debug(f"Service {service_name} not found in {len(all_services)} services")
         return None
 
-    async def _try_collect_metrics(self, service: Any) -> Optional[ServiceTelemetryData]:
-        """Try different methods to collect metrics from service."""
-        if not service:
-            logger.debug("[TELEMETRY] Service is None, cannot collect metrics")
+    def _convert_dict_to_telemetry(self, metrics: Dict[str, Any], service_name: str) -> ServiceTelemetryData:
+        """Convert dict metrics to ServiceTelemetryData with proper uptime detection."""
+        # Look for various uptime keys
+        uptime = (
+            metrics.get("uptime_seconds")
+            or metrics.get("incident_uptime_seconds")
+            or metrics.get("tsdb_uptime_seconds")
+            or metrics.get("auth_uptime_seconds")
+            or metrics.get("scheduler_uptime_seconds")
+            or 0.0
+        )
+
+        # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
+        healthy = metrics.get("healthy", uptime > 0)
+
+        logger.debug(f"Converting dict metrics to ServiceTelemetryData for {service_name}: healthy={healthy}, uptime={uptime}")
+
+        return ServiceTelemetryData(
+            healthy=healthy,
+            uptime_seconds=uptime,
+            error_count=metrics.get("error_count", 0),
+            requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
+            error_rate=metrics.get("error_rate", 0.0),
+            memory_mb=metrics.get("memory_mb"),
+            custom_metrics=metrics,  # Pass the whole dict as custom_metrics
+        )
+
+    async def _try_get_metrics_method(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try to collect metrics via get_metrics() method."""
+        if not hasattr(service, "get_metrics"):
+            logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
             return None
 
-        # Try get_metrics first
-        if hasattr(service, "get_metrics"):
-            logger.debug(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
-            try:
-                # Check if get_metrics is async or sync
-                if asyncio.iscoroutinefunction(service.get_metrics):
-                    metrics = await service.get_metrics()
-                else:
-                    metrics = service.get_metrics()
-                logger.debug(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
-                if isinstance(metrics, ServiceTelemetryData):
-                    return metrics
-                elif isinstance(metrics, dict):
-                    # Convert dict to ServiceTelemetryData
-                    # Look for various uptime keys
-                    uptime = (
-                        metrics.get("uptime_seconds")
-                        or metrics.get("incident_uptime_seconds")
-                        or metrics.get("tsdb_uptime_seconds")
-                        or metrics.get("auth_uptime_seconds")
-                        or metrics.get("scheduler_uptime_seconds")
-                        or 0.0
-                    )
+        logger.debug(f"[TELEMETRY] Service {type(service).__name__} has get_metrics method")
+        try:
+            # Check if get_metrics is async or sync
+            if asyncio.iscoroutinefunction(service.get_metrics):
+                metrics = await service.get_metrics()
+            else:
+                metrics = service.get_metrics()
 
-                    # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
-                    healthy = metrics.get("healthy", uptime > 0)
+            logger.debug(f"[TELEMETRY] Got metrics from {type(service).__name__}: {metrics}")
 
-                    logger.debug(
-                        f"Converting dict metrics to ServiceTelemetryData for {type(service).__name__}: healthy={healthy}, uptime={uptime}"
-                    )
-                    return ServiceTelemetryData(
-                        healthy=healthy,
-                        uptime_seconds=uptime,
-                        error_count=metrics.get("error_count", 0),
-                        requests_handled=metrics.get("request_count") or metrics.get("requests_handled"),
-                        error_rate=metrics.get("error_rate", 0.0),
-                        memory_mb=metrics.get("memory_mb"),
-                        custom_metrics=metrics,  # Pass the whole dict as custom_metrics
-                    )
-            except Exception as e:
-                logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
-                # Don't return None here - continue to try other methods
-        else:
-            logger.debug(f"Service {type(service).__name__} does not have get_metrics method")
+            if isinstance(metrics, ServiceTelemetryData):
+                return metrics
+            elif isinstance(metrics, dict):
+                return self._convert_dict_to_telemetry(metrics, type(service).__name__)
 
-        # Try _collect_metrics
-        if hasattr(service, "_collect_metrics"):
+            return None
+        except Exception as e:
+            logger.error(f"Error calling get_metrics on {type(service).__name__}: {e}")
+            return None
+
+    def _try_collect_metrics_method(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try to collect metrics via _collect_metrics() method."""
+        if not hasattr(service, "_collect_metrics"):
+            return None
+
+        try:
             metrics = service._collect_metrics()
             if isinstance(metrics, ServiceTelemetryData):
                 return metrics
             elif isinstance(metrics, dict):
-                # Convert dict to ServiceTelemetryData
                 return ServiceTelemetryData(
                     healthy=metrics.get("healthy", False),
                     uptime_seconds=metrics.get("uptime_seconds"),
@@ -639,18 +654,45 @@ class TelemetryAggregator:
                     memory_mb=metrics.get("memory_mb"),
                     custom_metrics=metrics.get("custom_metrics"),
                 )
+        except Exception as e:
+            logger.error(f"Error calling _collect_metrics on {type(service).__name__}: {e}")
+
+        return None
+
+    async def _try_get_status_method(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try to collect metrics via get_status() method."""
+        if not hasattr(service, "get_status"):
             return None
 
-        # Try get_status
-        if hasattr(service, "get_status"):
+        try:
             status = service.get_status()
             if asyncio.iscoroutine(status):
                 status = await status
             # status_to_telemetry returns dict, not ServiceTelemetryData
             # Return None as we can't convert properly here
             return None
+        except Exception as e:
+            logger.error(f"Error calling get_status on {type(service).__name__}: {e}")
+            return None
 
-        return None
+    async def _try_collect_metrics(self, service: Any) -> Optional[ServiceTelemetryData]:
+        """Try different methods to collect metrics from service."""
+        if not service:
+            logger.debug("[TELEMETRY] Service is None, cannot collect metrics")
+            return None
+
+        # Try get_metrics first (most common)
+        result = await self._try_get_metrics_method(service)
+        if result:
+            return result
+
+        # Try _collect_metrics (fallback)
+        result = self._try_collect_metrics_method(service)
+        if result:
+            return result
+
+        # Try get_status (last resort)
+        return await self._try_get_status_method(service)
 
     async def collect_from_bus(self, bus_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a message bus."""
@@ -849,6 +891,103 @@ class TelemetryAggregator:
             custom_metrics=custom_metrics,
         )
 
+    def _create_empty_telemetry(self, adapter_id: str, error_msg: Optional[str] = None) -> ServiceTelemetryData:
+        """Create empty telemetry data for failed/unavailable adapter."""
+        custom_metrics = {"adapter_id": adapter_id}
+        if error_msg:
+            custom_metrics["error"] = error_msg
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0,
+                custom_metrics=custom_metrics
+            )
+        return ServiceTelemetryData(
+            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0,
+            custom_metrics=custom_metrics
+        )
+
+    def _create_running_telemetry(self, adapter_info: Any) -> ServiceTelemetryData:
+        """Create telemetry for running adapter without metrics."""
+        uptime = 0.0
+        if hasattr(adapter_info, "started_at") and adapter_info.started_at:
+            uptime = (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
+
+        return ServiceTelemetryData(
+            healthy=True,
+            uptime_seconds=uptime,
+            error_count=0,
+            requests_handled=0,
+            error_rate=0.0,
+            custom_metrics={
+                "adapter_id": adapter_info.adapter_id,
+                "adapter_type": adapter_info.adapter_type,
+            },
+        )
+
+    async def _collect_from_adapter_with_metrics(
+        self, adapter_instance: Any, adapter_info: Any, adapter_id: str
+    ) -> ServiceTelemetryData:
+        """Collect metrics from a single adapter instance."""
+        try:
+            metrics = await self._get_adapter_metrics(adapter_instance)
+            if metrics:
+                return self._create_telemetry_data(metrics, adapter_info, adapter_id, healthy=True)
+            else:
+                return self._create_empty_telemetry(adapter_id)
+        except Exception as e:
+            logger.error(f"Error getting metrics from {adapter_id}: {e}")
+            return self._create_empty_telemetry(adapter_id, str(e))
+
+    async def _collect_from_control_service(
+        self, adapter_type: str
+    ) -> Optional[Dict[str, ServiceTelemetryData]]:
+        """Try to collect adapter metrics via control service."""
+        if not self.runtime:
+            return None
+
+        try:
+            control_service = await self._get_control_service()
+            if not control_service or not hasattr(control_service, "list_adapters"):
+                return None
+
+            all_adapters = await control_service.list_adapters()
+            adapter_metrics = {}
+
+            for adapter_info in all_adapters:
+                if adapter_info.adapter_type != adapter_type or not self._is_adapter_running(adapter_info):
+                    continue
+
+                adapter_instance = self._find_adapter_instance(adapter_type)
+                if adapter_instance:
+                    adapter_metrics[adapter_info.adapter_id] = await self._collect_from_adapter_with_metrics(
+                        adapter_instance, adapter_info, adapter_info.adapter_id
+                    )
+                else:
+                    adapter_metrics[adapter_info.adapter_id] = self._create_running_telemetry(adapter_info)
+
+            return adapter_metrics
+
+        except Exception as e:
+            logger.error(f"Failed to get adapter list from control service: {e}")
+            return None
+
+    async def _collect_from_bootstrap_adapters(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
+        """Fallback: collect from bootstrap adapters directly."""
+        adapter_metrics: Dict[str, ServiceTelemetryData] = {}
+
+        if not self.runtime or not hasattr(self.runtime, "adapters"):
+            return adapter_metrics
+
+        for adapter in self.runtime.adapters:
+            if adapter_type not in adapter.__class__.__name__.lower():
+                continue
+
+            adapter_id = f"{adapter_type}_bootstrap"
+            adapter_metrics[adapter_id] = await self._collect_from_adapter_with_metrics(
+                adapter, None, adapter_id
+            )
+
+        return adapter_metrics
+
     async def collect_from_adapter_instances(self, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
         """
         Collect telemetry from ALL active adapter instances of a given type.
@@ -856,96 +995,13 @@ class TelemetryAggregator:
         Returns a dict mapping adapter_id to telemetry data.
         Multiple instances of the same adapter type can be running simultaneously.
         """
-        adapter_metrics = {}
+        # Try control service first
+        adapter_metrics = await self._collect_from_control_service(adapter_type)
+        if adapter_metrics is not None:
+            return adapter_metrics
 
-        # Try to get adapters from runtime control service if available
-        if self.runtime:
-            try:
-                control_service = await self._get_control_service()
-                if control_service and hasattr(control_service, "list_adapters"):
-                    all_adapters = await control_service.list_adapters()
-
-                    for adapter_info in all_adapters:
-                        if adapter_info.adapter_type == adapter_type and self._is_adapter_running(adapter_info):
-                            adapter_instance = self._find_adapter_instance(adapter_type)
-
-                            if adapter_instance:
-                                try:
-                                    metrics = await self._get_adapter_metrics(adapter_instance)
-                                    if metrics:
-                                        adapter_metrics[adapter_info.adapter_id] = self._create_telemetry_data(
-                                            metrics, adapter_info, adapter_info.adapter_id, healthy=True
-                                        )
-                                    else:
-                                        adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                            healthy=False,
-                                            uptime_seconds=0.0,
-                                            error_count=0,
-                                            requests_handled=0,
-                                            error_rate=0.0,
-                                            custom_metrics={"adapter_id": adapter_info.adapter_id},
-                                        )
-                                except Exception as e:
-                                    logger.error(f"Error getting metrics from {adapter_info.adapter_id}: {e}")
-                                    adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                        healthy=False,
-                                        uptime_seconds=0.0,
-                                        error_count=1,
-                                        requests_handled=0,
-                                        error_rate=1.0,
-                                        custom_metrics={"error": str(e), "adapter_id": adapter_info.adapter_id},
-                                    )
-                            else:
-                                # Adapter is running but no metrics available
-                                uptime = 0
-                                if hasattr(adapter_info, "started_at") and adapter_info.started_at:
-                                    uptime = (datetime.now(timezone.utc) - adapter_info.started_at).total_seconds()
-
-                                adapter_metrics[adapter_info.adapter_id] = ServiceTelemetryData(
-                                    healthy=True,
-                                    uptime_seconds=uptime,
-                                    error_count=0,
-                                    requests_handled=0,
-                                    error_rate=0.0,
-                                    custom_metrics={
-                                        "adapter_id": adapter_info.adapter_id,
-                                        "adapter_type": adapter_info.adapter_type,
-                                    },
-                                )
-
-                    return adapter_metrics
-
-            except Exception as e:
-                logger.error(f"Failed to get adapter list from control service: {e}")
-
-        # Fallback: Check bootstrap adapters directly
-        if self.runtime and hasattr(self.runtime, "adapters"):
-            for adapter in self.runtime.adapters:
-                if adapter_type in adapter.__class__.__name__.lower():
-                    adapter_id = f"{adapter_type}_bootstrap"
-
-                    try:
-                        metrics = await self._get_adapter_metrics(adapter)
-                        if metrics:
-                            adapter_metrics[adapter_id] = self._create_telemetry_data(
-                                metrics, None, adapter_id, healthy=True
-                            )
-                        else:
-                            adapter_metrics[adapter_id] = ServiceTelemetryData(
-                                healthy=False,
-                                uptime_seconds=0.0,
-                                error_count=0,
-                                requests_handled=0,
-                                error_rate=0.0,
-                                custom_metrics={"adapter_id": adapter_id},
-                            )
-                    except Exception as e:
-                        logger.error(f"Error getting metrics from {adapter_id}: {e}")
-                        adapter_metrics[adapter_id] = ServiceTelemetryData(
-                            healthy=False, uptime_seconds=0.0, error_count=1, requests_handled=0, error_rate=1.0
-                        )
-
-        return adapter_metrics
+        # Fallback to bootstrap adapters
+        return await self._collect_from_bootstrap_adapters(adapter_type)
 
     def get_fallback_metrics(self, _service_name: Optional[str] = None, _healthy: bool = False) -> ServiceTelemetryData:
         """NO FALLBACKS. Real metrics or nothing.
@@ -1338,18 +1394,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             MemoryBusUnavailableError,
             MetricCollectionError,
         )
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
+            calculate_query_time_window,
+            convert_to_metric_record,
+            filter_by_metric_name,
+            filter_by_tags,
+            filter_by_time_range,
+        )
         from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
         if not self._memory_bus:
             raise MemoryBusUnavailableError("Memory bus not available for metric queries")
 
         try:
-            # Calculate hours from time range
-            hours = 24  # Default
-            if start_time and end_time:
-                hours = int((end_time - start_time).total_seconds() / 3600)
-            elif start_time:
-                hours = int((self._now() - start_time).total_seconds() / 3600)
+            # Calculate hours from time range using helper
+            hours = calculate_query_time_window(start_time, end_time, self._now())
 
             # Recall time series data from memory
             timeseries_data = await self._memory_bus.recall_timeseries(
@@ -1360,38 +1419,21 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 handler_name="telemetry_service",
             )
 
-            # Convert to typed MetricRecord objects
+            # Filter and convert to typed MetricRecord objects using helpers
             results: List[MetricRecord] = []
             for data in timeseries_data:
-                # Filter by metric name
-                if data.metric_name != metric_name:
+                # Apply filters using helper functions
+                if not filter_by_metric_name(data, metric_name):
+                    continue
+                if not filter_by_tags(data, tags):
+                    continue
+                if not filter_by_time_range(data, start_time, end_time):
                     continue
 
-                # Filter by tags if specified
-                if tags:
-                    data_tags = data.tags or {}
-                    if not all(data_tags.get(k) == v for k, v in tags.items()):
-                        continue
-
-                # Filter by time range
-                if data.timestamp:
-                    ts = data.timestamp
-                    if ts is not None:
-                        if start_time and ts < start_time:
-                            continue
-                        if end_time and ts > end_time:
-                            continue
-
-                # Create typed MetricRecord (validation happens here)
-                if data.metric_name and data.value is not None and data.timestamp:
-                    results.append(
-                        MetricRecord(
-                            metric_name=data.metric_name,
-                            value=data.value,
-                            timestamp=data.timestamp,
-                            tags=data.tags or {},
-                        )
-                    )
+                # Convert to MetricRecord using helper
+                record = convert_to_metric_record(data)
+                if record:
+                    results.append(record)
 
             return results
 

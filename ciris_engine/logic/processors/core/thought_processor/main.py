@@ -300,8 +300,12 @@ class ThoughtProcessor(
         retry_context = thought_context
         if hasattr(thought_context, "model_copy"):
             retry_context = thought_context.model_copy()
-
-        retry_context.is_conscience_retry = True
+            retry_context.is_conscience_retry = True
+        elif isinstance(thought_context, dict):
+            retry_context = thought_context.copy()
+            retry_context["is_conscience_retry"] = True
+        elif hasattr(retry_context, "is_conscience_retry"):
+            retry_context.is_conscience_retry = True
 
         # Add conscience guidance to the thought item
         setattr(

@@ -160,9 +160,19 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
     def _build_identity_block(self, agent_identity: Any) -> str:
         """Build identity block from agent_identity data."""
-        agent_id = agent_identity.get("agent_id", "Unknown") if isinstance(agent_identity, dict) else getattr(agent_identity, "agent_id", "Unknown")
-        description = agent_identity.get("description", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "description", "")
-        role = agent_identity.get("role", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "role", "")
+        agent_id = (
+            agent_identity.get("agent_id", "Unknown")
+            if isinstance(agent_identity, dict)
+            else getattr(agent_identity, "agent_id", "Unknown")
+        )
+        description = (
+            agent_identity.get("description", "")
+            if isinstance(agent_identity, dict)
+            else getattr(agent_identity, "description", "")
+        )
+        role = (
+            agent_identity.get("role", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "role", "")
+        )
 
         return (
             "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
@@ -174,9 +184,19 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
     def _build_context_summary(self, agent_identity: Any) -> str:
         """Build context summary from agent_identity data."""
-        agent_id = agent_identity.get("agent_id", "Unknown") if isinstance(agent_identity, dict) else getattr(agent_identity, "agent_id", "Unknown")
-        description = agent_identity.get("description", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "description", "")
-        role = agent_identity.get("role", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "role", "")
+        agent_id = (
+            agent_identity.get("agent_id", "Unknown")
+            if isinstance(agent_identity, dict)
+            else getattr(agent_identity, "agent_id", "Unknown")
+        )
+        description = (
+            agent_identity.get("description", "")
+            if isinstance(agent_identity, dict)
+            else getattr(agent_identity, "description", "")
+        )
+        role = (
+            agent_identity.get("role", "") if isinstance(agent_identity, dict) else getattr(agent_identity, "role", "")
+        )
 
         return (
             f"{agent_id} ({role}) - {description}. "
@@ -193,7 +213,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             system_snapshot_block = system_snapshot_str + user_profiles_str
             user_profiles_block = ""
         else:
-            identity_block, system_snapshot_block, user_profiles_block, context_summary = self._extract_context_from_legacy_path(thought_item)
+            identity_block, system_snapshot_block, user_profiles_block, context_summary = (
+                self._extract_context_from_legacy_path(thought_item)
+            )
 
         messages = self._create_csdma_messages_for_instructor(
             thought_content_str,

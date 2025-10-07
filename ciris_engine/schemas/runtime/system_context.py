@@ -362,6 +362,9 @@ class ContinuitySummary(BaseModel):
     # Last shutdown
     last_shutdown: Optional[datetime] = Field(None, description="When last shutdown occurred")
     last_shutdown_reason: Optional[str] = Field(None, description="Reason for last shutdown")
+    last_shutdown_consent: Optional[str] = Field(
+        None, description="Consent status: 'accepted', 'rejected', or 'manual' (crashes/forced)"
+    )
 
     @field_serializer("first_startup", "current_session_start", "last_shutdown")
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:

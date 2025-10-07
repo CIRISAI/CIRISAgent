@@ -1216,6 +1216,17 @@ class CIRISRuntime:
                 agreement_context=None,
             )
 
+            # Determine consent status: accepted, rejected, or manual
+            consent_status = "manual"  # Default for crashes, forced restarts, etc.
+            if self.agent_processor and hasattr(self.agent_processor, "shutdown_processor"):
+                shutdown_proc = self.agent_processor.shutdown_processor
+                if shutdown_proc and hasattr(shutdown_proc, "shutdown_result") and shutdown_proc.shutdown_result:
+                    result = shutdown_proc.shutdown_result
+                    if result.get("action") == "shutdown_accepted" or result.get("status") == "completed":
+                        consent_status = "accepted"
+                    elif result.get("action") == "shutdown_rejected" or result.get("status") == "rejected":
+                        consent_status = "rejected"
+
             # Create memory node for shutdown with flexible attributes for reason
             shutdown_node = GraphNode(
                 id=f"shutdown_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
@@ -1231,6 +1242,7 @@ class CIRISRuntime:
                     "created_by": "runtime_shutdown",
                     "tags": ["shutdown", "continuity_awareness"],
                     "reason": shutdown_context.reason,  # Save shutdown reason in node
+                    "consent_status": consent_status,  # Save consent: accepted, rejected, or manual
                 },
             )
 

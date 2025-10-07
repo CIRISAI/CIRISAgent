@@ -880,6 +880,31 @@ def _extract_shutdown_reason_from_node(node: Any) -> Optional[str]:
     return None
 
 
+def _extract_shutdown_consent_from_node(node: Any) -> Optional[str]:
+    """Extract shutdown consent status from shutdown node attributes.
+
+    Args:
+        node: Shutdown graph node
+
+    Returns:
+        Consent status string ('accepted', 'rejected', or 'manual') if found, None otherwise
+    """
+    if not hasattr(node, "attributes"):
+        return None
+
+    attrs = node.attributes
+
+    # Handle both dict (NodeAttributes) and object (GraphNodeAttributes) forms
+    if isinstance(attrs, dict):
+        consent = attrs.get("consent_status")
+        return str(consent) if consent is not None else None
+    elif hasattr(attrs, "consent_status"):
+        consent = attrs.consent_status
+        return str(consent) if consent is not None else None
+
+    return None
+
+
 def _extract_timestamps_from_nodes(nodes: List[Any], prefix: str) -> List[datetime]:
     """Extract all valid timestamps from lifecycle nodes.
 
@@ -1042,14 +1067,16 @@ async def build_continuity_summary_from_memory(
         first_startup = min(startup_timestamps) if startup_timestamps else None
         last_shutdown_ts = max(shutdown_timestamps) if shutdown_timestamps else None
 
-        # Extract last shutdown reason from the most recent shutdown node
+        # Extract last shutdown reason and consent status from the most recent shutdown node
         last_shutdown_reason = None
+        last_shutdown_consent = None
         if shutdown_nodes and last_shutdown_ts:
             # Find the shutdown node with the matching timestamp
             for node in shutdown_nodes:
                 node_ts = _extract_timestamp_from_node_id(node, "shutdown_")
                 if node_ts == last_shutdown_ts:
                     last_shutdown_reason = _extract_shutdown_reason_from_node(node)
+                    last_shutdown_consent = _extract_shutdown_consent_from_node(node)
                     break
 
         # Merge and calculate durations
@@ -1078,6 +1105,7 @@ async def build_continuity_summary_from_memory(
             current_session_duration_seconds=current_session_duration,
             last_shutdown=last_shutdown_ts,
             last_shutdown_reason=last_shutdown_reason,
+            last_shutdown_consent=last_shutdown_consent,
         )
 
     except Exception as e:

@@ -282,6 +282,10 @@ class LLMBus(BaseBus[LLMService]):
     async def _get_prioritized_services(self, handler_name: str, domain: Optional[str] = None) -> List[Tuple[Any, int]]:
         """Get all available LLM services with their priorities, optionally filtered by domain.
 
+        NOTE: This method does NOT filter by health/circuit breaker state. That check
+        happens during service selection in call_llm_structured() to enable proper
+        failover from services with open circuit breakers to lower-priority services.
+
         Args:
             handler_name: Handler identifier
             domain: Optional domain filter (e.g., 'medical', 'legal', 'financial')
@@ -295,10 +299,6 @@ class LLMBus(BaseBus[LLMService]):
         for service in all_llm_services:
             # Check capabilities
             if not self._check_service_capabilities(service):
-                continue
-
-            # Check health
-            if not await self._is_service_healthy(service):
                 continue
 
             # Get priority and metadata
@@ -366,14 +366,6 @@ class LLMBus(BaseBus[LLMService]):
             # This would require tracking active requests
             # For now, use the one with fewest total requests
             return min(services, key=lambda s: self.service_metrics[f"{type(s).__name__}_{id(s)}"].total_requests)
-
-    async def _is_service_healthy(self, service: object) -> bool:
-        """Check if a service is healthy"""
-        try:
-            result = await service.is_healthy()  # type: ignore[attr-defined]
-            return bool(result)
-        except Exception:
-            return False
 
     def _check_circuit_breaker(self, service_name: str) -> bool:
         """Check if circuit breaker allows execution"""

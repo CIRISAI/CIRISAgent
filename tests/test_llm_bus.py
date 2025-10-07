@@ -192,17 +192,16 @@ class TestLLMBusBasics:
             )
 
     @pytest.mark.asyncio
-    async def test_health_check_filtering(self, llm_bus, service_registry):
-        """Test that unhealthy services are filtered out"""
+    async def test_circuit_breaker_skips_to_lower_priority(self, llm_bus, service_registry):
+        """Test that services with open circuit breakers are skipped in favor of lower priority services"""
         # Register healthy and unhealthy services
         healthy_service = MockLLMService("HealthyLLM")
-        unhealthy_service = MockLLMService("UnhealthyLLM")
-        unhealthy_service.healthy = False
+        failing_service = MockLLMService("FailingLLM", failure_rate=1.0)
 
         service_registry.register_service(
             service_type=ServiceType.LLM,
-            provider=unhealthy_service,
-            priority=Priority.HIGH,  # Higher priority but unhealthy
+            provider=failing_service,
+            priority=Priority.HIGH,  # Higher priority but will fail
             capabilities=["call_llm_structured"],
             metadata={"provider": "mock"},
         )
@@ -214,14 +213,14 @@ class TestLLMBusBasics:
             metadata={"provider": "mock"},
         )
 
-        # Make a call - should use healthy service despite lower priority
+        # Make a call - should try high priority, fail, then use normal priority
         result, _ = await llm_bus.call_llm_structured(
             messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
         )
 
         assert result.message == "Response from HealthyLLM"
-        assert healthy_service.call_count == 1
-        assert unhealthy_service.call_count == 0
+        assert failing_service.call_count == 1  # High priority was tried first
+        assert healthy_service.call_count == 1  # Normal priority succeeded
 
 
 class TestDistributionStrategies:

@@ -385,7 +385,7 @@ def main():
             print(f"✓ Marked {args.hotspot_key} as safe")
 
         elif args.command == "coverage":
-            pr_number = getattr(args, 'pr', None)
+            pr_number = getattr(args, "pr", None)
             metrics = client.get_coverage_metrics(new_code=args.new_code, pull_request=pr_number)
             component = metrics["component"]
 

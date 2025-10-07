@@ -186,6 +186,7 @@ class TestUserProfileExtraction:
             messages_current_hour=42,
         )
         mocks["telemetry_service"].get_telemetry_summary = AsyncMock(return_value=telemetry_summary)
+        mocks["telemetry_service"].get_continuity_summary = AsyncMock(return_value=None)  # No continuity data in tests
 
         # Set up secrets service
         mocks["secrets_service"].list_secrets = MagicMock(return_value=[])

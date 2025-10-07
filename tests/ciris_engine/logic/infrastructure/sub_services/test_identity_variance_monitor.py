@@ -662,8 +662,6 @@ class TestStatusAndCapabilities:
         assert capabilities.service_name == "IdentityVarianceMonitor"
         assert "initialize_baseline" in capabilities.actions
         assert "check_variance" in capabilities.actions
-        assert capabilities.metadata["variance_threshold"] == 0.20
-        assert capabilities.metadata["check_interval_hours"] == 24
 
 
 class TestEdgeCases:

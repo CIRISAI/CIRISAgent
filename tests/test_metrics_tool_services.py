@@ -234,8 +234,8 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
 
         # Check custom metadata
         assert capabilities.metadata is not None
-        assert capabilities.metadata["adapter"] == "secrets"
-        assert capabilities.metadata["tool_count"] == 3
+        assert capabilities.metadata.adapter == "secrets"
+        assert capabilities.metadata.tool_count == 3
 
     @pytest.mark.asyncio
     async def test_tool_info_methods(self, secrets_tool_service):

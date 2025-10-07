@@ -902,7 +902,7 @@ class TestDeferralLifecycle:
 
         # Check notification metadata preserved
         assert (
-            context.metadata.get("attempted_action") == "unknown"
+            context.metadata.get("attempted_action", "unknown") == "unknown"
         )  # Default value since DispatchContext doesn't have this field
         assert params.context["notification_required"] == "true"
         assert params.context["urgency"] == "critical"

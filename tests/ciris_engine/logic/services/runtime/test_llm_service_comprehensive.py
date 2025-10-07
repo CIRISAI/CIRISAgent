@@ -132,11 +132,11 @@ class TestOpenAICompatibleClient:
         assert len(caps.actions) > 0
 
         # Check custom metadata
-        assert caps.metadata["model"] == "gpt-4o-mini"
-        assert caps.metadata["instructor_mode"] == "JSON"
-        assert caps.metadata["timeout_seconds"] == 30
-        assert caps.metadata["max_retries"] == 3
-        assert "circuit_breaker_state" in caps.metadata
+        assert caps.metadata.model == "gpt-4o-mini"
+        assert caps.metadata.instructor_mode == "JSON"
+        assert caps.metadata.timeout_seconds == 30
+        assert caps.metadata.max_retries == 3
+        assert hasattr(caps.metadata, "circuit_breaker_state")
 
     def test_collect_custom_metrics(self, llm_service):
         """Test custom metrics collection."""

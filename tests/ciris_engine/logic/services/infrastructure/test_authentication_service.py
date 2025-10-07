@@ -338,7 +338,7 @@ def test_auth_service_capabilities(auth_service):
     assert "revoke_wa" in caps.actions
     # generate_keypair is not exposed as an action, it's internal
     assert "TimeService" in caps.dependencies
-    assert caps.metadata["description"] == "Infrastructure service for WA authentication and identity management"
+    assert caps.metadata.description == "Infrastructure service for WA authentication and identity management"
 
 
 def test_auth_service_status(auth_service):

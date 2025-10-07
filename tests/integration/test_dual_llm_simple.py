@@ -59,9 +59,9 @@ async def test_dual_llm_direct():
             print(f"  - Name: {provider.name}")
             print(f"    Priority: {provider.priority.name}")
             if provider.metadata:
-                print(f"    Provider: {provider.metadata.get('provider')}")
-                print(f"    Model: {provider.metadata.get('model')}")
-                print(f"    Base URL: {provider.metadata.get('base_url', 'default')}")
+                print(f"    Provider: {getattr(provider.metadata, 'provider', None)}")
+                print(f"    Model: {getattr(provider.metadata, 'model', None)}")
+                print(f"    Base URL: {getattr(provider.metadata, 'base_url', 'default')}")
             print()
 
         # Check if dual LLM is configured

@@ -198,8 +198,9 @@ def test_audit_service_capabilities(audit_service):
     assert "verify_audit_integrity" in caps.actions  # Actual method name
     # GraphAuditService lists MemoryBus as dependency
     assert "MemoryBus" in caps.dependencies
-    # Check metadata exists (exact text may vary)
-    assert caps.metadata is None or isinstance(caps.metadata, dict)
+    # Metadata is ServiceMetadata or None
+    from ciris_engine.schemas.services.metadata import ServiceMetadata
+    assert caps.metadata is None or isinstance(caps.metadata, ServiceMetadata)
 
 
 def test_audit_service_status(audit_service):

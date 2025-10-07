@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.5] - 2025-10-06
 
+### Added
+- **📊 Shutdown Reason Tracking**: System now persists and displays shutdown reasons in continuity summary
+  - Shutdown nodes now save `reason` field (e.g., "Signal 15", "Graceful shutdown", "CLI non-interactive mode completed")
+  - Added `_extract_shutdown_reason_from_node()` helper to retrieve reason from most recent shutdown
+  - `ContinuitySummary.last_shutdown_reason` now populated with actual shutdown reason (was hardcoded None)
+  - Uses flexible `NodeAttributes` (dict) to store reason alongside standard fields
+  - Future shutdowns will include contextual reason; existing 761+ historical shutdowns remain None
+  - Visible in SSE `snapshot_and_context` events and system telemetry
+
 ### Changed
 - **🎯 ServiceMetadata Type Safety Enforcement**: Complete metadata dict → Pydantic schema migration
   - Merged `refactor-metadata-handling` branch - replaced `Dict[str, Any]` with typed `ServiceMetadata`

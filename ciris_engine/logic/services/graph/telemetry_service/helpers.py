@@ -442,6 +442,79 @@ def store_summary_cache(
 # ============================================================================
 
 
+def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
+    """Collect circuit breaker state from all buses.
+
+    Walks through all buses (LLM, Memory, Communication, Tool, Wise, RuntimeControl)
+    via the runtime's bus_manager and collects their circuit breaker states.
+
+    Args:
+        runtime: Runtime instance with bus_manager attribute
+
+    Returns:
+        Dict mapping service names to their circuit breaker info (state, failures, etc)
+    """
+    circuit_breaker_data: Dict[str, Any] = {}
+
+    if not runtime:
+        return circuit_breaker_data
+
+    try:
+        # Get bus_manager from runtime
+        bus_manager = getattr(runtime, "bus_manager", None)
+        if not bus_manager:
+            return circuit_breaker_data
+
+        # List of bus attributes to check
+        bus_names = ["llm", "memory", "communication", "wise", "tool", "runtime_control"]
+
+        for bus_name in bus_names:
+            bus = getattr(bus_manager, bus_name, None)
+            if not bus:
+                continue
+
+            # Check if bus has circuit breaker state (buses typically expose this via get_service_stats)
+            if hasattr(bus, "get_service_stats"):
+                try:
+                    service_stats = bus.get_service_stats()
+                    # service_stats is a dict like: {"ServiceName_123": {"circuit_breaker_state": "closed", ...}}
+                    if isinstance(service_stats, dict):
+                        for svc_name, stats in service_stats.items():
+                            if isinstance(stats, dict) and "circuit_breaker_state" in stats:
+                                circuit_breaker_data[svc_name] = {
+                                    "state": stats.get("circuit_breaker_state", "unknown"),
+                                    "total_requests": stats.get("total_requests", 0),
+                                    "failed_requests": stats.get("failed_requests", 0),
+                                    "failure_rate": stats.get("failure_rate", "0.00%"),
+                                    "consecutive_failures": stats.get("consecutive_failures", 0),
+                                }
+                except Exception:
+                    # Silently skip buses that fail to provide stats
+                    pass
+
+            # Also check if bus has direct circuit_breakers attribute (like LLMBus)
+            if hasattr(bus, "circuit_breakers"):
+                try:
+                    circuit_breakers = bus.circuit_breakers
+                    if isinstance(circuit_breakers, dict):
+                        for cb_name, cb in circuit_breakers.items():
+                            if cb_name not in circuit_breaker_data:  # Don't override if already collected
+                                circuit_breaker_data[cb_name] = {
+                                    "state": str(cb.state) if hasattr(cb, "state") else "unknown",
+                                    "failure_count": cb.failure_count if hasattr(cb, "failure_count") else 0,
+                                    "success_count": cb.success_count if hasattr(cb, "success_count") else 0,
+                                }
+                except Exception:
+                    # Silently skip
+                    pass
+
+    except Exception:
+        # If anything fails, return whatever we collected so far
+        pass
+
+    return circuit_breaker_data
+
+
 def build_telemetry_summary(
     window_start: datetime,
     window_end: datetime,
@@ -451,6 +524,7 @@ def build_telemetry_summary(
     avg_thought_depth: float,
     queue_saturation: float,
     service_latency_ms: Dict[str, float],
+    circuit_breaker: Optional[Dict[str, Any]] = None,
 ) -> TelemetrySummary:
     """Build TelemetrySummary from collected data.
 
@@ -463,6 +537,7 @@ def build_telemetry_summary(
         avg_thought_depth: Average thought depth
         queue_saturation: Queue saturation ratio
         service_latency_ms: Service latency map
+        circuit_breaker: Circuit breaker state across all services
 
     Returns:
         Validated TelemetrySummary schema
@@ -492,6 +567,7 @@ def build_telemetry_summary(
         error_rate_percent=error_rate,
         avg_thought_depth=avg_thought_depth,
         queue_saturation=queue_saturation,
+        circuit_breaker=circuit_breaker,
     )
 
 

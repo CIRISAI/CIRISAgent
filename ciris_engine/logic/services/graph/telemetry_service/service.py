@@ -1982,6 +1982,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             calculate_average_latencies,
             calculate_error_rate,
             check_summary_cache,
+            collect_circuit_breaker_state,
             collect_metric_aggregates,
             get_average_thought_depth,
             get_queue_saturation,
@@ -2032,6 +2033,12 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         )
         service_latency_ms = calculate_average_latencies(aggregates.service_latency)
 
+        # Collect circuit breaker state from all buses
+        circuit_breaker_state = collect_circuit_breaker_state(getattr(self, "runtime", None))
+        # Always include circuit_breaker field (empty dict if no data, never None)
+        if not circuit_breaker_state:
+            circuit_breaker_state = {}
+
         # Build result
         summary = build_telemetry_summary(
             window_start_24h,
@@ -2042,6 +2049,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             avg_thought_depth,
             queue_saturation,
             service_latency_ms,
+            circuit_breaker=circuit_breaker_state,
         )
 
         # Cache and return

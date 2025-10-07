@@ -333,6 +333,11 @@ class TelemetrySummary(BaseModel):
     avg_thought_depth: float = Field(0.0, description="Average thought processing depth")
     queue_saturation: float = Field(0.0, description="Queue saturation 0-1")
 
+    # Circuit breaker state
+    circuit_breaker: Optional[Dict[str, Any]] = Field(
+        None, description="Circuit breaker state across all services (service_name -> {state, failures, etc})"
+    )
+
     @field_serializer("window_start", "window_end")
     def serialize_datetimes(self, dt: datetime, _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None

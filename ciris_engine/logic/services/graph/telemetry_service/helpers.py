@@ -442,6 +442,117 @@ def store_summary_cache(
 # ============================================================================
 
 
+def _extract_service_stats_cb_data(stats: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract circuit breaker data from service stats dict.
+
+    Args:
+        stats: Service stats dict containing circuit_breaker_state
+
+    Returns:
+        Dict with circuit breaker state and metrics
+    """
+    return {
+        "state": stats.get("circuit_breaker_state", "unknown"),
+        "total_requests": stats.get("total_requests", 0),
+        "failed_requests": stats.get("failed_requests", 0),
+        "failure_rate": stats.get("failure_rate", "0.00%"),
+        "consecutive_failures": stats.get("consecutive_failures", 0),
+    }
+
+
+def _extract_direct_cb_data(cb: Any) -> Dict[str, Any]:
+    """Extract circuit breaker data from CircuitBreaker object.
+
+    Args:
+        cb: CircuitBreaker instance
+
+    Returns:
+        Dict with circuit breaker state and counts
+    """
+    return {
+        "state": str(cb.state) if hasattr(cb, "state") else "unknown",
+        "failure_count": cb.failure_count if hasattr(cb, "failure_count") else 0,
+        "success_count": cb.success_count if hasattr(cb, "success_count") else 0,
+    }
+
+
+def _collect_from_service_stats(bus: Any) -> Dict[str, Any]:
+    """Collect circuit breaker data from bus.get_service_stats().
+
+    Args:
+        bus: Bus instance with get_service_stats method
+
+    Returns:
+        Dict mapping service names to their circuit breaker data
+    """
+    cb_data: Dict[str, Any] = {}
+
+    try:
+        service_stats = bus.get_service_stats()
+        if not isinstance(service_stats, dict):
+            return cb_data
+
+        for svc_name, stats in service_stats.items():
+            if isinstance(stats, dict) and "circuit_breaker_state" in stats:
+                cb_data[svc_name] = _extract_service_stats_cb_data(stats)
+
+    except Exception:
+        # Silently skip buses that fail to provide stats
+        pass
+
+    return cb_data
+
+
+def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect circuit breaker data from bus.circuit_breakers attribute.
+
+    Args:
+        bus: Bus instance with circuit_breakers attribute
+        existing_data: Already collected CB data (don't override these)
+
+    Returns:
+        Dict mapping service names to their circuit breaker data
+    """
+    cb_data: Dict[str, Any] = {}
+
+    try:
+        circuit_breakers = bus.circuit_breakers
+        if not isinstance(circuit_breakers, dict):
+            return cb_data
+
+        for cb_name, cb in circuit_breakers.items():
+            if cb_name not in existing_data:  # Don't override if already collected
+                cb_data[cb_name] = _extract_direct_cb_data(cb)
+
+    except Exception:
+        # Silently skip
+        pass
+
+    return cb_data
+
+
+def _collect_from_single_bus(bus: Any) -> Dict[str, Any]:
+    """Collect circuit breaker data from a single bus.
+
+    Args:
+        bus: Bus instance to collect from
+
+    Returns:
+        Dict mapping service names to their circuit breaker data
+    """
+    cb_data: Dict[str, Any] = {}
+
+    # Try get_service_stats first
+    if hasattr(bus, "get_service_stats"):
+        cb_data.update(_collect_from_service_stats(bus))
+
+    # Also check direct circuit_breakers attribute
+    if hasattr(bus, "circuit_breakers"):
+        cb_data.update(_collect_from_direct_cb_attribute(bus, cb_data))
+
+    return cb_data
+
+
 def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
     """Collect circuit breaker state from all buses.
 
@@ -460,7 +571,6 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
         return circuit_breaker_data
 
     try:
-        # Get bus_manager from runtime
         bus_manager = getattr(runtime, "bus_manager", None)
         if not bus_manager:
             return circuit_breaker_data
@@ -470,43 +580,8 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
 
         for bus_name in bus_names:
             bus = getattr(bus_manager, bus_name, None)
-            if not bus:
-                continue
-
-            # Check if bus has circuit breaker state (buses typically expose this via get_service_stats)
-            if hasattr(bus, "get_service_stats"):
-                try:
-                    service_stats = bus.get_service_stats()
-                    # service_stats is a dict like: {"ServiceName_123": {"circuit_breaker_state": "closed", ...}}
-                    if isinstance(service_stats, dict):
-                        for svc_name, stats in service_stats.items():
-                            if isinstance(stats, dict) and "circuit_breaker_state" in stats:
-                                circuit_breaker_data[svc_name] = {
-                                    "state": stats.get("circuit_breaker_state", "unknown"),
-                                    "total_requests": stats.get("total_requests", 0),
-                                    "failed_requests": stats.get("failed_requests", 0),
-                                    "failure_rate": stats.get("failure_rate", "0.00%"),
-                                    "consecutive_failures": stats.get("consecutive_failures", 0),
-                                }
-                except Exception:
-                    # Silently skip buses that fail to provide stats
-                    pass
-
-            # Also check if bus has direct circuit_breakers attribute (like LLMBus)
-            if hasattr(bus, "circuit_breakers"):
-                try:
-                    circuit_breakers = bus.circuit_breakers
-                    if isinstance(circuit_breakers, dict):
-                        for cb_name, cb in circuit_breakers.items():
-                            if cb_name not in circuit_breaker_data:  # Don't override if already collected
-                                circuit_breaker_data[cb_name] = {
-                                    "state": str(cb.state) if hasattr(cb, "state") else "unknown",
-                                    "failure_count": cb.failure_count if hasattr(cb, "failure_count") else 0,
-                                    "success_count": cb.success_count if hasattr(cb, "success_count") else 0,
-                                }
-                except Exception:
-                    # Silently skip
-                    pass
+            if bus:
+                circuit_breaker_data.update(_collect_from_single_bus(bus))
 
     except Exception:
         # If anything fails, return whatever we collected so far

@@ -8,11 +8,7 @@ the thought processing pipeline.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
-
-if TYPE_CHECKING:
-    from ciris_engine.schemas.telemetry.collector import SingleStepResult as SingleStepResultTelemetry
-    from ciris_engine.schemas.services.runtime_control import ThoughtProcessingResult as ThoughtProcessingResultModel
+from typing import Any, Dict, List, Optional, Protocol
 
 from pydantic import BaseModel, Field
 

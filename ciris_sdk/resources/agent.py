@@ -8,7 +8,7 @@ The API interfaces may change without notice.
 """
 
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -279,17 +279,6 @@ class AgentResource:
 
         return AgentIdentity(**result)
 
-    async def stream(self, websocket_url: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:  # noqa: ARG002
-        """
-        WebSocket streaming interface (placeholder).
-
-        Note: Full WebSocket support will be added in a future release.
-        For now, this method exists to satisfy interface requirements.
-        """
-        # This is a placeholder - actual WebSocket implementation would go here
-        raise NotImplementedError("WebSocket streaming not yet implemented in SDK")
-        yield  # Make this an async generator (unreachable but satisfies type checker)  # noqa: RET503
-
     # Convenience methods for common patterns
 
     async def ask(self, question: str, context: Optional[Union[InteractionContext, Dict[str, Any]]] = None) -> str:
@@ -306,94 +295,3 @@ class AgentResource:
         """
         response = await self.interact(question, context)
         return response.response
-
-    # Backward compatibility methods (deprecated)
-
-    async def send_message(
-        self,
-        content: str,
-        channel_id: str = "api_default",
-        author_id: str = "api_user",
-        author_name: str = "API User",
-        reference_message_id: Optional[str] = None,  # noqa: ARG002
-    ) -> Dict[str, Any]:
-        """[DEPRECATED] Use interact() instead.
-
-        Send a message to the agent.
-
-        This method is maintained for backward compatibility.
-        New code should use interact() instead.
-        """
-        import warnings
-
-        warnings.warn("send_message() is deprecated. Use interact() instead.", DeprecationWarning, stacklevel=2)
-
-        response = await self.interact(content)
-        return {"message_id": response.message_id, "status": "sent"}
-
-    async def get_messages(
-        self, channel_id: str, limit: int = 100, after_message_id: Optional[str] = None  # noqa: ARG002
-    ) -> Dict[str, Any]:
-        """[DEPRECATED] Use get_history() instead.
-
-        Get messages from a channel.
-
-        This method is maintained for backward compatibility.
-        New code should use get_history() instead.
-        """
-        import warnings
-
-        warnings.warn("get_messages() is deprecated. Use get_history() instead.", DeprecationWarning, stacklevel=2)
-
-        history = await self.get_history(limit=limit)
-
-        # Convert to old format
-        messages = []
-        for msg in history.messages:
-            messages.append(
-                {
-                    "id": msg.id,
-                    "content": msg.content,
-                    "author_id": "ciris_agent" if msg.is_agent else "api_user",
-                    "author_name": msg.author,
-                    "channel_id": channel_id,
-                    "timestamp": msg.timestamp.isoformat(),
-                }
-            )
-
-        return {"messages": messages}
-
-    async def list_channels(self) -> Dict[str, Any]:
-        """[DEPRECATED] Channels are now implicit per user.
-
-        This method is maintained for backward compatibility.
-        Returns a single default channel.
-        """
-        import warnings
-
-        warnings.warn(
-            "list_channels() is deprecated. Channels are now implicit per user.", DeprecationWarning, stacklevel=2
-        )
-
-        return {"channels": [{"id": "api_default", "name": "Default API Channel", "active": True}]}
-
-    async def get_capabilities(self) -> Dict[str, Any]:
-        """[DEPRECATED] Use get_identity() instead.
-
-        Get agent capabilities.
-
-        This method is maintained for backward compatibility.
-        New code should use get_identity() instead.
-        """
-        import warnings
-
-        warnings.warn("get_capabilities() is deprecated. Use get_identity() instead.", DeprecationWarning, stacklevel=2)
-
-        identity = await self.get_identity()
-
-        return {
-            "tools": identity.tools,
-            "handlers": identity.handlers,
-            "services": identity.services,
-            "permissions": identity.permissions,
-        }

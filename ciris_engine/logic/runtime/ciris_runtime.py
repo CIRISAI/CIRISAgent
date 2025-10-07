@@ -1216,14 +1216,18 @@ class CIRISRuntime:
                 agreement_context=None,
             )
 
-            # Create memory node for shutdown
+            # Create memory node for shutdown with flexible attributes for reason
             shutdown_node = GraphNode(
                 id=f"shutdown_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
-                attributes=GraphNodeAttributes(
-                    created_by="runtime_shutdown", tags=["shutdown", "continuity_awareness"]
-                ),
+                attributes={
+                    "created_at": (self.time_service.now() if self.time_service else datetime.now(timezone.utc)).isoformat(),
+                    "updated_at": (self.time_service.now() if self.time_service else datetime.now(timezone.utc)).isoformat(),
+                    "created_by": "runtime_shutdown",
+                    "tags": ["shutdown", "continuity_awareness"],
+                    "reason": shutdown_context.reason,  # Save shutdown reason in node
+                },
             )
 
             # Store in memory service

@@ -158,7 +158,9 @@ def test_initialization_service_capabilities(init_service):
     assert "initialize" in caps.actions
     assert "get_initialization_status" in caps.actions
     assert "TimeService" in caps.dependencies
-    assert hasattr(caps.metadata, "description") and caps.metadata.description  # Infrastructure services now have metadata
+    assert (
+        hasattr(caps.metadata, "description") and caps.metadata.description
+    )  # Infrastructure services now have metadata
 
 
 @pytest.mark.asyncio

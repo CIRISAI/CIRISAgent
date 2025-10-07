@@ -48,6 +48,9 @@ class StreamingVerificationModule:
         events_with_recursive_flag = 0
         recursive_aspdma_count = 0
         recursive_conscience_count = 0
+
+        # Track first snapshot_and_context event for field validation
+        first_snapshot_printed = False
         unexpected_events: Set[str] = set()  # Track events outside the expected 6
 
         # Track duplicates: (thought_id, event_type) -> count
@@ -62,7 +65,7 @@ class StreamingVerificationModule:
             """Monitor SSE stream in a separate thread."""
             nonlocal events_with_audit_data, events_with_recursive_flag
             nonlocal recursive_aspdma_count, recursive_conscience_count, unexpected_events
-            nonlocal event_occurrences, duplicates_found
+            nonlocal event_occurrences, duplicates_found, first_snapshot_printed
 
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
@@ -222,6 +225,52 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 f"system_snapshot.service_health only has {len(service_health)} services (expected 20+)"
                                             )
+
+                                        # Print first occurrence of critical fields for validation
+                                        if not first_snapshot_printed:
+                                            first_snapshot_printed = True
+                                            print("\n" + "=" * 80)
+                                            print("📊 FIRST SNAPSHOT_AND_CONTEXT EVENT - Field Validation")
+                                            print("=" * 80)
+
+                                            # Print service_health
+                                            print(f"\n🔧 service_health ({len(service_health)} services):")
+                                            if service_health:
+                                                for i, (service_name, is_healthy) in enumerate(
+                                                    sorted(service_health.items()), 1
+                                                ):
+                                                    status = "✓" if is_healthy else "✗"
+                                                    print(f"  {i:2d}. {status} {service_name}: {is_healthy}")
+                                            else:
+                                                print("  (empty)")
+
+                                            # Print continuity_summary
+                                            continuity = snapshot.get("continuity_summary")
+                                            print(f"\n📈 continuity_summary:")
+                                            if continuity:
+                                                print(f"  Type: {type(continuity).__name__}")
+                                                if isinstance(continuity, dict):
+                                                    for key, value in sorted(continuity.items()):
+                                                        print(f"  - {key}: {value}")
+                                            else:
+                                                print("  (None)")
+
+                                            # Print telemetry_summary
+                                            telemetry = snapshot.get("telemetry_summary")
+                                            print(f"\n📊 telemetry_summary:")
+                                            if telemetry:
+                                                print(f"  Type: {type(telemetry).__name__}")
+                                                if isinstance(telemetry, dict):
+                                                    for key, value in sorted(telemetry.items()):
+                                                        # Truncate long values
+                                                        val_str = str(value)
+                                                        if len(val_str) > 60:
+                                                            val_str = val_str[:57] + "..."
+                                                        print(f"  - {key}: {val_str}")
+                                            else:
+                                                print("  (None)")
+
+                                            print("=" * 80 + "\n")
 
                                 elif event_type == "dma_results":
                                     # Required base fields

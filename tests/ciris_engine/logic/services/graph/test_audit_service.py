@@ -200,6 +200,7 @@ def test_audit_service_capabilities(audit_service):
     assert "MemoryBus" in caps.dependencies
     # Metadata is ServiceMetadata or None
     from ciris_engine.schemas.services.metadata import ServiceMetadata
+
     assert caps.metadata is None or isinstance(caps.metadata, ServiceMetadata)
 
 

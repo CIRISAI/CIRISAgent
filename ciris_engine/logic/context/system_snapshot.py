@@ -95,7 +95,7 @@ async def build_system_snapshot(
     secrets_data = await _get_secrets_data(secrets_service)
     shutdown_context = _get_shutdown_context(runtime)
     resource_alerts = _collect_resource_alerts(resource_monitor)
-    service_health, circuit_breaker_status = await _collect_service_health(service_registry)
+    service_health, circuit_breaker_status = await _collect_service_health(service_registry, runtime)
     telemetry_summary = await _get_telemetry_summary(telemetry_service)
     continuity_summary = await _get_continuity_summary(telemetry_service)
 

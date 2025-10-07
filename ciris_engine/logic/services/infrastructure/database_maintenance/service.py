@@ -445,7 +445,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             actions=["cleanup", "archive", "maintenance"],
             version="1.0.0",
             dependencies=["TimeService"],
-            metadata={"archive_older_than_hours": self.archive_older_than_hours, "maintenance_interval": "hourly"},
+            metadata=None,
         )
 
     def get_service_type(self) -> ServiceType:

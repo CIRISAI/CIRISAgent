@@ -79,27 +79,21 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities with custom metadata."""
-        # Get metadata dict from parent's _get_metadata()
+        # Get metadata from parent's _get_metadata()
         service_metadata = self._get_metadata()
-        metadata_dict = service_metadata.model_dump() if isinstance(service_metadata, ServiceMetadata) else {}
 
-        # Add infrastructure-specific metadata from parent
-        metadata_dict.update(
-            {
-                "category": "infrastructure",
-                "critical": True,
-                "description": "Coordinates graceful system shutdown",
-                "supports_emergency": True,
-                "max_handlers": 100,
-            }
-        )
+        # Set infrastructure-specific fields
+        if service_metadata:
+            service_metadata.category = "infrastructure"
+            service_metadata.critical = True
+            service_metadata.description = "Coordinates graceful system shutdown"
 
         return ServiceCapabilities(
             service_name=self.service_name,
             actions=self._get_actions(),
             version=self._version,
             dependencies=list(self._dependencies),
-            metadata=metadata_dict,
+            metadata=service_metadata,
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

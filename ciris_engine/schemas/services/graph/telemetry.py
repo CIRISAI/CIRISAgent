@@ -95,15 +95,6 @@ class GraphQuery(BaseModel):
     limit: Optional[int] = Field(None, description="Maximum results to return")
 
 
-class ServiceCapabilities(BaseModel):
-    """Service capabilities declaration."""
-
-    actions: List[str] = Field(..., description="Supported actions")
-    features: List[str] = Field(..., description="Supported features")
-    node_type: str = Field(..., description="Primary node type managed")
-    version: str = Field("1.0.0", description="Service version")
-
-
 class LLMUsageData(BaseModel):
     """Structured LLM usage data."""
 
@@ -231,7 +222,6 @@ __all__ = [
     "TelemetryConsolidationResult",
     "TelemetryServiceStatus",
     "GraphQuery",
-    "ServiceCapabilities",
     "LLMUsageData",
     "TelemetryKwargs",
     "CustomMetrics",

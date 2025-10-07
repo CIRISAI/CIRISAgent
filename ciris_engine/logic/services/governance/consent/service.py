@@ -932,14 +932,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             actions=[],  # Non-bussed services don't have actions
             version="0.2.0",
             dependencies=["TimeService"],
-            metadata={
-                "default_stream": "TEMPORARY",
-                "temporary_duration_days": 14,
-                "decay_duration_days": 90,
-                "partnership_requires_bilateral": True,
-                "service_number": 22,
-                "service_category": "Governance #5",
-            },
+            metadata=None,
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

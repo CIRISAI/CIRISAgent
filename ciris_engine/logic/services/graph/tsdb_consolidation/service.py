@@ -932,10 +932,7 @@ class TSDBConsolidationService(BaseGraphService):
             ],
             version="2.0.0",
             dependencies=["MemoryService", "TimeService"],
-            metadata={
-                "consolidation_interval_hours": self._consolidation_interval.total_seconds() / 3600,
-                "raw_retention_hours": self._raw_retention.total_seconds() / 3600,
-            },
+            metadata=None,
         )
 
     def get_status(self) -> ServiceStatus:

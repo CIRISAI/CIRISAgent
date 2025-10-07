@@ -754,7 +754,7 @@ class DiscordToolService(ToolService):
             ],
             version="1.0.0",
             dependencies=[],
-            metadata={"max_batch_size": 1, "supports_versioning": False, "supported_formats": ["json"]},
+            metadata=None,
         )
 
     def get_status(self) -> Any:

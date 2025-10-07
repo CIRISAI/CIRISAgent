@@ -1013,8 +1013,5 @@ class IdentityVarianceMonitor(BaseScheduledService):
             actions=["initialize_baseline", "check_variance", "monitor_identity_drift", "trigger_wa_review"],
             version="1.0.0",
             dependencies=["TimeService", "MemoryBus", "WiseBus"],
-            metadata={
-                "variance_threshold": self._variance_threshold,
-                "check_interval_hours": self._check_interval_hours,
-            },
+            metadata=None,
         )

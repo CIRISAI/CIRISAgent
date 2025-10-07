@@ -163,7 +163,7 @@ class TestActionSelectionPDMAEvaluator:
             stakeholders="user, system",
             conflicts="none",
             reasoning="OK",
-            alignment_check="Basic ethical approval without detailed analysis."
+            alignment_check="Basic ethical approval without detailed analysis.",
         )
 
         # Need a valid CSDMA result even for this test

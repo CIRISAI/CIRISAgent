@@ -4,6 +4,7 @@ Examples of using the CIRISClient SDK to access unified telemetry.
 The unified telemetry endpoint provides easy access to ALL 436+ metrics
 from 22 services through a single, optimized endpoint.
 """
+
 # mypy: disable-error-code="index,operator,union-attr,arg-type"
 
 import asyncio

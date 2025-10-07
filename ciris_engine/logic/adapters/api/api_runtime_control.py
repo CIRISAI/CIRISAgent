@@ -177,10 +177,7 @@ class APIRuntimeControlService(Service):
             ],
             version="1.0.0",
             dependencies=[],
-            metadata={
-                "description": "Runtime control service for API adapter",
-                "features": ["pause_resume", "state_transitions", "emergency_shutdown"],
-            },
+            metadata=None,
         )
 
     def get_status(self) -> ServiceStatus:

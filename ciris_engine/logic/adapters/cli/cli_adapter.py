@@ -731,13 +731,7 @@ Tools available:
             actions=["send_message", "receive_message", "execute_tool", "list_tools"],
             version="1.0.0",
             dependencies=[],
-            metadata={
-                "service_type": ServiceType.COMMUNICATION,
-                "max_concurrent_operations": 1,
-                "supports_streaming": False,
-                "interactive": self.interactive,
-                "available_tools": list(self._available_tools.keys()),
-            },
+            metadata=None,
         )
 
     async def list_tools(self) -> List[str]:

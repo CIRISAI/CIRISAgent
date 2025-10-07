@@ -717,7 +717,7 @@ class IncidentManagementService(BaseGraphService):
             actions=["process_recent_incidents", "detect_patterns", "identify_problems", "generate_insights"],
             version="1.0.0",
             dependencies=["MemoryService", "TimeService"],
-            metadata={"itil_aligned": True, "analysis_window_hours": 24},
+            metadata=None,
         )
 
     def get_status(self) -> ServiceStatus:

@@ -349,10 +349,5 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
                 "unregister_websocket",
             ],
             version="1.0.0",
-            metadata={
-                "http_responses": True,
-                "websocket_broadcast": True,
-                "message_queueing": True,
-                "channel_based_routing": True,
-            },
+            metadata=None,
         )

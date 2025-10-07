@@ -87,8 +87,6 @@ class TestCLIToolServiceLifecycle:
         assert caps.service_name == "CLIToolService"
         assert "execute_tool" in caps.actions
         assert caps.version == "1.0.0"
-        assert caps.metadata is not None
-        assert caps.metadata.get("resource_limits", {}).get("max_concurrent_tools") == 10
 
     @pytest.mark.asyncio
     async def test_service_health(self, cli_tool_service):

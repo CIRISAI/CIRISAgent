@@ -8,12 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.5] - 2025-10-06
 
 ### Added
-- **📊 Shutdown Reason Tracking**: System now persists and displays shutdown reasons in continuity summary
-  - Shutdown nodes now save `reason` field (e.g., "Signal 15", "Graceful shutdown", "CLI non-interactive mode completed")
-  - Added `_extract_shutdown_reason_from_node()` helper to retrieve reason from most recent shutdown
-  - `ContinuitySummary.last_shutdown_reason` now populated with actual shutdown reason (was hardcoded None)
-  - Uses flexible `NodeAttributes` (dict) to store reason alongside standard fields
-  - Future shutdowns will include contextual reason; existing 761+ historical shutdowns remain None
+- **📊 Shutdown Consent & Reason Tracking**: System now persists shutdown consent status and reasons
+  - **Consent Status** (`consent_status` field): Tracks whether shutdown was consensual
+    - `"accepted"`: Agent agreed to shutdown (task completed gracefully)
+    - `"rejected"`: Agent refused shutdown (task failed/rejected)
+    - `"manual"`: No negotiation (crashes, SIGTERM signals, forced restarts)
+  - **Shutdown Reason** (`reason` field): Contextual reason (e.g., "Signal 15", "Graceful shutdown")
+  - `ContinuitySummary.last_shutdown_consent` and `last_shutdown_reason` fields now populated
+  - Runtime checks `agent_processor.shutdown_processor.shutdown_result` to determine consent
+  - Uses flexible `NodeAttributes` (dict) to store both fields alongside standard attributes
+  - Future shutdowns include both consent and reason; existing 761+ historical shutdowns remain None
   - Visible in SSE `snapshot_and_context` events and system telemetry
 
 ### Changed

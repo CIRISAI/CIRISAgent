@@ -121,8 +121,8 @@ class SonarClient:
         response.raise_for_status()
         return response.json()
 
-    def get_coverage_metrics(self, new_code: bool = False) -> Dict[str, Any]:
-        """Get coverage metrics for the project."""
+    def get_coverage_metrics(self, new_code: bool = False, pull_request: Optional[str] = None) -> Dict[str, Any]:
+        """Get coverage metrics for the project or a specific PR."""
         metrics = []
         if new_code:
             metrics = [
@@ -135,11 +135,42 @@ class SonarClient:
         else:
             metrics = ["coverage", "lines_to_cover", "uncovered_lines", "line_coverage", "branch_coverage"]
 
-        response = self.session.get(
-            f"{SONAR_API_BASE}/measures/component", params={"component": PROJECT_KEY, "metricKeys": ",".join(metrics)}
-        )
+        params = {"component": PROJECT_KEY, "metricKeys": ",".join(metrics)}
+        if pull_request:
+            params["pullRequest"] = pull_request
+
+        response = self.session.get(f"{SONAR_API_BASE}/measures/component", params=params)
         response.raise_for_status()
         return response.json()
+
+    def get_pr_analysis(self, pull_request: str) -> Dict[str, Any]:
+        """Get analysis for a specific pull request."""
+        params = {"pullRequest": pull_request, "component": PROJECT_KEY}
+
+        # Get PR quality gate status
+        qg_response = self.session.get(f"{SONAR_API_BASE}/qualitygates/project_status", params=params)
+        qg_response.raise_for_status()
+        quality_gate = qg_response.json()
+
+        # Get PR coverage metrics
+        coverage_metrics = self.get_coverage_metrics(new_code=True, pull_request=pull_request)
+
+        # Get PR issues
+        issues_params = {
+            "componentKeys": PROJECT_KEY,
+            "pullRequest": pull_request,
+            "resolved": "false",
+            "ps": 100,
+        }
+        issues_response = self.session.get(f"{SONAR_API_BASE}/issues/search", params=issues_params)
+        issues_response.raise_for_status()
+        issues_data = issues_response.json()
+
+        return {
+            "quality_gate": quality_gate,
+            "coverage": coverage_metrics,
+            "issues": issues_data,
+        }
 
 
 def format_hotspot(hotspot: Dict[str, Any]) -> str:
@@ -223,6 +254,11 @@ def main():
     # Coverage
     coverage_parser = subparsers.add_parser("coverage", help="Show coverage metrics")
     coverage_parser.add_argument("--new-code", action="store_true", help="Show metrics for new code only")
+    coverage_parser.add_argument("--pr", type=str, help="Pull request number (e.g., 430)")
+
+    # PR Analysis
+    pr_parser = subparsers.add_parser("pr", help="Analyze a specific pull request")
+    pr_parser.add_argument("pr_number", type=str, help="Pull request number")
 
     args = parser.parse_args()
 
@@ -349,7 +385,8 @@ def main():
             print(f"✓ Marked {args.hotspot_key} as safe")
 
         elif args.command == "coverage":
-            metrics = client.get_coverage_metrics(new_code=args.new_code)
+            pr_number = getattr(args, 'pr', None)
+            metrics = client.get_coverage_metrics(new_code=args.new_code, pull_request=pr_number)
             component = metrics["component"]
 
             # Extract measures - handle both value and periods formats
@@ -360,7 +397,8 @@ def main():
                 elif "periods" in m and m["periods"]:
                     measures[m["metric"]] = m["periods"][0]["value"]
 
-            print(f"\nCoverage Metrics for {PROJECT_KEY}")
+            scope_label = f"PR #{pr_number}" if pr_number else PROJECT_KEY
+            print(f"\nCoverage Metrics for {scope_label}")
             print("=" * 50)
 
             prefix = "new_" if args.new_code else ""
@@ -388,6 +426,70 @@ def main():
 
             if f"{prefix}branch_coverage" in measures:
                 print(f"Branch Coverage: {float(measures[f'{prefix}branch_coverage']):.1f}%")
+
+        elif args.command == "pr":
+            pr_data = client.get_pr_analysis(args.pr_number)
+
+            print(f"\n🔍 Pull Request #{args.pr_number} Analysis")
+            print("=" * 70)
+
+            # Quality Gate Status
+            qg = pr_data["quality_gate"]
+            qg_status = qg.get("projectStatus", qg)
+            status = qg_status["status"]
+            status_icon = "✅" if status == "OK" else "❌"
+            print(f"\nQuality Gate: {status_icon} {status}")
+
+            if qg_status.get("conditions"):
+                print("\nConditions:")
+                for condition in qg_status["conditions"]:
+                    cond_status = "✓" if condition["status"] == "OK" else "✗"
+                    metric = condition["metricKey"].replace("_", " ").title()
+                    actual = condition.get("actualValue", "N/A")
+                    threshold = condition["errorThreshold"]
+                    comparator = "≥" if condition["comparator"] == "LT" else "≤"
+                    print(f"  {cond_status} {metric}: {actual} (needs {comparator} {threshold})")
+
+            # Coverage Metrics
+            coverage_comp = pr_data["coverage"]["component"]
+            measures = {}
+            for m in coverage_comp.get("measures", []):
+                if "value" in m:
+                    measures[m["metric"]] = m["value"]
+                elif "periods" in m and m["periods"]:
+                    measures[m["metric"]] = m["periods"][0]["value"]
+
+            print("\n📊 Coverage on New Code:")
+            if "new_coverage" in measures:
+                coverage = float(measures["new_coverage"])
+                print(f"  Coverage: {coverage:.1f}%")
+                if coverage < 80:
+                    print("  ⚠️  Below 80% threshold!")
+
+            if "new_lines_to_cover" in measures:
+                lines_to_cover = int(float(measures.get("new_lines_to_cover", 0)))
+                uncovered_lines = int(float(measures.get("new_uncovered_lines", 0)))
+                covered_lines = lines_to_cover - uncovered_lines
+                print(f"  Lines to cover: {lines_to_cover}")
+                print(f"  Covered: {covered_lines}")
+                print(f"  Uncovered: {uncovered_lines}")
+
+            # Issues
+            issues_data = pr_data["issues"]
+            total_issues = issues_data["total"]
+            print(f"\n🐛 Issues: {total_issues}")
+
+            if total_issues > 0:
+                # Group by severity
+                by_severity = {}
+                for issue in issues_data["issues"]:
+                    severity = issue["severity"]
+                    by_severity[severity] = by_severity.get(severity, 0) + 1
+
+                print("  By severity:")
+                for sev in ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]:
+                    if sev in by_severity:
+                        print(f"    {sev}: {by_severity[sev]}")
 
         else:
             parser.print_help()

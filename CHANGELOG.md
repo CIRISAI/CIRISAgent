@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed unused TYPE_CHECKING imports
   - Suppressed vulture false positives for TYPE_CHECKING imports with noqa comments
   - Vulture warnings: 11 → 0 (100% clean)
+- **🧠 Reduced Cognitive Complexity**: Refactored `collect_circuit_breaker_state()` from complexity 59 to <15
+  - Extracted 5 focused helper functions for clarity and maintainability
+  - `_extract_service_stats_cb_data()` - Extract CB data from stats dict
+  - `_extract_direct_cb_data()` - Extract CB data from CB object
+  - `_collect_from_service_stats()` - Collect from bus.get_service_stats()
+  - `_collect_from_direct_cb_attribute()` - Collect from bus.circuit_breakers
+  - `_collect_from_single_bus()` - Orchestrate collection from one bus
+  - Main function now has simple control flow with early returns
+  - Functionality preserved, all tests pass
 
 ### Testing
 - All 46 LLM bus tests pass (21 basic + 25 domain routing)

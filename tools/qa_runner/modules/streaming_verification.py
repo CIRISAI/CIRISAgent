@@ -215,6 +215,17 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
                                             )
+                                        # Validate telemetry_summary.circuit_breaker is not null
+                                        telemetry = snapshot.get("telemetry_summary")
+                                        if telemetry and isinstance(telemetry, dict):
+                                            if "circuit_breaker" not in telemetry:
+                                                event_detail["issues"].append(
+                                                    "system_snapshot.telemetry_summary missing 'circuit_breaker' field"
+                                                )
+                                            elif telemetry.get("circuit_breaker") is None:
+                                                event_detail["issues"].append(
+                                                    "system_snapshot.telemetry_summary.circuit_breaker is None (should be dict with state/failures/etc)"
+                                                )
                                         # Check service_health - should have entries for all services
                                         service_health = snapshot.get("service_health", {})
                                         if not service_health or not isinstance(service_health, dict):

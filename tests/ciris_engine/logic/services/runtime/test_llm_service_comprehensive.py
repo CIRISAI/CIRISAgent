@@ -64,6 +64,31 @@ class TestOpenAICompatibleClient:
                     OpenAICompatibleClient(config=config, time_service=mock_time_service)
                 assert "No OpenAI API key found" in str(exc_info.value)
 
+    def test_timeout_configuration_propagation(self, mock_time_service, mock_telemetry_service):
+        """Test that timeout_seconds from config is properly propagated to the OpenAI client."""
+        # Create config with custom timeout
+        custom_timeout = 45
+        config = OpenAIConfig(api_key="test-key", timeout_seconds=custom_timeout)
+
+        with patch.dict(os.environ, {"MOCK_LLM": ""}, clear=False):
+            with patch("sys.argv", []):
+                # Patch AsyncOpenAI where it's actually used in service.py
+                with patch("ciris_engine.logic.services.runtime.llm_service.service.AsyncOpenAI") as mock_openai:
+                    with patch("ciris_engine.logic.services.runtime.llm_service.service.instructor"):
+                        service = OpenAICompatibleClient(
+                            config=config, time_service=mock_time_service, telemetry_service=mock_telemetry_service
+                        )
+
+                        # Verify AsyncOpenAI was called with the correct timeout value
+                        mock_openai.assert_called_once()
+                        call_kwargs = mock_openai.call_args[1]
+                        assert (
+                            call_kwargs["timeout"] == custom_timeout
+                        ), f"Expected timeout={custom_timeout}, got timeout={call_kwargs['timeout']}"
+
+                        # Verify the config field is properly set
+                        assert service.openai_config.timeout_seconds == custom_timeout
+
     def test_get_service_type(self, llm_service):
         """Test get_service_type returns correct enum."""
         assert llm_service.get_service_type() == ServiceType.LLM

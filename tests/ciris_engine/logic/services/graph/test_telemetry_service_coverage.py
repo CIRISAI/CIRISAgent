@@ -118,20 +118,27 @@ def mock_service_registry():
 
     registry.get_services_by_type = Mock(return_value=[mock_provider, mock_provider2, mock_provider3, mock_provider4])
 
-    # Provider info for registry collection
+    # Provider info for registry collection - use actual instance IDs to match implementation
+    # This ensures the provider matching logic correctly finds the right instance
     registry.get_provider_info = Mock(
         return_value={
             "services": {
                 "TOOL": [
-                    {"name": "APIToolService_123456", "metadata": {"adapter_id": "api_tool_456"}},
+                    {"name": f"APIToolService_{id(mock_provider)}", "metadata": {"adapter_id": "api_tool_456"}},
                     {"name": "SecretsToolService_789012", "metadata": {}},
                 ],
                 "COMMUNICATION": [
-                    {"name": "APICommunicationService_345678", "metadata": {"adapter_id": "api_comm_789"}},
-                    {"name": "CLIAdapter_901234", "metadata": {"adapter_id": "cli_adapter@host123"}},
+                    {
+                        "name": f"APICommunicationService_{id(mock_provider2)}",
+                        "metadata": {"adapter_id": "api_comm_789"},
+                    },
+                    {"name": f"CLIAdapter_{id(mock_provider3)}", "metadata": {"adapter_id": "cli_adapter@host123"}},
                 ],
                 "WISE_AUTHORITY": [
-                    {"name": "DiscordWiseAuthority_567890", "metadata": {"adapter_id": "discord_wise_123"}},
+                    {
+                        "name": f"DiscordWiseAuthority_{id(mock_provider4)}",
+                        "metadata": {"adapter_id": "discord_wise_123"},
+                    },
                 ],
             }
         }
@@ -342,30 +349,35 @@ class TestTelemetryServiceCoverage:
     @pytest.mark.asyncio
     async def test_collect_from_registry_provider_scenarios(self, telemetry_aggregator, mock_service_registry):
         """Test collect_from_registry_provider with various provider scenarios."""
+        # Get the actual provider names from the registry's provider_info
+        provider_info = mock_service_registry.get_provider_info()
+
+        # Extract provider names
+        api_comm_provider_name = provider_info["services"]["COMMUNICATION"][0]["name"]
+        api_tool_provider_name = provider_info["services"]["TOOL"][0]["name"]
+        cli_adapter_provider_name = provider_info["services"]["COMMUNICATION"][1]["name"]
+        discord_wise_provider_name = provider_info["services"]["WISE_AUTHORITY"][0]["name"]
+
         # Test provider that returns ServiceTelemetryData
-        result = await telemetry_aggregator.collect_from_registry_provider(
-            "COMMUNICATION", "APICommunicationService_345678"
-        )
+        result = await telemetry_aggregator.collect_from_registry_provider("COMMUNICATION", api_comm_provider_name)
         assert isinstance(result, ServiceTelemetryData)
         assert result.healthy is True
         assert result.uptime_seconds == 900.0
 
         # Test provider that returns dict
-        result = await telemetry_aggregator.collect_from_registry_provider("TOOL", "APIToolService_123456")
+        result = await telemetry_aggregator.collect_from_registry_provider("TOOL", api_tool_provider_name)
         assert isinstance(result, ServiceTelemetryData)
         assert result.healthy is True
         assert result.uptime_seconds == 800.0
 
         # Test provider with only is_healthy
-        result = await telemetry_aggregator.collect_from_registry_provider("COMMUNICATION", "CLIAdapter_901234")
+        result = await telemetry_aggregator.collect_from_registry_provider("COMMUNICATION", cli_adapter_provider_name)
         assert isinstance(result, ServiceTelemetryData)
         assert result.healthy is True
         assert result.uptime_seconds == 0.0  # No uptime from is_healthy
 
         # Test provider with no telemetry methods
-        result = await telemetry_aggregator.collect_from_registry_provider(
-            "WISE_AUTHORITY", "DiscordWiseAuthority_567890"
-        )
+        result = await telemetry_aggregator.collect_from_registry_provider("WISE_AUTHORITY", discord_wise_provider_name)
         assert isinstance(result, ServiceTelemetryData)
         assert result.healthy is False
 
@@ -600,3 +612,96 @@ class TestTelemetryServiceCoverage:
         # Clean up coroutines to prevent warnings
         for coro in created_coroutines:
             coro.close()
+
+    @pytest.mark.asyncio
+    async def test_collect_from_registry_provider_multiple_instances_same_class(self):
+        """
+        Test collect_from_registry_provider correctly disambiguates multiple instances
+        of the same provider class. This is the critical bug fix test.
+
+        Bug: Previous implementation used provider_name.split("_")[0] which would match
+        the first instance every time when multiple instances existed.
+
+        Fix: Now matches the full provider_name (including instance ID) to get the
+        correct specific instance.
+        """
+        # Create three distinct mock providers of the same class
+        mock_provider1 = Mock()
+        mock_provider1.__class__.__name__ = "APICommunicationService"
+        mock_provider1.get_metrics = AsyncMock(
+            return_value={"healthy": True, "uptime_seconds": 100.0, "requests_handled": 10}
+        )
+
+        mock_provider2 = Mock()
+        mock_provider2.__class__.__name__ = "APICommunicationService"
+        mock_provider2.get_metrics = AsyncMock(
+            return_value={"healthy": True, "uptime_seconds": 200.0, "requests_handled": 20}
+        )
+
+        mock_provider3 = Mock()
+        mock_provider3.__class__.__name__ = "APICommunicationService"
+        mock_provider3.get_metrics = AsyncMock(
+            return_value={"healthy": True, "uptime_seconds": 300.0, "requests_handled": 30}
+        )
+
+        # Setup mock registry with all three instances
+        mock_registry = Mock()
+
+        # The providers will have names like ClassName_<id(instance)>
+        provider1_name = f"APICommunicationService_{id(mock_provider1)}"
+        provider2_name = f"APICommunicationService_{id(mock_provider2)}"
+        provider3_name = f"APICommunicationService_{id(mock_provider3)}"
+
+        # Mock get_services_by_type to return all three instances
+        mock_registry.get_services_by_type = Mock(return_value=[mock_provider1, mock_provider2, mock_provider3])
+
+        # Mock get_provider_info to return metadata for all three
+        mock_registry.get_provider_info = Mock(
+            return_value={
+                "services": {
+                    "COMMUNICATION": [
+                        {"name": provider1_name, "metadata": {"adapter_id": "api_comm_1"}},
+                        {"name": provider2_name, "metadata": {"adapter_id": "api_comm_2"}},
+                        {"name": provider3_name, "metadata": {"adapter_id": "api_comm_3"}},
+                    ]
+                }
+            }
+        )
+
+        # Create aggregator with this registry
+        mock_time_service = Mock()
+        mock_time_service.now = Mock(return_value=datetime.now(timezone.utc))
+
+        mock_runtime = Mock()
+        mock_runtime.adapters = []
+
+        aggregator = TelemetryAggregator(
+            service_registry=mock_registry, time_service=mock_time_service, runtime=mock_runtime
+        )
+
+        # Test: Collect from each provider individually
+        result1 = await aggregator.collect_from_registry_provider("COMMUNICATION", provider1_name)
+        result2 = await aggregator.collect_from_registry_provider("COMMUNICATION", provider2_name)
+        result3 = await aggregator.collect_from_registry_provider("COMMUNICATION", provider3_name)
+
+        # Verify each result is from the correct instance (not just the first one every time!)
+        assert isinstance(result1, ServiceTelemetryData)
+        assert result1.uptime_seconds == 100.0
+        assert result1.requests_handled == 10
+
+        assert isinstance(result2, ServiceTelemetryData)
+        assert result2.uptime_seconds == 200.0
+        assert result2.requests_handled == 20
+
+        assert isinstance(result3, ServiceTelemetryData)
+        assert result3.uptime_seconds == 300.0
+        assert result3.requests_handled == 30
+
+        # Verify all three providers were called (not just the first one three times)
+        assert mock_provider1.get_metrics.await_count == 1
+        assert mock_provider2.get_metrics.await_count == 1
+        assert mock_provider3.get_metrics.await_count == 1
+
+        # This test ensures the bug is fixed: the OLD implementation would have
+        # returned uptime=100.0 for all three calls because it would match
+        # the first instance every time due to stripping the instance ID

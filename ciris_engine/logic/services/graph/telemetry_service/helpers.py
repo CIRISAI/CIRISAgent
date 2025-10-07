@@ -5,8 +5,11 @@ These break down the complex get_telemetry_summary method into focused,
 testable components. All functions fail fast and loud - no fallback data.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+
+logger = logging.getLogger(__name__)
 
 from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
     MemoryBusUnavailableError,
@@ -18,8 +21,11 @@ from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
     ThoughtDepthQueryError,
     UnknownMetricTypeError,
 )
-from ciris_engine.schemas.runtime.system_context import TelemetrySummary
+from ciris_engine.schemas.runtime.system_context import ContinuitySummary, TelemetrySummary
 from ciris_engine.schemas.services.graph.telemetry import MetricAggregates, MetricRecord
+
+# TypeVar for summary cache
+SummaryType = TypeVar("SummaryType", TelemetrySummary, ContinuitySummary)
 
 if TYPE_CHECKING:
     from ciris_engine.logic.buses.memory_bus import MemoryBus
@@ -391,12 +397,12 @@ def calculate_average_latencies(
 
 
 def check_summary_cache(
-    cache: Dict[str, Tuple[datetime, TelemetrySummary]],
+    cache: Dict[str, Tuple[datetime, Any]],
     cache_key: str,
     now: datetime,
     ttl_seconds: int,
-) -> Optional[TelemetrySummary]:
-    """Check if cached telemetry summary is still valid.
+) -> Optional[Any]:
+    """Check if cached summary is still valid.
 
     Args:
         cache: Summary cache dictionary
@@ -405,7 +411,7 @@ def check_summary_cache(
         ttl_seconds: Cache TTL in seconds
 
     Returns:
-        Cached TelemetrySummary if valid, None otherwise
+        Cached summary (TelemetrySummary or ContinuitySummary) if valid, None otherwise
     """
     if cache_key in cache:
         cached_time, cached_summary = cache[cache_key]
@@ -415,12 +421,12 @@ def check_summary_cache(
 
 
 def store_summary_cache(
-    cache: Dict[str, Tuple[datetime, TelemetrySummary]],
+    cache: Dict[str, Tuple[datetime, Any]],
     cache_key: str,
     now: datetime,
-    summary: TelemetrySummary,
+    summary: Any,
 ) -> None:
-    """Store telemetry summary in cache.
+    """Store summary in cache.
 
     Args:
         cache: Summary cache dictionary (mutated)
@@ -822,3 +828,286 @@ def get_service_category(service_name: str) -> str:
         return "governance"
     else:
         return "runtime"
+
+
+# ============================================================================
+# CONTINUITY SUMMARY HELPERS
+# ============================================================================
+
+
+def _extract_timestamp_from_node_id(node: Any, prefix: str) -> Optional[datetime]:
+    """Extract timestamp from lifecycle node ID.
+
+    Args:
+        node: Graph node with lifecycle event
+        prefix: Node ID prefix ('startup_' or 'shutdown_')
+
+    Returns:
+        Datetime if successfully extracted, None otherwise
+    """
+    if not hasattr(node, "id") or not node.id.startswith(prefix):
+        return None
+
+    ts_str = node.id.replace(prefix, "")
+    try:
+        return datetime.fromisoformat(ts_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_shutdown_reason_from_node(node: Any) -> Optional[str]:
+    """Extract shutdown reason from shutdown node attributes.
+
+    Args:
+        node: Shutdown graph node
+
+    Returns:
+        Shutdown reason string if found, None otherwise
+    """
+    if not hasattr(node, "attributes"):
+        return None
+
+    attrs = node.attributes
+
+    # Handle both dict (NodeAttributes) and object (GraphNodeAttributes) forms
+    if isinstance(attrs, dict):
+        reason = attrs.get("reason")
+        return str(reason) if reason is not None else None
+    elif hasattr(attrs, "reason"):
+        reason = attrs.reason
+        return str(reason) if reason is not None else None
+
+    return None
+
+
+def _extract_shutdown_consent_from_node(node: Any) -> Optional[str]:
+    """Extract shutdown consent status from shutdown node attributes.
+
+    Args:
+        node: Shutdown graph node
+
+    Returns:
+        Consent status string ('accepted', 'rejected', or 'manual') if found, None otherwise
+    """
+    if not hasattr(node, "attributes"):
+        return None
+
+    attrs = node.attributes
+
+    # Handle both dict (NodeAttributes) and object (GraphNodeAttributes) forms
+    if isinstance(attrs, dict):
+        consent = attrs.get("consent_status")
+        return str(consent) if consent is not None else None
+    elif hasattr(attrs, "consent_status"):
+        consent = attrs.consent_status
+        return str(consent) if consent is not None else None
+
+    return None
+
+
+def _extract_timestamps_from_nodes(nodes: List[Any], prefix: str) -> List[datetime]:
+    """Extract all valid timestamps from lifecycle nodes.
+
+    Args:
+        nodes: List of graph nodes
+        prefix: Node ID prefix to match
+
+    Returns:
+        List of extracted timestamps
+    """
+    timestamps = []
+    for node in nodes:
+        ts = _extract_timestamp_from_node_id(node, prefix)
+        if ts:
+            timestamps.append(ts)
+    return timestamps
+
+
+def _merge_and_sort_events(
+    startup_timestamps: List[datetime], shutdown_timestamps: List[datetime]
+) -> List[Tuple[str, datetime]]:
+    """Merge startup/shutdown timestamps into sorted event list.
+
+    Args:
+        startup_timestamps: List of startup times
+        shutdown_timestamps: List of shutdown times
+
+    Returns:
+        Sorted list of (event_type, timestamp) tuples
+    """
+    all_events = []
+    for ts in startup_timestamps:
+        all_events.append(("startup", ts))
+    for ts in shutdown_timestamps:
+        all_events.append(("shutdown", ts))
+    all_events.sort(key=lambda x: x[1])
+    return all_events
+
+
+def _infer_missing_startup(
+    last_shutdown_ts: Optional[datetime], current_shutdown_ts: datetime
+) -> Tuple[datetime, float]:
+    """Infer startup time for shutdown without matching startup.
+
+    Args:
+        last_shutdown_ts: Previous shutdown timestamp (None if first shutdown)
+        current_shutdown_ts: Current shutdown timestamp
+
+    Returns:
+        Tuple of (inferred_startup_time, offline_seconds_to_add)
+    """
+    from datetime import timedelta
+
+    if last_shutdown_ts is None:
+        # First shutdown: assume startup 1 minute BEFORE
+        inferred_startup = current_shutdown_ts - timedelta(minutes=1)
+        logger.debug(
+            f"First shutdown at {current_shutdown_ts} without startup, "
+            f"inferring startup 1 minute before at {inferred_startup}"
+        )
+        return inferred_startup, 0.0
+    else:
+        # Subsequent shutdown: assume startup 1 minute AFTER previous shutdown
+        inferred_startup = last_shutdown_ts + timedelta(minutes=1)
+        logger.debug(
+            f"Shutdown at {current_shutdown_ts} without startup after previous shutdown at {last_shutdown_ts}, "
+            f"inferring startup 1 minute after at {inferred_startup}"
+        )
+        return inferred_startup, 60.0  # 1 minute downtime
+
+
+def _calculate_online_offline_durations(all_events: List[Tuple[str, datetime]]) -> Tuple[float, float]:
+    """Calculate total online/offline durations from lifecycle events.
+
+    Args:
+        all_events: Sorted list of (event_type, timestamp) tuples
+
+    Returns:
+        Tuple of (total_online_seconds, total_offline_seconds)
+    """
+    total_online = 0.0
+    total_offline = 0.0
+    current_session_start = None
+    last_shutdown = None
+
+    for i, (event_type, ts) in enumerate(all_events):
+        if event_type == "startup":
+            current_session_start = ts
+
+        elif event_type == "shutdown":
+            # Infer missing startup if needed
+            if not current_session_start:
+                current_session_start, offline_to_add = _infer_missing_startup(last_shutdown, ts)
+                total_offline += offline_to_add
+
+            # Calculate session duration
+            session_duration = (ts - current_session_start).total_seconds()
+            total_online += session_duration
+
+            # Calculate offline time to next startup
+            if i + 1 < len(all_events) and all_events[i + 1][0] == "startup":
+                next_startup = all_events[i + 1][1]
+                offline_duration = (next_startup - ts).total_seconds()
+                total_offline += offline_duration
+
+            last_shutdown = ts
+            current_session_start = None
+
+    return total_online, total_offline
+
+
+async def _fetch_lifecycle_nodes(memory_service: Any) -> Tuple[List[Any], List[Any]]:
+    """Fetch startup and shutdown nodes from memory.
+
+    Args:
+        memory_service: Memory service for queries
+
+    Returns:
+        Tuple of (startup_nodes, shutdown_nodes)
+    """
+    from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    startup_filter = MemorySearchFilter(scope=GraphScope.IDENTITY.value, node_type="agent", limit=1000)
+    startup_nodes = await memory_service.search(query="startup", filters=startup_filter)
+
+    shutdown_filter = MemorySearchFilter(scope=GraphScope.IDENTITY.value, node_type="agent", limit=1000)
+    shutdown_nodes = await memory_service.search(query="shutdown", filters=shutdown_filter)
+
+    return startup_nodes, shutdown_nodes
+
+
+async def build_continuity_summary_from_memory(
+    memory_service: Optional[Any], time_service: Any, start_time: Optional[datetime]
+) -> Optional[ContinuitySummary]:
+    """Build continuity summary from startup/shutdown memory nodes.
+
+    Args:
+        memory_service: Memory service to query for lifecycle events
+        time_service: Time service for current time
+        start_time: Service start time for current session
+
+    Returns:
+        ContinuitySummary if memory service available, None otherwise
+    """
+    if not memory_service:
+        return None
+
+    try:
+        now = time_service.now() if time_service else datetime.now(timezone.utc)
+
+        # Fetch lifecycle nodes
+        startup_nodes, shutdown_nodes = await _fetch_lifecycle_nodes(memory_service)
+
+        # Extract timestamps
+        startup_timestamps = _extract_timestamps_from_nodes(startup_nodes, "startup_")
+        shutdown_timestamps = _extract_timestamps_from_nodes(shutdown_nodes, "shutdown_")
+
+        # Calculate basic metrics
+        first_startup = min(startup_timestamps) if startup_timestamps else None
+        last_shutdown_ts = max(shutdown_timestamps) if shutdown_timestamps else None
+
+        # Extract last shutdown reason and consent status from the most recent shutdown node
+        last_shutdown_reason = None
+        last_shutdown_consent = None
+        if shutdown_nodes and last_shutdown_ts:
+            # Find the shutdown node with the matching timestamp
+            for node in shutdown_nodes:
+                node_ts = _extract_timestamp_from_node_id(node, "shutdown_")
+                if node_ts == last_shutdown_ts:
+                    last_shutdown_reason = _extract_shutdown_reason_from_node(node)
+                    last_shutdown_consent = _extract_shutdown_consent_from_node(node)
+                    break
+
+        # Merge and calculate durations
+        all_events = _merge_and_sort_events(startup_timestamps, shutdown_timestamps)
+        total_online, total_offline = _calculate_online_offline_durations(all_events)
+
+        # Add current session if online
+        current_session_duration = 0.0
+        if start_time:
+            current_session_duration = (now - start_time).total_seconds()
+            total_online += current_session_duration
+
+        # Calculate averages
+        total_shutdowns = len(shutdown_timestamps)
+        avg_online = total_online / (total_shutdowns + 1) if total_shutdowns >= 0 else 0.0
+        avg_offline = total_offline / total_shutdowns if total_shutdowns > 0 else 0.0
+
+        return ContinuitySummary(
+            first_startup=first_startup,
+            total_time_online_seconds=total_online,
+            total_time_offline_seconds=total_offline,
+            total_shutdowns=total_shutdowns,
+            average_time_online_seconds=avg_online,
+            average_time_offline_seconds=avg_offline,
+            current_session_start=start_time,
+            current_session_duration_seconds=current_session_duration,
+            last_shutdown=last_shutdown_ts,
+            last_shutdown_reason=last_shutdown_reason,
+            last_shutdown_consent=last_shutdown_consent,
+        )
+
+    except Exception as e:
+        logger.warning(f"Failed to build continuity summary: {e}")
+        return None

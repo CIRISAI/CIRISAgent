@@ -448,16 +448,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                 ),
                 time_service,
             )
+            # Note: Guidance requests are already audited via defer handler action
+
             guidance_text = guidance.get("guidance")
-
-            # Audit log the guidance request
-            await self._audit_logger.log_guidance_request(
-                channel_id=deferral_channel_id,
-                requester_id="discord_adapter",
-                context=context.model_dump(),
-                guidance_received=guidance_text,
-            )
-
             return guidance_text
         except Exception as e:
             self._errors_total += 1
@@ -615,14 +608,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                 except Exception as e:
                     logger.error(f"Failed to store approval in memory: {e}")
 
-            # Audit log the approval request
-            await self._audit_logger.log_approval_request(
-                channel_id=deferral_channel_id,
-                requester_id=context.requester_id,
-                action=action,
-                approval_status=approval_result.status.value,
-                approver_id=approval_result.resolver_id,
-            )
+            # Note: Approval requests are already audited via handler actions
 
             # Return true only if approved
             return approval_result.status == ApprovalStatus.APPROVED
@@ -749,14 +735,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     await member.add_roles(role)
                     logger.info(f"Granted {permission} to user {wa_id} in guild {guild.name}")
 
-                    # Audit log the permission change
-                    await self._audit_logger.log_permission_change(
-                        admin_id="discord_adapter",
-                        target_id=wa_id,
-                        permission=permission,
-                        action="grant",
-                        guild_id=str(guild.id),
-                    )
+                    # Note: Permission changes are already audited via grant/revoke handler actions
 
                     return True
 
@@ -785,14 +764,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                         await member.remove_roles(role)
                         logger.info(f"Revoked {permission} from user {wa_id} in guild {guild.name}")
 
-                        # Audit log the permission change
-                        await self._audit_logger.log_permission_change(
-                            admin_id="discord_adapter",
-                            target_id=wa_id,
-                            permission=permission,
-                            action="revoke",
-                            guild_id=str(guild.id),
-                        )
+                        # Note: Permission changes are already audited via grant/revoke handler actions
 
                         return True
 

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Optio
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from websockets.asyncio.client import ClientConnection as WebSocketClientProtocol
+    from websockets.asyncio.client import ClientConnection as WebSocketClientProtocol  # noqa: F401 (used in type annotations)
 
 logger = logging.getLogger(__name__)
 

@@ -190,10 +190,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Get base capabilities
         capabilities = super().get_capabilities()
 
-        # Add custom metadata
+        # Add custom metadata using model_copy
         if capabilities.metadata:
-            capabilities.metadata.update(
-                {
+            capabilities.metadata = capabilities.metadata.model_copy(
+                update={
                     "model": self.model_name,
                     "instructor_mode": getattr(self.openai_config, "instructor_mode", "JSON"),
                     "timeout_seconds": getattr(self.openai_config, "timeout_seconds", 30),

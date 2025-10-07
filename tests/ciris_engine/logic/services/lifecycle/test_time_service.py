@@ -80,7 +80,7 @@ def test_time_service_capabilities():
     assert "now_iso" in caps.actions
     assert "timestamp" in caps.actions
     assert len(caps.dependencies) == 0
-    assert caps.metadata["description"] == "Provides consistent UTC time operations"
+    assert caps.metadata.description == "Provides consistent UTC time operations"
 
 
 @pytest.mark.asyncio

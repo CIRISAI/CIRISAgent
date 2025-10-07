@@ -1528,7 +1528,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""
+        from uuid import uuid4
+
         from ciris_engine.schemas.services.core import ServiceCapabilities
+        from ciris_engine.schemas.services.metadata import ServiceMetadata
 
         return ServiceCapabilities(
             service_name="AuthenticationService",
@@ -1549,12 +1552,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             ],
             version="1.0.0",
             dependencies=["TimeService"],
-            metadata={
-                "description": "Infrastructure service for WA authentication and identity management",
-                "features": ["jwt_tokens", "certificate_management", "channel_auth", "role_based_access"],
-                "token_types": ["channel", "standard", "oauth"],
-                "supported_algorithms": ["HS256", "EdDSA"],
-            },
+            metadata=ServiceMetadata(
+                category="infrastructure",
+                critical=True,
+                description="Infrastructure service for WA authentication and identity management",
+            ),
         )
 
     def get_status(self) -> ServiceStatus:

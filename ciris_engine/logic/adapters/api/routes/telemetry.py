@@ -301,27 +301,35 @@ def _update_resource_usage(overview: SystemOverview, resource_monitor: Any) -> N
 
 
 def _get_service_health_counts(request: Request) -> tuple[int, int]:
-    """Count healthy and degraded services."""
+    """Count healthy and degraded services (22 core services + API consent_manager)."""
     services = [
+        # Graph Services (6)
         "memory_service",
-        "llm_service",
-        "audit_service",
-        "telemetry_service",
         "config_service",
-        "visibility_service",
-        "time_service",
-        "secrets_service",
-        "resource_monitor",
-        "authentication_service",
-        "wise_authority",
+        "telemetry_service",
+        "audit_service",
         "incident_management_service",
         "tsdb_consolidation_service",
-        "self_observation_service",
-        "adaptive_filter_service",
-        "task_scheduler",
-        "initialization_service",
+        # Infrastructure Services (8)
+        "time_service",
         "shutdown_service",
-        "runtime_control",
+        "initialization_service",
+        "authentication_service",
+        "resource_monitor",
+        "database_maintenance_service",
+        "secrets_service",
+        "consent_manager",  # API-specific consent service
+        # Governance Services (4)
+        "wise_authority_service",
+        "adaptive_filter_service",
+        "visibility_service",
+        "self_observation_service",
+        # Runtime Services (3)
+        "llm_service",
+        "runtime_control_service",
+        "task_scheduler",
+        # Tool Services (1)
+        "secrets_tool_service",
     ]
 
     healthy = 0

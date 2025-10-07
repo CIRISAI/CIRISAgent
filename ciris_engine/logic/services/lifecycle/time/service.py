@@ -63,21 +63,21 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities with custom metadata."""
-        # Get metadata dict from parent's _get_metadata()
+        # Get metadata from parent's _get_metadata()
         service_metadata = self._get_metadata()
-        metadata_dict = service_metadata.model_dump() if isinstance(service_metadata, ServiceMetadata) else {}
 
-        # Add infrastructure-specific metadata from parent
-        metadata_dict.update(
-            {"category": "infrastructure", "critical": True, "description": "Provides consistent UTC time operations"}
-        )
+        # Set infrastructure-specific fields
+        if service_metadata:
+            service_metadata.category = "infrastructure"
+            service_metadata.critical = True
+            service_metadata.description = "Provides consistent UTC time operations"
 
         return ServiceCapabilities(
             service_name=self.service_name,
             actions=self._get_actions(),
             version=self._version,
             dependencies=list(self._dependencies),
-            metadata=metadata_dict,
+            metadata=service_metadata,
         )
 
     # Override _now to prevent circular dependency

@@ -490,10 +490,10 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         # Get base capabilities
         capabilities = super().get_capabilities()
 
-        # Add custom metadata
+        # Add custom metadata using model_copy
         if capabilities.metadata:
-            capabilities.metadata.update(
-                {
+            capabilities.metadata = capabilities.metadata.model_copy(
+                update={
                     "features": ["cron_scheduling", "one_time_defer", "task_persistence"],
                     "cron_support": CRONITER_AVAILABLE,
                     "description": "Task scheduling and deferral service",

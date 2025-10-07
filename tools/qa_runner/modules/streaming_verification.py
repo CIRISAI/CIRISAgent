@@ -48,6 +48,9 @@ class StreamingVerificationModule:
         events_with_recursive_flag = 0
         recursive_aspdma_count = 0
         recursive_conscience_count = 0
+
+        # Track first snapshot_and_context event for field validation
+        first_snapshot_printed = False
         unexpected_events: Set[str] = set()  # Track events outside the expected 6
 
         # Track duplicates: (thought_id, event_type) -> count
@@ -62,7 +65,7 @@ class StreamingVerificationModule:
             """Monitor SSE stream in a separate thread."""
             nonlocal events_with_audit_data, events_with_recursive_flag
             nonlocal recursive_aspdma_count, recursive_conscience_count, unexpected_events
-            nonlocal event_occurrences, duplicates_found
+            nonlocal event_occurrences, duplicates_found, first_snapshot_printed
 
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
@@ -185,6 +188,14 @@ class StreamingVerificationModule:
                                             "agent_identity": (str, type(None)),
                                             "user_profiles": (list, type(None)),
                                             "current_time_utc": (str, type(None)),
+                                            "continuity_summary": (
+                                                dict,
+                                                type(None),
+                                            ),  # ContinuitySummary - should be dict not null
+                                            "telemetry_summary": (
+                                                dict,
+                                                type(None),
+                                            ),  # TelemetrySummary - should be dict not null
                                         }
 
                                         for field, allowed_types in snapshot_field_types.items():
@@ -194,6 +205,72 @@ class StreamingVerificationModule:
                                                         f"system_snapshot.{field} has wrong type: {type(snapshot[field]).__name__} "
                                                         f"(expected one of {[t.__name__ for t in allowed_types]})"
                                                     )
+
+                                        # Warn if critical optional fields are None or empty (production issue check)
+                                        if snapshot.get("continuity_summary") is None:
+                                            event_detail["issues"].append(
+                                                "system_snapshot.continuity_summary is None (should be ContinuitySummary dict)"
+                                            )
+                                        if snapshot.get("telemetry_summary") is None:
+                                            event_detail["issues"].append(
+                                                "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
+                                            )
+                                        # Check service_health - should have entries for all services
+                                        service_health = snapshot.get("service_health", {})
+                                        if not service_health or not isinstance(service_health, dict):
+                                            event_detail["issues"].append(
+                                                f"system_snapshot.service_health is empty or invalid: {service_health}"
+                                            )
+                                        elif len(service_health) < 20:  # Should have ~22+ services
+                                            event_detail["issues"].append(
+                                                f"system_snapshot.service_health only has {len(service_health)} services (expected 20+)"
+                                            )
+
+                                        # Print first occurrence of critical fields for validation
+                                        if not first_snapshot_printed:
+                                            first_snapshot_printed = True
+                                            print("\n" + "=" * 80)
+                                            print("📊 FIRST SNAPSHOT_AND_CONTEXT EVENT - Field Validation")
+                                            print("=" * 80)
+
+                                            # Print service_health
+                                            print(f"\n🔧 service_health ({len(service_health)} services):")
+                                            if service_health:
+                                                for i, (service_name, is_healthy) in enumerate(
+                                                    sorted(service_health.items()), 1
+                                                ):
+                                                    status = "✓" if is_healthy else "✗"
+                                                    print(f"  {i:2d}. {status} {service_name}: {is_healthy}")
+                                            else:
+                                                print("  (empty)")
+
+                                            # Print continuity_summary
+                                            continuity = snapshot.get("continuity_summary")
+                                            print(f"\n📈 continuity_summary:")
+                                            if continuity:
+                                                print(f"  Type: {type(continuity).__name__}")
+                                                if isinstance(continuity, dict):
+                                                    for key, value in sorted(continuity.items()):
+                                                        print(f"  - {key}: {value}")
+                                            else:
+                                                print("  (None)")
+
+                                            # Print telemetry_summary
+                                            telemetry = snapshot.get("telemetry_summary")
+                                            print(f"\n📊 telemetry_summary:")
+                                            if telemetry:
+                                                print(f"  Type: {type(telemetry).__name__}")
+                                                if isinstance(telemetry, dict):
+                                                    for key, value in sorted(telemetry.items()):
+                                                        # Truncate long values
+                                                        val_str = str(value)
+                                                        if len(val_str) > 60:
+                                                            val_str = val_str[:57] + "..."
+                                                        print(f"  - {key}: {val_str}")
+                                            else:
+                                                print("  (None)")
+
+                                            print("=" * 80 + "\n")
 
                                 elif event_type == "dma_results":
                                     # Required base fields

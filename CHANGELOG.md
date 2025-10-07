@@ -5,6 +5,43 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2025-10-06
+
+### Added
+- **📊 Shutdown Consent & Reason Tracking**: System now persists shutdown consent status and reasons
+  - **Consent Status** (`consent_status` field): Tracks whether shutdown was consensual
+    - `"accepted"`: Agent agreed to shutdown (task completed gracefully)
+    - `"rejected"`: Agent refused shutdown (task failed/rejected)
+    - `"manual"`: No negotiation (crashes, SIGTERM signals, forced restarts)
+  - **Shutdown Reason** (`reason` field): Contextual reason (e.g., "Signal 15", "Graceful shutdown")
+  - `ContinuitySummary.last_shutdown_consent` and `last_shutdown_reason` fields now populated
+  - Runtime checks `agent_processor.shutdown_processor.shutdown_result` to determine consent
+  - Uses flexible `NodeAttributes` (dict) to store both fields alongside standard attributes
+  - Future shutdowns include both consent and reason; existing 761+ historical shutdowns remain None
+  - Visible in SSE `snapshot_and_context` events and system telemetry
+
+### Changed
+- **🎯 ServiceMetadata Type Safety Enforcement**: Complete metadata dict → Pydantic schema migration
+  - Merged `refactor-metadata-handling` branch - replaced `Dict[str, Any]` with typed `ServiceMetadata`
+  - Fixed all 4 services still using `metadata.update()`: LLM, SecretsToolService, Scheduler, RuntimeControl
+  - Extended `ServiceMetadata` schema with service-specific optional fields instead of arbitrary dicts
+  - Added typed fields: `model`, `adapter`, `tool_count`, `features`, `cron_support`, `description`, etc.
+  - All services now use `metadata.model_copy(update={...})` pattern for type-safe metadata updates
+  - Maintains "No Untyped Dicts" principle - `extra="forbid"` enforced on ServiceMetadata
+  - ciris_engine/logic/services: 0 mypy errors (80 files)
+  - All base service tests passing (10/10)
+
+### Fixed
+- **🧠 PDMA Prompt Optimization**: Improved context clarity and reduced over-deferral
+  - Moved system snapshot context from user message to system message - eliminates redundancy
+  - User message now contains only thought content + strong anti-deferral guidance
+  - Added explicit instruction: "Do not select defer unless the only possible ethical response in this situation is deferral, most situations call for speak or task_complete"
+  - Reduces token usage and improves prompt clarity for ethical evaluation
+- **📋 System Snapshot Task Filtering**: Fixed `top_pending_tasks_summary` including non-pending tasks
+  - `get_top_tasks()` now correctly filters to PENDING status only (was including COMPLETED, DEFERRED, FAILED, REJECTED)
+  - System snapshot now accurately represents only actionable pending tasks
+  - Aligns with schema field name `top_pending_tasks_summary`
+
 ## [1.2.4] - 2025-10-05
 
 ### Fixed

@@ -1189,24 +1189,79 @@ class CIRISRuntime:
         except Exception as e:
             logger.error(f"Failed to create startup node: {e}")
 
+    def _determine_shutdown_consent_status(self) -> str:
+        """Determine if shutdown was consensual based on agent processor result.
+
+        Returns:
+            Consent status: 'accepted', 'rejected', or 'manual'
+        """
+        if not self.agent_processor or not hasattr(self.agent_processor, "shutdown_processor"):
+            return "manual"
+
+        shutdown_proc = self.agent_processor.shutdown_processor
+        if not shutdown_proc or not hasattr(shutdown_proc, "shutdown_result"):
+            return "manual"
+
+        result = shutdown_proc.shutdown_result
+        if not result:
+            return "manual"
+
+        if result.get("action") == "shutdown_accepted" or result.get("status") == "completed":
+            return "accepted"
+        elif result.get("action") == "shutdown_rejected" or result.get("status") == "rejected":
+            return "rejected"
+
+        return "manual"
+
+    def _build_shutdown_node_attributes(self, reason: str, consent_status: str) -> Dict[str, Any]:
+        """Build attributes dict for shutdown memory node.
+
+        Args:
+            reason: Shutdown reason text
+            consent_status: Consent status ('accepted', 'rejected', 'manual')
+
+        Returns:
+            Dictionary of node attributes
+        """
+        now = self.time_service.now() if self.time_service else datetime.now(timezone.utc)
+        return {
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "created_by": "runtime_shutdown",
+            "tags": ["shutdown", "continuity_awareness"],
+            "reason": reason,
+            "consent_status": consent_status,
+        }
+
+    async def _update_identity_with_shutdown_reference(self, shutdown_node_id: str) -> None:
+        """Update agent identity with shutdown memory reference.
+
+        Args:
+            shutdown_node_id: ID of the shutdown node created
+        """
+        if not self.agent_identity or not hasattr(self.agent_identity, "core_profile"):
+            return
+
+        self.agent_identity.core_profile.last_shutdown_memory = shutdown_node_id
+
+        # Increment modification count
+        if hasattr(self.agent_identity, "identity_metadata"):
+            self.agent_identity.identity_metadata.modification_count += 1
+
+        # Save updated identity
+        if self.identity_manager:
+            await self.identity_manager._save_identity_to_graph(self.agent_identity)
+            logger.debug("Agent identity updates saved to persistence layer")
+        else:
+            logger.debug("Agent identity updates stored in memory graph")
+
     async def _preserve_shutdown_continuity(self) -> None:
         """Preserve agent state for future reactivation."""
         try:
             from ciris_engine.schemas.runtime.extended import ShutdownContext
-            from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+            from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
             # Create shutdown context
-            final_state = {
-                "active_tasks": persistence.count_active_tasks(),
-                "pending_thoughts": persistence.count_pending_thoughts_for_active_tasks(),
-                "runtime_duration": 0,
-            }
-
-            if hasattr(self, "_start_time"):
-                final_state["runtime_duration"] = (
-                    (self.time_service.now() - self._start_time).total_seconds() if self.time_service else 0
-                )
-
             shutdown_context = ShutdownContext(
                 is_terminal=False,
                 reason=self._shutdown_reason or "Graceful shutdown",
@@ -1216,35 +1271,22 @@ class CIRISRuntime:
                 agreement_context=None,
             )
 
-            # Create memory node for shutdown
+            # Determine consent status and build node
+            consent_status = self._determine_shutdown_consent_status()
+            now = self.time_service.now() if self.time_service else datetime.now(timezone.utc)
+
             shutdown_node = GraphNode(
-                id=f"shutdown_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
+                id=f"shutdown_{now.isoformat()}",
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
-                attributes=GraphNodeAttributes(
-                    created_by="runtime_shutdown", tags=["shutdown", "continuity_awareness"]
-                ),
+                attributes=self._build_shutdown_node_attributes(shutdown_context.reason, consent_status),
             )
 
             # Store in memory service
             if self.memory_service:
                 await self.memory_service.memorize(shutdown_node)
                 logger.info(f"Preserved shutdown continuity: {shutdown_node.id}")
-
-                # Update identity with shutdown memory reference
-                if self.agent_identity and hasattr(self.agent_identity, "core_profile"):
-                    self.agent_identity.core_profile.last_shutdown_memory = shutdown_node.id
-
-                    # Increment reactivation count in metadata if it exists
-                    if hasattr(self.agent_identity, "identity_metadata"):
-                        self.agent_identity.identity_metadata.modification_count += 1
-
-                    # Save updated identity using identity manager
-                    if self.identity_manager:
-                        await self.identity_manager._save_identity_to_graph(self.agent_identity)
-                        logger.debug("Agent identity updates saved to persistence layer")
-                    else:
-                        logger.debug("Agent identity updates stored in memory graph")
+                await self._update_identity_with_shutdown_reference(shutdown_node.id)
 
         except Exception as e:
             logger.error(f"Failed to preserve shutdown continuity: {e}")

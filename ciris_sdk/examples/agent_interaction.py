@@ -13,7 +13,7 @@ import asyncio
 from ciris_sdk import CIRISClient
 
 
-async def main():
+async def main() -> None:
     # Create client
     async with CIRISClient() as client:
         print("=== CIRIS SDK Agent Interaction Example ===\n")
@@ -70,7 +70,7 @@ async def main():
         print()
 
 
-async def authenticated_example():
+async def authenticated_example() -> None:
     """Example with authentication."""
     async with CIRISClient() as client:
         print("=== Authenticated Example ===\n")
@@ -88,7 +88,7 @@ async def authenticated_example():
         print("Logged out")
 
 
-async def error_handling_example():
+async def error_handling_example() -> None:
     """Example of error handling."""
     async with CIRISClient() as client:
         print("=== Error Handling Example ===\n")

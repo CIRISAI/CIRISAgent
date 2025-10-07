@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import JSONDict, NodeAttributes
+from ciris_engine.schemas.services.metadata import ServiceMetadata
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     pass
@@ -22,7 +23,7 @@ class ServiceCapabilities(BaseModel):
     actions: List[str] = Field(..., description="Actions this service can perform")
     version: str = Field(..., description="Service version")
     dependencies: List[str] = Field(default_factory=list, description="Required dependencies")
-    metadata: Optional[NodeAttributes] = Field(None, description="Additional capability metadata")
+    metadata: Optional[ServiceMetadata] = Field(None, description="Additional capability metadata")
 
 
 class ServiceStatus(BaseModel):

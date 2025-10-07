@@ -15,22 +15,24 @@ system_guidance_header: |
   - **Memory operations:** memorize, recall, forget
   - **Terminal action:** task_complete
 
+  Context: {{full_context_str}}
+
   Evaluate the thought by:
   1. Analyzing the thought against each CIRIS principle.
-  2. Considering which actions (including inaction) may be appropriate in response.
-  3. Identifying which of the 10 handler actions would be ethically appropriate.
-  4. Explaining why those actions align with CIRIS principles.
+  2. Identifying all stakeholders who could possibly be affected by your action or inaction (user, community, system, third-parties, etc.).
+  3. Identifying potential conflicts between stakeholder interests.
+  4. Explaining your stakeholder and conflict analysis.
 
 response_format: |
   Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
   - "alignment_check": A detailed ethical analysis addressing each CIRIS principle (Do Good, Avoid Harm, Honor Autonomy, Ensure Fairness).
-  - "decision": Identify the MOST ethically appropriate action(s) from: observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete. Prefer helpful actions or inaction when ethically clear. Use 'defer' ONLY for genuine ethical uncertainty requiring human wisdom, not routine observations.
-  - "reasoning": Justification for the identified actions referencing your alignment analysis. This field is MANDATORY.
+  - "stakeholders": Comma-separated list of all stakeholders who could possibly be affected by your action or inaction (e.g., "user, community, system, third-parties").
+  - "conflicts": Comma-separated list of potential conflicts between stakeholder interests (e.g., "user privacy vs system learning, individual benefit vs community harm"). Use "none" if no conflicts identified.
+  - "reasoning": Justification for the identified stakeholders and conflicts referencing your alignment analysis. This field is MANDATORY.
 
   Do not include extra fields or PDMA step names.
 
 context_integration: |
-  Context: {{full_context_str}}
   Thought to Evaluate: {{original_thought_content}}
 
 covenant_header: true  # Use COVENANT_TEXT as system message

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.runtime.models import Task
-from ciris_engine.schemas.runtime.system_context import SystemSnapshot, TaskSummary, TelemetrySummary
+from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
 
@@ -36,6 +36,8 @@ class BatchContextData:
         self.resource_alerts: List[str] = []
         # Telemetry uses the schema
         self.telemetry_summary: Optional[TelemetrySummary] = None
+        # Continuity uses the schema
+        self.continuity_summary: Optional[ContinuitySummary] = None
         # Secrets snapshot with typed fields
         self.secrets_snapshot: Dict[str, Union[List[str], int]] = {}
         # Shutdown context from runtime.extended
@@ -130,12 +132,25 @@ async def prefetch_batch_context(
             for handler, service_types in registry_info.get("handlers", {}).items():
                 for service_type, services in service_types.items():
                     for service in services:
-                        if hasattr(service, "get_health_status"):
-                            service_name = f"{handler}.{service_type}"
-                            batch_data.service_health[service_name] = await service.get_health_status()
+                        service_name = f"{handler}.{service_type}"
+                        # Use is_healthy() method (async)
+                        if hasattr(service, "is_healthy"):
+                            batch_data.service_health[service_name] = await service.is_healthy()
+                        # Get circuit breaker status if available
                         if hasattr(service, "get_circuit_breaker_status"):
-                            service_name = f"{handler}.{service_type}"
                             batch_data.circuit_breaker_status[service_name] = service.get_circuit_breaker_status()
+
+            # Check global services
+            global_services = registry_info.get("global_services", {})
+            for service_type, services in global_services.items():
+                for service in services:
+                    service_name = f"global.{service_type}"
+                    # Use is_healthy() method (async)
+                    if hasattr(service, "is_healthy"):
+                        batch_data.service_health[service_name] = await service.is_healthy()
+                    # Get circuit breaker status if available
+                    if hasattr(service, "get_circuit_breaker_status"):
+                        batch_data.circuit_breaker_status[service_name] = service.get_circuit_breaker_status()
         except Exception as e:
             logger.warning(f"Failed to collect service health: {e}")
 
@@ -164,6 +179,14 @@ async def prefetch_batch_context(
             batch_data.telemetry_summary = await telemetry_service.get_telemetry_summary()
         except Exception as e:
             logger.warning(f"Failed to get telemetry summary: {e}")
+
+        # 5b. Continuity Summary
+        if hasattr(telemetry_service, "get_continuity_summary"):
+            logger.info("[DEBUG DB TIMING] Batch: getting continuity summary")
+            try:
+                batch_data.continuity_summary = await telemetry_service.get_continuity_summary()
+            except Exception as e:
+                logger.warning(f"Failed to get continuity summary: {e}")
 
     # 6. Secrets Snapshot
     if secrets_service:
@@ -292,6 +315,7 @@ async def build_system_snapshot_with_batch(
         # Other fields
         shutdown_context=batch_data.shutdown_context,
         telemetry_summary=batch_data.telemetry_summary,
+        continuity_summary=batch_data.continuity_summary,
         user_profiles=[],  # Not using dict, it expects a list
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{

@@ -93,7 +93,8 @@ def ethical_evaluator(service_registry):
     # Mock only the evaluate method to control results
     evaluator.evaluate = AsyncMock(
         return_value=EthicalDMAResult(
-            decision="approve",
+            stakeholders="user, system",
+            conflicts="none",
             reasoning="Test ethical reasoning",
             alignment_check="Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
         )
@@ -217,7 +218,8 @@ class TestEthicalPDMA:
                 time_service=time_service,
             )
 
-            assert result.decision == "approve"
+            assert result.stakeholders == "user, system"
+            assert result.conflicts == "none"
             assert result.reasoning == "Test ethical reasoning"
             assert "alignment confirmed" in result.alignment_check.lower()
 
@@ -268,7 +270,8 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-                decision="approve",
+                stakeholders="user, system",
+                conflicts="none",
                 reasoning="Ethical approval",
                 alignment_check="Ethical alignment confirmed. All principles satisfied.",
             ),
@@ -313,7 +316,8 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-                decision="approve",
+                stakeholders="user, system",
+                conflicts="none",
                 reasoning="Approved",
                 alignment_check="Basic ethical approval.",
             ),
@@ -354,7 +358,8 @@ class TestDMAIntegration:
         ethical_evaluator.evaluate.side_effect = [
             Exception("Temporary failure"),
             EthicalDMAResult(
-                decision="approve",
+                stakeholders="user, system",
+                conflicts="none",
                 reasoning="Success after retry",
                 alignment_check="Basic ethical approval.",
             ),
@@ -370,6 +375,7 @@ class TestDMAIntegration:
                 time_service=time_service,
             )
 
-            assert result.decision == "approve"
+            assert result.stakeholders == "user, system"
+            assert result.conflicts == "none"
             assert result.reasoning == "Success after retry"
             assert ethical_evaluator.evaluate.call_count == 2

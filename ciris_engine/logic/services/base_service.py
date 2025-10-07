@@ -114,9 +114,7 @@ class BaseService(ABC, ServiceProtocol):
 
     def _get_metadata(self) -> ServiceMetadata:
         """Get service-specific metadata - override in subclass."""
-        from uuid import uuid4
-
-        return ServiceMetadata(service_name=self.service_name, method_name="_get_metadata", correlation_id=uuid4())
+        return ServiceMetadata()
 
     def _register_dependencies(self) -> None:
         """Register service dependencies - override in subclass."""
@@ -177,16 +175,12 @@ class BaseService(ABC, ServiceProtocol):
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""
-        # Get ServiceMetadata and convert to dict for compatibility
-        service_metadata = self._get_metadata()
-        metadata_dict = service_metadata.model_dump() if isinstance(service_metadata, ServiceMetadata) else {}
-
         return ServiceCapabilities(
             service_name=self.service_name,
             actions=self._get_actions(),
             version=self._version,
             dependencies=list(self._dependencies),
-            metadata=metadata_dict,
+            metadata=self._get_metadata(),
         )
 
     def get_status(self) -> ServiceStatus:

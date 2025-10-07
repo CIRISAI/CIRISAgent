@@ -184,6 +184,25 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             await self._record_event("processor_control", "single_step", success=True, result=result)
 
             # Return the full step result data instead of discarding it
+            # Validate step_results - only include if they match StepResultData schema
+            raw_step_results = result.get("step_results", [])
+            validated_step_results = []
+
+            from ciris_engine.schemas.services.runtime_control import StepResultData
+
+            for step_result in raw_step_results:
+                try:
+                    # Try to validate as StepResultData
+                    if isinstance(step_result, dict):
+                        validated = StepResultData(**step_result)
+                        validated_step_results.append(validated)
+                    elif isinstance(step_result, StepResultData):
+                        validated_step_results.append(step_result)
+                except Exception:
+                    # Skip invalid results - this happens during thought initiation
+                    # when step_results only contain {"thought_id": ..., "initiated": True}
+                    pass
+
             return ProcessorControlResponse(
                 success=result.get("success", False),
                 processor_name="agent",
@@ -192,7 +211,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error=result.get("error"),
                 # Pass through all the H3ERE step data
                 step_point=result.get("step_point"),
-                step_results=result.get("step_results", []),
+                step_results=validated_step_results if validated_step_results else None,
                 thoughts_processed=result.get("thoughts_processed", 0),
                 processing_time_ms=result.get("processing_time_ms", 0.0),
                 pipeline_state=result.get("pipeline_state", {}),
@@ -2056,10 +2075,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # Get base capabilities
         capabilities = super().get_capabilities()
 
-        # Add custom metadata
+        # Add custom metadata using model_copy
         if capabilities.metadata is not None:
-            capabilities.metadata.update(
-                {
+            capabilities.metadata = capabilities.metadata.model_copy(
+                update={
                     "description": "Runtime control and management service",
                     "features": ["processor_control", "adapter_management", "config_management", "health_monitoring"],
                 }

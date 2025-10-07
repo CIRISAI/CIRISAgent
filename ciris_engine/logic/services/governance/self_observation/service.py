@@ -579,21 +579,7 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
             actions=["adapt_configuration", "monitor_identity", "process_feedback", "emergency_stop"],
             version="1.0.0",
             dependencies=["variance_monitor", "feedback_loop", "telemetry_service"],
-            metadata={
-                "description": "Autonomous self-configuration and adaptation service",
-                "features": [
-                    "autonomous_adaptation",
-                    "identity_variance_monitoring",
-                    "pattern_detection",
-                    "configuration_feedback",
-                    "safe_adaptation",
-                    "wa_review_integration",
-                    "emergency_stop",
-                    "adaptation_history",
-                    "experience_processing",
-                ],
-                "safety_features": ["emergency_stop", "wa_review", "change_limits"],
-            },
+            metadata=None,
         )
 
     def get_status(self) -> ServiceStatus:

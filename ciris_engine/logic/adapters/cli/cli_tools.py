@@ -394,7 +394,7 @@ class CLIToolService(BaseService, ToolService):
             actions=["execute_tool", "get_available_tools", "get_tool_schema", "get_tool_result"],
             version="1.0.0",
             dependencies=[],
-            metadata={"resource_limits": {"max_concurrent_tools": 10}},
+            metadata=None,
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

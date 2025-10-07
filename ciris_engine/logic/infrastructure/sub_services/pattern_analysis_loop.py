@@ -731,7 +731,7 @@ class PatternAnalysisLoop(BaseScheduledService):
             ],
             version="1.0.0",
             dependencies=["TimeService", "MemoryBus"],
-            metadata={"analysis_interval_hours": self._analysis_interval_hours},
+            metadata=None,
         )
 
     def get_status(self) -> "ServiceStatus":

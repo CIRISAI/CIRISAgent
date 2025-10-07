@@ -655,27 +655,64 @@ async def _process_services_group(
             await _process_single_service(service, service_name, service_health, circuit_breaker_status)
 
 
-async def _collect_service_health(service_registry: Optional[Any]) -> Tuple[Dict[str, bool], Dict[str, str]]:
+async def _collect_service_health(
+    service_registry: Optional[Any], runtime: Optional[Any] = None
+) -> Tuple[Dict[str, bool], Dict[str, str]]:
     """Collect service health and circuit breaker status."""
     service_health: Dict[str, bool] = {}
     circuit_breaker_status: Dict[str, str] = {}
 
-    if not service_registry:
-        return service_health, circuit_breaker_status
+    # First, collect core services from runtime (21 core services)
+    if runtime:
+        core_services = [
+            # Graph Services (6)
+            "memory_service",
+            "config_service",
+            "telemetry_service",
+            "audit_service",
+            "incident_management_service",
+            "tsdb_consolidation_service",
+            # Infrastructure Services (7)
+            "time_service",
+            "shutdown_service",
+            "initialization_service",
+            "authentication_service",
+            "resource_monitor",
+            "maintenance_service",  # database maintenance
+            "secrets_service",
+            # Governance Services (4)
+            "wa_auth_system",  # wise authority
+            "adaptive_filter_service",
+            "visibility_service",
+            "self_observation_service",
+            # Runtime Services (3)
+            "llm_service",
+            "runtime_control_service",
+            "task_scheduler",
+            # Tool Services (1)
+            "core_tool_service",  # secrets tool
+        ]
 
-    try:
-        registry_info = service_registry.get_provider_info()
+        for service_name in core_services:
+            service = getattr(runtime, service_name, None)
+            if service:
+                await _process_single_service(service, service_name, service_health, circuit_breaker_status)
 
-        # Process handler-specific services
-        for handler, service_types in registry_info.get("handlers", {}).items():
-            await _process_services_group(service_types, handler, service_health, circuit_breaker_status)
+    # Then, collect handler-specific services from service_registry
+    if service_registry:
+        try:
+            registry_info = service_registry.get_provider_info()
 
-        # Process global services
-        global_services = registry_info.get("global_services", {})
-        await _process_services_group(global_services, "global", service_health, circuit_breaker_status)
+            # Process handler-specific services
+            for handler, service_types in registry_info.get("handlers", {}).items():
+                await _process_services_group(service_types, handler, service_health, circuit_breaker_status)
 
-    except Exception as e:
-        logger.warning(f"Failed to collect service health status: {e}")
+            # Process global services
+            global_services = registry_info.get("global_services", {})
+            await _process_services_group(global_services, "global", service_health, circuit_breaker_status)
+
+        except Exception as e:
+            logger.warning(f"Failed to collect service health status: {e}")
 
     return service_health, circuit_breaker_status
 
@@ -694,6 +731,18 @@ async def _get_telemetry_summary(telemetry_service: Optional[Any]) -> Optional[A
             return telemetry_summary
         except Exception as e:
             logger.warning(f"Failed to get telemetry summary: {e}")
+    return None
+
+
+async def _get_continuity_summary(telemetry_service: Optional[Any]) -> Optional[Any]:
+    """Get continuity awareness summary from lifecycle events."""
+    if telemetry_service and hasattr(telemetry_service, "get_continuity_summary"):
+        try:
+            continuity_summary = await telemetry_service.get_continuity_summary()
+            logger.debug("Successfully retrieved continuity summary")
+            return continuity_summary
+        except Exception as e:
+            logger.warning(f"Failed to get continuity summary: {e}")
     return None
 
 

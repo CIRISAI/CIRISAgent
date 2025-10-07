@@ -265,7 +265,7 @@ class APIToolService(BaseService, ToolService):
             ],
             version="1.0.0",
             dependencies=[],
-            metadata={"max_batch_size": 1, "supports_versioning": False, "supported_formats": ["json"]},
+            metadata=None,
         )
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

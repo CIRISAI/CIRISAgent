@@ -210,7 +210,7 @@ Adhere strictly to the schema for your JSON output.
             else ethical_pdma_result.alignment_check
         )
 
-        return f"Ethical PDMA Stance: {ethical_pdma_result.decision}. Analysis: {alignment_summary}"
+        return f"Ethical PDMA Analysis: Stakeholders: {ethical_pdma_result.stakeholders}. Conflicts: {ethical_pdma_result.conflicts}. {alignment_summary}"
 
     def _build_csdma_summary(self, csdma_result: CSDMAResult) -> str:
         """Build CSDMA summary."""

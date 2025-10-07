@@ -864,9 +864,7 @@ class TSDBConsolidationService(BaseGraphService):
             from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
                 get_retention_cutoff_date,
             )
-            from ciris_engine.logic.services.graph.tsdb_consolidation.db_query_helpers import (
-                query_expired_summaries,
-            )
+            from ciris_engine.logic.services.graph.tsdb_consolidation.db_query_helpers import query_expired_summaries
 
             logger.info("Starting cleanup of consolidated graph data (audit_log untouched)")
 
@@ -932,10 +930,7 @@ class TSDBConsolidationService(BaseGraphService):
             ],
             version="2.0.0",
             dependencies=["MemoryService", "TimeService"],
-            metadata={
-                "consolidation_interval_hours": self._consolidation_interval.total_seconds() / 3600,
-                "raw_retention_hours": self._raw_retention.total_seconds() / 3600,
-            },
+            metadata=None,
         )
 
     def get_status(self) -> ServiceStatus:
@@ -1283,9 +1278,7 @@ class TSDBConsolidationService(BaseGraphService):
             group_summaries_by_day,
             parse_summary_attributes,
         )
-        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
-            calculate_week_period,
-        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import calculate_week_period
         from ciris_engine.logic.services.graph.tsdb_consolidation.extensive_helpers import (
             check_daily_summary_exists,
             create_daily_summary_attributes,
@@ -1447,9 +1440,7 @@ class TSDBConsolidationService(BaseGraphService):
         creating new nodes. Future versions will handle multimedia compression.
         """
         from ciris_engine.logic.persistence.db.core import get_db_connection
-        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
-            calculate_month_period,
-        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import calculate_month_period
         from ciris_engine.logic.services.graph.tsdb_consolidation.profound_helpers import (
             calculate_storage_metrics,
             cleanup_old_basic_summaries,

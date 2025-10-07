@@ -187,6 +187,7 @@ class TestUserProfileExtractionComprehensive:
             messages_current_hour=42,
         )
         telemetry_service.get_telemetry_summary = AsyncMock(return_value=telemetry_summary)
+        telemetry_service.get_continuity_summary = AsyncMock(return_value=None)  # No continuity data in tests
 
         # 5. Secrets Service Mock
         secrets_service = MagicMock()
@@ -401,6 +402,7 @@ class TestUserProfileExtractionComprehensive:
             messages_current_hour=42,
         )
         telemetry_service.get_telemetry_summary = AsyncMock(return_value=telemetry_summary)
+        telemetry_service.get_continuity_summary = AsyncMock(return_value=None)  # No continuity data in tests
 
         secrets_service = MagicMock()
         secrets_service.list_secrets = MagicMock(return_value=[])

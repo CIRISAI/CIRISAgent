@@ -75,40 +75,6 @@ class TestDiscordAuditCoverage:
         self.mock_audit_service.log_event.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_log_guidance_request_success(self):
-        """Test guidance request logging - DEPRECATED (already audited via defer handler action)."""
-        context = {"task_id": "task123", "thought_id": "thought456"}
-        await self.audit.log_guidance_request("channel123", "user456", context, "guidance received")
-
-        # Method is now deprecated - should not call audit service
-        self.mock_audit_service.log_event.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_log_guidance_request_no_guidance(self):
-        """Test guidance request logging - DEPRECATED (already audited via defer handler action)."""
-        context = {"task_id": "task123"}
-        await self.audit.log_guidance_request("channel123", "user456", context, None)
-
-        # Method is now deprecated - should not call audit service
-        self.mock_audit_service.log_event.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_log_approval_request_success(self):
-        """Test approval request logging - DEPRECATED (already audited via handler actions)."""
-        await self.audit.log_approval_request("channel123", "user456", "delete_file", "approved", "admin789")
-
-        # Method is now deprecated - should not call audit service
-        self.mock_audit_service.log_event.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_log_permission_change_success(self):
-        """Test permission change logging - DEPRECATED (already audited via grant/revoke handler actions)."""
-        await self.audit.log_permission_change("admin123", "user456", "AUTHORITY", "grant", "guild789")
-
-        # Method is now deprecated - should not call audit service
-        self.mock_audit_service.log_event.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_log_tool_execution_success(self):
         """Test successful tool execution logging - targets line 222."""
         params = {"param1": "value1", "param2": 123}

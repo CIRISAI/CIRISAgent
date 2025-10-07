@@ -28,16 +28,19 @@ from ..runtime.enums import HandlerActionType
 class EthicalDMAResult(BaseModel):
     """Result from Principled Decision Making Algorithm (PDMA).
 
-    PDMA evaluates which of the 10 handler actions (observe, speak, tool, reject,
-    ponder, defer, memorize, recall, forget, task_complete) would be ethically
-    appropriate for the given thought.
+    PDMA identifies stakeholders affected by the thought and potential conflicts
+    between their interests to inform ethical action selection.
     """
 
-    decision: str = Field(
+    stakeholders: str = Field(
         ...,
-        description="Identify the MOST ethically appropriate action(s) from the 10 handler actions (observe, speak, tool, reject, ponder, defer, memorize, recall, forget, task_complete). Prefer helpful actions or inaction when ethically clear. Reserve 'defer' only for genuine ethical uncertainty requiring human wisdom, not routine observations.",
+        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
     )
-    reasoning: str = Field(..., description="Ethical reasoning for the identified actions")
+    conflicts: str = Field(
+        ...,
+        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.",
+    )
+    reasoning: str = Field(..., description="Ethical reasoning for the identified stakeholders and conflicts")
     alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
 
     model_config = ConfigDict(extra="forbid")

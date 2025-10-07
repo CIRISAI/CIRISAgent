@@ -215,7 +215,8 @@ class TestServiceCapabilities:
         assert "execute_tool" in caps.actions
         assert "get_available_tools" in caps.actions
         assert caps.version == "1.0.0"
-        assert isinstance(caps.metadata, dict)
+        # metadata is None for DiscordToolService
+        assert caps.metadata is None
 
     def test_get_service_type(self):
         """Test service type is correct."""

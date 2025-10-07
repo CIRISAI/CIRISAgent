@@ -36,33 +36,17 @@ class BaseInfrastructureService(BaseService):
         """
         return ServiceType.TIME
 
-    def get_capabilities(self) -> ServiceCapabilities:
-        """Get service capabilities with infrastructure metadata."""
-        # Get metadata dict from parent's _get_metadata()
-        service_metadata = self._get_metadata()
-        metadata_dict = service_metadata.model_dump() if isinstance(service_metadata, ServiceMetadata) else {}
-
-        # Add infrastructure-specific metadata
-        metadata_dict.update({"category": "infrastructure", "critical": True})
-
-        return ServiceCapabilities(
-            service_name=self.service_name,
-            actions=self._get_actions(),
-            version=self._version,
-            dependencies=list(self._dependencies),
-            metadata=metadata_dict,
-        )
-
     def _get_metadata(self) -> ServiceMetadata:
         """
         Get infrastructure service metadata.
 
-        Returns ServiceMetadata for type safety.
-        Subclasses can override to add more specific metadata.
+        Returns ServiceMetadata for type safety, with infrastructure-specific
+        attributes added.
         """
-        # Return base metadata - infrastructure-specific attributes
-        # are now handled through other mechanisms
-        return super()._get_metadata()
+        base_metadata = super()._get_metadata()
+        # Use model_copy to create a mutable copy and update it
+        updated_metadata = base_metadata.model_copy(update={"category": "infrastructure", "critical": True})
+        return updated_metadata
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """

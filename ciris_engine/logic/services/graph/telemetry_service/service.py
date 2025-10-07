@@ -33,7 +33,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.protocols_core import MetricDataPoint, ResourceLimits
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.runtime.system_context import ChannelContext as SystemChannelContext
-from ciris_engine.schemas.runtime.system_context import SystemSnapshot, TelemetrySummary, UserProfile
+from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TelemetrySummary, UserProfile
 from ciris_engine.schemas.services.core import ServiceStatus
 from ciris_engine.schemas.services.graph.telemetry import (
     AggregatedTelemetryMetadata,
@@ -1988,7 +1988,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         cached = check_summary_cache(self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds)
         if cached:
             logger.debug("Returning cached telemetry summary")
-            return cached
+            return cached  # type: ignore[no-any-return]
 
         # Fail fast if memory bus not available
         if not self._memory_bus:
@@ -2040,6 +2040,40 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         # Cache and return
         store_summary_cache(self._summary_cache, "telemetry_summary", now, summary)
         return summary
+
+    async def get_continuity_summary(self) -> Optional[ContinuitySummary]:
+        """Get continuity awareness summary from startup/shutdown lifecycle events.
+
+        Queries memory service for all startup and shutdown nodes tagged with
+        'continuity_awareness' and builds a complete continuity history.
+
+        Returns:
+            ContinuitySummary with lifecycle metrics, or None if memory service unavailable
+        """
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
+            build_continuity_summary_from_memory,
+            check_summary_cache,
+            store_summary_cache,
+        )
+
+        now = self._now()
+
+        # Check cache
+        cached = check_summary_cache(self._summary_cache, "continuity_summary", now, self._summary_cache_ttl_seconds)
+        if cached:
+            logger.debug("Returning cached continuity summary")
+            return cached  # type: ignore[no-any-return]
+
+        # Build from memory nodes
+        continuity = await build_continuity_summary_from_memory(
+            self._memory_bus, self._time_service if hasattr(self, "_time_service") else None, self._start_time
+        )
+
+        # Cache and return
+        if continuity:
+            store_summary_cache(self._summary_cache, "continuity_summary", now, continuity)
+
+        return continuity
 
     # Required methods for BaseGraphService
 

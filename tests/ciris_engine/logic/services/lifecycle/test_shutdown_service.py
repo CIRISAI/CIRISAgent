@@ -113,7 +113,7 @@ def test_shutdown_service_capabilities():
     assert "is_shutdown_requested" in caps.actions
     assert "get_shutdown_reason" in caps.actions
     assert len(caps.dependencies) == 0
-    assert caps.metadata["description"] == "Coordinates graceful system shutdown"
+    assert caps.metadata.description == "Coordinates graceful system shutdown"
 
 
 @pytest.mark.asyncio

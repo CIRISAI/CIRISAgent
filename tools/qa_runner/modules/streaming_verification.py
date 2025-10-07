@@ -219,7 +219,9 @@ class StreamingVerificationModule:
                                         telemetry = snapshot.get("telemetry_summary")
                                         if telemetry and isinstance(telemetry, dict):
                                             if "circuit_breaker" not in telemetry:
-                                                issue_msg = "system_snapshot.telemetry_summary missing 'circuit_breaker' field"
+                                                issue_msg = (
+                                                    "system_snapshot.telemetry_summary missing 'circuit_breaker' field"
+                                                )
                                                 event_detail["issues"].append(issue_msg)
                                                 errors.append(f"🐛 MISSING FIELD: {issue_msg}")
                                             elif telemetry.get("circuit_breaker") is None:

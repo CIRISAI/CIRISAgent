@@ -5,6 +5,54 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-10-07
+
+### Added
+- **🔴 Circuit Breaker State in Telemetry**: Complete circuit breaker tracking across all buses
+  - Added `circuit_breaker` field to `TelemetrySummary` schema (`Dict[str, Any]`)
+  - New `collect_circuit_breaker_state()` helper walks all buses via `runtime.bus_manager`
+  - Collects state from LLM, Memory, Communication, Tool, Wise, and RuntimeControl buses
+  - Returns dict mapping service names to `{state, failures, requests, failure_rate, etc}`
+  - Visible in SSE `snapshot_and_context` events and telemetry endpoints
+  - Empty dict when no circuit breakers triggered (normal operation)
+  - Populated with detailed data when failures occur in production
+- **✅ QA Circuit Breaker Validation**: Enhanced streaming verification module
+  - Added validation to ensure `telemetry_summary.circuit_breaker` exists and is not null
+  - Prints circuit_breaker data prominently in verbose test output
+  - Test fails if field is missing or null (catches schema regressions)
+
+### Fixed
+- **🔄 LLM Failover**: Secondary LLM services now properly used when primary fails
+  - **Root Cause**: `_get_prioritized_services()` was filtering out services with open circuit breakers before failover logic could execute
+  - **Solution**: Removed health check from service filtering - circuit breaker check now happens during service selection
+  - Services with open circuit breakers are skipped in favor of lower-priority services
+  - Removed unused `_is_service_healthy()` method
+  - **Impact**: Secondary LLM automatically used when primary circuit breaker opens
+  - Expected failure rate drop from 48% to <5% during single-provider outages in production
+  - Updated `test_circuit_breaker_skips_to_lower_priority` to verify new behavior
+- **📋 Domain Routing Tests**: Updated 2 tests to match new LLM failover behavior
+  - `test_domain_filtering_with_unhealthy_services` - Now tests failover when service calls fail (not just health check)
+  - `test_service_health_check_failure` → `test_service_failure_propagates` - Renamed and updated to test actual call failures
+  - Both tests verify correct failover behavior where services are tried in priority order
+- **🐛 Code Quality**: Fixed OpenAI timeout configuration and telemetry provider disambiguation
+  - OpenAI client timeout was silently ignoring user settings (used `getattr()` instead of direct attribute access)
+  - Telemetry aggregator couldn't disambiguate multiple instances of same provider class
+  - Both issues fixed with tests to prevent regression
+
+### Changed
+- **🧹 Dead Code Removal**: Removed 204 lines of deprecated code
+  - Removed 3 deprecated audit methods in Discord adapter
+  - Removed 5 deprecated SDK methods (including non-functional `stream()` placeholder)
+  - Removed unused TYPE_CHECKING imports
+  - Suppressed vulture false positives for TYPE_CHECKING imports with noqa comments
+  - Vulture warnings: 11 → 0 (100% clean)
+
+### Testing
+- All 46 LLM bus tests pass (21 basic + 25 domain routing)
+- All 2 QA streaming tests pass (100%)
+- Mypy clean: 0 errors in 552 source files
+- Zero vulture warnings
+
 ## [1.2.5] - 2025-10-06
 
 ### Added

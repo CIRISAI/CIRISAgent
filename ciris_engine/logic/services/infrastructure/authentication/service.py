@@ -1553,9 +1553,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             version="1.0.0",
             dependencies=["TimeService"],
             metadata=ServiceMetadata(
-                service_name="AuthenticationService",
-                method_name="get_capabilities",
-                correlation_id=uuid4(),
                 category="infrastructure",
                 critical=True,
                 description="Infrastructure service for WA authentication and identity management",

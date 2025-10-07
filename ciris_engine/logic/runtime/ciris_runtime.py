@@ -1222,8 +1222,12 @@ class CIRISRuntime:
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
                 attributes={
-                    "created_at": (self.time_service.now() if self.time_service else datetime.now(timezone.utc)).isoformat(),
-                    "updated_at": (self.time_service.now() if self.time_service else datetime.now(timezone.utc)).isoformat(),
+                    "created_at": (
+                        self.time_service.now() if self.time_service else datetime.now(timezone.utc)
+                    ).isoformat(),
+                    "updated_at": (
+                        self.time_service.now() if self.time_service else datetime.now(timezone.utc)
+                    ).isoformat(),
                     "created_by": "runtime_shutdown",
                     "tags": ["shutdown", "continuity_awareness"],
                     "reason": shutdown_context.reason,  # Save shutdown reason in node

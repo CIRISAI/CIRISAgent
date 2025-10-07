@@ -871,9 +871,11 @@ def _extract_shutdown_reason_from_node(node: Any) -> Optional[str]:
 
     # Handle both dict (NodeAttributes) and object (GraphNodeAttributes) forms
     if isinstance(attrs, dict):
-        return attrs.get("reason")
+        reason = attrs.get("reason")
+        return str(reason) if reason is not None else None
     elif hasattr(attrs, "reason"):
-        return attrs.reason
+        reason = attrs.reason
+        return str(reason) if reason is not None else None
 
     return None
 
@@ -896,7 +898,9 @@ def _extract_timestamps_from_nodes(nodes: List[Any], prefix: str) -> List[dateti
     return timestamps
 
 
-def _merge_and_sort_events(startup_timestamps: List[datetime], shutdown_timestamps: List[datetime]) -> List[Tuple[str, datetime]]:
+def _merge_and_sort_events(
+    startup_timestamps: List[datetime], shutdown_timestamps: List[datetime]
+) -> List[Tuple[str, datetime]]:
     """Merge startup/shutdown timestamps into sorted event list.
 
     Args:
@@ -947,9 +951,7 @@ def _infer_missing_startup(
         return inferred_startup, 60.0  # 1 minute downtime
 
 
-def _calculate_online_offline_durations(
-    all_events: List[Tuple[str, datetime]]
-) -> Tuple[float, float]:
+def _calculate_online_offline_durations(all_events: List[Tuple[str, datetime]]) -> Tuple[float, float]:
     """Calculate total online/offline durations from lifecycle events.
 
     Args:
@@ -998,8 +1000,8 @@ async def _fetch_lifecycle_nodes(memory_service: Any) -> Tuple[List[Any], List[A
     Returns:
         Tuple of (startup_nodes, shutdown_nodes)
     """
-    from ciris_engine.schemas.services.graph_core import GraphScope
     from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
+    from ciris_engine.schemas.services.graph_core import GraphScope
 
     startup_filter = MemorySearchFilter(scope=GraphScope.IDENTITY.value, node_type="agent", limit=1000)
     startup_nodes = await memory_service.search(query="startup", filters=startup_filter)

@@ -556,3 +556,34 @@ class TestContinuitySummaryFormatting:
         assert "First Startup:" in formatted
         assert "Total Time Online:" in formatted
         assert "Shutdowns: 3" in formatted
+
+    def test_continuity_summary_with_shutdown_consent(self) -> None:
+        """Test continuity summary includes shutdown consent status."""
+        from datetime import datetime, timezone
+
+        from ciris_engine.schemas.runtime.system_context import ContinuitySummary
+
+        # Test all three consent states
+        for consent_status in ["accepted", "rejected", "manual"]:
+            continuity = ContinuitySummary(
+                total_time_online_seconds=3600.0,
+                total_shutdowns=1,
+                last_shutdown=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                last_shutdown_reason="Test shutdown",
+                last_shutdown_consent=consent_status,
+            )
+
+            assert continuity.last_shutdown_consent == consent_status
+            assert continuity.last_shutdown_reason == "Test shutdown"
+
+        # Test None (legacy shutdowns)
+        continuity_legacy = ContinuitySummary(
+            total_time_online_seconds=3600.0,
+            total_shutdowns=1,
+            last_shutdown=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            last_shutdown_reason="Legacy shutdown",
+            last_shutdown_consent=None,
+        )
+
+        assert continuity_legacy.last_shutdown_consent is None
+        assert continuity_legacy.last_shutdown_reason == "Legacy shutdown"

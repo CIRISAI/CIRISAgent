@@ -57,8 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Functionality preserved, all tests pass
 
 ### Testing
+- **🧪 Conscience Core Test Coverage**: 20.5% → 88.37% (+67.87%)
+  - Added 28 comprehensive tests for `conscience/core.py`
+  - Tests cover all 4 conscience types: Entropy, Coherence, OptimizationVeto, EpistemicHumility
+  - Tests include: Non-SPEAK actions, sink unavailable, no content, LLM evaluation, error handling, message creation
+  - Priority #1 file from quality analyzer (was highest priority with lowest coverage)
 - All 46 LLM bus tests pass (21 basic + 25 domain routing)
 - All 2 QA streaming tests pass (100%)
+- All 28 conscience core tests pass (100%)
 - Mypy clean: 0 errors in 552 source files
 - Zero vulture warnings
 
